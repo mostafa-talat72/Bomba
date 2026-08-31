@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Outlet, Link, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
@@ -29,8 +29,6 @@ import {
   Table as TableIcon,
   PanelLeftClose,
   PanelLeftOpen,
-  ChevronLeft,
-  ChevronRight,
   RefreshCw,
   Maximize2,
   Minimize2
@@ -56,7 +54,7 @@ interface NotificationRead {
 }
 
 const Layout = () => {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const { isRTL } = useLanguage();
   const { formatDate: formatOrgDate } = useOrganization();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -67,8 +65,7 @@ const Layout = () => {
     try { localStorage.setItem('sidebarCollapsed', String(sidebarCollapsed)); } catch {}
   }, [sidebarCollapsed]);
   const location = useLocation();
-  const { user, logout, sessions, orders, notifications, subscriptionStatus } = useApp();
-  const { tables } = useData();
+  const { user, logout, sessions, orders, notifications, subscriptionStatus, tables, bills } = useApp();
   const { isDarkMode, toggleDarkMode } = useTheme();
   const tablesHeader = useTablesHeader();
   const mainContentRef = useRef<HTMLElement>(null);
@@ -214,7 +211,7 @@ const Layout = () => {
     { name: t('nav.settings'), href: '/settings', icon: Settings, permissions: ['settings'] },
   ];
 
-  const isActive = (href: string) => location.pathname === href;
+  const isActive = (href?: string) => !!href && location.pathname === href;
 
   // Reset scroll position when route changes
   useEffect(() => {
@@ -237,30 +234,45 @@ const Layout = () => {
 
   const filteredNavigation = getFilteredNavigation();
 
+  const hasOccupiedTables = useMemo(() => {
+    if (!user || !Array.isArray(tables) || tables.length === 0) {
+      return false;
+    }
+
+    const activeStatuses = new Set(['occupied', 'reserved']);
+
+    const tableIdsWithStatus = new Set(
+      tables
+        .filter((table: any) => table && table.isActive !== false && activeStatuses.has(String(table.status || '').toLowerCase()))
+        .map((table: any) => String(table._id || table.id))
+    );
+
+    const hasOpenBill = Array.isArray(bills) && bills.some((bill: any) => {
+      const tableId = bill?.table?._id || bill?.table || bill?.tableId;
+      if (!tableId) return false;
+
+      const billStatus = String(bill?.status || '').toLowerCase();
+      if (['paid', 'cancelled'].includes(billStatus)) return false;
+
+      return tableIdsWithStatus.has(String(tableId)) || tables.some((table: any) => String(table._id || table.id) === String(tableId));
+    });
+
+    const hasActiveSession = Array.isArray(sessions) && sessions.some((session: any) => {
+      const status = String(session?.status || '').toLowerCase();
+      const tableId = session?.table?._id || session?.table || session?.tableId;
+      if (status !== 'active' || !tableId) return false;
+      return tables.some((table: any) => String(table._id || table.id) === String(tableId));
+    });
+
+    return tableIdsWithStatus.size > 0 || hasOpenBill || hasActiveSession;
+  }, [user, tables, bills, sessions]);
+
   const handleLogout = async () => {
-    const occupiedCount = getOccupiedTablesCount(tables);
-    
-    if (occupiedCount > 0) {
-      setShowOccupiedWarning(true);
+    if (hasOccupiedTables && !window.confirm('توجد طاولات مشغولة، هل تريد تسجيل الخروج؟')) {
       return;
     }
-    
-    setIsConfirmingLogout(true);
-    try {
-      await logout();
-    } finally {
-      setIsConfirmingLogout(false);
-    }
-  };
 
-  const handleConfirmLogoutWithOccupied = async () => {
-    setIsConfirmingLogout(true);
-    try {
-      await logout();
-    } finally {
-      setIsConfirmingLogout(false);
-      setShowOccupiedWarning(false);
-    }
+    await logout();
   };
 
   // حالة فتح قائمة الأجهزة
@@ -322,7 +334,7 @@ const Layout = () => {
                 </div>
                 <div className={`flex items-center ${isRTL ? 'space-x-1 space-x-reverse' : 'space-x-1'}`}>
                   <button
-                    onClick={toggleDarkMode}
+                    onClick={() => { void toggleDarkMode(); }}
                     className="p-1 text-gray-400 hover:text-orange-600 dark:text-orange-400 dark:hover:text-orange-300 transition-colors duration-200 flex-shrink-0"
                     title={isDarkMode ? t('theme.switchToLight') : t('theme.switchToDark')}
                   >
@@ -340,7 +352,7 @@ const Layout = () => {
             )}
             {sidebarCollapsed && (
               <div className="flex flex-col gap-1 mt-1">
-                <button onClick={toggleDarkMode} className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg" title={isDarkMode ? t('theme.switchToLight') : t('theme.switchToDark')}>
+                <button onClick={() => { void toggleDarkMode(); }} className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg" title={isDarkMode ? t('theme.switchToLight') : t('theme.switchToDark')}>
                   {isDarkMode ? <Sun className="h-4 w-4 text-gray-600 dark:text-gray-300" /> : <Moon className="h-4 w-4 text-gray-600 dark:text-gray-300" />}
                 </button>
                 <button onClick={handleLogout} className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg" title={t('auth.logout')}>
@@ -426,7 +438,7 @@ const Layout = () => {
                     showIfNoPermission={false}
                   >
                     <Link
-                      to={item.href}
+                      to={item.href || '/'}
                       title={sidebarCollapsed ? item.name : undefined}
                       className={`${isActive(item.href)
                         ? `bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-300 ${isRTL ? 'border-r-4' : 'border-l-4'} border-orange-600`

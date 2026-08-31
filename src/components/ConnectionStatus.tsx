@@ -140,6 +140,9 @@ export const ConnectionStatus: React.FC<ConnectionStatusProps> = ({ onRetry }) =
               <RefreshCw className="w-4 h-4 animate-spin" />
               <span>في انتظار عودة الاتصال...</span>
             </div>
+            <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+              آخر فحص: {lastChecked.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+            </div>
           </div>
 
           {/* أزرار */}

@@ -52,6 +52,68 @@ const PageLoader = () => (
 );
 
 // مكون للتحقق من الصلاحيات وحماية المسارات
+const ExitGuard = () => {
+  const { user, tables, bills, sessions } = useApp();
+
+  const hasOccupiedTables = React.useMemo(() => {
+    if (!user || !Array.isArray(tables) || tables.length === 0) {
+      return false;
+    }
+
+    const activeStatuses = new Set(['occupied', 'reserved']);
+    const tableIdsWithActiveStatus = new Set(
+      tables
+        .filter((table: any) => table && table.isActive !== false && activeStatuses.has(String(table.status || '').toLowerCase()))
+        .map((table: any) => String(table._id || table.id))
+    );
+
+    const hasOpenBill = Array.isArray(bills) && bills.some((bill: any) => {
+      const tableId = bill?.table?._id || bill?.table || bill?.tableId;
+      if (!tableId) return false;
+      const billStatus = String(bill?.status || '').toLowerCase();
+      return !['paid', 'cancelled'].includes(billStatus) && (!tableId || tableIdsWithActiveStatus.has(String(tableId)) || !Array.isArray(tables) || tables.some((table: any) => String(table._id || table.id) === String(tableId)) );
+    });
+
+    const hasActiveSession = Array.isArray(sessions) && sessions.some((session: any) => {
+      const status = String(session?.status || '').toLowerCase();
+      const tableId = session?.table?._id || session?.table || session?.tableId;
+      if (status !== 'active' || !tableId) return false;
+      return tables.some((table: any) => String(table._id || table.id) === String(tableId));
+    });
+
+    return tableIdsWithActiveStatus.size > 0 || hasOpenBill || hasActiveSession;
+  }, [user, tables, bills, sessions]);
+
+  React.useEffect(() => {
+    try {
+      sessionStorage.setItem('bombaExitGuard', String(Boolean(user && hasOccupiedTables)));
+    } catch {}
+
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (!user || !hasOccupiedTables) return;
+      event.preventDefault();
+      event.returnValue = 'توجد طاولات مشغولة، هل تريد الخروج؟';
+      return 'توجد طاولات مشغولة، هل تريد الخروج؟';
+    };
+
+    const handlePageHide = (event: PageTransitionEvent) => {
+      if (!user || !hasOccupiedTables) return;
+      event.preventDefault();
+      (event as any).returnValue = 'توجد طاولات مشغولة، هل تريد الخروج؟';
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    window.addEventListener('pagehide', handlePageHide);
+
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      window.removeEventListener('pagehide', handlePageHide);
+    };
+  }, [user, hasOccupiedTables]);
+
+  return null;
+};
+
 const ProtectedRoute = ({ children, requiredPermissions = [], requiredRole }: {
   children: React.ReactNode;
   requiredPermissions?: string[];
@@ -291,6 +353,7 @@ const App = () => {
               <OrganizationProvider>
                 <TablesHeaderProvider>
                 <ToastManager>
+                  <ExitGuard />
                   <div className="min-h-screen bg-gray-50 dark:bg-gray-900 font-cairo container-responsive">
                     <RouteHandler />
                   </div>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { X, Search, Save, ShoppingCart, Table as TableIcon, ChefHat, AlertTriangle, CheckCircle, Printer } from 'lucide-react';
+import { X, Search, Save, ShoppingCart, Table as TableIcon, AlertTriangle, CheckCircle, Printer } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Bill, MenuItem, MenuSection, MenuCategory } from '../../services/api';
 import { api } from '../../services/api';
@@ -222,19 +222,6 @@ const BillItemsEditModal: React.FC<Props> = ({ isOpen, onClose, bill, menuItems,
     setTimeout(() => { const el = itemRefsMap.current[flashKey] || itemRefsMap.current[id]; el?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }, 30);
   }, []);
 
-  const updateItemQuantity = (menuItemId: string, variant: string | null, delta: number) => {
-    setItems(prev => {
-      const next = prev.map(it => it.menuItem === menuItemId && (it as any).variant === variant ? { ...it, quantity: it.quantity + delta } : it).filter(it => it.quantity > 0);
-      return next;
-    });
-  };
-  const removeItemFromOrder = (menuItemId: string, variant: string | null) => {
-    setItems(prev => prev.filter(it => !(it.menuItem === menuItemId && (it as any).variant === variant)));
-  };
-  const updateItemNotes = (menuItemId: string, notes: string) => {
-    setItems(prev => prev.map(it => it.menuItem === menuItemId ? { ...it, notes } : it));
-  };
-
   const handlePriceEditSaveBill = (qty: number, newPrice: number) => {
     if (!priceEditTarget) return;
     const { index, item } = priceEditTarget;
@@ -257,7 +244,7 @@ const BillItemsEditModal: React.FC<Props> = ({ isOpen, onClose, bill, menuItems,
     });
   };
 
-  const doSave = async (shouldPrint: boolean) => {
+  const doSave = async ({ shouldPrint = false, shouldPayFull = false }: { shouldPrint?: boolean; shouldPayFull?: boolean } = {}) => {
     const targetBill = fullBill || bill;
     if (!targetBill) return;
     setSaving(true);
@@ -278,18 +265,42 @@ const BillItemsEditModal: React.FC<Props> = ({ isOpen, onClose, bill, menuItems,
         return payload;
       });
       const res: any = await api.updateBillAggregatedItems(billId, { items: payloadItems });
-      if (res.success) {
-        onSuccess(res.data);
-        if (shouldPrint) {
-          try { await printBill(res.data, (user as any)?.organizationName || '', i18n.language, t); } catch {}
-        }
-        onClose();
-      } else {
+      if (!res.success) {
         setError(res.message || 'حدث خطأ أثناء حفظ التعديلات');
         if (res.errors) setInventoryErrors(res.errors);
         if (res.details) setInventoryErrors(res.details.map((d: any) => `${d.name}: المطلوب ${d.required} ${d.unit} المتوفر ${d.available}`));
         if (res.inventoryErrors) setInventoryErrors(res.inventoryErrors);
+        return;
       }
+
+      let finalBill = res.data || targetBill;
+
+      if (shouldPayFull) {
+        const remaining = Number(finalBill?.remaining ?? 0);
+        if (remaining > 0) {
+          const paymentRes: any = await api.updatePayment(billId, {
+            paid: Number(finalBill?.paid || 0) + remaining,
+            remaining: 0,
+            status: 'paid',
+            paymentAmount: remaining,
+            method: 'cash',
+            reference: '',
+          } as any);
+
+          if (paymentRes?.success && paymentRes.data) {
+            finalBill = paymentRes.data;
+          } else {
+            setError(paymentRes?.message || 'حدث خطأ أثناء الدفع الكامل');
+            return;
+          }
+        }
+      }
+
+      onSuccess(finalBill);
+      if (shouldPrint) {
+        try { await printBill(finalBill, (user as any)?.organizationName || '', i18n.language, t); } catch {}
+      }
+      onClose();
     } catch (e: any) {
       const msg = e?.message || e?.data?.message || 'خطأ في حفظ التعديلات';
       setError(msg);
@@ -300,8 +311,9 @@ const BillItemsEditModal: React.FC<Props> = ({ isOpen, onClose, bill, menuItems,
       setSaving(false);
     }
   };
-  const handleSave = () => doSave(false);
-  const handleSaveAndPrint = () => doSave(true);
+  const handleSave = () => doSave({ shouldPrint: false, shouldPayFull: false });
+  const handleSaveAndPrint = () => doSave({ shouldPrint: true, shouldPayFull: false });
+  const handleSaveAndPayFull = () => doSave({ shouldPrint: false, shouldPayFull: true });
 
   if (!isOpen || !bill) return null;
   const displayBill = fullBill || bill;
@@ -467,7 +479,7 @@ const BillItemsEditModal: React.FC<Props> = ({ isOpen, onClose, bill, menuItems,
                 <span className="text-base font-bold text-orange-600 dark:text-orange-400">{fmt(calculateTotal())}</span>
               </div>
 
-              <div ref={scrollContainerRef} className="flex-1 overflow-y-auto px-2 py-2 space-y-1.5 min-h-0">
+              <div ref={scrollContainerRef} className="flex-1 overflow-y-auto px-2 py-2 space-y-1.5 min-h-0 pb-28">
                 {items.length === 0 ? (
                   <div className="flex flex-col items-center justify-center h-full select-none">
                     <ShoppingCart className="h-8 w-8 text-gray-200 dark:text-gray-700 mb-1" />
@@ -499,22 +511,25 @@ const BillItemsEditModal: React.FC<Props> = ({ isOpen, onClose, bill, menuItems,
                 })}
               </div>
 
-              <div className="px-3 py-3 flex-shrink-0 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700">
-                <div className="grid grid-cols-3 gap-2">
-                  <button onClick={onClose} disabled={saving}
-                    className="py-2.5 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 font-semibold text-sm rounded-xl flex items-center justify-center gap-1.5 shadow-sm transition-all active:scale-[0.98] disabled:opacity-50">
-                    <X className="h-4 w-4" />إلغاء
-                  </button>
-                  <button onClick={handleSave} disabled={saving || loadingBill}
-                    className="py-2.5 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold text-sm rounded-xl flex items-center justify-center gap-1.5 shadow-md border border-blue-700 transition-all active:scale-[0.98] disabled:opacity-50">
-                    {saving ? <><svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>جاري الحفظ...</> : <><Save className="h-4 w-4" />حفظ</>}
-                  </button>
-                  <button onClick={handleSaveAndPrint} disabled={saving || loadingBill}
-                    className="py-2.5 bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 active:from-orange-700 active:to-red-700 text-white font-bold text-sm rounded-xl flex items-center justify-center gap-1.5 shadow-md border border-orange-600 transition-all active:scale-[0.98] disabled:opacity-50">
-                    <Printer className="h-4 w-4" />حفظ وطباعة
+              <div className="sticky bottom-0 z-10 px-3 py-3 flex-shrink-0 bg-white/95 dark:bg-gray-800/95 border-t border-gray-200 dark:border-gray-700">
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 gap-2">
+                    <button onClick={handleSave} disabled={saving || loadingBill}
+                      className="min-h-[46px] py-2.5 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold text-sm rounded-xl flex items-center justify-center gap-1.5 shadow-md border border-blue-700 transition-all active:scale-[0.98] disabled:opacity-50">
+                      {saving ? <><svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>جاري الحفظ...</> : <><Save className="h-4 w-4" />حفظ</>}
+                    </button>
+                    <button onClick={handleSaveAndPrint} disabled={saving || loadingBill}
+                      className="min-h-[46px] py-2.5 bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 active:from-orange-700 active:to-red-700 text-white font-bold text-sm rounded-xl flex items-center justify-center gap-1.5 shadow-md border border-orange-600 transition-all active:scale-[0.98] disabled:opacity-50">
+                      <Printer className="h-4 w-4" />حفظ وطباعة
+                    </button>
+                  </div>
+                  <button onClick={handleSaveAndPayFull} disabled={saving || loadingBill}
+                    className="w-full min-h-[50px] py-3 bg-gradient-to-r from-orange-500 via-amber-500 to-orange-600 hover:from-orange-600 hover:via-amber-600 hover:to-orange-700 active:from-orange-700 active:via-amber-700 active:to-orange-800 text-white font-black text-sm rounded-xl flex items-center justify-center gap-1.5 shadow-lg border-2 border-orange-300 transition-all active:scale-[0.98] disabled:opacity-50">
+                    <CheckCircle className="h-4 w-4" />حفظ ودفع بالكامل
                   </button>
                 </div>
               </div>
+
               </div>
             </div>
           </div>
