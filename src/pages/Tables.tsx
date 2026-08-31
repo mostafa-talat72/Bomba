@@ -1817,14 +1817,31 @@ const loadInitialData = async () => {
         paymentAmount: remaining, method: 'cash', reference: '',
       } as any);
       if (result?.data) {
-        setBills(prev => prev.map(b => String(b._id || b.id) === String(billToPayFull._id || billToPayFull.id) ? result.data : b));
+        const finalPaidBill = result.data;
+        const tableId = String((finalPaidBill.table as any)?._id || finalPaidBill.table || '');
+        setBills(prev => {
+          const next = prev.map(b => String(b._id || b.id) === String(billToPayFull._id || billToPayFull.id) ? finalPaidBill : b);
+          if (tableId && !next.some((b: any) => String(b.table?._id || b.table) === tableId && ['draft','partial','overdue'].includes(b.status))) {
+            setShowUnifiedTableModal(false);
+            setSelectedTable(null);
+          }
+          return next;
+        });
         setShowPayFullBillConfirmModal(false); setBillToPayFull(null);
         setIsProcessingPayment(false);
         setShowPaymentSuccessAnim(true);
         setTimeout(() => setShowPaymentSuccessAnim(false), 2500);
+        tableCardDataCache.current.clear();
         invalidateTablesCache();
-        scheduleBackgroundRefetch(true);
+        fetchBills().catch(() => {});
         showNotification(t('billing.notifications.payFullBillSuccess'), 'success');
+
+        if (user?.organization?.printSettings?.openCashDrawerOnPayment !== false) {
+          await handleOpenCashDrawer();
+        }
+        if (user?.organization?.printSettings?.autoPrintOnPayment ?? true) {
+          try { await printBill(finalPaidBill, user?.organizationName, i18n.language, t, getTableSectionName(finalPaidBill.table)); } catch {}
+        }
       }
     } catch { showNotification(t('billing.notifications.payFullBillError'), 'error'); setIsProcessingPayment(false); }
   };
@@ -1861,7 +1878,16 @@ const loadInitialData = async () => {
         paymentAmount: remaining, method: 'cash', reference: '',
       } as any);
       if (result?.data) {
-        setBills(prev => prev.map(b => String(b._id || (b as any).id) === String((bill as any)._id || (bill as any).id) ? result.data : b));
+        const finalPaidBill = result.data;
+        const tableId = String((finalPaidBill.table as any)?._id || finalPaidBill.table || '');
+        setBills(prev => {
+          const next = prev.map(b => String(b._id || (b as any).id) === String((bill as any)._id || (bill as any).id) ? finalPaidBill : b);
+          if (tableId && !next.some((b: any) => String(b.table?._id || b.table) === tableId && ['draft','partial','overdue'].includes(b.status))) {
+            setShowUnifiedTableModal(false);
+            setSelectedTable(null);
+          }
+          return next;
+        });
         tableCardDataCache.current.clear();
         setIsProcessingPayment(false);
         setShowPaymentSuccessAnim(true);
@@ -1870,14 +1896,12 @@ const loadInitialData = async () => {
         // fetch فوري بدون throttle عشان حالة الطاولة تتأكد
         fetchBills().catch(()=>{});
         showNotification(t('billing.notifications.payFullBillSuccess'), 'success');
-        
-        // فتح درج الكاشير تلقائياً إذا كان مفعلاً في الإعدادات
-        await handleOpenCashDrawer();
-        
-        // طباعة الفاتورة تلقائياً إذا كان مفعلاً في الإعدادات
-        const autoPrint = user?.organization?.printSettings?.autoPrintOnPayment ?? true;
-        if (autoPrint) {
-          await printBill(result.data, user?.organizationName, i18n.language, t);
+
+        if (user?.organization?.printSettings?.openCashDrawerOnPayment !== false) {
+          await handleOpenCashDrawer();
+        }
+        if (user?.organization?.printSettings?.autoPrintOnPayment ?? true) {
+          await printBill(finalPaidBill, user?.organizationName, i18n.language, t, getTableSectionName(finalPaidBill.table));
         }
       } else {
         setIsProcessingPayment(false);
@@ -1889,11 +1913,12 @@ const loadInitialData = async () => {
     try {
       const organization = user?.organization;
       const response = await api.openCashDrawerOnly(organization);
-      
+      const message = response?.message || '';
+
       if (response.success) {
         showNotification(t('settings.organization.printSettings.cashDrawerOpened'), 'success');
       } else {
-        if (response.message.includes('disabled')) {
+        if (message.includes('disabled')) {
           showNotification(t('settings.organization.printSettings.cashDrawerDisabled'), 'warning');
         } else {
           showNotification(t('settings.organization.printSettings.cashDrawerFailed'), 'error');
@@ -3911,6 +3936,23 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
           // update selectedBill if open
           if (selectedBill && (selectedBill as any)._id === (updatedBill as any)._id) {
             setSelectedBill(updatedBill as any);
+          }
+          if ((updatedBill as any)?.status === 'paid') {
+            const tableId = String(((updatedBill as any).table as any)?._id || (updatedBill as any).table || '');
+            setBills(prev => {
+              const next = prev.map((b: any) => String(b._id || b.id) === String((updatedBill as any)._id || (updatedBill as any).id) ? updatedBill : b);
+              if (tableId && !next.some((b: any) => String(b.table?._id || b.table) === tableId && ['draft','partial','overdue'].includes(b.status))) {
+                setShowUnifiedTableModal(false);
+                setSelectedTable(null);
+              }
+              return next;
+            });
+            if (user?.organization?.printSettings?.openCashDrawerOnPayment !== false) {
+              await handleOpenCashDrawer();
+            }
+            if (user?.organization?.printSettings?.autoPrintOnPayment ?? true) {
+              try { await printBill(updatedBill, user?.organizationName, i18n.language, t, getTableSectionName((updatedBill as any).table)); } catch {}
+            }
           }
           showNotification('تم تحديث أصناف الفاتورة بنجاح', 'success');
         }}
