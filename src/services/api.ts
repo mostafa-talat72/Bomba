@@ -2122,6 +2122,30 @@ class ApiClient {
     });
   }
 
+  // Backup methods
+  async createBackup(backupPath?: string): Promise<ApiResponse<any>> {
+    return this.request('/backup/create', {
+      method: 'POST',
+      body: JSON.stringify({ backupPath }),
+    });
+  }
+
+  async getBackups(): Promise<ApiResponse<any>> {
+    return this.request('/backup');
+  }
+
+  async restoreBackup(fileName: string): Promise<ApiResponse<any>> {
+    return this.request(`/backup/restore/${fileName}`, {
+      method: 'POST',
+    });
+  }
+
+  async deleteBackup(fileName: string): Promise<ApiResponse<any>> {
+    return this.request(`/backup/${fileName}`, {
+      method: 'DELETE',
+    });
+  }
+
   // Device endpoints
   async getDevices(params?: {
     type?: string;
@@ -2821,6 +2845,13 @@ class ApiClient {
   async getDevicePrinter(deviceId?: string): Promise<ApiResponse<any>> {
     const query = deviceId ? `?deviceId=${deviceId}` : '';
     return this.request(`/print/device${query}`);
+  }
+
+  async openCashDrawerOnly(organization: any): Promise<ApiResponse<any>> {
+    return this.request('/print/open-cash-drawer', {
+      method: 'POST',
+      body: JSON.stringify({ organization }),
+    });
   }
 
 

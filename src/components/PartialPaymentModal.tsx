@@ -178,7 +178,10 @@ const PartialPaymentModal: React.FC<PartialPaymentModalProps> = ({
                         </div>
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-bold text-base sm:text-lg text-gray-900 dark:text-gray-100 truncate">{item.name}{(item as any).variant ? ` (${(item as any).variant})` : ''}</span>
+                            <span className="font-bold text-base sm:text-lg text-gray-900 dark:text-gray-100 truncate flex items-center gap-1.5 flex-wrap">
+                              <span className="truncate">{item.name}</span>
+                              {(item as any).variant && <span className="text-[11px] bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-300 px-2 py-0.5 rounded-md font-bold whitespace-nowrap">{(item as any).variant}</span>}
+                            </span>
                             {item.hasAddons && (
                               <span className="text-xs bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200 px-2 py-0.5 rounded-full whitespace-nowrap">
                                 🍯 {t('billing.partialPaymentModal.withAddons')}

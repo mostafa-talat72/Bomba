@@ -1824,6 +1824,10 @@
         "printerPortDesc": "منفذ الطابعة الشبكية (الافتراضي: 9100)",
         "openCashDrawer": "فتح درج الكاشير للفواتير",
         "openCashDrawerDesc": "فتح درج الكاشير تلقائياً عند طباعة الفواتير فقط",
+        "openCashDrawerOnPayment": "فتح درج الكاشير عند الدفع الكامل",
+        "openCashDrawerOnPaymentDesc": "فتح درج الكاشير تلقائياً عند دفع الفاتورة بالكامل (يمكن أيضاً فتحه يدوياً)",
+        "autoPrintOnPayment": "طباعة الفاتورة تلقائياً عند الدفع",
+        "autoPrintOnPaymentDesc": "طباعة الفاتورة تلقائياً عند دفع الفاتورة بالكامل (يمكن تعطيلها)",
         "charactersPerLine": "عدد الأحرف في السطر",
         "charactersPerLineDesc": "عدد الأحرف في كل سطر (الافتراضي: 48)",
         "printHeader": "طباعة الرأس",
@@ -1843,7 +1847,11 @@
         "detectFailed": "فشل كشف الطابعات",
         "test": "اختبار",
         "testSuccess": "الطابعة متصلة وجاهزة",
-        "testFailed": "فشل اختبار الطابعة: {{error}}"
+        "testFailed": "فشل اختبار الطابعة: {{error}}",
+        "openCashDrawer": "فتح درج الكاشير",
+        "cashDrawerOpened": "تم فتح درج الكاشير بنجاح",
+        "cashDrawerFailed": "فشل فتح درج الكاشير",
+        "cashDrawerDisabled": "فتح درج الكاشير عند الدفع معطل في الإعدادات"
       },
       "saveSettings": "حفظ الإعدادات",
       "saveAllSettings": "تم حفظ جميع الإعدادات بنجاح",

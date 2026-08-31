@@ -3583,7 +3583,7 @@ export const updateBillAggregatedItems = async (req, res) => {
         const allOldItems = [];
         (bill.orders || []).forEach((order) => {
             (order.items || []).forEach((it) => {
-                allOldItems.push({ menuItem: it.menuItem, name: it.name, price: it.price, quantity: it.quantity });
+                allOldItems.push({ menuItem: it.menuItem, name: it.name, price: it.price, quantity: it.quantity, variant: it.variant || null });
             });
         });
 

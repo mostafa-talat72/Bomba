@@ -67,6 +67,7 @@ import payrollRoutes from "./routes/payroll.js";
 import warehouseRoutes from "./routes/warehouseRoutes.js";
 import inviteRoutes from "./routes/inviteRoutes.js";
 import printRoutes from "./routes/printRoutes.js";
+import backupRoutes from "./routes/backupRoutes.js";
 
 // Environment variables already loaded at the top of the file
 
@@ -733,6 +734,7 @@ app.use("/api/payroll", payrollRoutes);
 app.use("/api/warehouse", warehouseRoutes);
 app.use("/api/invites", inviteRoutes);
 app.use("/api/print", printRoutes);
+app.use("/api/backup", backupRoutes);
 app.use("/public", publicRoutes);
 
 // Desktop app static serving (enabled only when DESKTOP_DIST_PATH is set)

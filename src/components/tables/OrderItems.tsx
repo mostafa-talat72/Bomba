@@ -24,17 +24,17 @@ export const ItemCard = React.memo(({ item, qty, qtyByVariant, onAdd, fmt }: {
               const vQty = qtyByVariant?.[v.size] || 0;
               return (
                 <button key={v.size} onClick={() => onAdd(item, v.size)}
-                  className={`relative flex flex-col items-center rounded-md border px-1 py-1 text-xs font-medium transition-colors ${vQty > 0 ? 'bg-orange-500 text-white border-orange-600' : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 border-gray-200 dark:border-gray-600 hover:border-orange-300'}`}>
-                  <span className="font-semibold">{v.size}</span>
-                  <span className={`text-[11px] ${vQty > 0 ? 'text-white/90' : 'text-orange-600 dark:text-orange-400'}`}>{fmt(v.price)}</span>
-                  {vQty > 0 && <span className="absolute -top-1 -left-1 min-w-[14px] h-[14px] bg-green-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center px-0.5">{vQty}</span>}
+                  className={`relative flex flex-col items-center rounded-md border px-1 py-1.5 text-xs font-medium transition-colors ${vQty > 0 ? 'bg-orange-500 text-white border-orange-600' : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 border-gray-200 dark:border-gray-600 hover:border-orange-300'}`}>
+                  <span className="font-bold text-sm">{v.size}</span>
+                  <span className={`text-[11px] mt-0.5 ${vQty > 0 ? 'text-white/90' : 'text-orange-600 dark:text-orange-400'}`}>{fmt(v.price)}</span>
+                  {vQty > 0 && <span className="absolute -top-1.5 -left-1.5 min-w-[18px] h-[18px] bg-green-500 text-white text-[11px] font-bold rounded-full flex items-center justify-center px-0.5 shadow-sm">{vQty}</span>}
                 </button>
               );
             })}
           </div>
         </div>
         <div className={`w-full flex items-center justify-center gap-0.5 py-1 border-t text-base font-medium ${inOrder ? 'border-orange-200 dark:border-orange-700 bg-orange-500 text-white' : 'border-gray-100 dark:border-gray-700 text-gray-400 group-hover:text-orange-500 group-hover:bg-orange-50 dark:group-hover:bg-orange-900/20'}`}>
-          <span className="text-xs">{inOrder ? `${qty} في الطلب` : 'اختر الحجم'}</span>
+          <span className="text-xs font-semibold">{inOrder ? `${qty} في الطلب` : 'اختر الحجم'}</span>
         </div>
       </div>
     );

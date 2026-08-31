@@ -222,14 +222,14 @@ const BillItemsEditModal: React.FC<Props> = ({ isOpen, onClose, bill, menuItems,
     setTimeout(() => { const el = itemRefsMap.current[flashKey] || itemRefsMap.current[id]; el?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }, 30);
   }, []);
 
-  const updateItemQuantity = (menuItemId: string, delta: number) => {
+  const updateItemQuantity = (menuItemId: string, variant: string | null, delta: number) => {
     setItems(prev => {
-      const next = prev.map(it => it.menuItem === menuItemId ? { ...it, quantity: it.quantity + delta } : it).filter(it => it.quantity > 0);
+      const next = prev.map(it => it.menuItem === menuItemId && (it as any).variant === variant ? { ...it, quantity: it.quantity + delta } : it).filter(it => it.quantity > 0);
       return next;
     });
   };
-  const removeItemFromOrder = (menuItemId: string) => {
-    setItems(prev => prev.filter(it => it.menuItem !== menuItemId));
+  const removeItemFromOrder = (menuItemId: string, variant: string | null) => {
+    setItems(prev => prev.filter(it => !(it.menuItem === menuItemId && (it as any).variant === variant)));
   };
   const updateItemNotes = (menuItemId: string, notes: string) => {
     setItems(prev => prev.map(it => it.menuItem === menuItemId ? { ...it, notes } : it));
@@ -476,6 +476,7 @@ const BillItemsEditModal: React.FC<Props> = ({ isOpen, onClose, bill, menuItems,
                   </div>
                 ) : items.map((item, idx) => {
                   const compositeKey = `${item.menuItem}::${(item as any).variant || ''}::${item.price}`;
+                  const itemVariant = (item as any).variant || null;
                   return (
                   <div key={compositeKey + idx} ref={el => { itemRefsMap.current[compositeKey] = el as HTMLDivElement | null; itemRefsMap.current[item.menuItem] = el as HTMLDivElement | null; }}>
                     <OrderItemRow
