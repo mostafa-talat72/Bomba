@@ -441,6 +441,10 @@ export function KitchenDisplay() {
                       <ul className="space-y-1 mb-3">
                         {order.items.map((item, i) => {
                           const isItemPrepared = (item.preparedCount ?? 0) >= (item.quantity ?? 1);
+                          const variant = (item as any).variant as string | null | undefined;
+                          const hasVariant = !!variant && variant !== 'عادي' && String(variant).trim() !== '';
+                          const baseName = i18n.language === 'ar' ? item.arabicName || item.name : item.name;
+                          const displayName = hasVariant ? `${baseName} (${variant})` : baseName;
                           return (
                             <li key={i} className="flex items-center justify-between text-sm py-0.5">
                               <div className="flex items-center gap-2 min-w-0">
@@ -461,10 +465,15 @@ export function KitchenDisplay() {
                                     </span>
                                   </label>
                                 )}
-                                <span className={`text-gray-700 dark:text-gray-300 truncate ${
+                                <span className={`text-gray-700 dark:text-gray-300 truncate flex items-center gap-1.5 flex-wrap ${
                                   isItemPrepared ? 'line-through text-gray-400 dark:text-gray-500' : ''
                                 }`}>
-                                  {i18n.language === 'ar' ? item.arabicName || item.name : item.name}
+                                  <span className="truncate">{displayName}</span>
+                                  {hasVariant && (
+                                    <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-700 shrink-0">
+                                      {variant}
+                                    </span>
+                                  )}
                                 </span>
                               </div>
                               <span className="text-gray-500 font-medium flex-shrink-0 ms-2">{t('common.quantity', { count: formatNumber(item.quantity) })}</span>
@@ -554,6 +563,10 @@ function GroupedItemsBySection({ order, sections, getSectionName, onItemToggle, 
             <ul className="space-y-0.5">
               {items.map((item, i) => {
                 const isItemPrepared = (item.preparedCount ?? 0) >= (item.quantity ?? 1);
+                const variant = (item as any).variant as string | null | undefined;
+                const hasVariant = !!variant && variant !== 'عادي' && String(variant).trim() !== '';
+                const baseName = i18n.language === 'ar' ? item.arabicName || item.name : item.name;
+                const displayName = hasVariant ? `${baseName} (${variant})` : baseName;
                 return (
                   <li key={i} className="flex items-center justify-between text-sm py-0.5">
                     <div className="flex items-center gap-2 min-w-0">
@@ -574,10 +587,15 @@ function GroupedItemsBySection({ order, sections, getSectionName, onItemToggle, 
                           </span>
                         </label>
                       )}
-                      <span className={`text-gray-700 dark:text-gray-300 truncate ${
+                      <span className={`text-gray-700 dark:text-gray-300 truncate flex items-center gap-1.5 flex-wrap ${
                         isItemPrepared ? 'line-through text-gray-400 dark:text-gray-500' : ''
                       }`}>
-                        {i18n.language === 'ar' ? item.arabicName || item.name : item.name}
+                        <span className="truncate">{displayName}</span>
+                        {hasVariant && (
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-700 shrink-0">
+                            {variant}
+                          </span>
+                        )}
                       </span>
                     </div>
                     <span className="text-gray-500 font-medium flex-shrink-0 ms-2">{t('common.quantity', { count: formatNumber(item.quantity) })}</span>

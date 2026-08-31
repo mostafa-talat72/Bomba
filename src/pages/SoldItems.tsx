@@ -31,11 +31,22 @@ interface SoldItemDetail {
 
 interface SoldItem {
   itemName: string;
+  variant?: string | null;
   totalQuantity: number;
   totalRevenue: number;
   orderCount: number;
   details: SoldItemDetail[];
 }
+
+// Variant-aware helpers: different sizes of same menu item should be separate rows
+const getDisplayName = (item: SoldItem): string => {
+  if (item.variant && item.variant !== 'عادي' && String(item.variant).trim() !== '') {
+    return `${item.itemName} (${item.variant})`;
+  }
+  return item.itemName;
+};
+
+const getItemKey = (item: Pick<SoldItem, 'itemName' | 'variant'>): string => `${item.itemName}|${item.variant || ''}`;
 
 interface Category {
   categoryId: string;
@@ -127,7 +138,7 @@ const SoldItems: React.FC = () => {
     fetchSoldItems();
   }, [dateFilter, customDateRange]);
 
-  // Sorting function
+  // Sorting function - variant-aware display name
   const applySorting = (data: Section[]): Section[] => {
     return data.map(section => ({
       ...section,
@@ -138,7 +149,7 @@ const SoldItems: React.FC = () => {
           
           switch (sortBy) {
             case 'name':
-              comparison = a.itemName.localeCompare(b.itemName, i18n.language);
+              comparison = getDisplayName(a).localeCompare(getDisplayName(b), i18n.language);
               break;
             case 'quantity':
               comparison = a.totalQuantity - b.totalQuantity;
@@ -209,14 +220,15 @@ const SoldItems: React.FC = () => {
       if (response.success && response.data) {
         let sectionsData: Section[] = response.data;
         
-        // Apply search filter if needed
+        // Apply search filter if needed - variant-aware (search in "name (variant)")
         if (searchTerm) {
+          const lower = searchTerm.toLowerCase();
           sectionsData = sectionsData.map(section => ({
             ...section,
             categories: section.categories.map(category => ({
               ...category,
               items: category.items.filter(item =>
-                item.itemName.toLowerCase().includes(searchTerm.toLowerCase())
+                getDisplayName(item).toLowerCase().includes(lower)
               )
             })).filter(category => category.items.length > 0)
           })).filter(section => section.categories.length > 0);
@@ -296,26 +308,26 @@ const SoldItems: React.FC = () => {
     });
   };
 
-  const toggleItem = async (itemName: string) => {
-    // If closing the item, just close it
-    if (expandedItem === itemName) {
+  const toggleItem = async (itemKey: string) => {
+    // If closing the item, just close it - variant-aware key: name|variant
+    if (expandedItem === itemKey) {
       setExpandedItem(null);
       return;
     }
 
     // Add loading state for this item
-    setLoadingItems(prev => new Set(prev).add(itemName));
+    setLoadingItems(prev => new Set(prev).add(itemKey));
     
     // Simulate loading delay (you can remove this if data is already loaded)
     await new Promise(resolve => setTimeout(resolve, 300));
     
     // Expand the item
-    setExpandedItem(itemName);
+    setExpandedItem(itemKey);
     
     // Remove loading state
     setLoadingItems(prev => {
       const newSet = new Set(prev);
-      newSet.delete(itemName);
+      newSet.delete(itemKey);
       return newSet;
     });
   };
@@ -676,17 +688,19 @@ const SoldItems: React.FC = () => {
                         {/* Items */}
                         {expandedCategory === category.categoryId && !loadingCategories.has(category.categoryId) && (
                           <div className="p-3 bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 space-y-3">
-                            {category.items.map((item) => (
+                            {category.items.map((item) => {
+                              const itemKey = getItemKey(item);
+                              return (
                               <div
-                                key={item.itemName}
+                                key={itemKey}
                                 className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden border border-gray-200 dark:border-gray-700 hover:shadow-md transition-shadow"
                               >
-                                {/* Item Header */}
+                                {/* Item Header - variant-aware display */}
                                 <button
-                                  onClick={() => toggleItem(item.itemName)}
+                                  onClick={() => toggleItem(itemKey)}
                                   className={`w-full p-4 flex items-center justify-between hover:bg-gradient-to-${isRTL ? 'l' : 'r'} hover:from-orange-50 hover:to-transparent dark:hover:from-orange-900 dark:hover:to-transparent transition-all`}
                                   style={{ direction: dir }}
-                                  disabled={loadingItems.has(item.itemName)}
+                                  disabled={loadingItems.has(itemKey)}
                                 >
                                   <div className="flex items-center gap-3 flex-1" style={{ direction: dir }}>
                                     <div className="bg-gradient-to-br from-orange-500 to-orange-600 p-2.5 rounded-lg shadow">
@@ -694,7 +708,7 @@ const SoldItems: React.FC = () => {
                                     </div>
                                     <div className="flex-1" style={{ textAlign: textAlign }}>
                                       <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-1" dir="auto">
-                                        {item.itemName}
+                                        {getDisplayName(item)}
                                       </h4>
                                       <div className="flex gap-3 text-sm text-gray-600 dark:text-gray-400 flex-wrap" style={{ direction: dir }}>
                                         <span className="bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded-full">
@@ -709,17 +723,17 @@ const SoldItems: React.FC = () => {
                                       </div>
                                     </div>
                                   </div>
-                                  {loadingItems.has(item.itemName) ? (
+                                  {loadingItems.has(itemKey) ? (
                                     <div className="animate-spin rounded-full h-5 w-5 border-2 border-orange-500 border-t-transparent"></div>
-                                  ) : expandedItem === item.itemName ? (
+                                  ) : expandedItem === itemKey ? (
                                     <ChevronUp className="w-5 h-5 text-gray-400" />
                                   ) : (
                                     <ChevronDown className="w-5 h-5 text-gray-400" />
                                   )}
                                 </button>
 
-                                {/* Item Details */}
-                                {expandedItem === item.itemName && !loadingItems.has(item.itemName) && (
+                                {/* Item Details - variant-aware key */}
+                                {expandedItem === itemKey && !loadingItems.has(itemKey) && (
                                   <div className="p-4 bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800">
                                     <div className="space-y-3">
                                       {item.details.map((detail, index) => (
@@ -799,7 +813,7 @@ const SoldItems: React.FC = () => {
                                   </div>
                                 )}
                               </div>
-                            ))}
+                            )})}
                           </div>
                         )}
                       </div>

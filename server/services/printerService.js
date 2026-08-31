@@ -1,6 +1,7 @@
 import pkg from 'node-thermal-printer';
 import { Buffer } from 'buffer';
 const ThermalPrinter = pkg.ThermalPrinter || pkg.printer || pkg.default?.ThermalPrinter || pkg.default?.printer;
+const PrinterTypes = pkg.types || pkg.Types || pkg.default?.types || { EPSON: 'epson' };
 
 class PrinterService {
   constructor() {
@@ -18,14 +19,19 @@ class PrinterService {
     }
 
     try {
+      // node-thermal-printer expects type = printer model (epson/star), not interface type
+      const printerModel = printSettings.printerModel || printSettings.model || PrinterTypes.EPSON || 'epson';
+      let iface = printSettings.printerDevice || '';
+      if (printSettings.printerType === 'network' && printSettings.printerIP) {
+        iface = `tcp://${printSettings.printerIP}:${printSettings.printerPort || 9100}`;
+      } else if (!iface) {
+        // No device configured - treat as not connected, will fallback to window print
+        console.log('Printer device not configured, skipping direct print');
+        return false;
+      }
       this.printer = new ThermalPrinter({
-        type: printSettings.printerType === 'usb' ? 'USB' : 
-              printSettings.printerType === 'network' ? 'NETWORK' : 
-              printSettings.printerType === 'bluetooth' ? 'BLUETOOTH' : 'USB',
-        interface: printSettings.printerType === 'network' 
-          ? `tcp://${printSettings.printerIP}:${printSettings.printerPort}`
-          : printSettings.printerDevice,
-        driver: printSettings.printerDevice,
+        type: printerModel,
+        interface: iface,
         options: {
           timeout: 1000
         }

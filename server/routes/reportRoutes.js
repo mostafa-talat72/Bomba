@@ -76,8 +76,9 @@ router.get("/sold-items", authorize("soldItems", "all"), async (req, res) => {
             };
         }
         
-        // Get all orders (excluding cancelled) with populated data
+        // Get all orders (excluding cancelled) with populated data - scoped to organization
         const orders = await Order.find({
+            organization: req.user.organization,
             status: { $ne: 'cancelled' },
             items: { $exists: true, $ne: [], $type: 'array' },
             ...dateQuery
@@ -144,6 +145,8 @@ router.get("/sold-items", authorize("soldItems", "all"), async (req, res) => {
                 if (quantity <= 0 || price < 0) return;
                 
                 const itemName = item.name;
+                const variant = item.variant || '';
+                const itemKey = `${itemName}|${variant}`;
                 const menuInfo = itemMenuMap.get(itemName);
                 
                 // If item not found in menu, skip it or put in "غير مصنف"
@@ -186,10 +189,11 @@ router.get("/sold-items", authorize("soldItems", "all"), async (req, res) => {
                 category.totalQuantity += quantity;
                 category.totalRevenue += price * quantity;
                 
-                // Get or create item
-                if (!category.items.has(itemName)) {
-                    category.items.set(itemName, {
+                // Get or create item - variant-aware: different sizes of same menu item are separate rows
+                if (!category.items.has(itemKey)) {
+                    category.items.set(itemKey, {
                         itemName,
+                        variant,
                         totalQuantity: 0,
                         totalRevenue: 0,
                         orderCount: 0,
@@ -197,7 +201,7 @@ router.get("/sold-items", authorize("soldItems", "all"), async (req, res) => {
                     });
                 }
                 
-                const soldItem = category.items.get(itemName);
+                const soldItem = category.items.get(itemKey);
                 soldItem.totalQuantity += quantity;
                 soldItem.totalRevenue += price * quantity;
                 soldItem.orderCount += 1;

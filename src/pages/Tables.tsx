@@ -239,6 +239,8 @@ const Tables: React.FC = () => {
   // #7 - Activity log tab
   const [activeTab3, setActiveTab3] = useState<'orders' | 'billing' | 'log' | 'sessions'>('orders');
   const [tableActivityLog, setTableActivityLog] = useState<Array<{type: string; message: string; time: Date; color: string}>>([]);
+  // إغلاق معاينة الطلب عند الانتقال لتبويب آخر
+  useEffect(() => { if (activeTab3 !== 'orders') setPinnedOrder(null); }, [activeTab3]);
 
   // #8 - Drag & Drop in management modal (order tracking)
   const [draggedTableId, setDraggedTableId] = useState<string | null>(null);
