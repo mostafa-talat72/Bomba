@@ -1171,16 +1171,16 @@ export const initializeScheduler = () => {
     cron.schedule("0 0 * * *", createRecurringCosts);
     Logger.info("✅ Recurring costs creation scheduled: daily at midnight");
 
-    // Create database backup weekly on Sunday at 2 AM
-    cron.schedule("0 2 * * 0", async () => {
+    // Create database backup every 3 hours
+    cron.schedule("0 */3 * * *", async () => {
         try {
-            Logger.info("💾 Database backup scheduled task triggered");
+            Logger.info("💾 Scheduled database backup triggered");
             await createDatabaseBackup();
         } catch (error) {
             Logger.error("Scheduled backup failed", { error: error.message });
         }
     });
-    Logger.info("✅ Database backup scheduled: weekly on Sunday at 2 AM");
+    Logger.info("✅ Database backup scheduled: every 3 hours");
 
     // Clean expired notifications daily at 3 AM
     cron.schedule("0 3 * * *", async () => {

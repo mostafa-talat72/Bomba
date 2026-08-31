@@ -251,7 +251,9 @@ class PrintController {
       );
 
       aggregatedItems.forEach(item => {
-        const name = item.name;
+        const variant = item.variant;
+        const variantText = variant && variant !== 'عادي' ? ` (${variant})` : '';
+        const name = item.name + variantText;
         const qty = item.totalQuantity;
         const paidQty = item.paidQuantity;
         const total = item.price * item.totalQuantity;
@@ -502,6 +504,85 @@ class PrintController {
       return res.status(500).json({ 
         success: false, 
         message: 'Failed to get printer settings',
+        error: error.message
+      });
+    }
+  }
+
+  /**
+   * فتح درج الكاشير فقط (بدون طباعة)
+   */
+  async openCashDrawerOnly(req, res) {
+    try {
+      const { organization } = req.body;
+
+      if (!organization) {
+        return res.status(400).json({ 
+          success: false, 
+          message: 'Organization data is required' 
+        });
+      }
+
+      // الحصول على إعدادات الطابعة من المنشأة
+      let printSettings = {};
+      if (organization) {
+        if (typeof organization === 'object' && organization.printSettings) {
+          printSettings = organization.printSettings;
+        } else if (typeof organization === 'string') {
+          const org = await Organization.findById(organization);
+          if (org) {
+            printSettings = org.printSettings || {};
+          }
+        }
+      }
+
+      // التحقق من أن الطابعة معدة وأن فتح الدفع مفعلاً
+      if (!printSettings || printSettings.printerType === 'none') {
+        return res.status(400).json({ 
+          success: false, 
+          message: 'Printer not configured' 
+        });
+      }
+
+      if (printSettings.openCashDrawerOnPayment === false) {
+        return res.status(400).json({ 
+          success: false, 
+          message: 'Cash drawer opening on payment is disabled in settings' 
+        });
+      }
+
+      // تهيئة الطابعة
+      const connected = await printerService.initializePrinter(printSettings);
+      if (!connected) {
+        return res.status(500).json({ 
+          success: false, 
+          message: 'Failed to connect to printer' 
+        });
+      }
+
+      // فتح درج الكاشير فقط
+      const result = await printerService.openCashDrawer();
+
+      // إغلاق الاتصال بالطابعة
+      await printerService.disconnect();
+
+      if (result) {
+        return res.json({ 
+          success: true, 
+          message: 'Cash drawer opened successfully' 
+        });
+      } else {
+        return res.status(500).json({ 
+          success: false, 
+          message: 'Failed to open cash drawer' 
+        });
+      }
+    } catch (error) {
+      console.error('Error opening cash drawer:', error);
+      await printerService.disconnect();
+      return res.status(500).json({ 
+        success: false, 
+        message: 'Internal server error',
         error: error.message
       });
     }

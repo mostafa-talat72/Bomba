@@ -4,7 +4,7 @@ import {
   Settings, AlertTriangle, Search, CheckCircle, DollarSign,
   Calendar, User, Receipt, QrCode, Table as TableIcon, Eye, EyeOff,
   Gamepad2, ChevronDown, ChevronUp, ChefHat,
-  Clock, History, FileText, Zap, Layers
+  Clock, History, FileText, Zap, Layers, Unlock
 } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
@@ -21,6 +21,7 @@ import { printOrder } from '../utils/printOrder';
 import { printBill } from '../utils/printBill';
 import { aggregateItemsWithPayments, getItemIdsForAggregatedItem } from '../utils/billAggregation';
 import { useBillAggregation } from '../hooks/useBillAggregation';
+import { i18n } from '../i18n';
 import {
   canAddOrder, canEditOrder, canDeleteOrder,
   canPartialPayment, canPayFullBill, canDeleteBill,
@@ -1869,10 +1870,39 @@ const loadInitialData = async () => {
         // fetch فوري بدون throttle عشان حالة الطاولة تتأكد
         fetchBills().catch(()=>{});
         showNotification(t('billing.notifications.payFullBillSuccess'), 'success');
+        
+        // فتح درج الكاشير تلقائياً إذا كان مفعلاً في الإعدادات
+        await handleOpenCashDrawer();
+        
+        // طباعة الفاتورة تلقائياً إذا كان مفعلاً في الإعدادات
+        const autoPrint = user?.organization?.printSettings?.autoPrintOnPayment ?? true;
+        if (autoPrint) {
+          await printBill(result.data, user?.organizationName, i18n.language, t);
+        }
       } else {
         setIsProcessingPayment(false);
       }
     } catch { showNotification(t('billing.notifications.payFullBillError'), 'error'); setIsProcessingPayment(false); }
+  };
+
+  const handleOpenCashDrawer = async () => {
+    try {
+      const organization = user?.organization;
+      const response = await api.openCashDrawerOnly(organization);
+      
+      if (response.success) {
+        showNotification(t('settings.organization.printSettings.cashDrawerOpened'), 'success');
+      } else {
+        if (response.message.includes('disabled')) {
+          showNotification(t('settings.organization.printSettings.cashDrawerDisabled'), 'warning');
+        } else {
+          showNotification(t('settings.organization.printSettings.cashDrawerFailed'), 'error');
+        }
+      }
+    } catch (error) {
+      console.error('Error opening cash drawer:', error);
+      showNotification(t('settings.organization.printSettings.cashDrawerFailed'), 'error');
+    }
   };
 
   const handlePartialPayment = async (bill: Bill) => {
@@ -3906,6 +3936,11 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
                   onClick={() => { const b = payChoiceBill; setShowPayChoiceModal(false); setPayChoiceBill(null); if (b) handlePaymentClick(b); }}
                   className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl flex items-center justify-center gap-2 shadow">
                   <Receipt className="h-5 w-5" />الذهاب لإدارة الدفع
+                </button>
+                <button
+                  onClick={() => handleOpenCashDrawer()}
+                  className="w-full py-3 bg-orange-600 hover:bg-orange-700 text-white font-bold rounded-xl flex items-center justify-center gap-2 shadow">
+                  <Unlock className="h-5 w-5" />فتح درج الكاشير
                 </button>
                 <p className="text-xs text-gray-500 text-center">إدارة الدفع تتيح الدفع الجزئي والتقسيم والخصم</p>
               </div>

@@ -63,4 +63,11 @@ router.get('/device', printController.getDevicePrinter);
  */
 router.post('/auto-detect', printController.autoDetectPrinter);
 
+/**
+ * @route   POST /api/print/open-cash-drawer
+ * @desc    فتح درج الكاشير فقط (بدون طباعة)
+ * @access  Private
+ */
+router.post('/open-cash-drawer', printController.openCashDrawerOnly);
+
 export default router;

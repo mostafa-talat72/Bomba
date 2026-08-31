@@ -7,15 +7,23 @@ import Logger from "../middleware/logger.js";
 const execAsync = promisify(exec);
 
 // Backup configuration
-const BACKUP_DIR = process.env.DESKTOP_BACKUP_DIR || path.join(process.cwd(), 'backups');
+const DEFAULT_BACKUP_DIR = process.env.DESKTOP_BACKUP_DIR || path.join(process.cwd(), 'backups');
 const MAX_BACKUPS = 10; // Keep only the last 10 backups
 
+// Get backup directory from settings or default
+export const getBackupDir = async () => {
+    return DEFAULT_BACKUP_DIR;
+};
+
 // Ensure backup directory exists
-const ensureBackupDir = () => {
-    if (!fs.existsSync(BACKUP_DIR)) {
+const ensureBackupDir = async (backupDir) => {
+    if (!backupDir) {
+        backupDir = await getBackupDir();
+    }
+    if (!fs.existsSync(backupDir)) {
         try {
-            fs.mkdirSync(BACKUP_DIR, { recursive: true });
-            Logger.info(`Created backup directory at: ${BACKUP_DIR}`);
+            fs.mkdirSync(backupDir, { recursive: true });
+            Logger.info(`Created backup directory at: ${backupDir}`);
         } catch (error) {
             Logger.error('Failed to create backup directory', { error });
             throw error;
@@ -24,18 +32,28 @@ const ensureBackupDir = () => {
 };
 
 // Initialize backup directory on startup
-try {
-    ensureBackupDir();
-} catch (error) {
-    Logger.error('Backup directory initialization failed', { error });
-}
+const initBackupDir = async () => {
+    try {
+        await ensureBackupDir();
+    } catch (error) {
+        Logger.error('Backup directory initialization failed', { error });
+    }
+};
+
+initBackupDir();
 
 // Create database backup
-export const createDatabaseBackup = async () => {
+export const createDatabaseBackup = async (customPath) => {
     try {
+        let backupDir = customPath;
+        if (!backupDir) {
+            backupDir = await getBackupDir();
+        }
+        await ensureBackupDir(backupDir);
+
         const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
         const backupFileName = `bomba-backup-${timestamp}.gz`;
-        const backupPath = path.join(BACKUP_DIR, backupFileName);
+        const backupPath = path.join(backupDir, backupFileName);
 
         // Extract database name from MongoDB URI
         const dbName = process.env.MONGODB_URI.split("/").pop().split("?")[0];
@@ -46,7 +64,7 @@ export const createDatabaseBackup = async () => {
         await execAsync(command);
 
         // Clean up old backups
-        await cleanupOldBackups();
+        await cleanupOldBackups(backupDir);
 
         return {
             success: true,
@@ -63,7 +81,8 @@ export const createDatabaseBackup = async () => {
 // Restore database from backup
 export const restoreDatabaseBackup = async (backupFileName) => {
     try {
-        const backupPath = path.join(BACKUP_DIR, backupFileName);
+        const backupDir = await getBackupDir();
+        const backupPath = path.join(backupDir, backupFileName);
 
         if (!fs.existsSync(backupPath)) {
             throw new Error("ملف النسخة الاحتياطية غير موجود");
@@ -88,13 +107,14 @@ export const restoreDatabaseBackup = async (backupFileName) => {
 };
 
 // Get list of available backups
-export const getBackupsList = () => {
+export const getBackupsList = async () => {
     try {
+        const backupDir = await getBackupDir();
         const files = fs
-            .readdirSync(BACKUP_DIR)
+            .readdirSync(backupDir)
             .filter((file) => file.endsWith(".gz"))
             .map((file) => {
-                const filePath = path.join(BACKUP_DIR, file);
+                const filePath = path.join(backupDir, file);
                 const stats = fs.statSync(filePath);
 
                 return {
@@ -114,15 +134,15 @@ export const getBackupsList = () => {
 };
 
 // Clean up old backups
-const cleanupOldBackups = async () => {
+const cleanupOldBackups = async (backupDir) => {
     try {
-        const backups = getBackupsList();
+        const backups = await getBackupsList();
 
         if (backups.length > MAX_BACKUPS) {
             const backupsToDelete = backups.slice(MAX_BACKUPS);
 
             for (const backup of backupsToDelete) {
-                const backupPath = path.join(BACKUP_DIR, backup.fileName);
+                const backupPath = path.join(backupDir, backup.fileName);
                 fs.unlinkSync(backupPath);
             }
         }
@@ -132,9 +152,10 @@ const cleanupOldBackups = async () => {
 };
 
 // Delete specific backup
-export const deleteBackup = (backupFileName) => {
+export const deleteBackup = async (backupFileName) => {
     try {
-        const backupPath = path.join(BACKUP_DIR, backupFileName);
+        const backupDir = await getBackupDir();
+        const backupPath = path.join(backupDir, backupFileName);
 
         if (!fs.existsSync(backupPath)) {
             throw new Error("ملف النسخة الاحتياطية غير موجود");

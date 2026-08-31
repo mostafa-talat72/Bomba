@@ -1832,6 +1832,10 @@
         "printerPortDesc": "Network printer port (default: 9100)",
         "openCashDrawer": "Open cash drawer for bills",
         "openCashDrawerDesc": "Automatically open cash drawer when printing bills only",
+        "openCashDrawerOnPayment": "Open cash drawer on full payment",
+        "openCashDrawerOnPaymentDesc": "Automatically open cash drawer when paying bill in full (can also be opened manually)",
+        "autoPrintOnPayment": "Auto print bill on payment",
+        "autoPrintOnPaymentDesc": "Automatically print bill when paying in full (can be disabled)",
         "charactersPerLine": "Characters per line",
         "charactersPerLineDesc": "Number of characters per line (default: 48)",
         "printHeader": "Print header",
@@ -1851,7 +1855,11 @@
         "detectFailed": "Failed to detect printers",
         "test": "Test",
         "testSuccess": "Printer connected and ready",
-        "testFailed": "Printer test failed: {{error}}"
+        "testFailed": "Printer test failed: {{error}}",
+        "openCashDrawer": "Open cash drawer",
+        "cashDrawerOpened": "Cash drawer opened successfully",
+        "cashDrawerFailed": "Failed to open cash drawer",
+        "cashDrawerDisabled": "Cash drawer opening on payment is disabled in settings"
       },
       "saveSettings": "Save settings",
       "saveAllSettings": "All settings have been saved successfully",

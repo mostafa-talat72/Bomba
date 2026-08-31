@@ -4,6 +4,7 @@ import { api } from '../services/api';
 interface AggregatedItem {
   id: string;
   name: string;
+  variant?: string | null;
   price: number;
   totalQuantity: number;
   paidQuantity: number;

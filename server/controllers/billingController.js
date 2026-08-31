@@ -3583,7 +3583,7 @@ export const updateBillAggregatedItems = async (req, res) => {
         const allOldItems = [];
         (bill.orders || []).forEach((order) => {
             (order.items || []).forEach((it) => {
-                allOldItems.push({ menuItem: it.menuItem, name: it.name, price: it.price, quantity: it.quantity });
+                allOldItems.push({ menuItem: it.menuItem, name: it.name, price: it.price, quantity: it.quantity, variant: it.variant || null });
             });
         });
 
@@ -3628,6 +3628,7 @@ export const updateBillAggregatedItems = async (req, res) => {
                     quantity: qty,
                     itemTotal,
                     notes: raw.notes || null,
+                    variant: raw.variant || null,
                     preparationTime: mi.preparationTime || 5,
                     section: mi.category ? null : null,
                 });
@@ -3647,6 +3648,7 @@ export const updateBillAggregatedItems = async (req, res) => {
                     quantity: qty,
                     itemTotal,
                     notes: raw.notes || null,
+                    variant: raw.variant || null,
                     preparationTime: raw.preparationTime || 5,
                 });
             }

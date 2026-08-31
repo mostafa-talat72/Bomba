@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, FC } from 'react';
+﻿import { useState, useEffect, FC, useRef } from 'react';
 import { Settings as SettingsIcon, Save, Bell, User, Lock, Eye, EyeOff, Building2, LucideIcon, Facebook, Instagram, Twitter, Linkedin, Youtube, MessageCircle, Send, Globe, Phone, Mail, MapPin, Users, Check, X, Clock, Search } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useTranslation } from 'react-i18next';
@@ -49,6 +49,7 @@ interface NotificationSettings {
 interface GeneralSettings {
   theme: string;
   language: string;
+  backupPath: string;
 }
 
 interface ProfileData {
@@ -117,8 +118,10 @@ const Settings: FC = () => {
   const { currentLanguage, isRTL, changeLanguage } = useLanguage();
   const { isDarkMode, toggleDarkMode, setTheme } = useTheme();
   const { refreshOrganizationSettings, setCurrency, setTimezone } = useOrganization();
+  const folderInputRef = useRef<HTMLInputElement>(null);
+
   const { user, updateUserProfile, changePassword, updateNotificationSettings, updateGeneralSettings, getNotificationSettings, getGeneralSettings, getOrganization, updateOrganization, updateOrganizationPermissions, canEditOrganization, getAvailableManagers, getReportSettings, updateReportSettings, canManageReports, sendReportNow, canManagePayroll, updatePayrollPermissions } = useApp();
-  
+
   // UI State
   const [activeTab, setActiveTab] = useState('profile');
   
@@ -177,6 +180,7 @@ const Settings: FC = () => {
   const [generalSettings, setGeneralSettings] = useState<GeneralSettings>({
     theme: 'light',
     language: 'ar',
+    backupPath: localStorage.getItem('backupPath') || '',
   });
 
   // Organization state
@@ -319,6 +323,7 @@ const Settings: FC = () => {
               ...prev,
               theme: genSettings.theme || 'light',
               language: genSettings.language || currentLanguage,
+              backupPath: localStorage.getItem('backupPath') || '',
             }));
           }
         } catch (error) {
@@ -582,10 +587,41 @@ const Settings: FC = () => {
     }
   };
 
+  const handleBrowseBackupFolder = async () => {
+    try {
+      if ('showDirectoryPicker' in window) {
+        const dirHandle = await (window as any).showDirectoryPicker();
+        const path = dirHandle.name;
+        setGeneralSettings(prev => ({ ...prev, backupPath: path }));
+        localStorage.setItem('backupPath', path);
+      } else {
+        folderInputRef.current?.click();
+      }
+    } catch (error) {
+      // User cancelled
+    }
+  };
+
+  const handleFolderInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (files && files.length > 0) {
+      const path = files[0].webkitRelativePath.split('/')[0];
+      setGeneralSettings(prev => ({ ...prev, backupPath: path }));
+      localStorage.setItem('backupPath', path);
+    }
+  };
+
   const handleGeneralSettingsUpdate = async () => {
     setGeneralSaving(true);
     try {
-      const success = await updateGeneralSettings(generalSettings);
+      const { backupPath, ...settingsToSend } = generalSettings;
+      
+      // Save backupPath to localStorage (device-specific, not in DB)
+      if (backupPath !== undefined) {
+        localStorage.setItem('backupPath', backupPath);
+      }
+      
+      const success = await updateGeneralSettings(settingsToSend);
       if (success) {
         // Apply theme changes (without saving to DB again, already saved above)
         await setTheme(generalSettings.theme as 'light' | 'dark' | 'auto', false);
@@ -1251,6 +1287,39 @@ const Settings: FC = () => {
                         </select>
                       </div>
 
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        مسار النسخ الاحتياطي
+                      </label>
+                      <div className="flex space-x-2 space-x-reverse">
+                        <input
+                          type="text"
+                          value={generalSettings.backupPath}
+                          onChange={(e) => setGeneralSettings({ ...generalSettings, backupPath: e.target.value })}
+                          placeholder="C:\Backups\Bomba"
+                          className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                        />
+                        <button
+                          type="button"
+                          onClick={handleBrowseBackupFolder}
+                          className="px-3 py-2 bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300"
+                        >
+                          استعراض
+                        </button>
+                      </div>
+                      <input
+                        ref={folderInputRef}
+                        type="file"
+                        style={{ display: 'none' }}
+                        webkitdirectory
+                        directory
+                        onChange={handleFolderInputChange}
+                      />
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                        سيتم حفظ النسخ الاحتياطية في هذا المجلد على هذا الجهاز فقط
+                      </p>
+                    </div>
+
                     <div className="mt-6">
                       <button
                         onClick={handleGeneralSettingsUpdate}
@@ -1644,6 +1713,64 @@ const Settings: FC = () => {
                                 printSettings: {
                                   ...organization.printSettings,
                                   openCashDrawer: e.target.checked,
+                                },
+                              })
+                            }
+                            className="sr-only peer"
+                          />
+                          <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-orange-300 dark:peer-focus:ring-orange-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-orange-600"></div>
+                        </label>
+                      </div>
+
+                      {/* Open Cash Drawer On Payment */}
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                            {t('settings.organization.printSettings.openCashDrawerOnPayment')}
+                          </h4>
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                            {t('settings.organization.printSettings.openCashDrawerOnPaymentDesc')}
+                          </p>
+                        </div>
+                        <label className="relative inline-flex items-center cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={organization.printSettings?.openCashDrawerOnPayment ?? true}
+                            onChange={(e) =>
+                              setOrganization({
+                                ...organization,
+                                printSettings: {
+                                  ...organization.printSettings,
+                                  openCashDrawerOnPayment: e.target.checked,
+                                },
+                              })
+                            }
+                            className="sr-only peer"
+                          />
+                          <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-orange-300 dark:peer-focus:ring-orange-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-orange-600"></div>
+                        </label>
+                      </div>
+
+                      {/* Auto Print On Payment */}
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                            {t('settings.organization.printSettings.autoPrintOnPayment')}
+                          </h4>
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                            {t('settings.organization.printSettings.autoPrintOnPaymentDesc')}
+                          </p>
+                        </div>
+                        <label className="relative inline-flex items-center cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={organization.printSettings?.autoPrintOnPayment ?? true}
+                            onChange={(e) =>
+                              setOrganization({
+                                ...organization,
+                                printSettings: {
+                                  ...organization.printSettings,
+                                  autoPrintOnPayment: e.target.checked,
                                 },
                               })
                             }
