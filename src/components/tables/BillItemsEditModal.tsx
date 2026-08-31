@@ -488,6 +488,7 @@ const BillItemsEditModal: React.FC<Props> = ({ isOpen, onClose, bill, menuItems,
                   </div>
                 ) : items.map((item, idx) => {
                   const compositeKey = `${item.menuItem}::${(item as any).variant || ''}::${item.price}`;
+                  const itemVariant = (item as any).variant || null;
                   return (
                   <div key={compositeKey + idx} ref={el => { itemRefsMap.current[compositeKey] = el as HTMLDivElement | null; itemRefsMap.current[item.menuItem] = el as HTMLDivElement | null; }}>
                     <OrderItemRow
@@ -503,6 +504,7 @@ const BillItemsEditModal: React.FC<Props> = ({ isOpen, onClose, bill, menuItems,
                       fmt={fmt}
                       canEditPrice={canEditPrice}
                       onEditPrice={() => { setPriceEditTarget({ index: idx, item }); setShowPriceEditModal(true); }}
+                      showVariantBadge={true}
                     />
                   </div>
                   );

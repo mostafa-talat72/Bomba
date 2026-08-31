@@ -124,7 +124,9 @@ const OrganizationSchema = new mongoose.Schema({
         printerDevice: { type: String, default: '' }, // معرف الجهاز للطابعة
         printerIP: { type: String, default: '' }, // عنوان IP للطابعة الشبكية
         printerPort: { type: Number, default: 9100 }, // منفذ الطابعة الشبكية
-        openCashDrawer: { type: Boolean, default: true }, // فتح درج الكاشير للفواتير
+        openCashDrawer: { type: Boolean, default: true }, // فتح درج الكاشير عند طباعة الفواتير
+        openCashDrawerOnPayment: { type: Boolean, default: true }, // فتح درج الكاشير عند الدفع الكامل
+        autoPrintOnPayment: { type: Boolean, default: true }, // طباعة الفاتورة تلقائياً عند الدفع الكامل
         charactersPerLine: { type: Number, default: 48 }, // عدد الأحرف في السطر
         printHeader: { type: Boolean, default: true }, // طباعة الرأس
         printFooter: { type: Boolean, default: true }, // طباعة التذييل

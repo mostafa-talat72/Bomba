@@ -312,12 +312,6 @@ export const resetSettings = async (req, res) => {
                 maxLoginAttempts: 5,
                 requirePasswordChange: false,
             },
-            backup: {
-                autoBackup: true,
-                backupFrequency: "weekly",
-                retentionDays: 30,
-                backupLocation: "local",
-            },
         };
 
         const settings = defaultSettings[category];

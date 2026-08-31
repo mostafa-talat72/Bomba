@@ -1612,6 +1612,7 @@ class ApiClient {
       price?: number;
       quantity: number;
       notes?: string | null;
+      variant?: string | null;
     }>;
   }): Promise<ApiResponse<Bill>> {
     const response = await this.request<Bill>(`/billing/${id}/items-aggregated`, {
@@ -2118,6 +2119,30 @@ class ApiClient {
     return this.request('/settings/general', {
       method: 'PUT',
       body: JSON.stringify(settings),
+    });
+  }
+
+  // Backup methods
+  async createBackup(backupPath?: string): Promise<ApiResponse<any>> {
+    return this.request('/backup/create', {
+      method: 'POST',
+      body: JSON.stringify({ backupPath }),
+    });
+  }
+
+  async getBackups(): Promise<ApiResponse<any>> {
+    return this.request('/backup');
+  }
+
+  async restoreBackup(fileName: string): Promise<ApiResponse<any>> {
+    return this.request(`/backup/restore/${fileName}`, {
+      method: 'POST',
+    });
+  }
+
+  async deleteBackup(fileName: string): Promise<ApiResponse<any>> {
+    return this.request(`/backup/${fileName}`, {
+      method: 'DELETE',
     });
   }
 
@@ -2820,6 +2845,13 @@ class ApiClient {
   async getDevicePrinter(deviceId?: string): Promise<ApiResponse<any>> {
     const query = deviceId ? `?deviceId=${deviceId}` : '';
     return this.request(`/print/device${query}`);
+  }
+
+  async openCashDrawerOnly(organization: any): Promise<ApiResponse<any>> {
+    return this.request('/print/open-cash-drawer', {
+      method: 'POST',
+      body: JSON.stringify({ organization }),
+    });
   }
 
 

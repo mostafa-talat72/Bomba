@@ -29,6 +29,7 @@ interface AuthContextType {
 
   login: (email: string, password: string) => Promise<{ success: boolean; message?: string }>;
   logout: () => void;
+  forceLogout: () => void; // تسجيل خروج فوري بدون تحقق من الطاولات
   resendVerification: (email: string) => Promise<{ success: boolean; message?: string }>;
   forgotPassword: (email: string) => Promise<{ success: boolean; message?: string }>;
   resetPassword: (token: string, password: string) => Promise<{ success: boolean; message?: string }>;
@@ -143,6 +144,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     showNotification(t('auth.logoutSuccess'), 'info');
 
     setIsLoggingOut(false);
+  };
+
+  // دالة الخروج الفوري (بدون تحقق من الطاولات)
+  const forceLogout = (): void => {
+    logout();
   };
 
   useEffect(() => {
@@ -436,6 +442,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
     login,
     logout,
+    forceLogout,
     resendVerification,
     forgotPassword,
     resetPassword,

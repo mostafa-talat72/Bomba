@@ -34,6 +34,7 @@ import {
   Minimize2
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import { useData } from '../context/DataContext';
 import { useTheme } from '../context/ThemeContext';
 import { useLanguage } from '../context/LanguageContext';
 import { useTablesHeader } from '../context/TablesHeaderContext';
@@ -43,6 +44,8 @@ import NotificationCenter from './NotificationCenter';
 import PermissionGuard from './PermissionGuard';
 import LanguageSwitcher from './LanguageSwitcher';
 import ScrollButtons from './ScrollButtons';
+import OccupiedTablesWarningModal from './OccupiedTablesWarningModal';
+import { getOccupiedTablesCount, getOccupiedTablesNames } from '../utils/occupiedTablesHelper';
 
 // عرف نوع read بشكل صحيح
 interface NotificationRead {
@@ -83,10 +86,14 @@ const Layout = () => {
   const [touchEnd, setTouchEnd] = useState<number | null>(null);
   const [showSwipeIndicator, setShowSwipeIndicator] = useState(true);
 
+  // حالة modal الطاولات المشغولة
+  const [showOccupiedWarning, setShowOccupiedWarning] = useState(false);
+  const [isConfirmingLogout, setIsConfirmingLogout] = useState(false);
+
   // الحد الأدنى للمسافة المطلوبة للسحب
   const minSwipeDistance = 50;
 
-  // إخفاء الإشارة البصرية بعد 5 ثوانٍ
+   // إخفاء الإشارة البصرية بعد 5 ثوانٍ
   useEffect(() => {
     const timer = setTimeout(() => {
       setShowSwipeIndicator(false);
@@ -94,6 +101,21 @@ const Layout = () => {
 
     return () => clearTimeout(timer);
   }, []);
+
+  // منع إغلاق المتصفح عند وجود طاولات مشغولة
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      const occupiedCount = getOccupiedTablesCount(tables);
+      if (occupiedCount > 0) {
+        e.preventDefault();
+        e.returnValue = t('tables.occupiedWarning.confirmClose') || 'There are occupied tables. Are you sure you want to close?';
+        return e.returnValue;
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [tables, t]);
 
   // جلب معلومات الاشتراك
   useEffect(() => {
@@ -582,6 +604,17 @@ const Layout = () => {
         </main>
       </div>
       <ScrollButtons mainContentRef={mainContentRef} />
+      
+      {/* Occupied Tables Warning Modal */}
+      <OccupiedTablesWarningModal
+        isOpen={showOccupiedWarning}
+        occupiedTablesCount={getOccupiedTablesCount(tables)}
+        occupiedTablesNames={getOccupiedTablesNames(tables)}
+        onConfirm={handleConfirmLogoutWithOccupied}
+        onCancel={() => setShowOccupiedWarning(false)}
+        isLoading={isConfirmingLogout}
+        actionType="logout"
+      />
     </div>
   );
 };
