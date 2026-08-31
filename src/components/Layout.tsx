@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Outlet, Link, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
@@ -64,7 +64,7 @@ const Layout = () => {
     try { localStorage.setItem('sidebarCollapsed', String(sidebarCollapsed)); } catch {}
   }, [sidebarCollapsed]);
   const location = useLocation();
-  const { user, logout, sessions, orders, notifications, subscriptionStatus } = useApp();
+  const { user, logout, sessions, orders, notifications, subscriptionStatus, tables, bills } = useApp();
   const { isDarkMode, toggleDarkMode } = useTheme();
   const tablesHeader = useTablesHeader();
   const mainContentRef = useRef<HTMLElement>(null);
@@ -214,7 +214,44 @@ const Layout = () => {
 
   const filteredNavigation = getFilteredNavigation();
 
+  const hasOccupiedTables = useMemo(() => {
+    if (!user || !Array.isArray(tables) || tables.length === 0) {
+      return false;
+    }
+
+    const activeStatuses = new Set(['occupied', 'reserved']);
+
+    const tableIdsWithStatus = new Set(
+      tables
+        .filter((table: any) => table && table.isActive !== false && activeStatuses.has(String(table.status || '').toLowerCase()))
+        .map((table: any) => String(table._id || table.id))
+    );
+
+    const hasOpenBill = Array.isArray(bills) && bills.some((bill: any) => {
+      const tableId = bill?.table?._id || bill?.table || bill?.tableId;
+      if (!tableId) return false;
+
+      const billStatus = String(bill?.status || '').toLowerCase();
+      if (['paid', 'cancelled'].includes(billStatus)) return false;
+
+      return tableIdsWithStatus.has(String(tableId)) || tables.some((table: any) => String(table._id || table.id) === String(tableId));
+    });
+
+    const hasActiveSession = Array.isArray(sessions) && sessions.some((session: any) => {
+      const status = String(session?.status || '').toLowerCase();
+      const tableId = session?.table?._id || session?.table || session?.tableId;
+      if (status !== 'active' || !tableId) return false;
+      return tables.some((table: any) => String(table._id || table.id) === String(tableId));
+    });
+
+    return tableIdsWithStatus.size > 0 || hasOpenBill || hasActiveSession;
+  }, [user, tables, bills, sessions]);
+
   const handleLogout = async () => {
+    if (hasOccupiedTables && !window.confirm('توجد طاولات مشغولة، هل تريد تسجيل الخروج؟')) {
+      return;
+    }
+
     await logout();
   };
 

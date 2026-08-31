@@ -90,7 +90,23 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
+  const shouldBlockExit = (): boolean => {
+    try {
+      return sessionStorage.getItem('bombaExitGuard') === 'true';
+    } catch {
+      return false;
+    }
+  };
+
   const logout = (): void => {
+    if (shouldBlockExit()) {
+      const confirmed = window.confirm('توجد طاولات مشغولة، هل تريد تسجيل الخروج؟');
+      if (!confirmed) {
+        setIsLoggingOut(false);
+        return;
+      }
+    }
+
     setIsLoggingOut(true);
 
     const token = localStorage.getItem('token');
