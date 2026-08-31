@@ -95,6 +95,7 @@ interface AppContextType {
   createMenuItem: (itemData: any) => Promise<any>;
   updateMenuItem: (id: string, updates: any) => Promise<any>;
   deleteMenuItem: (id: string) => Promise<boolean>;
+  mergeMenuItems: (itemIds: string[], name?: string) => Promise<any>;
   getMenuItemsByCategory: (category: string) => Promise<any>;
   getPopularMenuItems: (limit?: number) => Promise<any>;
   getMenuStats: () => Promise<any>;
@@ -273,6 +274,7 @@ const AppContextInner: React.FC<{ children: ReactNode }> = ({ children }) => {
     createMenuItem: data.createMenuItem,
     updateMenuItem: data.updateMenuItem,
     deleteMenuItem: data.deleteMenuItem,
+    mergeMenuItems: (data as any).mergeMenuItems,
     getMenuItemsByCategory: data.getMenuItemsByCategory,
     getPopularMenuItems: data.getPopularMenuItems,
     getMenuStats: data.getMenuStats,

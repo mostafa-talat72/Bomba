@@ -825,4 +825,146 @@ export const updateMenuItemsOrder = async (req, res) => {
     }
 };
 
+export const mergeMenuItems = async (req, res) => {
+    try {
+        const { itemIds, name } = req.body;
+
+        // Validate custom name if provided
+        let customName = null;
+        if (name !== undefined && name !== null) {
+            if (typeof name !== 'string') {
+                return res.status(400).json({
+                    success: false,
+                    message: "اسم الصنف غير صالح",
+                });
+            }
+            const trimmed = name.trim();
+            if (trimmed.length === 0) {
+                return res.status(400).json({
+                    success: false,
+                    message: "اسم الصنف المدمج مطلوب",
+                });
+            }
+            if (trimmed.length < 2) {
+                return res.status(400).json({
+                    success: false,
+                    message: "اسم الصنف قصير جداً",
+                });
+            }
+            if (trimmed.length > 100) {
+                return res.status(400).json({
+                    success: false,
+                    message: "اسم الصنف طويل جداً (الحد الأقصى 100 حرف)",
+                });
+            }
+            customName = trimmed;
+        }
+
+        if (!itemIds || !Array.isArray(itemIds) || itemIds.length < 2 || itemIds.length > 4) {
+            return res.status(400).json({
+                success: false,
+                message: "يجب اختيار من 2 إلى 4 عناصر للدمج",
+            });
+        }
+
+        // Remove duplicates
+        const uniqueIds = [...new Set(itemIds.map(String))];
+        if (uniqueIds.length < 2 || uniqueIds.length > 4) {
+            return res.status(400).json({
+                success: false,
+                message: "يجب اختيار من 2 إلى 4 عناصر فريدة للدمج",
+            });
+        }
+
+        if (!req.user || !req.user.organization) {
+            return res.status(401).json({
+                success: false,
+                message: "يجب تسجيل الدخول للوصول إلى عناصر المنيو",
+            });
+        }
+
+        const items = await MenuItem.find({
+            _id: { $in: uniqueIds },
+            organization: req.user.organization,
+        });
+
+        if (items.length !== uniqueIds.length) {
+            return res.status(404).json({
+                success: false,
+                message: "بعض العناصر غير موجودة أو لا تنتمي لمنشأتك",
+            });
+        }
+
+        // Helper to get effective price (price field or first variant price)
+        const getEffectivePrice = (item) => {
+            if (item.price != null && !isNaN(Number(item.price))) return Number(item.price);
+            if (item.variants && item.variants.length > 0 && item.variants[0].price != null) return Number(item.variants[0].price);
+            return 0;
+        };
+
+        // Sort by price ascending
+        const sortedItems = [...items].sort((a, b) => getEffectivePrice(a) - getEffectivePrice(b));
+
+        let sizes = [];
+        if (sortedItems.length === 4) sizes = ['صغير', 'وسط', 'كبير', 'عائلي'];
+        else if (sortedItems.length === 3) sizes = ['صغير', 'وسط', 'كبير'];
+        else if (sortedItems.length === 2) sizes = ['وسط', 'كبير'];
+
+        const variants = sortedItems.map((item, idx) => ({
+            size: sizes[idx],
+            price: getEffectivePrice(item),
+            sku: null,
+            barcode: null,
+        }));
+
+        const baseItem = sortedItems[0];
+        const idsToDelete = sortedItems.slice(1).map(i => i._id);
+
+        baseItem.variants = variants;
+        baseItem.price = variants[0].price;
+        baseItem.updatedBy = req.user.id;
+        // Use custom name if provided, otherwise cheapest item's name (baseItem.name already)
+        if (customName) {
+            baseItem.name = customName;
+        }
+        // name, category, image, etc. are already from cheapest item (baseItem) if no custom name
+        await baseItem.save();
+
+        // Fire-and-forget Atlas write for updated base item
+        writeToAtlas('menuitems', 'upsert', baseItem.toObject ? baseItem.toObject() : baseItem, { _id: baseItem._id });
+
+        if (idsToDelete.length > 0) {
+            await MenuItem.deleteMany({ _id: { $in: idsToDelete }, organization: req.user.organization });
+            // Fire-and-forget Atlas deletes
+            idsToDelete.forEach(id => {
+                writeToAtlas('menuitems', 'delete', null, { _id: id });
+            });
+        }
+
+        // Populate for response
+        await baseItem.populate("category", "name section");
+        // Handle nested populate safely
+        try { await baseItem.populate("category.section", "name"); } catch (e) {}
+        await baseItem.populate("createdBy", "name");
+        await baseItem.populate("updatedBy", "name");
+
+        if (req.io) {
+            try { req.io.notifyMenuUpdate("updated", baseItem, req.user.organization); } catch (e) {}
+            try { idsToDelete.forEach(id => req.io.notifyMenuUpdate("deleted", { _id: id }, req.user.organization)); } catch (e) {}
+        }
+
+        return res.json({
+            success: true,
+            message: "تم دمج العناصر بنجاح",
+            data: baseItem,
+        });
+    } catch (error) {
+        return res.status(500).json({
+            success: false,
+            message: "خطأ في دمج عناصر القائمة",
+            error: error.message,
+        });
+    }
+};
+
 

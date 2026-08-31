@@ -119,6 +119,7 @@ interface DataContextType {
   createMenuItem: (itemData: any) => Promise<MenuItem | null>;
   updateMenuItem: (id: string, updates: any) => Promise<MenuItem | null>;
   deleteMenuItem: (id: string) => Promise<boolean>;
+  mergeMenuItems: (itemIds: string[], name?: string) => Promise<MenuItem | null>;
   getMenuItemsByCategory: (category: string) => Promise<MenuItem[]>;
   getPopularMenuItems: (limit?: number) => Promise<MenuItem[]>;
   getMenuStats: () => Promise<any>;
@@ -1176,6 +1177,23 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const err = error as { message?: string };
       showNotification(err.message || 'خطأ في حذف العنصر', 'error');
       return false;
+    }
+  };
+
+  const mergeMenuItems = async (itemIds: string[], name?: string): Promise<MenuItem | null> => {
+    try {
+      const response = await api.mergeMenuItems(itemIds, name);
+      if (response.success && response.data) {
+        await fetchMenuItems();
+        showNotification('تم دمج العناصر بنجاح', 'success');
+        return response.data;
+      }
+      showNotification((response as any).message || 'خطأ في دمج العناصر', 'error');
+      return null;
+    } catch (error: unknown) {
+      const err = error as { message?: string };
+      showNotification(err.message || 'خطأ في دمج العناصر', 'error');
+      return null;
     }
   };
 
@@ -2299,6 +2317,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     createMenuItem,
     updateMenuItem,
     deleteMenuItem,
+    mergeMenuItems,
     getMenuItemsByCategory,
     getPopularMenuItems,
     getMenuStats,

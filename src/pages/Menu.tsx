@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Utensils, Plus, Search, Sparkles, Eye, EyeOff, ChevronDown, ChevronRight, Edit, Trash2, Copy, LayoutGrid } from 'lucide-react';
+import { Utensils, Plus, Search, Sparkles, Eye, EyeOff, ChevronDown, ChevronRight, Edit, Trash2, Copy, LayoutGrid, Layers, X, Check } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useApp } from '../context/AppContext';
 import { MenuItem, MenuSection, MenuCategory } from '../services/api';
@@ -33,8 +33,9 @@ const Menu: React.FC = () => {
 		deleteMenuCategory,
 		inventoryItems,
 		fetchInventoryItems,
-		showNotification
-	} = useApp();
+		showNotification,
+		mergeMenuItems
+	} = useApp() as any;
 
 	// UI State
 	const [loading, setLoading] = useState(false);
@@ -45,6 +46,12 @@ const Menu: React.FC = () => {
 	const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
 	const [collapsedCategories, setCollapsedCategories] = useState<Record<string, boolean>>({});
 	const [showAddDropdown, setShowAddDropdown] = useState(false);
+
+	// Merge multi-select state
+	const [selectedMergeIds, setSelectedMergeIds] = useState<string[]>([]);
+	const [showMergePreview, setShowMergePreview] = useState(false);
+	const [merging, setMerging] = useState(false);
+	const [mergeName, setMergeName] = useState('');
 
 	// Modal State
 	const [showItemModal, setShowItemModal] = useState(false);
@@ -124,6 +131,7 @@ const Menu: React.FC = () => {
 				setShowSectionModal(false);
 				setShowCategoryModal(false);
 				setShowQuickView(false);
+				setShowMergePreview(false);
 			}
 		};
 		document.addEventListener('keydown', handleEscape);
@@ -441,6 +449,120 @@ const Menu: React.FC = () => {
 		}
 	};
 
+	// Merge Handlers
+	const getItemCategoryId = (item: MenuItem) => {
+		const cat: any = item?.category;
+		if (!cat) return '';
+		if (typeof cat === 'string') return cat;
+		return cat._id || cat.id || '';
+	};
+
+	const toggleMergeSelect = (itemOrId: string | MenuItem) => {
+		const itemId = typeof itemOrId === 'string' ? itemOrId : (itemOrId as any).id || (itemOrId as any)._id;
+		if (!itemId) return;
+		const item: MenuItem | undefined = typeof itemOrId === 'string'
+			? menuItems.find((mi: MenuItem) => mi.id === itemId || (mi as any)._id === itemId)
+			: itemOrId as MenuItem;
+		setSelectedMergeIds(prev => {
+			if (prev.includes(itemId)) return prev.filter(id => id !== itemId);
+			if (prev.length >= 4) {
+				showNotification('يمكن اختيار حتى 4 عناصر فقط للدمج', 'warning');
+				return prev;
+			}
+			if (prev.length > 0 && item) {
+				const firstItem = menuItems.find((mi: MenuItem) => mi.id === prev[0] || (mi as any)._id === prev[0]);
+				if (firstItem) {
+					const firstCatId = getItemCategoryId(firstItem);
+					const newCatId = getItemCategoryId(item);
+					if (firstCatId && newCatId && String(firstCatId) !== String(newCatId)) {
+						showNotification('لا يمكن دمج أصناف من فئات مختلفة', 'warning');
+						return prev;
+					}
+				}
+			}
+			return [...prev, itemId];
+		});
+	};
+
+	const clearMergeSelection = () => setSelectedMergeIds([]);
+
+	const getMergePreview = () => {
+		const selectedItems = menuItems.filter((mi: MenuItem) => selectedMergeIds.includes(mi.id) || selectedMergeIds.includes((mi as any)._id));
+		const getPrice = (it: MenuItem) => {
+			if (it.price != null && !isNaN(Number(it.price))) return Number(it.price);
+			if (it.variants && it.variants.length > 0) return Number(it.variants[0].price);
+			return 0;
+		};
+		const sorted = [...selectedItems].sort((a, b) => getPrice(a) - getPrice(b));
+		let sizes: string[] = [];
+		if (sorted.length === 4) sizes = ['صغير', 'وسط', 'كبير', 'عائلي'];
+		else if (sorted.length === 3) sizes = ['صغير', 'وسط', 'كبير'];
+		else if (sorted.length === 2) sizes = ['وسط', 'كبير'];
+		const variants = sorted.map((it, idx) => ({ size: sizes[idx], price: getPrice(it), name: it.name }));
+		const cheapest = sorted[0];
+		const cheapestName = cheapest?.name || '';
+		return { sorted, sizes, variants, cheapest, cheapestName };
+	};
+
+	// Keep mergeName in sync when preview opens
+	useEffect(() => {
+		if (showMergePreview) {
+			const preview = getMergePreview();
+			setMergeName(preview.cheapest?.name || preview.cheapestName || '');
+		}
+	}, [showMergePreview]);
+
+	const lockedMergeCategoryId = useMemo(() => {
+		if (selectedMergeIds.length === 0) return null;
+		const firstItem = menuItems.find((mi: MenuItem) => selectedMergeIds.includes(mi.id) || selectedMergeIds.includes((mi as any)._id));
+		if (!firstItem) return null;
+		return getItemCategoryId(firstItem);
+	}, [selectedMergeIds, menuItems]);
+
+	const handleConfirmMerge = async () => {
+		if (selectedMergeIds.length < 2 || selectedMergeIds.length > 4) {
+			showNotification('يجب اختيار من 2 إلى 4 عناصر للدمج', 'error');
+			return;
+		}
+		if (!mergeName.trim()) {
+			showNotification('اسم الصنف المدمج مطلوب', 'error');
+			return;
+		}
+		setMerging(true);
+		try {
+			const trimmedName = mergeName.trim();
+			const result = mergeMenuItems ? await mergeMenuItems(selectedMergeIds, trimmedName) : null;
+			// Fallback direct API call if context not available
+			if (!result) {
+				// try direct api import
+				try {
+					const { default: api } = await import('../services/api');
+					const resp: any = await api.mergeMenuItems(selectedMergeIds, trimmedName);
+					if (resp.success) {
+						showNotification('تم دمج العناصر بنجاح', 'success');
+						await loadMenuItems();
+					} else {
+						showNotification(resp.message || 'خطأ في دمج العناصر', 'error');
+						setMerging(false);
+						return;
+					}
+				} catch (apiErr: any) {
+					showNotification(apiErr?.message || 'خطأ في دمج العناصر', 'error');
+					setMerging(false);
+					return;
+				}
+			}
+			setShowMergePreview(false);
+			setSelectedMergeIds([]);
+			setMergeName('');
+			await loadMenuItems();
+		} catch (e: any) {
+			showNotification(e?.message || 'خطأ في دمج العناصر', 'error');
+		} finally {
+			setMerging(false);
+		}
+	};
+
 	// Ingredients Handlers
 	const addIngredient = () => {
 		const availableRawMaterials = inventoryItems.filter(item => item.isRawMaterial);
@@ -556,7 +678,7 @@ const Menu: React.FC = () => {
 	};
 
 	return (
-		<div className="space-y-6 p-4">
+		<div className={`space-y-6 p-4 ${selectedMergeIds.length > 0 ? 'pb-24' : ''}`}>
 			{/* Header */}
 			<div className="bg-gradient-to-r from-orange-50 via-white to-orange-50 dark:from-gray-800 dark:via-gray-800 dark:to-gray-800 rounded-2xl shadow-lg border border-orange-100 dark:border-gray-700 p-6">
 				<div className="flex items-center justify-between flex-wrap gap-4">
@@ -665,6 +787,59 @@ const Menu: React.FC = () => {
 					</div>
 				</div>
 			</div>
+
+			{/* Merge Selection Bar - Floating sticky bottom bar */}
+			{selectedMergeIds.length > 0 && (
+				<div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 w-[calc(100%-2rem)] max-w-3xl bg-gradient-to-r from-indigo-50 via-white to-indigo-50 dark:from-gray-800 dark:via-gray-800 dark:to-gray-800 rounded-2xl shadow-2xl border border-indigo-200 dark:border-gray-700 p-4 flex items-center justify-between flex-wrap gap-3">
+					<div className="flex items-center gap-3 flex-1 min-w-0">
+						<div className="p-2 bg-indigo-100 dark:bg-indigo-900/30 rounded-xl flex-shrink-0">
+							<Layers className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
+						</div>
+						<div className="min-w-0">
+							<p className="text-sm font-bold text-gray-900 dark:text-gray-100">تم اختيار {formatDecimal(selectedMergeIds.length, i18n.language)} عناصر</p>
+							<p className="text-xs text-gray-500 dark:text-gray-400">
+								{selectedMergeIds.length < 2 && 'اختر عنصرًا إضافيًا واحدًا على الأقل للدمج'}
+								{selectedMergeIds.length >= 2 && selectedMergeIds.length <= 4 && 'جاهز للدمج كأحجام'}
+								{selectedMergeIds.length > 4 && 'يمكن دمج 4 عناصر كحد أقصى'}
+							</p>
+						</div>
+						<div className="flex items-center gap-1 ms-2 flex-wrap">
+							{selectedMergeIds.map(id => {
+								const it = menuItems.find((m: MenuItem) => m.id === id || (m as any)._id === id);
+								return (
+									<span key={id} className="text-xs bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 px-2 py-1 rounded-full flex items-center gap-1">
+										{it?.name?.slice(0, 12) || id.slice(-4)}
+										<button onClick={() => toggleMergeSelect(id)} className="p-0.5 hover:bg-gray-100 dark:hover:bg-gray-600 rounded-full">
+											<X className="h-3 w-3" />
+										</button>
+									</span>
+								);
+							})}
+						</div>
+					</div>
+					<div className="flex items-center gap-2 flex-shrink-0">
+						<button
+							onClick={clearMergeSelection}
+							className="px-4 py-2 rounded-xl text-sm font-medium bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+						>
+							إلغاء
+						</button>
+						{selectedMergeIds.length >= 2 && selectedMergeIds.length <= 4 && (
+							<button
+								onClick={() => {
+									const preview = getMergePreview();
+									setMergeName(preview.cheapest?.name || preview.cheapestName || '');
+									setShowMergePreview(true);
+								}}
+								className="px-5 py-2.5 rounded-xl text-sm font-bold bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white shadow-md hover:shadow-lg transition-all duration-200 flex items-center gap-2"
+							>
+								<Layers className="h-4 w-4" />
+								دمج كأحجام
+							</button>
+						)}
+					</div>
+				</div>
+			)}
 
 			{/* Section Tabs */}
 			{menuSections.length > 0 && (
@@ -885,12 +1060,25 @@ const Menu: React.FC = () => {
 													</div>
 												) : (
 													<div className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-														{categoryItems.map(item => (
+														{categoryItems.map(item => {
+															const isSelected = selectedMergeIds.includes(item.id) || selectedMergeIds.includes((item as any)._id);
+															const itemCatId = getItemCategoryId(item);
+															const isDisabled = !!lockedMergeCategoryId && !isSelected && String(itemCatId) !== String(lockedMergeCategoryId);
+															return (
 															<div
 																key={item.id}
-																className="group bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 rounded-xl border border-gray-200 dark:border-gray-600 p-4 transition-all duration-200 hover:shadow-md"
+																className={`group rounded-xl border p-4 transition-all duration-200 hover:shadow-md relative ${isDisabled ? 'opacity-50 grayscale' : ''} ${isSelected ? 'bg-indigo-50 dark:bg-indigo-900/20 border-indigo-300 dark:border-indigo-600 shadow-md' : 'bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 border-gray-200 dark:border-gray-600'}`}
 															>
-																<div className="flex items-start justify-between mb-2">
+																<label className={`absolute top-2 left-2 flex items-center z-10 ${isDisabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`} onClick={(e) => e.stopPropagation()}>
+																	<input
+																		type="checkbox"
+																		checked={isSelected}
+																		disabled={isDisabled}
+																		onChange={() => !isDisabled && toggleMergeSelect(item)}
+																		className={`h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 ${isDisabled ? 'cursor-not-allowed bg-gray-200 dark:bg-gray-600' : 'cursor-pointer'}`}
+																	/>
+																</label>
+																<div className="flex items-start justify-between mb-2 ps-6">
 																	<div className="flex-1 min-w-0">
 																		<div className="flex items-center gap-2">
 																			<p className="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate">{item.name}</p>
@@ -964,7 +1152,8 @@ const Menu: React.FC = () => {
 																	</div>
 																</div>
 															</div>
-														))}
+															);
+														})}
 													</div>
 												)}
 												</div>
@@ -1045,6 +1234,100 @@ const Menu: React.FC = () => {
 					false
 				}
 			/>
+
+			{/* Merge Preview Dialog */}
+			{showMergePreview && (() => {
+				const preview = getMergePreview();
+				return (
+					<div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setShowMergePreview(false)}>
+						<div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden" onClick={(e) => e.stopPropagation()}>
+							<div className="bg-gradient-to-r from-indigo-600 to-indigo-700 px-6 py-4 flex items-center justify-between">
+								<div className="flex items-center gap-3">
+									<div className="p-2 bg-white/20 rounded-xl">
+										<Layers className="h-5 w-5 text-white" />
+									</div>
+									<div>
+										<h3 className="text-lg font-bold text-white">دمج كأحجام</h3>
+										<p className="text-xs text-indigo-100">سيتم إنشاء صنف واحد بأحجام متعددة</p>
+									</div>
+								</div>
+								<button onClick={() => setShowMergePreview(false)} className="p-2 hover:bg-white/20 rounded-xl text-white transition-colors">
+									<X className="h-5 w-5" />
+								</button>
+							</div>
+							<div className="p-6 space-y-4">
+								<div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-xl p-3">
+									<p className="text-sm text-amber-800 dark:text-amber-300">
+										سيتم الاحتفاظ بالصنف الأرخص <span className="font-bold">"{preview.cheapest?.name}"</span> وتحويل العناصر المحددة إلى أحجام له، وسيتم حذف باقي العناصر نهائياً.
+									</p>
+									<p className="text-xs text-amber-600 dark:text-amber-400 mt-1">العناصر ستبقى لقطة في الطلبات/الفواتير السابقة (snapshot).</p>
+								</div>
+								<div>
+									<label className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1 block">اسم الصنف المدمج</label>
+									<input value={mergeName} onChange={e=>setMergeName(e.target.value)} placeholder="اسم الصنف المدمج" className="w-full px-3 py-2.5 border-2 border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors mb-2" />
+									<p className="text-xs text-gray-500 dark:text-gray-400 mb-2">الفئة والصور ستؤخذ من الصنف الأرخص. الترتيب حسب السعر من الأقل للأعلى.</p>
+									<div className="border border-gray-200 dark:border-gray-600 rounded-xl overflow-hidden">
+										<table className="w-full text-sm">
+											<thead className="bg-gray-50 dark:bg-gray-700">
+												<tr>
+													<th className="px-3 py-2 text-right font-semibold text-gray-600 dark:text-gray-300">الحجم</th>
+													<th className="px-3 py-2 text-right font-semibold text-gray-600 dark:text-gray-300">السعر</th>
+													<th className="px-3 py-2 text-right font-semibold text-gray-600 dark:text-gray-300">من عنصر</th>
+												</tr>
+											</thead>
+											<tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+												{preview.variants.map((v: any, idx: number) => (
+													<tr key={idx} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+														<td className="px-3 py-2 font-medium text-gray-900 dark:text-gray-100">{v.size}</td>
+														<td className="px-3 py-2 text-gray-700 dark:text-gray-300">{formatDecimal(v.price, i18n.language)}</td>
+														<td className="px-3 py-2 text-xs text-gray-500 dark:text-gray-400 truncate max-w-[150px]">{v.name}</td>
+													</tr>
+												))}
+											</tbody>
+										</table>
+									</div>
+								</div>
+								<div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-3">
+									<p className="text-xs text-red-700 dark:text-red-400 font-medium">سيتم حذف العناصر التالية نهائياً:</p>
+									<ul className="mt-1 space-y-1">
+										{preview.sorted.slice(1).map((it: MenuItem) => (
+											<li key={it.id} className="text-xs text-red-600 dark:text-red-300 flex items-center gap-1">
+												<Trash2 className="h-3 w-3" /> {it.name} - {formatDecimal((it.price ?? it.variants?.[0]?.price) as any, i18n.language)}
+											</li>
+										))}
+									</ul>
+								</div>
+							</div>
+							<div className="px-6 py-4 bg-gray-50 dark:bg-gray-700/50 flex items-center justify-end gap-3">
+								<button
+									onClick={() => setShowMergePreview(false)}
+									disabled={merging}
+									className="px-5 py-2.5 rounded-xl text-sm font-medium bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors disabled:opacity-50"
+								>
+									إلغاء
+								</button>
+								<button
+									onClick={handleConfirmMerge}
+									disabled={merging}
+									className="px-6 py-2.5 rounded-xl text-sm font-bold bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white shadow-md hover:shadow-lg transition-all duration-200 flex items-center gap-2 disabled:opacity-50"
+								>
+									{merging ? (
+										<>
+											<div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+											جاري الدمج...
+										</>
+									) : (
+										<>
+											<Check className="h-4 w-4" />
+											تأكيد الدمج
+										</>
+									)}
+								</button>
+							</div>
+						</div>
+					</div>
+				);
+			})()}
 		</div>
 	);
 };

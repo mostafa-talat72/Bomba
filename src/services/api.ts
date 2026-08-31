@@ -2285,6 +2285,21 @@ class ApiClient {
     });
   }
 
+  async mergeMenuItems(itemIds: string[], name?: string): Promise<ApiResponse<MenuItem>> {
+    const body: any = { itemIds };
+    if (name !== undefined && name !== null && String(name).trim() !== '') {
+      body.name = String(name).trim();
+    }
+    const response = await this.request<MenuItem>('/menu/merge', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+    if (response.success && response.data) {
+      response.data = this.normalizeData(response.data);
+    }
+    return response;
+  }
+
   async getMenuItemsByCategory(category: string): Promise<ApiResponse<MenuItem[]>> {
     const response = await this.request<MenuItem[]>(`/menu/category/${encodeURIComponent(category)}`);
     if (response.success && response.data) {

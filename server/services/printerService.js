@@ -1,5 +1,6 @@
-import ThermalPrinter from 'node-thermal-printer';
+import pkg from 'node-thermal-printer';
 import { Buffer } from 'buffer';
+const ThermalPrinter = pkg.ThermalPrinter || pkg.printer || pkg.default?.ThermalPrinter || pkg.default?.printer;
 
 class PrinterService {
   constructor() {

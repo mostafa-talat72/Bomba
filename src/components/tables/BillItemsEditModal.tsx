@@ -11,6 +11,7 @@ import ModalPortal from '../ModalPortal';
 import PriceEditModal from './PriceEditModal';
 import { useApp } from '../../context/AppContext';
 import { canEditItemPrice } from '../../utils/permissionHelper';
+import { printBill } from '../../utils/printBill';
 import type { LocalOrderItem } from './tableHelpers';
 
 interface AggregatedEditItem extends LocalOrderItem {}
@@ -114,7 +115,17 @@ const BillItemsEditModal: React.FC<Props> = ({ isOpen, onClose, bill, menuItems,
   // qtyMap for ItemCard badges
   const qtyMap = useMemo(() => {
     const map: Record<string, number> = {};
-    items.forEach(i => { map[i.menuItem] = i.quantity; });
+    items.forEach(i => { map[i.menuItem] = (map[i.menuItem] || 0) + i.quantity; });
+    return map;
+  }, [items]);
+  const qtyByVariantMap = useMemo(() => {
+    const map: Record<string, Record<string, number>> = {};
+    items.forEach(i => {
+      const v = (i as any).variant || '';
+      if (!v) return;
+      if (!map[i.menuItem]) map[i.menuItem] = {};
+      map[i.menuItem][v] = (map[i.menuItem][v] || 0) + i.quantity;
+    });
     return map;
   }, [items]);
 
@@ -188,18 +199,27 @@ const BillItemsEditModal: React.FC<Props> = ({ isOpen, onClose, bill, menuItems,
     prevLengthRef.current = items.length;
   }, [items.length]);
 
-  const handleAddWithFlash = useCallback((menuItem: MenuItem) => {
+  const handleAddWithFlash = useCallback((menuItem: MenuItem, variant?: string | null) => {
     const id = (menuItem as any)._id || (menuItem as any).id;
-    const effectivePrice = menuItem.variants && menuItem.variants.length > 0 ? menuItem.variants[0].price : menuItem.price;
+    let effVariant: string | null = variant ? String(variant).trim() : null;
+    let effPrice = menuItem.price;
+    if (menuItem.variants && menuItem.variants.length > 0) {
+      if (effVariant) {
+        const matched = menuItem.variants.find(v => v.size === effVariant);
+        if (matched) effPrice = matched.price;
+        else { effVariant = menuItem.variants[0].size; effPrice = menuItem.variants[0].price; }
+      } else { effVariant = menuItem.variants[0].size; effPrice = menuItem.variants[0].price; }
+    }
+    const flashKey = `${id}::${effVariant || ''}::${effPrice}`;
     setItems(prev => {
-      const ex = prev.find(i => i.menuItem === id && i.price === effectivePrice);
-      if (ex) return prev.map(i => i.menuItem === id && i.price === effectivePrice ? { ...i, quantity: i.quantity + 1 } : i);
-      return [...prev, { menuItem: id, name: menuItem.name, price: effectivePrice, quantity: 1 }];
+      const ex = prev.find(i => i.menuItem === id && (i as any).variant === effVariant && i.price === effPrice);
+      if (ex) return prev.map(i => i.menuItem === id && (i as any).variant === effVariant && i.price === effPrice ? { ...i, quantity: i.quantity + 1 } : i);
+      return [...prev, { menuItem: id, name: menuItem.name, price: effPrice, variant: effVariant, quantity: 1 } as any];
     });
     if (flashTimerRef.current) clearTimeout(flashTimerRef.current);
-    setFlashId(id);
+    setFlashId(flashKey);
     flashTimerRef.current = setTimeout(() => setFlashId(null), 700);
-    setTimeout(() => { itemRefsMap.current[id]?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }, 30);
+    setTimeout(() => { const el = itemRefsMap.current[flashKey] || itemRefsMap.current[id]; el?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }, 30);
   }, []);
 
   const updateItemQuantity = (menuItemId: string, delta: number) => {
@@ -237,7 +257,7 @@ const BillItemsEditModal: React.FC<Props> = ({ isOpen, onClose, bill, menuItems,
     });
   };
 
-  const handleSave = async () => {
+  const doSave = async (shouldPrint: boolean) => {
     const targetBill = fullBill || bill;
     if (!targetBill) return;
     setSaving(true);
@@ -245,7 +265,6 @@ const BillItemsEditModal: React.FC<Props> = ({ isOpen, onClose, bill, menuItems,
     setInventoryErrors([]);
     try {
       const billId = (targetBill as any)._id || (targetBill as any).id;
-      // Map items: include price/variant for custom price per order (requires canEditItemPrice)
       const payloadItems = items.map(it => {
         const isObjectId = /^[a-f\d]{24}$/i.test(it.menuItem);
         if (isObjectId) {
@@ -261,6 +280,9 @@ const BillItemsEditModal: React.FC<Props> = ({ isOpen, onClose, bill, menuItems,
       const res: any = await api.updateBillAggregatedItems(billId, { items: payloadItems });
       if (res.success) {
         onSuccess(res.data);
+        if (shouldPrint) {
+          try { await printBill(res.data, (user as any)?.organizationName || '', i18n.language, t); } catch {}
+        }
         onClose();
       } else {
         setError(res.message || 'حدث خطأ أثناء حفظ التعديلات');
@@ -278,6 +300,8 @@ const BillItemsEditModal: React.FC<Props> = ({ isOpen, onClose, bill, menuItems,
       setSaving(false);
     }
   };
+  const handleSave = () => doSave(false);
+  const handleSaveAndPrint = () => doSave(true);
 
   if (!isOpen || !bill) return null;
   const displayBill = fullBill || bill;
@@ -423,7 +447,7 @@ const BillItemsEditModal: React.FC<Props> = ({ isOpen, onClose, bill, menuItems,
                 ) : (
                   <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-1">
                     {displayedItems.map(item => (
-                      <ItemCard key={item.id} item={item} qty={qtyMap[item.id] || 0} onAdd={handleAddWithFlash} fmt={fmt} />
+                      <ItemCard key={item.id} item={item} qty={qtyMap[item.id] || 0} qtyByVariant={qtyByVariantMap[item.id]} onAdd={handleAddWithFlash} fmt={fmt} />
                     ))}
                   </div>
                 )}
@@ -451,12 +475,12 @@ const BillItemsEditModal: React.FC<Props> = ({ isOpen, onClose, bill, menuItems,
                     <p className="text-xs text-gray-400 mt-1">أضف من القائمة</p>
                   </div>
                 ) : items.map((item, idx) => {
-                  const compositeKey = `${item.menuItem}::${item.price}`;
+                  const compositeKey = `${item.menuItem}::${(item as any).variant || ''}::${item.price}`;
                   return (
-                  <div key={compositeKey + idx} ref={el => { itemRefsMap.current[compositeKey] = el as HTMLDivElement | null; }}>
+                  <div key={compositeKey + idx} ref={el => { itemRefsMap.current[compositeKey] = el as HTMLDivElement | null; itemRefsMap.current[item.menuItem] = el as HTMLDivElement | null; }}>
                     <OrderItemRow
                       item={item}
-                      isFlash={flashId === item.menuItem}
+                      isFlash={flashId === compositeKey || flashId === item.menuItem}
                       isExpanded={!!expandedNotes[compositeKey]}
                       onMinus={() => setItems(prev => { const cp=[...prev]; const it=cp[idx]; if(!it) return prev; const q=it.quantity-1; if(q<=0) cp.splice(idx,1); else cp[idx]={...it, quantity:q}; return cp; })}
                       onPlus={() => setItems(prev => { const cp=[...prev]; cp[idx]={...cp[idx], quantity:cp[idx].quantity+1}; return cp; })}
@@ -473,21 +497,19 @@ const BillItemsEditModal: React.FC<Props> = ({ isOpen, onClose, bill, menuItems,
                 })}
               </div>
 
-              <div className="px-2 pb-3 flex-shrink-0 space-y-1.5">
-                <button onClick={handleSave} disabled={saving || (items.length === 0 && (fullBill as any)?.orders?.length > 0 ? false : items.length === 0) || loadingBill}
-                  className="w-full py-2.5 bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white font-bold text-base rounded-xl flex items-center justify-center gap-1.5 shadow-sm transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed">
-                  {saving
-                    ? <><svg className="animate-spin h-3.5 w-3.5" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>جاري الحفظ...</>
-                    : <><Save className="h-3.5 w-3.5" />حفظ التعديلات</>}
-                </button>
-                <div className="flex gap-1.5">
+              <div className="px-3 py-3 flex-shrink-0 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700">
+                <div className="grid grid-cols-3 gap-2">
                   <button onClick={onClose} disabled={saving}
-                    className="flex-1 py-2 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 hover:bg-gray-50 text-gray-600 dark:text-gray-300 font-medium text-base rounded-lg flex items-center justify-center gap-1 transition-all disabled:opacity-50">
-                    إلغاء
+                    className="py-2.5 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 font-semibold text-sm rounded-xl flex items-center justify-center gap-1.5 shadow-sm transition-all active:scale-[0.98] disabled:opacity-50">
+                    <X className="h-4 w-4" />إلغاء
                   </button>
                   <button onClick={handleSave} disabled={saving || loadingBill}
-                    className="flex-1 py-2 border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 text-blue-600 dark:text-blue-400 font-medium text-base rounded-lg flex items-center justify-center gap-1 transition-all disabled:opacity-50">
-                    <CheckCircle className="h-3 w-3 text-green-500" />حفظ
+                    className="py-2.5 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold text-sm rounded-xl flex items-center justify-center gap-1.5 shadow-md border border-blue-700 transition-all active:scale-[0.98] disabled:opacity-50">
+                    {saving ? <><svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>جاري الحفظ...</> : <><Save className="h-4 w-4" />حفظ</>}
+                  </button>
+                  <button onClick={handleSaveAndPrint} disabled={saving || loadingBill}
+                    className="py-2.5 bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 active:from-orange-700 active:to-red-700 text-white font-bold text-sm rounded-xl flex items-center justify-center gap-1.5 shadow-md border border-orange-600 transition-all active:scale-[0.98] disabled:opacity-50">
+                    <Printer className="h-4 w-4" />حفظ وطباعة
                   </button>
                 </div>
               </div>

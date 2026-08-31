@@ -273,24 +273,29 @@ const ConsumptionReport = () => {
 
         const itemPrice = Number(item.price) || 0;
         const itemQuantity = Number(item.quantity) || 0;
+        const variant = (item as any).variant || null;
+        const variantText = variant && variant !== 'عادي' ? ` (${variant})` : '';
+        const displayName = `${item.name}${variantText}`;
+        const key = `${item.name}|${variant || ''}`;
 
         if (!itemsBySection[sectionName]) {
           itemsBySection[sectionName] = [];
         }
 
-        const existingItem = itemsBySection[sectionName].find(i => i.name === item.name);
+        const existingItem = itemsBySection[sectionName].find(i => (i as any).key === key);
         if (existingItem) {
           existingItem.quantity += itemQuantity;
           existingItem.total = existingItem.quantity * existingItem.price;
         } else {
           itemsBySection[sectionName].push({
             id: (item as any)._id || Math.random().toString(),
-            name: item.name,
+            name: displayName,
             price: itemPrice,
             quantity: itemQuantity,
             total: itemPrice * itemQuantity,
-            category: sectionName
-          });
+            category: sectionName,
+            key
+          } as any);
         }
       });
     });

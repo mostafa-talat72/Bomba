@@ -4337,12 +4337,23 @@ const OrderModal: React.FC<OrderModalProps> = ({
 
   const handleAddWithFlash = useCallback((menuItem: MenuItem, variant?: string | null) => {
     addItemToOrder(menuItem, variant);
+    let effPrice = menuItem.price;
+    if (menuItem.variants && menuItem.variants.length > 0) {
+      if (variant) {
+        const m = menuItem.variants.find(v => v.size === variant);
+        if (m) effPrice = m.price;
+        else effPrice = menuItem.variants[0].price;
+      } else {
+        effPrice = menuItem.variants[0].price;
+      }
+    }
     if (flashTimerRef.current) clearTimeout(flashTimerRef.current);
-    const flashKey = variant ? `${menuItem.id}::${variant}` : menuItem.id;
+    const flashKey = `${menuItem.id}::${variant || ''}::${effPrice}`;
+    const fallbackKey = variant ? `${menuItem.id}::${variant}` : menuItem.id;
     setFlashId(flashKey);
     flashTimerRef.current = setTimeout(() => setFlashId(null), 700);
     setTimeout(() => {
-      const el = itemRefsMap.current[flashKey] || itemRefsMap.current[menuItem.id];
+      const el = itemRefsMap.current[flashKey] || itemRefsMap.current[fallbackKey] || itemRefsMap.current[menuItem.id];
       el?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }, 30);
   }, [addItemToOrder]);

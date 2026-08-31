@@ -10,6 +10,7 @@ import {
     getPopularMenuItems,
     updateMenuItemsOrder,
     incrementOrderCount,
+    mergeMenuItems,
 } from "../controllers/menuController.js";
 import {
     getAllMenuSections,
@@ -119,6 +120,9 @@ router.get("/categories/:id", authorize("menu", "all"), getMenuCategoryById);
 router.post("/categories", authorize("menu", "all"), createMenuCategory);
 router.put("/categories/:id", authorize("menu", "all"), updateMenuCategory);
 router.delete("/categories/:id", authorize("menu", "all"), deleteMenuCategory);
+
+// Menu merge route (menu permission required) - must be before /items/:id
+router.post("/merge", authorize("menu", "all"), mergeMenuItems);
 
 // Menu management routes (menu permission required)
 router.post(
