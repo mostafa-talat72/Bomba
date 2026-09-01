@@ -466,6 +466,25 @@ mainWindow.webContents.setWindowOpenHandler(({ url: targetUrl }) => {
       mainWindow.webContents.print({ preview: true });
     }
   });
+
+  // Direct print to default printer without preview
+  ipcMain.handle('direct-print', async (event) => {
+    try {
+      if (mainWindow && mainWindow.webContents) {
+        // Print directly to the default printer without showing preview
+        await mainWindow.webContents.print({ 
+          preview: false,
+          silent: true,  // No print dialog
+          printBackground: true
+        });
+        return { success: true, message: 'Printed successfully' };
+      }
+      return { success: false, message: 'Window not available' };
+    } catch (error) {
+      console.error('Direct print error:', error);
+      return { success: false, message: error.message };
+    }
+  });
 }
 
 // ---- App lifecycle ----

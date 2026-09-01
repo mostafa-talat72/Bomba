@@ -746,9 +746,15 @@ export const printBill = async (
 ) => {
   const isElectron = typeof window !== 'undefined' && !!((window as any).bombaDesktop?.isDesktop || (window as any).electronAPI);
   try {
-    const directPrint = api.printBill({ bill, organization: bill.organization, language, tableSectionName });
-    const timeoutMs = isElectron ? 8000 : 900;
-    const timeout = new Promise<never>((_, reject) => setTimeout(() => reject(new Error('print-timeout')), timeoutMs));
+    // استخدام الاكتشاف التلقائي للطابعة الحرارية
+    // بدلاً من الاستدعاء المباشر للـ API
+    const directPrint = api.autoDetectAndPrintBill({ 
+      bill, 
+      organization: bill.organization, 
+      language, 
+      tableSectionName 
+    });
+    const timeout = new Promise<never>((_, reject) => setTimeout(() => reject(new Error('print-timeout')), 900));
     const response: any = await Promise.race([directPrint, timeout]);
     if (response?.success) {
       const successMsg = language === 'ar' 
@@ -759,14 +765,16 @@ export const printBill = async (
       if (typeof window !== 'undefined' && (window as any).showNotification) (window as any).showNotification(successMsg, 'success');
       return;
     }
-    // رد غير ناجح بدون استثناء — اطبع السبب وانتقل للـ fallback/الخطأ
-    console.error('Direct print returned non-success:', response);
-    if (isElectron) {
-      const msg = response?.message || (language === 'ar' ? 'فشلت الطباعة المباشرة' : 'Direct print failed');
-      const cashMsg = response?.error ? `: ${response.error}` : '';
-      if ((window as any).showNotification) (window as any).showNotification(msg + cashMsg, 'error');
-      else alert(msg + cashMsg);
-      return;
+    
+    // إذا فشلت الطباعة لسبب ما (مثل عدم وجود طابعة)
+    if (response?.success === false) {
+      const errorMsg = response.message || (language === 'ar' 
+        ? 'فشل في طباعة الفاتورة'
+        : language === 'fr'
+        ? 'Impossible d\'imprimer la facture'
+        : 'Failed to print bill');
+      if (typeof window !== 'undefined' && (window as any).showNotification) (window as any).showNotification(errorMsg, 'error');
+      throw new Error(response.message || 'Print failed');
     }
   } catch (error: any) {
     if (error?.message !== 'print-timeout') console.error('Direct print failed, falling back to window print:', error);
@@ -781,8 +789,56 @@ export const printBill = async (
     }
   }
 
-  // Fallback (ويب فقط): استخدام الطريقة القديمة إذا فشلت الطباعة المباشرة
+  // Fallback: استخدام الطريقة القديمة أو Electron direct print إذا فشلت الطباعة المباشرة
   const receiptHTML = await buildBillPrintHTML(bill, fallbackOrganizationName, language, t, tableSectionName);
+
+  // Check if running on Electron desktop app
+  const isDesktopApp = typeof window !== 'undefined' && (window as any).bombaDesktop?.isDesktop;
+  
+  if (isDesktopApp) {
+    // On Electron, use direct print without preview
+    try {
+      const printFrame = document.createElement('iframe');
+      printFrame.style.position = 'absolute';
+      printFrame.style.top = '-1000px';
+      printFrame.style.left = '-1000px';
+      printFrame.style.width = '0';
+      printFrame.style.height = '0';
+      printFrame.style.border = 'none';
+      
+      document.body.appendChild(printFrame);
+      
+      const frameDoc = printFrame.contentDocument || printFrame.contentWindow?.document;
+      if (frameDoc) {
+        frameDoc.open();
+        frameDoc.write(receiptHTML);
+        frameDoc.close();
+        
+        // Wait for content to load then invoke Electron direct print
+        setTimeout(async () => {
+          try {
+            await (window as any).bombaDesktop.directPrint();
+            // Clean up after printing
+            setTimeout(() => {
+              if (document.body.contains(printFrame)) {
+                document.body.removeChild(printFrame);
+              }
+            }, 100);
+          } catch (error) {
+            console.error('Electron direct print error:', error);
+            // Clean up iframe on error
+            if (document.body.contains(printFrame)) {
+              document.body.removeChild(printFrame);
+            }
+          }
+        }, 100);
+      }
+      return;
+    } catch (error) {
+      console.error('Electron direct print setup error:', error);
+      // Fall through to standard print dialog on error
+    }
+  }
 
   // A real popup window is preferred for printing: in Electron, printing an
   // iframe can print the dark parent page instead of the receipt (all black).
