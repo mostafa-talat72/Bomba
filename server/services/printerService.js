@@ -58,7 +58,7 @@ class PrinterService {
         interface: iface,
         driver: printerDriver,
         characterSet: 'WPC1256_ARABIC',
-        options: { timeout: 5000 }
+        options: { timeout: 8000 }
       });
       if (typeof this.printer?.setCharacterSet === 'function') {
         try {
