@@ -86,7 +86,7 @@ function copyServer() {
 
 function pruneServerDeps() {
   log("Installing production dependencies into server bundle (from server/package.json)...");
-  execSync("npm install --omit=dev", {
+  execSync("npm install --omit=dev --legacy-peer-deps", {
     cwd: path.join(prepared, "server"),
     stdio: "inherit",
   });

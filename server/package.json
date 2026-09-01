@@ -74,6 +74,7 @@
     "node-thermal-printer": "^4.6.1",
     "nodemailer": "^8.0.1",
     "pdfkit": "^0.17.2",
+    "printer": "^0.4.0",
     "qrcode": "^1.5.3",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",

@@ -34,6 +34,48 @@ const FAWRY_MERCHANT_CODE = process.env.FAWRY_MERCHANT_CODE || "YOUR_MERCHANT_CO
 const FAWRY_SECURE_KEY = process.env.FAWRY_SECURE_KEY || "YOUR_SECURE_KEY";
 const VALID_SUBSCRIPTION_AMOUNTS = { monthly: 299, yearly: 2999 };
 
+// ── Helper: instant <100ms emit for bills + table status, keeps DB writes immediate ──
+function emitBillUpdated(req, bill) {
+    if (!req.io || !bill) return;
+    try {
+        const orgId = req.user?.organization?._id || req.user?.organization;
+        if (!orgId) return;
+        const orgStr = String(orgId);
+        // colon + dash rooms, both event names for compatibility
+        req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('bill:updated', bill);
+        req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('bill-update', { type: 'updated', bill });
+        try { req.io.notifyBillUpdate("updated", bill, req.user.organization); } catch {}
+        // table status if bill has table
+        if (bill.table) {
+            const tid = bill.table?._id || bill.table?.id || bill.table;
+            if (tid) {
+                const payload = { tableId: tid, status: (bill.status === 'paid' || bill.status === 'cancelled') ? 'empty' : 'occupied' };
+                req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('table:statusChanged', payload);
+                req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('table-status-update', payload);
+                try { req.io.notifyTableStatusUpdate(payload, req.user.organization); } catch {}
+            }
+        }
+    } catch (e) { Logger.warn('emitBillUpdated failed', e.message); }
+}
+function emitBillDeleted(req, billId, tableId) {
+    if (!req.io) return;
+    try {
+        const orgId = req.user?.organization?._id || req.user?.organization;
+        if (!orgId) return;
+        const orgStr = String(orgId);
+        const payload = { _id: billId };
+        req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('bill:updated', payload);
+        req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('bill-update', { type: 'deleted', bill: payload });
+        try { req.io.notifyBillUpdate("deleted", payload, req.user.organization); } catch {}
+        if (tableId) {
+            const tid = tableId?._id || tableId?.id || tableId;
+            const tp = { tableId: tid, status: 'empty' };
+            req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('table:statusChanged', tp);
+            req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('table-status-update', tp);
+        }
+    } catch {}
+}
+
 // دالة لتحويل الأرقام الإنجليزية إلى العربية
 const convertToArabicNumbers = (str) => {
     const arabicNumbers = ["٠", "١", "٢", "٣", "٤", "٥", "٦", "٧", "٨", "٩"];
@@ -89,12 +131,17 @@ async function updateTableStatusIfNeeded(tableId, organizationId, io = null) {
             `✓ Table status updated to '${newStatus}' for table: ${actualTableId} (${unpaidBills.length} unpaid bills)`
         );
 
-        // Emit table status update event if io is provided
+        // Emit table status update event if io is provided — scoped to org, both dash & colon rooms, both event names
         if (io) {
-            io.emit("table-status-update", {
-                tableId: actualTableId,
-                status: newStatus,
-            });
+            try {
+                const orgStr = String(organizationId?._id || organizationId);
+                const payload = { tableId: actualTableId, status: newStatus };
+                io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit("table-status-update", payload);
+                io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit("table:statusChanged", payload);
+                if (typeof io.notifyTableStatusUpdate === 'function') {
+                    io.notifyTableStatusUpdate(payload, organizationId);
+                }
+            } catch {}
         }
 
         return newStatus;
@@ -762,6 +809,9 @@ export const createBill = async (req, res) => {
             createdAt: bill.createdAt,
         };
 
+        // ── Real-time emit (<100ms) — keep DB writes immediate ──
+        emitBillUpdated(req, bill);
+
         // Return response IMMEDIATELY after local save (table status already updated)
         res.status(201).json({
             success: true,
@@ -1143,6 +1193,7 @@ export const updateBill = async (req, res) => {
         ]);
         const prevStatus = bill.status;
         const updatedBill = await bill.save();
+        emitBillUpdated(req, bill);
 
         // Update table status SYNCHRONOUSLY before response (fix stale status)
         // Handle both old and new table cases: updatedBill.table is the new/current table
@@ -1152,6 +1203,8 @@ export const updateBill = async (req, res) => {
 
         // Fire-and-forget Atlas write
         writeToAtlas('bills', 'upsert', updatedBill.toObject ? updatedBill.toObject() : updatedBill, { _id: updatedBill._id });
+
+        emitBillUpdated(req, updatedBill);
 
         // Prepare minimal response data
         const responseData = {
@@ -1281,6 +1334,7 @@ export const addPayment = async (req, res) => {
                 
                 
                 await bill.save();
+        emitBillUpdated(req, bill);
             } else {
                 // إذا لم يكن هناك مبلغ دفع جديد، قم بتحديث الحالة مباشرة
                 bill._skipStatusRecalculation = true;
@@ -1291,6 +1345,7 @@ export const addPayment = async (req, res) => {
                 
              
                 await bill.save();
+        emitBillUpdated(req, bill);
             }
 
             // Mark all items as paid if bill is fully paid
@@ -1366,6 +1421,7 @@ export const addPayment = async (req, res) => {
                 });
                 if (sessionsUpdated) {
                     await bill.save();
+        emitBillUpdated(req, bill);
                 }
             }
         } else {
@@ -1435,6 +1491,7 @@ export const addPayment = async (req, res) => {
             }
             
             await bill.save();
+        emitBillUpdated(req, bill);
         }
 
         // Mark all items as paid if bill is fully paid
@@ -1458,6 +1515,8 @@ export const addPayment = async (req, res) => {
         if (bill.table) {
             await updateTableStatusIfNeeded(bill.table, req.user.organization, req.io);
         }
+
+        emitBillUpdated(req, bill);
 
         // Populate only essential fields for response (QR يُنشأ في الخلفية بلا حجب)
         await bill.populate([
@@ -1654,6 +1713,7 @@ export const removeOrderFromBill = async (req, res) => {
         // Recalculate bill totals
         await bill.calculateSubtotal();
         await bill.save();
+        emitBillUpdated(req, bill);
 
         // Check if bill is now empty (no orders and no sessions)
         const updatedBill = await Bill.findOne({ _id: id, organization: req.user.organization });
@@ -1737,6 +1797,7 @@ export const addSessionToBill = async (req, res) => {
         bill.sessions.push(sessionId);
 
         await bill.save();
+        emitBillUpdated(req, bill);
 
         // Recalculate totals
         await bill.calculateSubtotal();
@@ -1830,6 +1891,8 @@ export const cancelBill = async (req, res) => {
         if (bill.table) {
             await updateTableStatusIfNeeded(bill.table, req.user.organization, req.io);
         }
+
+        emitBillUpdated(req, bill);
 
         const message =
             bill.paid > 0
@@ -2046,8 +2109,9 @@ export const deleteBill = async (req, res) => {
             await updateTableStatusIfNeeded(tableId, organizationId, req.io);
         }
 
-        // Emit bill-deleted event
+        // Emit bill-deleted event — instant
         if (req.io) {
+            emitBillDeleted(req, bill._id, tableId);
             req.io.notifyBillUpdate("deleted", { _id: bill._id, billNumber: bill.billNumber }, req.user.organization);
         }
 
@@ -2254,6 +2318,7 @@ export const addPartialPayment = async (req, res) => {
 
         // حفظ الفاتورة
         await bill.save();
+        emitBillUpdated(req, bill);
 
         Logger.info(`📊 [addPartialPayment] Bill status after save:`, {
             billId: bill._id,
@@ -2330,6 +2395,7 @@ export const redistributePayments = async (req, res) => {
         // Force recalculation by marking orders as modified
         bill.markModified('orders');
         await bill.save();
+        emitBillUpdated(req, bill);
 
         // Populate for response
         await bill.populate([
@@ -2380,6 +2446,7 @@ export const cleanupBillPayments = async (req, res) => {
         
         // حفظ التحديثات
         await bill.save();
+        emitBillUpdated(req, bill);
 
         Logger.info(`✅ [cleanupBillPayments] Cleanup completed:`, {
             billId: bill._id,
@@ -2471,6 +2538,7 @@ export const getBillItems = async (req, res) => {
                 
                 // حفظ التحديثات
                 await bill.save();
+        emitBillUpdated(req, bill);
                 Logger.info(`✅ [getBillItems] ItemPayments initialized: ${bill.itemPayments.length} items`);
             }
         }
@@ -3029,6 +3097,7 @@ export const payForItems = async (req, res) => {
                 req.user._id
             );
             await bill.save();
+        emitBillUpdated(req, bill);
 
             // Update table status based on all unpaid bills
             if (bill.table) {
@@ -3186,6 +3255,7 @@ export const paySessionPartial = async (req, res) => {
                 req.user._id
             );
             await bill.save();
+        emitBillUpdated(req, bill);
 
             // Update table status based on all unpaid bills (Requirement 2.4)
             if (bill.table) {
@@ -3510,6 +3580,7 @@ export const addPartialPaymentAggregated = async (req, res) => {
 
         // حفظ الفاتورة
         await bill.save();
+        emitBillUpdated(req, bill);
 
         Logger.info(`📊 [addPartialPaymentAggregated] Bill status after save:`, {
             billId: bill._id,
@@ -3970,6 +4041,7 @@ export const updateBillAggregatedItems = async (req, res) => {
         // Ensure variant field is included in response (convert to plain object)
         const billResponse = bill.toObject();
 
+        emitBillUpdated(req, bill);
         // Socket notify
         if (req.io) {
             try {

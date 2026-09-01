@@ -13,6 +13,33 @@ import { getCustomerNameForDevice, getTableName, getSessionBillNote, getNewSessi
 import { getInstanceId } from "../utils/instanceId.js";
 import { writeToAtlas, writeBatchToAtlas } from "../utils/atlasWrite.js";
 
+// ── Helper: instant emit for session + bill + table, keeps DB writes immediate ──
+function emitSessionInstant(req, session, bill) {
+    if (!req.io) return;
+    try {
+        const orgId = req.user?.organization?._id || req.user?.organization;
+        if (!orgId) return;
+        const orgStr = String(orgId);
+        req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('session:updated', session);
+        req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('session-update', { type: 'updated', session });
+        try { req.io.notifySessionUpdate("updated", session, req.user.organization); } catch {}
+        if (bill) {
+            req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('bill:updated', bill);
+            try { req.io.notifyBillUpdate("updated", bill, req.user.organization); } catch {}
+            const tid = bill.table?._id || bill.table?.id || bill.table || session.table;
+            if (tid) {
+                const payload = { tableId: tid, status: 'occupied' };
+                req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('table:statusChanged', payload);
+                req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('table-status-update', payload);
+            }
+        } else if (session.table) {
+            const payload = { tableId: session.table, status: 'occupied' };
+            req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('table:statusChanged', payload);
+            req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('table-status-update', payload);
+        }
+    } catch {}
+}
+
 /**
  * Helper function to translate text based on user language
  * @param {string} key - Translation key
@@ -753,6 +780,7 @@ const sessionController = {
 
                 // Save session with bill reference
                 await session.save();
+            emitSessionInstant(req, session, null);
 
                 // Fire-and-forget Atlas write for session
                 writeToAtlas('sessions', 'upsert', session.toObject ? session.toObject() : session, { _id: session._id });
@@ -774,6 +802,9 @@ const sessionController = {
                 await session.save();
                 await session.populate("createdBy", "name");
             }
+
+            // ── Instant emit before response (<100ms) ──
+                emitSessionInstant(req, session, bill);
 
             // Prepare minimal response data immediately
                 const responseSession = {
@@ -911,6 +942,9 @@ const sessionController = {
 
             // Fire-and-forget Atlas write
             writeToAtlas('sessions', 'upsert', session.toObject ? session.toObject() : session, { _id: session._id });
+
+            // ── Instant emit (<100ms) ──
+            emitSessionInstant(req, session, session.bill ? await Bill.findById(session.bill).lean().catch(()=>null) : null);
 
             // Prepare minimal response data
             const responseData = {
@@ -1143,6 +1177,7 @@ const sessionController = {
 
             session.updatedBy = req.user._id;
             await session.save();
+            emitSessionInstant(req, session, null);
             
             // تحديث الفاتورة المرتبطة بالجلسة إذا كانت موجودة
             if (session.bill) {
@@ -1308,6 +1343,7 @@ const sessionController = {
 
             session.updatedBy = req.user._id;
             await session.save();
+            emitSessionInstant(req, session, null);
             await session.populate(["createdBy", "updatedBy"], "name");
 
             Logger.info(`Controllers period conflict resolved for session ${sessionId}:`, {
@@ -1394,6 +1430,7 @@ const sessionController = {
 
             // Save session and fire-and-forget Atlas write
             await session.save();
+            emitSessionInstant(req, session, null);
             writeToAtlas('sessions', 'upsert', session.toObject ? session.toObject() : session, { _id: session._id });
 
             // Prepare minimal response data
@@ -1567,6 +1604,7 @@ const sessionController = {
             session.updatedBy = req.user._id;
 
             await session.save();
+            emitSessionInstant(req, session, null);
             
             Logger.info('🔍 After save:', {
                 sessionId: session._id,
@@ -1709,6 +1747,7 @@ const sessionController = {
                     // ربط الفاتورة بالجلسة
                     updatedSession.bill = updatedBill._id;
                     await updatedSession.save();
+            emitSessionInstant(req, updatedSession, null);
                     
                     await updatedBill.populate(["sessions", "createdBy"], "name");
                     
@@ -1765,6 +1804,9 @@ const sessionController = {
                     status: updatedBill.status,
                 }
                 : null;
+
+            // ── Instant emit (<100ms) before response ──
+            emitSessionInstant(req, updatedSession, updatedBill);
 
             // Return response IMMEDIATELY
             res.json({
@@ -1899,6 +1941,7 @@ const sessionController = {
 
             // Save session
             await session.save();
+            emitSessionInstant(req, session, null);
             await session.populate(["createdBy", "bill"], "name");
 
             // Add session to bill without updating customer name
@@ -2204,6 +2247,7 @@ const sessionController = {
                 session.bill = newBill._id;
                 session.updatedBy = req.user._id;
                 await session.save();
+            emitSessionInstant(req, session, null);
                 Logger.info(`✅ STEP 2: Updated session.bill reference to new bill`);
 
                 // STEP 3: Check if old bill is now empty and DELETE it
@@ -2276,6 +2320,7 @@ const sessionController = {
                 
                 session.updatedBy = req.user._id;
                 await session.save();
+            emitSessionInstant(req, session, null);
 
                 newBill = bill;
 
@@ -2671,6 +2716,7 @@ const sessionController = {
                 // STEP 4: Update session's bill reference LAST to avoid race conditions
                 session.bill = existingTableBill._id;
                 await session.save();
+            emitSessionInstant(req, session, null);
                 Logger.info(`✅ STEP 4: Updated session.bill reference to new bill`);
                 
                 finalBill = existingTableBill;
@@ -3048,6 +3094,7 @@ const sessionController = {
                 // STEP 3: Update session's bill reference LAST
                 session.bill = existingNewTableBill._id;
                 await session.save();
+            emitSessionInstant(req, session, null);
                 Logger.info(`✅ STEP 3: Updated session.bill reference`);
 
                 finalBill = existingNewTableBill;
@@ -3179,6 +3226,7 @@ const sessionController = {
                 // STEP 3: Update session's bill reference LAST
                 session.bill = newBill._id;
                 await session.save();
+            emitSessionInstant(req, session, null);
                 Logger.info(`✅ STEP 3: Updated session.bill reference`);
 
                 // STEP 4: Check if old bill is now empty and DELETE it
@@ -3660,6 +3708,7 @@ const sessionController = {
 
             // Save the session
             await session.save();
+            emitSessionInstant(req, session, null);
 
             // Recalculate current cost with new start time
             const currentCost = await session.calculateCurrentCost();
@@ -3831,6 +3880,7 @@ const sessionController = {
 
             // Save the session
             await session.save();
+            emitSessionInstant(req, session, null);
 
             // Update the associated bill if it exists
             if (session.bill) {
@@ -3950,6 +4000,7 @@ const sessionController = {
         // Update session reference to point to target bill
         session.bill = targetBill._id;
         await session.save();
+            emitSessionInstant(req, session, null);
 
         // Update all other sessions from source bill to point to target bill
         await Session.updateMany(

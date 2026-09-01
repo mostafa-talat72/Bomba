@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { API_BASE_URL } from '../utils/apiBase';
-import api, { Session, Order, InventoryItem, WarehouseItem, Bill, Cost, Device, MenuItem, MenuSection, MenuCategory, BillItem, User } from '../services/api';
+import api, { Session, Order, InventoryItem, WarehouseItem, Bill, Cost, Device, MenuItem, MenuSection, MenuCategory, BillItem, User, Table, TableSection } from '../services/api';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from './AuthContext';
@@ -642,6 +642,8 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const createOrder = async (orderData: any): Promise<Order | null> => {
+    let optimisticId: string | null = null;
+    let optimisticOrder: any = null;
     try {
       if (!orderData.customerName || !orderData.items || orderData.items.length === 0) {
         showNotification(t('toast.order.incompleteData'), 'error');
@@ -660,11 +662,36 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         return null;
       }
 
+      // ── Optimistic UI — instant (<100ms) before API response ──
+      optimisticId = `temp-${Date.now()}-${Math.random().toString(36).slice(2,7)}`;
+      optimisticOrder = {
+        _id: optimisticId,
+        id: optimisticId,
+        orderNumber: `TMP-${optimisticId.slice(-4)}`,
+        status: 'pending',
+        items: orderData.items,
+        table: orderData.table ? { _id: orderData.table, number: orderData.table } : undefined,
+        customerName: orderData.customerName,
+        createdAt: new Date(),
+        subtotal: orderData.items.reduce((s: number, it: any) => s + (it.price || 0) * (it.quantity || 1), 0),
+        _optimistic: true,
+      } as any;
+      setOrders(prev => [optimisticOrder, ...prev]);
+
       const response = await api.createOrder(orderData);
 
       if (response.success && response.data) {
-        const newOrder = response.data;
-        setOrders(prev => [...prev, newOrder]);
+        const newOrder = response.data as any;
+        // replace optimistic with real, dedupe
+        setOrders(prev => {
+          const withoutOptimistic = prev.filter((o: any) => o._id !== optimisticId && o.id !== optimisticId);
+          // if socket already inserted real order, replace
+          const exists = withoutOptimistic.some((o: any) => o._id === newOrder._id || o.id === newOrder.id || o._id === newOrder.id);
+          if (exists) {
+            return withoutOptimistic.map((o: any) => (o._id === newOrder._id || o.id === newOrder.id || o._id === newOrder.id || o.id === newOrder._id) ? newOrder : o);
+          }
+          return [newOrder, ...withoutOptimistic];
+        });
 
         if (newOrder.bill) {
           fetchBills().catch(() => {});
@@ -674,6 +701,8 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         updateNotificationCount(1);
         return newOrder;
       } else {
+        // remove optimistic on any failure
+        if (optimisticId) setOrders(prev => prev.filter((o: any) => o._id !== optimisticId && o.id !== optimisticId));
         const responseWithErrors = response as any;
         const currentLang = window.i18n?.language || 'ar';
         if (response.data && typeof response.data === 'object' && 'details' in response.data && Array.isArray((response.data as any).details) && (response.data as any).details.length > 0) {
@@ -699,12 +728,18 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             .join('\n');
           showNotification(`${t('toast.order.insufficientStock')}\n\n${detailsMessage}`, 'error');
         } else {
+          // remove optimistic on failure (non-exception)
+          if (optimisticId) setOrders(prev => prev.filter((o: any) => o._id !== optimisticId && o.id !== optimisticId));
           const errorMessage = response.message || t('toast.order.createError');
           showNotification(errorMessage, 'error');
         }
         return null;
       }
     } catch (error: unknown) {
+      // remove optimistic on error
+      if (optimisticId) {
+        setOrders(prev => prev.filter((o: any) => o._id !== optimisticId && o.id !== optimisticId));
+      }
       const err = error as { message?: string; response?: { data?: any } };
       const currentLang = window.i18n?.language || 'ar';
 
@@ -1693,6 +1728,147 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     on('table-section-update', 'tableSections', () => fetchersRef.current.fetchTableSections());
     on('settings-update', 'settings', () => fetchersRef.current.fetchSettings());
 
+    // ── Instant (<100ms) directly mutate state — Orders/Tables real-time ──
+    const normalizeId = (id: any) => String(id);
+    const onOrderCreated = (order: any) => {
+      if (!order) return;
+      const oid = order._id || order.id;
+      if (!oid) return;
+      setOrders(prev => {
+        // If there's an optimistic temp order, replace it with real (socket confirm)
+        const optimisticIdx = prev.findIndex((o: any) => String(o._id).startsWith('temp-') || (o as any)._optimistic);
+        if (optimisticIdx !== -1) {
+          // remove optimistic and insert real at its position (top)
+          const withoutOptimistic = prev.filter((_, i) => i !== optimisticIdx);
+          // if real already exists (from api response race), just replace
+          if (withoutOptimistic.some((o: any) => normalizeId(o._id) === normalizeId(oid) || normalizeId(o.id) === normalizeId(oid))) {
+            return withoutOptimistic.map((o: any) => (normalizeId(o._id) === normalizeId(oid) || normalizeId(o.id) === normalizeId(oid)) ? { ...o, ...order, id: oid, _id: oid } : o);
+          }
+          const normalized = { ...order, id: oid, _id: oid };
+          // insert at same index where optimistic was (if top, keep top)
+          const before = withoutOptimistic.slice(0, optimisticIdx);
+          const after = withoutOptimistic.slice(optimisticIdx);
+          return [...before, normalized, ...after];
+        }
+        const filtered = prev.filter((o: any) => !String(o._id).startsWith('temp-') || o._id !== oid);
+        if (filtered.some((o: any) => normalizeId(o._id) === normalizeId(oid) || normalizeId(o.id) === normalizeId(oid))) {
+          return filtered.map((o: any) => (normalizeId(o._id) === normalizeId(oid) || normalizeId(o.id) === normalizeId(oid)) ? { ...o, ...order, id: oid, _id: oid } : o);
+        }
+        const normalized = { ...order, id: oid, _id: oid };
+        return [normalized, ...filtered];
+      });
+    };
+    const onOrderUpdated = (order: any) => {
+      if (!order || !(order._id || order.id)) return;
+      const oid = order._id || order.id;
+      setOrders(prev => prev.map((o: any) => (normalizeId(o._id) === normalizeId(oid) || normalizeId(o.id) === normalizeId(oid)) ? { ...o, ...order, id: oid, _id: oid } : o));
+    };
+    const onOrderDeleted = (payload: any) => {
+      const oid = payload?._id || payload?.id || payload;
+      if (!oid) return;
+      setOrders(prev => prev.filter((o: any) => normalizeId(o._id) !== normalizeId(oid) && normalizeId(o.id) !== normalizeId(oid)));
+    };
+    const onBillUpdated = (bill: any) => {
+      if (!bill) return;
+      const bid = bill._id || bill.id;
+      if (!bid) {
+        if (bill._id) setBills(prev => prev.filter((b: any) => normalizeId(b._id) !== normalizeId(bill._id) && normalizeId(b.id) !== normalizeId(bill._id)));
+        return;
+      }
+      setBills(prev => {
+        const exists = prev.some((b: any) => normalizeId(b._id) === normalizeId(bid) || normalizeId(b.id) === normalizeId(bid));
+        const normalized = { ...bill, id: bid, _id: bid };
+        if (exists) return prev.map((b: any) => (normalizeId(b._id) === normalizeId(bid) || normalizeId(b.id) === normalizeId(bid)) ? { ...b, ...normalized } : b);
+        if (bill.status && ['paid','cancelled'].includes(bill.status)) return prev.filter((b: any) => normalizeId(b._id) !== normalizeId(bid));
+        return [...prev, normalized];
+      });
+      if (bill.table) {
+        const tid = (bill.table as any)?._id || (bill.table as any)?.id || bill.table;
+        if (tid) {
+          const status = (bill.status === 'paid' || bill.status === 'cancelled') ? 'empty' : 'occupied';
+          setTables(prev => prev.map((t: any) => (normalizeId(t._id) === normalizeId(tid) || normalizeId(t.id) === normalizeId(tid)) ? { ...t, status } : t));
+        }
+      }
+    };
+    const onTableStatusChanged = (payload: any) => {
+      const tid = payload?.tableId || payload?._id || payload?.id;
+      const status = payload?.status;
+      if (!tid || !status) return;
+      setTables(prev => prev.map((t: any) => (normalizeId(t._id) === normalizeId(tid) || normalizeId(t.id) === normalizeId(tid)) ? { ...t, status } : t));
+    };
+    const onTableCreatedOrUpdated = (table: any) => {
+      if (!table || !(table._id || table.id)) return;
+      const tid = table._id || table.id;
+      setTables(prev => {
+        const exists = prev.some((t: any) => normalizeId(t._id) === normalizeId(tid) || normalizeId(t.id) === normalizeId(tid));
+        const normalized = { ...table, id: tid, _id: tid };
+        if (exists) return prev.map((t: any) => (normalizeId(t._id) === normalizeId(tid) || normalizeId(t.id) === normalizeId(tid)) ? { ...t, ...normalized } : t);
+        return [...prev, normalized];
+      });
+    };
+    const onTableDeleted = (payload: any) => {
+      const tid = payload?._id || payload?.id || payload;
+      if (!tid) return;
+      setTables(prev => prev.filter((t: any) => normalizeId(t._id) !== normalizeId(tid) && normalizeId(t.id) !== normalizeId(tid)));
+    };
+    const onSessionUpdated = (session: any) => {
+      if (!session || !(session._id || session.id)) return;
+      const sid = session._id || session.id;
+      setSessions(prev => {
+        const exists = prev.some((s: any) => normalizeId(s._id) === normalizeId(sid) || normalizeId(s.id) === normalizeId(sid));
+        const normalized = { ...session, id: sid, _id: sid };
+        if (exists) return prev.map((s: any) => (normalizeId(s._id) === normalizeId(sid) || normalizeId(s.id) === normalizeId(sid)) ? { ...s, ...normalized } : s);
+        if (session.status === 'active') return [...prev, normalized];
+        return prev;
+      });
+    };
+
+    // Register colon events (instant)
+    socket.on('order:created', onOrderCreated);
+    socket.on('order:updated', onOrderUpdated);
+    socket.on('order:deleted', onOrderDeleted);
+    socket.on('bill:updated', onBillUpdated);
+    socket.on('bill:created', onBillUpdated);
+    socket.on('table:statusChanged', onTableStatusChanged);
+    socket.on('table:created', onTableCreatedOrUpdated);
+    socket.on('table:updated', onTableCreatedOrUpdated);
+    socket.on('table:deleted', onTableDeleted);
+    socket.on('session:updated', onSessionUpdated);
+    socket.on('session:created', onSessionUpdated);
+    socket.on('session:ended', onSessionUpdated);
+
+    // Also handle hyphen events instantly (backward compat)
+    socket.on('order-update', (data: any) => {
+      if (!data) return;
+      if (data.type === 'created' && data.order) onOrderCreated(data.order);
+      else if (data.type === 'deleted') onOrderDeleted(data.order || data);
+      else if (data.order) onOrderUpdated(data.order);
+      else if (data._id) onOrderUpdated(data);
+    });
+    socket.on('bill-update', (data: any) => {
+      if (data?.bill) onBillUpdated(data.bill);
+      else if (data?._id) onBillUpdated(data);
+    });
+    socket.on('table-status-update', onTableStatusChanged);
+    socket.on('table-update', (data: any) => {
+      if (data?.type === 'created' || data?.type === 'updated') onTableCreatedOrUpdated(data.table || data);
+      else if (data?.type === 'deleted') onTableDeleted(data.table || data);
+      else if (data?.table) onTableCreatedOrUpdated(data.table);
+    });
+    socket.on('session-update', (data: any) => {
+      if (data?.session) onSessionUpdated(data.session);
+      else if (data?._id) onSessionUpdated(data);
+    });
+
+    // fallback polling every 30s if socket disconnected
+    const fallbackInterval = setInterval(() => {
+      if (!socket.connected) {
+        fetchersRef.current.fetchOrders().catch(()=>{});
+        fetchersRef.current.fetchBills().catch(()=>{});
+        fetchersRef.current.fetchTables().catch(()=>{});
+      }
+    }, 30000);
+
     socket.on('reconnect', () => {
       // عند إعادة الاتصال — جلب كل شيء
       debouncedFetch('reconnect', () => {
@@ -1704,6 +1880,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     });
 
     return () => {
+      clearInterval(fallbackInterval);
       debounceTimersRef.current.forEach(t => clearTimeout(t));
       debounceTimersRef.current.clear();
       socket.off('bill-update'); socket.off('payment-received'); socket.off('partial-payment-received');
@@ -1712,6 +1889,11 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       socket.off('inventory-update'); socket.off('low-stock-alert');
       socket.off('menu-update'); socket.off('cost-update'); socket.off('device-update');
       socket.off('table-update'); socket.off('table-section-update'); socket.off('settings-update');
+      socket.off('order:created', onOrderCreated); socket.off('order:updated', onOrderUpdated); socket.off('order:deleted', onOrderDeleted);
+      socket.off('bill:updated', onBillUpdated); socket.off('bill:created', onBillUpdated);
+      socket.off('table:statusChanged', onTableStatusChanged);
+      socket.off('table:created', onTableCreatedOrUpdated); socket.off('table:updated', onTableCreatedOrUpdated); socket.off('table:deleted', onTableDeleted);
+      socket.off('session:updated', onSessionUpdated); socket.off('session:created', onSessionUpdated); socket.off('session:ended', onSessionUpdated);
       socket.off('reconnect');
       socket.disconnect();
       globalSocketRef.current = null;

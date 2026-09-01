@@ -664,11 +664,12 @@ class PrintController {
       const autoDetectedSettings = {
         printerType: 'usb',
         printerDevice: selectedPrinter.path,
+        printerName: selectedPrinter.driver || selectedPrinter.name,
         printerIP: null,
         printerPort: null,
-        printerModel: 'epson',  // النموذج الافتراضي
-        autoCut: true,  // القطع التلقائي للورق
-        openCashDrawer: true  // فتح درج الكاشير
+        printerModel: 'epson',
+        autoCut: true,
+        openCashDrawer: true
       };
 
       // 4. تهيئة الطابعة بالإعدادات المكتشفة
@@ -747,11 +748,12 @@ class PrintController {
       const autoDetectedSettings = {
         printerType: 'usb',
         printerDevice: selectedPrinter.path,
+        printerName: selectedPrinter.driver || selectedPrinter.name,
         printerIP: null,
         printerPort: null,
-        printerModel: 'epson',  // النموذج الافتراضي
-        autoCut: true,  // القطع التلقائي للورق
-        openCashDrawer: false  // لا نفتح درج الكاشير للطلبات
+        printerModel: 'epson',
+        autoCut: true,
+        openCashDrawer: false
       };
 
       // 4. تهيئة الطابعة بالإعدادات المكتشفة

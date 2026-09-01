@@ -235,6 +235,17 @@ export const createTable = async (req, res) => {
         // Fire-and-forget Atlas write
         writeToAtlas('tables', 'upsert', table.toObject ? table.toObject() : table, { _id: table._id });
 
+        // ── Real-time emit (<100ms) — before response ──
+        if (req.io) {
+            try {
+                const orgId = req.user.organization?._id || req.user.organization;
+                const orgStr = String(orgId);
+                req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('table:created', table);
+                req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('table:updated', table);
+                try { req.io.notifyTableUpdate("created", table, req.user.organization); } catch {}
+            } catch {}
+        }
+
         // Prepare minimal response data
         const responseData = {
             _id: table._id,
@@ -338,6 +349,16 @@ export const updateTable = async (req, res) => {
         // Fire-and-forget Atlas write
         writeToAtlas('tables', 'upsert', table.toObject ? table.toObject() : table, { _id: table._id });
 
+        // ── Real-time emit (<100ms) ──
+        if (req.io) {
+            try {
+                const orgId = req.user.organization?._id || req.user.organization;
+                const orgStr = String(orgId);
+                req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('table:updated', table);
+                try { req.io.notifyTableUpdate("updated", table, req.user.organization); } catch {}
+            } catch {}
+        }
+
         // Prepare minimal response data
         const responseData = {
             _id: table._id,
@@ -420,6 +441,17 @@ export const deleteTable = async (req, res) => {
         // Fire-and-forget Atlas write for delete
         writeToAtlas('tables', 'delete', null, { _id: deletedTable._id });
 
+        // ── Real-time emit (<100ms) ──
+        if (req.io) {
+            try {
+                const orgId = req.user.organization?._id || req.user.organization;
+                const orgStr = String(orgId);
+                req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('table:deleted', { _id: id });
+                req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('table:updated', { _id: id, _deleted: true });
+                try { req.io.notifyTableUpdate("deleted", { _id: id }, req.user.organization); } catch {}
+            } catch {}
+        }
+
         // Return response IMMEDIATELY
         res.json({
             success: true,
@@ -494,14 +526,20 @@ export const fixTableStatuses = async (req, res) => {
             const result = await Table.bulkWrite(bulkOps);
             fixed = result.modifiedCount ?? bulkOps.length;
 
-            // Emit updates for fixed tables
+            // Emit updates for fixed tables — scoped to org, both event names
             if (req.io) {
+                const orgId = req.user.organization?._id || req.user.organization;
+                const orgStr = orgId ? String(orgId) : null;
                 for (const e of emitQueue) {
                     try {
-                        req.io.emit("table-status-update", {
-                            tableId: e.tableId,
-                            status: e.status,
-                        });
+                        const payload = { tableId: e.tableId, status: e.status };
+                        if (orgStr) {
+                            req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit("table-status-update", payload);
+                            req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit("table:statusChanged", payload);
+                            try { req.io.notifyTableStatusUpdate(payload, req.user.organization); } catch {}
+                        } else {
+                            req.io.emit("table-status-update", payload);
+                        }
                     } catch (_) {}
                 }
             }
