@@ -485,10 +485,7 @@ class ApiClient {
         };
       }
 
-      return await (async () => {
-        const responsePromise = fetch(url, config);
-        try {
-          const response = await responsePromise;
+      const response = await fetch(url, config);
           if (!response.ok && response.status === 0) {
             return { success: false, message: 'خطأ في الاتصال بالخادم، تأكد من أن الخادم يعمل' };
           }
@@ -547,8 +544,6 @@ class ApiClient {
           }
           const inner = (data as any)?.data !== undefined ? (data as any).data as T : data as T;
           return { success: true, data: inner, message: data.message };
-        }
-      })();
     } catch (error: unknown) {
       if (error instanceof TypeError && error.message.includes('fetch')) {
         return {
