@@ -4,6 +4,19 @@ import Organization from '../models/Organization.js';
 import { aggregateItemsWithPayments } from '../utils/billAggregation.js';
 
 class PrintController {
+  constructor() {
+    this.printBill = this.printBill.bind(this);
+    this.printOrder = this.printOrder.bind(this);
+    this.printConsumptionReport = this.printConsumptionReport.bind(this);
+    this.detectPrinters = this.detectPrinters.bind(this);
+    this.testPrinter = this.testPrinter.bind(this);
+    this.saveDevicePrinter = this.saveDevicePrinter.bind(this);
+    this.getDevicePrinter = this.getDevicePrinter.bind(this);
+    this.autoDetectPrinter = this.autoDetectPrinter.bind(this);
+    this.openCashDrawerOnly = this.openCashDrawerOnly.bind(this);
+    this.autoDetectAndPrintBill = this.autoDetectAndPrintBill.bind(this);
+    this.autoDetectAndPrintOrder = this.autoDetectAndPrintOrder.bind(this);
+  }
   /**
    * طباعة فاتورة مباشرة
    */
@@ -14,7 +27,6 @@ class PrintController {
       if (!bill) {
         return res.status(400).json({ success: false, message: 'Bill data is required' });
       }
-
       // الحصول على إعدادات الطابعة من المنشأة
       let printSettings = {};
       if (organization) {
@@ -26,6 +38,7 @@ class PrintController {
             printSettings = org.printSettings || {};
           }
         }
+
       }
 
       // التحقق من أن الطابعة معدة
@@ -103,6 +116,7 @@ class PrintController {
             printSettings = org.printSettings || {};
           }
         }
+
       }
 
       if (!printSettings || printSettings.printerType === 'none') {
@@ -782,3 +796,7 @@ class PrintController {
     }
   }
 }
+
+const printController = new PrintController();
+
+export default printController;
