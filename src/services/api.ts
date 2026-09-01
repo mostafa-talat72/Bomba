@@ -2794,12 +2794,43 @@ class ApiClient {
     });
   }
 
+  /**
+   * اكتشاف تلقائي وطباعة الفاتورة مباشرة
+   * بدون الحاجة لتحديد الطابعة يدوياً
+   */
+  async autoDetectAndPrintBill(data: {
+    bill: any;
+    organization: any;
+    language?: string;
+    tableSectionName?: string;
+  }): Promise<ApiResponse<any>> {
+    return this.request('/print/bill/auto-detect', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
   async printOrder(data: {
     order: any;
     organization: any;
     language?: string;
   }): Promise<ApiResponse<any>> {
     return this.request('/print/order', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  /**
+   * اكتشاف تلقائي وطباعة الطلب مباشرة
+   * بدون الحاجة لتحديد الطابعة يدوياً
+   */
+  async autoDetectAndPrintOrder(data: {
+    order: any;
+    organization: any;
+    language?: string;
+  }): Promise<ApiResponse<any>> {
+    return this.request('/print/order/auto-detect', {
       method: 'POST',
       body: JSON.stringify(data),
     });

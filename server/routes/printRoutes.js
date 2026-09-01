@@ -70,4 +70,18 @@ router.post('/auto-detect', printController.autoDetectPrinter);
  */
 router.post('/open-cash-drawer', printController.openCashDrawerOnly);
 
+/**
+ * @route   POST /api/print/bill/auto-detect
+ * @desc    اكتشاف تلقائي للطابعة الحرارية وطباعة الفاتورة مباشرة بدون معاينة
+ * @access  Private
+ */
+router.post('/bill/auto-detect', printController.autoDetectAndPrintBill);
+
+/**
+ * @route   POST /api/print/order/auto-detect
+ * @desc    اكتشاف تلقائي للطابعة الحرارية وطباعة الطلب مباشرة بدون معاينة
+ * @access  Private
+ */
+router.post('/order/auto-detect', printController.autoDetectAndPrintOrder);
+
 export default router;

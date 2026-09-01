@@ -616,6 +616,169 @@ class PrintController {
       });
     }
   }
-}
 
-export default new PrintController();
+  /**
+   * اكتشاف تلقائي وطباعة الفاتورة مباشرة
+   * بدون الحاجة لتحديد الطابعة في الإعدادات
+   */
+  async autoDetectAndPrintBill(req, res) {
+    try {
+      const { bill, organization, language = 'ar', tableSectionName } = req.body;
+
+      if (!bill) {
+        return res.status(400).json({ success: false, message: 'Bill data is required' });
+      }
+
+      // 1. كشف الطابعات المتصلة
+      console.log('Auto-detecting thermal printer...');
+      const detectedPrinters = await printerDetectionService.detectUSBPrinters();
+      
+      if (!detectedPrinters || detectedPrinters.length === 0) {
+        return res.status(400).json({ 
+          success: false, 
+          message: 'No thermal printer detected. Please connect a thermal printer.' 
+        });
+      }
+
+      console.log('Detected printers:', detectedPrinters);
+
+      // 2. اختيار أول طابعة متصلة (يفترض أنها طابعة حرارية)
+      const selectedPrinter = detectedPrinters[0];
+      console.log('Selected printer:', selectedPrinter.name, 'at port:', selectedPrinter.path);
+
+      // 3. إعداد إعدادات الطابعة المكتشفة تلقائياً
+      const autoDetectedSettings = {
+        printerType: 'usb',
+        printerDevice: selectedPrinter.path,
+        printerIP: null,
+        printerPort: null,
+        printerModel: 'epson',  // النموذج الافتراضي
+        autoCut: true,  // القطع التلقائي للورق
+        openCashDrawer: true  // فتح درج الكاشير
+      };
+
+      // 4. تهيئة الطابعة بالإعدادات المكتشفة
+      const connected = await printerService.initializePrinter(autoDetectedSettings);
+      if (!connected) {
+        return res.status(500).json({ 
+          success: false, 
+          message: 'Failed to connect to detected printer. Please try again.' 
+        });
+      }
+
+      // 5. توليد محتوى الفاتورة للطباعة
+      const content = await this.generateBillContent(bill, organization, language, tableSectionName, autoDetectedSettings);
+
+      // 6. طباعة الفاتورة مع فتح درج الكاشير
+      const result = await printerService.printDocument(content, true, true);
+
+      // 7. إغلاق الاتصال بالطابعة
+      await printerService.disconnect();
+
+      if (result.success) {
+        return res.json({ 
+          success: true, 
+          message: 'Bill printed successfully',
+          cashDrawerOpened: true,
+          printerUsed: selectedPrinter.name
+        });
+      } else {
+        return res.status(500).json({ 
+          success: false, 
+          message: 'Failed to print bill',
+          error: result.error
+        });
+      }
+    } catch (error) {
+      console.error('Error in autoDetectAndPrintBill:', error);
+      await printerService.disconnect();
+      return res.status(500).json({ 
+        success: false, 
+        message: 'Internal server error during auto-detect printing',
+        error: error.message
+      });
+    }
+  }
+
+  /**
+   * اكتشاف تلقائي وطباعة الطلب مباشرة
+   * بدون الحاجة لتحديد الطابعة في الإعدادات
+   */
+  async autoDetectAndPrintOrder(req, res) {
+    try {
+      const { order, organization, language = 'ar' } = req.body;
+
+      if (!order) {
+        return res.status(400).json({ success: false, message: 'Order data is required' });
+      }
+
+      // 1. كشف الطابعات المتصلة
+      console.log('Auto-detecting thermal printer for order...');
+      const detectedPrinters = await printerDetectionService.detectUSBPrinters();
+      
+      if (!detectedPrinters || detectedPrinters.length === 0) {
+        return res.status(400).json({ 
+          success: false, 
+          message: 'No thermal printer detected. Please connect a thermal printer.' 
+        });
+      }
+
+      console.log('Detected printers:', detectedPrinters);
+
+      // 2. اختيار أول طابعة متصلة
+      const selectedPrinter = detectedPrinters[0];
+      console.log('Selected printer for order:', selectedPrinter.name, 'at port:', selectedPrinter.path);
+
+      // 3. إعداد إعدادات الطابعة المكتشفة تلقائياً
+      const autoDetectedSettings = {
+        printerType: 'usb',
+        printerDevice: selectedPrinter.path,
+        printerIP: null,
+        printerPort: null,
+        printerModel: 'epson',  // النموذج الافتراضي
+        autoCut: true,  // القطع التلقائي للورق
+        openCashDrawer: false  // لا نفتح درج الكاشير للطلبات
+      };
+
+      // 4. تهيئة الطابعة بالإعدادات المكتشفة
+      const connected = await printerService.initializePrinter(autoDetectedSettings);
+      if (!connected) {
+        return res.status(500).json({ 
+          success: false, 
+          message: 'Failed to connect to detected printer. Please try again.' 
+        });
+      }
+
+      // 5. توليد محتوى الطلب للطباعة
+      const content = await this.generateOrderContent(order, organization, language, autoDetectedSettings);
+
+      // 6. طباعة الطلب بدون فتح درج الكاشير
+      const result = await printerService.printDocument(content, false, true);
+
+      // 7. إغلاق الاتصال بالطابعة
+      await printerService.disconnect();
+
+      if (result.success) {
+        return res.json({ 
+          success: true, 
+          message: 'Order printed successfully',
+          printerUsed: selectedPrinter.name
+        });
+      } else {
+        return res.status(500).json({ 
+          success: false, 
+          message: 'Failed to print order',
+          error: result.error
+        });
+      }
+    } catch (error) {
+      console.error('Error in autoDetectAndPrintOrder:', error);
+      await printerService.disconnect();
+      return res.status(500).json({ 
+        success: false, 
+        message: 'Internal server error during auto-detect order printing',
+        error: error.message
+      });
+    }
+  }
+}

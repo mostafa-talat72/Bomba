@@ -176,8 +176,14 @@ class PrinterService {
 
     try {
       // إرسال أمر فتح درج الكاشير (ESC/POS command)
-      // ESC p m t1 t2 - Pulse: m=0, t1=50, t2=50
-      this.printer.raw(Buffer.from([0x1B, 0x70, 0x00, 0x32, 0x32]));
+      // الأمر الصحيح: 1B700019FA (HEX) = [0x1B, 0x70, 0x00, 0x19, 0xFA]
+      // ESC p m t1 t2 - حيث:
+      // - 0x1B = ESC
+      // - 0x70 = 'p' (pulse command)
+      // - 0x00 = m (mode)
+      // - 0x19 = t1 (25ms pulse duration)
+      // - 0xFA = t2 (250ms pulse interval)
+      this.printer.raw(Buffer.from([0x1B, 0x70, 0x00, 0x19, 0xFA]));
       await this.printer.execute();
       console.log('Cash drawer opened successfully');
       return true;
