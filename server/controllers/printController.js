@@ -16,6 +16,7 @@ class PrintController {
     this.openCashDrawerOnly = this.openCashDrawerOnly.bind(this);
     this.autoDetectAndPrintBill = this.autoDetectAndPrintBill.bind(this);
     this.autoDetectAndPrintOrder = this.autoDetectAndPrintOrder.bind(this);
+    this.autoDetectAndOpenCashDrawer = this.autoDetectAndOpenCashDrawer.bind(this);
   }
   /**
    * طباعة فاتورة مباشرة
@@ -661,6 +662,7 @@ class PrintController {
       console.log('Selected printer:', selectedPrinter.name, 'at port:', selectedPrinter.path);
 
       // 3. إعداد إعدادات الطابعة المكتشفة تلقائياً
+      const openDrawer = organization?.printSettings?.openCashDrawer !== false;
       const autoDetectedSettings = {
         printerType: 'usb',
         printerDevice: selectedPrinter.path,
@@ -669,7 +671,7 @@ class PrintController {
         printerPort: null,
         printerModel: 'epson',
         autoCut: true,
-        openCashDrawer: true
+        openCashDrawer: openDrawer
       };
 
       // 4. تهيئة الطابعة بالإعدادات المكتشفة
@@ -685,7 +687,7 @@ class PrintController {
       const content = await this.generateBillContent(bill, organization, language, tableSectionName, autoDetectedSettings);
 
       // 6. طباعة الفاتورة مع فتح درج الكاشير
-      const result = await printerService.printDocument(content, true, true);
+      const result = await printerService.printDocument(content, openDrawer, true);
 
       // 7. إغلاق الاتصال بالطابعة
       await printerService.disconnect();
@@ -795,6 +797,42 @@ class PrintController {
         message: 'Internal server error during auto-detect order printing',
         error: error.message
       });
+    }
+  }
+
+  async autoDetectAndOpenCashDrawer(req, res) {
+      try {
+        const { mode = 'payment', organization } = req.body || {};
+        const settingName = mode === 'bill' ? 'openCashDrawer' : 'openCashDrawerOnPayment';
+        if (organization?.printSettings?.[settingName] === false) {
+          return res.json({ success: false, disabled: true, message: 'Cash drawer opening is disabled in settings' });
+        }
+
+        const detectedPrinters = await printerDetectionService.detectUSBPrinters();
+        if (!detectedPrinters || detectedPrinters.length === 0) {
+          return res.status(400).json({ success: false, message: 'No thermal printer detected' });
+        }
+
+        const selectedPrinter = detectedPrinters[0];
+        const settings = {
+          printerType: 'usb',
+          printerDevice: selectedPrinter.path,
+          printerName: selectedPrinter.name,
+          printerModel: 'epson'
+        };
+        if (!await printerService.initializePrinter(settings)) {
+          return res.status(500).json({ success: false, message: 'Failed to connect to detected printer' });
+        }
+
+        const opened = await printerService.openCashDrawer();
+        await printerService.disconnect();
+        return opened
+          ? res.json({ success: true, printerUsed: selectedPrinter.name })
+          : res.status(500).json({ success: false, message: 'Failed to open cash drawer' });
+    } catch (error) {
+      console.error('Error in autoDetectAndOpenCashDrawer:', error);
+      await printerService.disconnect();
+      return res.status(500).json({ success: false, message: 'Internal server error opening cash drawer', error: error.message });
     }
   }
 }

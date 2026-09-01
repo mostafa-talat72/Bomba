@@ -23,5 +23,6 @@ router.post('/auto-detect', (req,res)=>printController.autoDetectPrinter(req,res
 router.post('/open-cash-drawer', (req,res)=>printController.openCashDrawerOnly(req,res));
 router.post('/bill/auto-detect', (req,res)=>printController.autoDetectAndPrintBill(req,res));
 router.post('/order/auto-detect', (req,res)=>printController.autoDetectAndPrintOrder(req,res));
+router.post('/cash-drawer/auto-detect', (req,res)=>printController.autoDetectAndOpenCashDrawer(req,res));
 
 export default router;

@@ -60,7 +60,8 @@ export const buildOrderPrintHTML = async (
   fallbackOrganizationName?: string,
   language: string = 'ar',
   t: TFunction = ((key: string) => key) as TFunction,
-  tableSectionName?: string
+  tableSectionName?: string,
+  selectedSectionIds?: string[]
 ): Promise<string> => {
   // Get establishment name from order data or use fallback
   let establishmentName = fallbackOrganizationName || t('orderPrint.defaultEstablishment') || 'Cafe Management System';
@@ -181,7 +182,9 @@ export const buildOrderPrintHTML = async (
   });
 
   // Print all sections on same page
-  const sectionsArray = Array.from(itemsBySection.entries()).map(([sectionId, items]) => {
+  const sectionsArray = Array.from(itemsBySection.entries()).filter(([sectionId]) =>
+    !selectedSectionIds || selectedSectionIds.includes(sectionId)
+  ).map(([sectionId, items]) => {
     const sectionName = sectionId === 'other' 
       ? t('orderPrint.otherSection')
       : menuSections.find(s => 
@@ -590,10 +593,22 @@ export const printOrder = async (
   fallbackOrganizationName?: string,
   language: string = 'ar',
   t: TFunction = ((key: string) => key) as TFunction,
-  tableSectionName?: string
+  tableSectionName?: string,
+  selectedSectionIds?: string[]
 ) => {
   const isElectron = typeof window !== 'undefined' && !!((window as any).bombaDesktop?.isDesktop || (window as any).electronAPI);
   try {
+    if (isElectron && (window as any).bombaDesktop?.directPrint) {
+      const printContent = await buildOrderPrintHTML(order, menuSections, menuItemsMap, fallbackOrganizationName, language, t, tableSectionName, selectedSectionIds);
+      const printResponse = await (window as any).bombaDesktop.directPrint(printContent);
+      if (!printResponse?.success) {
+        throw new Error(printResponse?.message || 'Desktop print failed');
+      }
+      const successMsg = language === 'ar' ? 'تمت طباعة الطلب بنجاح' : 'Order printed successfully';
+      if ((window as any).showNotification) (window as any).showNotification(successMsg, 'success');
+      return;
+    }
+
     // استخدام الاكتشاف التلقائي للطابعة الحرارية
     const directPrint = api.autoDetectAndPrintOrder({ 
       order, 
@@ -631,7 +646,7 @@ export const printOrder = async (
   }
 
   // Fallback: استخدام الطريقة القديمة أو Electron direct print إذا فشلت الطباعة المباشرة
-  const printContent = await buildOrderPrintHTML(order, menuSections, menuItemsMap, fallbackOrganizationName, language, t, tableSectionName);
+  const printContent = await buildOrderPrintHTML(order, menuSections, menuItemsMap, fallbackOrganizationName, language, t, tableSectionName, selectedSectionIds);
 
   // Check if running on Electron desktop app
   const isDesktopApp = typeof window !== 'undefined' && (window as any).bombaDesktop?.isDesktop;

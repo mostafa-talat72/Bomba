@@ -23,8 +23,8 @@ contextBridge.exposeInMainWorld("bombaDesktop", {
     ipcRenderer.send('print-preview');
   },
   // Direct print to default printer without preview (desktop only)
-  directPrint: () => {
+  directPrint: (html, printerName) => {
     const { ipcRenderer } = require("electron");
-    return ipcRenderer.invoke('direct-print');
+    return ipcRenderer.invoke('direct-print', { html, printerName });
   },
 });

@@ -808,6 +808,25 @@ export const printBill = async (
 ) => {
   const isElectron = typeof window !== 'undefined' && !!((window as any).bombaDesktop?.isDesktop || (window as any).electronAPI);
   try {
+    if (isElectron && (window as any).bombaDesktop?.directPrint) {
+      const receiptHTML = await buildBillPrintHTML(bill, fallbackOrganizationName, language, t, tableSectionName);
+      const printResponse = await (window as any).bombaDesktop.directPrint(receiptHTML);
+      if (!printResponse?.success) {
+        throw new Error(printResponse?.message || 'Desktop print failed');
+      }
+
+      const shouldOpenDrawer = bill.organization?.printSettings?.openCashDrawer !== false;
+      const drawerResponse = shouldOpenDrawer
+        ? await api.autoDetectAndOpenCashDrawer('bill', bill.organization)
+        : { success: true };
+      if (!drawerResponse?.success && !drawerResponse?.disabled) {
+        console.warn('Bill printed, but cash drawer could not be opened:', drawerResponse?.message);
+      }
+      const successMsg = language === 'ar' ? 'تمت طباعة الفاتورة بنجاح' : 'Bill printed successfully';
+      if ((window as any).showNotification) (window as any).showNotification(successMsg, 'success');
+      return;
+    }
+
     // استخدام الاكتشاف التلقائي للطابعة الحرارية
     // بدلاً من الاستدعاء المباشر للـ API
     const directPrint = api.autoDetectAndPrintBill({ 
