@@ -63,7 +63,7 @@ const Tables: React.FC = () => {
   const location = useLocation();
 
   const {
-    tableSections, tables, fetchTableSections, fetchTables,
+    tableSections, tables, fetchTableSections, fetchTables, setTables, setTableSections,
     menuItems, menuSections, menuCategories,
     fetchAvailableMenuItems, fetchMenuSections, fetchMenuCategories,
     showNotification, createOrder, updateOrder, deleteOrder,
@@ -671,13 +671,159 @@ const loadInitialData = async () => {
       // لا حاجة لـ setTableStatuses يدوياً — يتحدث مع bills
     });
 
+    // ── Instant colon events (<100ms) — Orders/Tables real-time ──
+    const onOrderCreatedColon = (order: any) => {
+      if (!order || !(order._id || order.id)) return;
+      const oid = order._id || order.id;
+      setOrders((prev: any[]) => {
+        // replace optimistic if exists
+        const optIdx = prev.findIndex((o: any) => String(o._id).startsWith('temp-') || (o as any)._optimistic);
+        if (optIdx !== -1) {
+          const withoutOpt = prev.filter((_, i) => i !== optIdx);
+          if (withoutOpt.some((o: any) => String(o._id) === String(oid) || String(o.id) === String(oid))) {
+            return withoutOpt.map((o: any) => (String(o._id) === String(oid) || String(o.id) === String(oid)) ? order : o);
+          }
+          const before = withoutOpt.slice(0, optIdx);
+          const after = withoutOpt.slice(optIdx);
+          return [...before, order, ...after];
+        }
+        if (prev.some((o: any) => String(o._id) === String(oid) || String(o.id) === String(oid))) {
+          return prev.map((o: any) => (String(o._id) === String(oid) || String(o.id) === String(oid)) ? order : o);
+        }
+        return [order, ...prev];
+      });
+      const cur = selectedTableRef.current;
+      if (cur) {
+        const tid = String(cur._id || (cur as any).id);
+        const oTid = String(order.table?._id || order.table?.id || order.table || '');
+        if (oTid && oTid === tid) {
+          setTableOrders((prev: any[]) => {
+            const optIdx2 = prev.findIndex((o: any) => String(o._id).startsWith('temp-') || (o as any)._optimistic);
+            if (optIdx2 !== -1) {
+              const withoutOpt2 = prev.filter((_, i) => i !== optIdx2);
+              if (withoutOpt2.some((o: any) => String(o._id) === String(oid))) return withoutOpt2.map((o: any) => String(o._id) === String(oid) ? order : o);
+              const before2 = withoutOpt2.slice(0, optIdx2);
+              const after2 = withoutOpt2.slice(optIdx2);
+              return [...before2, order, ...after2];
+            }
+            if (prev.some((o: any) => String(o._id) === String(oid))) return prev.map((o: any) => String(o._id) === String(oid) ? order : o);
+            return [order, ...prev];
+          });
+        }
+      }
+    };
+    const onOrderUpdatedColon = (order: any) => {
+      if (!order || !(order._id || order.id)) return;
+      const oid = order._id || order.id;
+      setOrders((prev: any[]) => prev.map((o: any) => (String(o._id) === String(oid) || String(o.id) === String(oid)) ? order : o));
+      const cur = selectedTableRef.current;
+      if (cur) {
+        const tid = String(cur._id || (cur as any).id);
+        const oTid = String(order.table?._id || order.table?.id || order.table || '');
+        if (oTid && oTid === tid) {
+          setTableOrders((prev: any[]) => prev.map((o: any) => String(o._id) === String(oid) ? order : o));
+        }
+      }
+    };
+    const onOrderDeletedColon = (payload: any) => {
+      const oid = payload?._id || payload?.id || payload;
+      if (!oid) return;
+      setOrders((prev: any[]) => prev.filter((o: any) => String(o._id) !== String(oid) && String(o.id) !== String(oid)));
+      setTableOrders((prev: any[]) => prev.filter((o: any) => String(o._id) !== String(oid)));
+    };
+    const onBillUpdatedColon = (bill: any) => {
+      if (!bill) return;
+      const bid = bill._id || bill.id;
+      if (!bid) {
+        if (bill._id) setBills((prev: any[]) => prev.filter((b: any) => String(b._id) !== String(bill._id) && String(b.id) !== String(bill._id)));
+        return;
+      }
+      setBills((prev: any[]) => {
+        const exists = prev.some((b: any) => String(b._id) === String(bid) || String(b.id) === String(bid));
+        if (exists) return prev.map((b: any) => (String(b._id) === String(bid) || String(b.id) === String(bid)) ? bill : b);
+        if (bill.status === 'paid' || bill.status === 'cancelled') return prev;
+        return [...prev, bill];
+      });
+      const cur = selectedBillRef.current;
+      if (cur && (String(bill._id) === String(cur._id) || String(bill.id) === String(cur.id))) {
+        setSelectedBill(bill);
+        if (bill.remaining !== undefined) {
+          setPaymentAmount(bill.remaining.toString());
+          setOriginalAmount(bill.remaining.toString());
+        }
+      }
+      // also update table status optimistically
+      if (bill.table) {
+        const tid = (bill.table as any)?._id || (bill.table as any)?.id || bill.table;
+        if (tid) {
+          const status = (bill.status === 'paid' || bill.status === 'cancelled') ? 'empty' : 'occupied';
+          setTables((prev: any[]) => prev.map((t: any) => String(t._id || (t as any).id) === String(tid) ? { ...t, status } : t));
+        }
+      }
+    };
+    const onTableStatusChangedColon = (payload: any) => {
+      const tid = payload?.tableId || payload?._id || payload?.id;
+      const status = payload?.status;
+      if (!tid || !status) return;
+      setTables((prev: any[]) => prev.map((t: any) => String(t._id || (t as any).id) === String(tid) ? { ...t, status } : t));
+    };
+    const onTableCreatedColon = (table: any) => {
+      if (!table || !(table._id || (table as any).id)) return;
+      const tid = table._id || (table as any).id;
+      setTables((prev: any[]) => {
+        if (prev.some((t: any) => String(t._id || (t as any).id) === String(tid))) return prev.map((t: any) => String(t._id || (t as any).id) === String(tid) ? table : t);
+        return [...prev, table];
+      });
+    };
+    const onTableUpdatedColon = (table: any) => {
+      if (!table || !(table._id || (table as any).id)) return;
+      const tid = table._id || (table as any).id;
+      setTables((prev: any[]) => prev.map((t: any) => String(t._id || (t as any).id) === String(tid) ? { ...table, _id: tid, id: tid } : t));
+    };
+    const onTableDeletedColon = (payload: any) => {
+      const tid = payload?._id || payload?.id || payload;
+      if (!tid) return;
+      setTables((prev: any[]) => prev.filter((t: any) => String(t._id || (t as any).id) !== String(tid)));
+    };
+    const onSessionUpdatedColon = (session: any) => {
+      if (!session || !(session._id || (session as any).id)) return;
+      const sid = session._id || (session as any).id;
+      const cur = selectedBillRef.current;
+      if (cur && cur.sessions?.some((s: any) => String((s as any)._id || (s as any).id) === String(sid))) {
+        setSelectedBill((prev: any) => prev ? { ...prev, sessions: prev.sessions.map((s: any) => String((s as any)._id || (s as any).id) === String(sid) ? session : s) } : prev);
+      }
+    };
+    socket.on('order:created', onOrderCreatedColon);
+    socket.on('order:updated', onOrderUpdatedColon);
+    socket.on('order:deleted', onOrderDeletedColon);
+    socket.on('bill:updated', onBillUpdatedColon);
+    socket.on('bill:created', onBillUpdatedColon);
+    socket.on('table:statusChanged', onTableStatusChangedColon);
+    socket.on('table:created', onTableCreatedColon);
+    socket.on('table:updated', onTableUpdatedColon);
+    socket.on('table:deleted', onTableDeletedColon);
+    socket.on('session:updated', onSessionUpdatedColon);
+    socket.on('session:created', onSessionUpdatedColon);
+    socket.on('session:ended', onSessionUpdatedColon);
+
+    // fallback polling every 30s if socket disconnected
+    const fallback = setInterval(() => {
+      if (!socket.connected) {
+        fetchBills().catch(()=>{});
+        fetchOrders().catch(()=>{});
+        fetchTables().catch(()=>{});
+      }
+    }, 30000);
+
     // ── تحديث المخزون ────────────────────────────────────────────────────
     socket.on('inventory-update', () => { fetchAvailableMenuItems(); });
 
     return () => {
+      clearInterval(fallback);
       if (import.meta.env.DEV) {
         ['reconnect', 'order-update', 'bill-update', 'payment-received', 'partial-payment-received',
-         'table-status-update', 'session-update', 'inventory-update'].forEach(e => socket.off(e));
+         'table-status-update', 'session-update', 'inventory-update',
+         'order:created','order:updated','order:deleted','bill:updated','bill:created','table:statusChanged','table:created','table:updated','table:deleted','session:updated','session:created','session:ended'].forEach(e => socket.off(e));
       } else {
         socket.disconnect();
       }

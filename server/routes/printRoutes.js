@@ -12,76 +12,16 @@ router.use(authenticateToken);
  * @desc    طباعة فاتورة مباشرة مع فتح درج الكاشير
  * @access  Private
  */
-router.post('/bill', printController.printBill);
-
-/**
- * @route   POST /api/print/order
- * @desc    طباعة طلب مباشرة بدون فتح درج الكاشير
- * @access  Private
- */
-router.post('/order', printController.printOrder);
-
-/**
- * @route   POST /api/print/consumption-report
- * @desc    طباعة تقرير الاستهلاك مباشرة بدون فتح درج الكاشير
- * @access  Private
- */
-router.post('/consumption-report', printController.printConsumptionReport);
-
-/**
- * @route   GET /api/print/detect
- * @desc    كشف الطابعات المتاحة
- * @access  Private
- */
-router.get('/detect', printController.detectPrinters);
-
-/**
- * @route   POST /api/print/test
- * @desc    اختبار اتصال طابعة
- * @access  Private
- */
-router.post('/test', printController.testPrinter);
-
-/**
- * @route   POST /api/print/device
- * @desc    حفظ إعدادات الطابعة للجهاز الحالي
- * @access  Private
- */
-router.post('/device', printController.saveDevicePrinter);
-
-/**
- * @route   GET /api/print/device
- * @desc    الحصول على إعدادات الطابعة للجهاز الحالي
- * @access  Private
- */
-router.get('/device', printController.getDevicePrinter);
-
-/**
- * @route   POST /api/print/auto-detect
- * @desc    اكتشاف تلقائي للطابعة وربطها بالمستخدم الحالي
- * @access  Private
- */
-router.post('/auto-detect', printController.autoDetectPrinter);
-
-/**
- * @route   POST /api/print/open-cash-drawer
- * @desc    فتح درج الكاشير فقط (بدون طباعة)
- * @access  Private
- */
-router.post('/open-cash-drawer', printController.openCashDrawerOnly);
-
-/**
- * @route   POST /api/print/bill/auto-detect
- * @desc    اكتشاف تلقائي للطابعة الحرارية وطباعة الفاتورة مباشرة بدون معاينة
- * @access  Private
- */
-router.post('/bill/auto-detect', printController.autoDetectAndPrintBill);
-
-/**
- * @route   POST /api/print/order/auto-detect
- * @desc    اكتشاف تلقائي للطابعة الحرارية وطباعة الطلب مباشرة بدون معاينة
- * @access  Private
- */
-router.post('/order/auto-detect', printController.autoDetectAndPrintOrder);
+router.post('/bill', (req,res)=>printController.printBill(req,res));
+router.post('/order', (req,res)=>printController.printOrder(req,res));
+router.post('/consumption-report', (req,res)=>printController.printConsumptionReport(req,res));
+router.get('/detect', (req,res)=>printController.detectPrinters(req,res));
+router.post('/test', (req,res)=>printController.testPrinter(req,res));
+router.post('/device', (req,res)=>printController.saveDevicePrinter(req,res));
+router.get('/device', (req,res)=>printController.getDevicePrinter(req,res));
+router.post('/auto-detect', (req,res)=>printController.autoDetectPrinter(req,res));
+router.post('/open-cash-drawer', (req,res)=>printController.openCashDrawerOnly(req,res));
+router.post('/bill/auto-detect', (req,res)=>printController.autoDetectAndPrintBill(req,res));
+router.post('/order/auto-detect', (req,res)=>printController.autoDetectAndPrintOrder(req,res));
 
 export default router;

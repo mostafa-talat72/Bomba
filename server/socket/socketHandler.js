@@ -34,9 +34,10 @@ export const setupSocketIO = (io) => {
         const userRole = socket.data.role;
         const userOrg = socket.data.organization;
         
-        // Auto-join organization room
+        // Auto-join organization room (support both dash and colon for compatibility)
         if (userOrg) {
             socket.join(`org-${userOrg}`);
+            socket.join(`org:${userOrg}`);
         }
         
         // Join user to their role room — only if role matches actual JWT role
@@ -141,18 +142,50 @@ export const setupSocketIO = (io) => {
         return String(orgId);
     };
     // Helper functions to emit events from controllers — scoped by organizationId
+    // emit to both dash and colon rooms and support both hyphen and colon event names for instant <100ms sync
+    const emitToOrgBothRooms = (event, data, org) => {
+        const dashRoom = org ? `org-${org}` : null;
+        const colonRoom = org ? `org:${org}` : null;
+        if (dashRoom) {
+            io.to(dashRoom).emit(event, data);
+            io.to(colonRoom).emit(event, data);
+        } else {
+            io.emit(event, data);
+        }
+    };
     io.notifySessionUpdate = (type, session, organizationId) => {
         const org = normalizeOrg(organizationId);
-        const target = org ? `org-${org}` : undefined;
-        if (target) io.to(target).emit("session-update", { type, session });
-        else io.emit("session-update", { type, session });
+        const targetDash = org ? `org-${org}` : undefined;
+        const targetColon = org ? `org:${org}` : undefined;
+        const doEmit = (event, data) => {
+            if (org) { io.to(targetDash).emit(event, data); io.to(targetColon).emit(event, data); }
+            else io.emit(event, data);
+        };
+        doEmit("session-update", { type, session });
+        // colon-style for instant frontend listeners
+        doEmit("session:updated", session);
+        if (type === "started") doEmit("session:created", session);
+        if (type === "ended") doEmit("session:ended", session);
     };
 
     io.notifyOrderUpdate = (type, order, organizationId) => {
         const org = normalizeOrg(organizationId);
-        const target = org ? `org-${org}` : undefined;
-        const emit = (event, data) => target ? io.to(target).emit(event, data) : io.emit(event, data);
+        const targetDash = org ? `org-${org}` : undefined;
+        const targetColon = org ? `org:${org}` : undefined;
+        const emit = (event, data) => {
+            if (org) { io.to(targetDash).emit(event, data); io.to(targetColon).emit(event, data); }
+            else io.emit(event, data);
+        };
         emit("order-update", { type, order });
+
+        // colon-style instant events
+        if (type === "created") {
+            emit("order:created", order);
+        } else if (type === "deleted") {
+            emit("order:deleted", { _id: order._id || order.id });
+        } else {
+            emit("order:updated", order);
+        }
 
         if (type === "created") {
             emit("new-order", order);
@@ -174,9 +207,30 @@ export const setupSocketIO = (io) => {
 
     io.notifyBillUpdate = (type, bill, organizationId) => {
         const org = normalizeOrg(organizationId);
-        const target = org ? `org-${org}` : undefined;
-        if (target) io.to(target).emit("bill-update", { type, bill });
-        else io.emit("bill-update", { type, bill });
+        const targetDash = org ? `org-${org}` : undefined;
+        const targetColon = org ? `org:${org}` : undefined;
+        const doEmit = (event, data) => {
+            if (org) { io.to(targetDash).emit(event, data); io.to(targetColon).emit(event, data); }
+            else io.emit(event, data);
+        };
+        doEmit("bill-update", { type, bill });
+        // colon-style instant
+        doEmit("bill:updated", bill);
+        doEmit("bill:created", bill);
+        // also emit payment-specific for compatibility
+        if (type === "payment-received" || type === "partial-payment" || type === "paid") {
+            doEmit("payment-received", { bill, type });
+            doEmit("partial-payment-received", { bill, type });
+        }
+        // if bill has table, also emit table status change
+        if (bill && bill.table) {
+            const tid = bill.table._id || bill.table.id || bill.table;
+            if (tid) {
+                const newStatus = (bill.status === 'paid' || bill.status === 'cancelled') ? 'empty' : 'occupied';
+                doEmit("table-status-update", { tableId: tid, status: newStatus });
+                doEmit("table:statusChanged", { tableId: tid, status: newStatus });
+            }
+        }
     };
 
     io.sendNotification = (message, type = "info", targetRole = null, organizationId = null) => {
@@ -193,12 +247,17 @@ export const setupSocketIO = (io) => {
         }
     };
 
-    // Debounced table status update to reduce event frequency
+    // Table status update — instant, scoped, emits both hyphen and colon events to dash & colon rooms
     io.notifyTableStatusUpdate = (data, organizationId) => {
         const org = normalizeOrg(organizationId);
-        const target = org ? `org-${org}` : undefined;
-        if (target) io.to(target).emit("table-status-update", data);
-        else io.emit("table-status-update", data);
+        const targetDash = org ? `org-${org}` : undefined;
+        const targetColon = org ? `org:${org}` : undefined;
+        const doEmit = (event, payload) => {
+            if (org) { io.to(targetDash).emit(event, payload); io.to(targetColon).emit(event, payload); }
+            else io.emit(event, payload);
+        };
+        doEmit("table-status-update", data);
+        doEmit("table:statusChanged", data);
     };
 
     // ── Generic real-time sync for remaining schemas (ثانوية — لحظية) ──────
@@ -222,9 +281,19 @@ export const setupSocketIO = (io) => {
     };
     io.notifyTableUpdate = (type, table, organizationId) => {
         const org = normalizeOrg(organizationId);
-        const target = org ? `org-${org}` : undefined;
-        if (target) io.to(target).emit("table-update", { type, table });
-        else io.emit("table-update", { type, table });
+        const targetDash = org ? `org-${org}` : undefined;
+        const targetColon = org ? `org:${org}` : undefined;
+        const doEmit = (event, payload) => {
+            if (org) { io.to(targetDash).emit(event, payload); io.to(targetColon).emit(event, payload); }
+            else io.emit(event, payload);
+        };
+        doEmit("table-update", { type, table });
+        // colon-style
+        if (type === "created") doEmit("table:created", table);
+        else if (type === "updated") doEmit("table:updated", table);
+        else if (type === "deleted") doEmit("table:deleted", { _id: (table && (table._id || table.id)) || table });
+        // generic table:updated for all mutations
+        doEmit("table:updated", table);
     };
     io.notifyTableSectionUpdate = (type, section, organizationId) => {
         const org = normalizeOrg(organizationId);

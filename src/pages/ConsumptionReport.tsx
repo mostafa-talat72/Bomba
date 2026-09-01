@@ -117,13 +117,17 @@ const ConsumptionReport = () => {
     }
   }, []);
   
-  const [dateRange, setDateRange] = useState<[Dayjs, Dayjs]>([
-    dayjs().set('hour', 0).set('minute', 0).set('second', 0),
-    dayjs().set('hour', 23).set('minute', 59).set('second', 59)
-  ]);
+  const [dateRange, setDateRange] = useState<[Dayjs, Dayjs]>(() => {
+    const now = dayjs();
+    const start = now.hour() < 7
+      ? now.subtract(1, 'day').hour(7).minute(0).second(0).millisecond(0)
+      : now.hour(7).minute(0).second(0).millisecond(0);
+    const end = start.add(1, 'day').subtract(1, 'second');
+    return [start, end];
+  });
   const [timeRange, setTimeRange] = useState<[Dayjs, Dayjs]>([
-    dayjs().set('hour', 0).set('minute', 0),
-    dayjs().set('hour', 23).set('minute', 59)
+    dayjs().set('hour', 7).set('minute', 0),
+    dayjs().set('hour', 7).set('minute', 0),
   ]);
   const [activeTab, setActiveTab] = useState<string>('all');
   const [pageSize, setPageSize] = useState<number>(10);
@@ -451,36 +455,39 @@ const ConsumptionReport = () => {
   };
 
   const printReport = async () => {
+    const isElectron = typeof window !== 'undefined' && !!(window as any).electronAPI;
     try {
-      // محاولة الطباعة المباشرة عبر API
       const reportData = {
         consumptionData,
         dateRange,
         totalSales: Object.values(consumptionData).flat().reduce((sum, item) => sum + item.total, 0),
         totalConsumption: Object.values(consumptionData).flat().reduce((sum, item) => sum + item.total, 0)
       };
-
-      const response = await api.printConsumptionReport({
+      const response: any = await api.printConsumptionReport({
         reportData,
         organization: user?.organization,
         language: i18n.language
       });
-
-      if (response.success) {
-        const successMsg = i18n.language === 'ar' 
-          ? 'تمت طباعة التقرير بنجاح'
-          : i18n.language === 'fr'
-          ? 'Rapport imprimé avec succès'
-          : 'Report printed successfully';
-        
+      if (response?.success) {
+        const successMsg = i18n.language === 'ar' ? 'تمت طباعة التقرير بنجاح' : i18n.language === 'fr' ? 'Rapport imprimé avec succès' : 'Report printed successfully';
         toast.success(successMsg);
         return;
       }
-    } catch (error) {
+      console.error('Direct print returned non-success:', response);
+      if (isElectron) {
+        toast.error(response?.message || (i18n.language === 'ar' ? 'فشلت الطباعة المباشرة' : 'Direct print failed') + (response?.error ? `: ${response.error}` : ''));
+        return;
+      }
+    } catch (error: any) {
       console.error('Direct print failed, falling back to window print:', error);
+      if (isElectron) {
+        const msg = error?.message === 'print-timeout' ? (i18n.language === 'ar' ? 'انتهت مهلة الطباعة — تأكد من توصيل الطابعة' : 'Direct print timeout') : (i18n.language === 'ar' ? 'فشلت الطباعة المباشرة' : 'Direct print failed');
+        toast.error(msg);
+        return;
+      }
     }
 
-    // Fallback: استخدام الطريقة القديمة إذا فشلت الطباعة المباشرة
+    // Fallback (ويب فقط): استخدام الطريقة القديمة إذا فشلت الطباعة المباشرة
     try {
       const isRTL = i18n.language === 'ar';
       const dir = isRTL ? 'rtl' : 'ltr';

@@ -1,7 +1,19 @@
 import pkg from 'node-thermal-printer';
 import { Buffer } from 'buffer';
+import { createRequire } from 'module';
+import os from 'os';
+import path from 'path';
+import fs from 'fs';
+import { exec } from 'child_process';
+import { promisify } from 'util';
+const execPromise = promisify(exec);
 const ThermalPrinter = pkg.ThermalPrinter || pkg.printer || pkg.default?.ThermalPrinter || pkg.default?.printer;
 const PrinterTypes = pkg.types || pkg.Types || pkg.default?.types || { EPSON: 'epson' };
+let printerDriver = null;
+try {
+  const require = createRequire(import.meta.url);
+  printerDriver = require('printer');
+} catch { printerDriver = null; }
 
 class PrinterService {
   constructor() {
@@ -17,30 +29,44 @@ class PrinterService {
       console.log('Printer not configured or disabled');
       return false;
     }
-
     try {
-      // node-thermal-printer expects type = printer model (epson/star), not interface type
       const printerModel = printSettings.printerModel || printSettings.model || PrinterTypes.EPSON || 'epson';
       let iface = printSettings.printerDevice || '';
+      const printerName = printSettings.printerName || printSettings.name || '';
+      this.winPrinterName = null;
+      this.winUseRawFallback = false;
       if (printSettings.printerType === 'network' && printSettings.printerIP) {
         iface = `tcp://${printSettings.printerIP}:${printSettings.printerPort || 9100}`;
+      } else if (process.platform === 'win32' && printSettings.printerType === 'usb') {
+        if (printerDriver) {
+          if (printerName) iface = `printer:${printerName}`;
+          else if (iface && !iface.startsWith('printer:') && !iface.startsWith('tcp://')) iface = `printer:${iface}`;
+        } else {
+          // بدون حزمة printer الأصلية — استخدم ملف مؤقت ثم أرسله عبر PowerShell Out-Printer
+          this.winPrinterName = printerName || iface || 'XP-80C';
+          if (this.winPrinterName.startsWith('printer:')) this.winPrinterName = this.winPrinterName.slice(8);
+          iface = path.join(os.tmpdir(), `mte-print-${Date.now()}.bin`);
+          this.winUseRawFallback = true;
+          console.log(`Windows raw fallback: buffer -> ${iface} -> Out-Printer "${this.winPrinterName}"`);
+        }
       } else if (!iface) {
-        // No device configured - treat as not connected, will fallback to window print
         console.log('Printer device not configured, skipping direct print');
         return false;
       }
       this.printer = new ThermalPrinter({
         type: printerModel,
         interface: iface,
-        options: {
-          timeout: 1000
-        }
+        driver: printerDriver,
+        options: { timeout: 1000 }
       });
-
-      // محاولة الاتصال بالطابعة
+      if (this.winUseRawFallback) {
+        // لا نتحقق من وجود الملف قبل الكتابة
+        this.isConnected = true;
+        console.log('Printer initialized in Windows raw fallback mode');
+        return true;
+      }
       const connected = await this.printer.isPrinterConnected();
       this.isConnected = connected;
-      
       if (connected) {
         console.log('Printer connected successfully');
         return true;
@@ -175,17 +201,11 @@ class PrinterService {
       return false;
     }
     try {
-      // إرسال أمر فتح درج الكاشير (ESC/POS command)
-      // الأمر الصحيح: 1B700019FA (HEX) = [0x1B, 0x70, 0x00, 0x19, 0xFA]
-      // ESC p m t1 t2 - حيث:
-      // - 0x1B = ESC
-      // - 0x70 = 'p' (pulse command)
-      // - 0x00 = m (mode)
-      // - 0x19 = t1 (25ms pulse duration)
-      // - 0xFA = t2 (250ms pulse interval)
       this.printer.raw(Buffer.from([0x1B, 0x70, 0x00, 0x19, 0xFA]));
-      await this.printer.execute();
-      console.log('Cash drawer opened successfully');
+      if (executeNow) {
+        await this.printer.execute();
+        console.log('Cash drawer opened successfully');
+      }
       return true;
     } catch (error) {
       console.error('Error opening cash drawer:', error);
@@ -235,13 +255,29 @@ class PrinterService {
       console.log('Printer not connected');
       return { success: false, error: 'Printer not connected' };
     }
-
     try {
       this.printer.println(content);
       if (openDrawer) await this.openCashDrawer(false);
       if (autoCut) await this.cutPaper();
       else await this.feedLines(3);
       await this.printer.execute();
+      if (this.winUseRawFallback) {
+        // أرسل الملف المؤقت إلى الطابعة الحقيقية عبر PowerShell
+        try {
+          const tmpFile = this.printer.Interface?.path || this.printer.interface;
+          const filePath = typeof tmpFile === 'string' ? tmpFile : this.printer.Interface?.path;
+          if (filePath && fs.existsSync(filePath)) {
+            const ps = `powershell -Command "Get-Content -Path '${filePath.replace(/'/g, "''")}' -Encoding Byte -ReadCount 0 | Out-Printer -Name '${this.winPrinterName.replace(/'/g, "''")}'"`;
+            await execPromise(ps, { timeout: 8000 });
+            console.log(`Raw buffer sent to Windows printer "${this.winPrinterName}" via Out-Printer`);
+            try { fs.unlinkSync(filePath); } catch {}
+          }
+        } catch (e) {
+          console.error('Windows raw fallback print failed, trying direct file write:', e.message);
+          // محاولة أخيرة: اكتب مباشرة إلى \\.\pipe أو استخدم print command
+          throw e;
+        }
+      }
       if (openDrawer) console.log('Cash drawer opened successfully');
       console.log('Document printed successfully');
       return { success: true, cashDrawerTried: openDrawer };

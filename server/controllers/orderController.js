@@ -1020,6 +1020,25 @@ export const createOrder = async (req, res) => {
             responseData.table = tableDoc;
         }
 
+        // ── Real-time emit (<100ms) — immediate, before response, keep DB writes immediate ──
+        if (req.io) {
+            try {
+                const orgId = req.user.organization?._id || req.user.organization;
+                const orgStr = String(orgId);
+                // colon + dash rooms for compatibility
+                req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('order:created', responseData);
+                req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('order:updated', responseData);
+                // also via helper for legacy hyphen events
+                try { req.io.notifyOrderUpdate("created", responseData, req.user.organization); } catch {}
+                if (table) {
+                    const tblData = { tableId: table, status: 'occupied' };
+                    req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('table:statusChanged', tblData);
+                    req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('table-status-update', tblData);
+                    try { req.io.notifyTableStatusUpdate(tblData, req.user.organization); } catch {}
+                }
+            } catch (emitErr) { Logger.error('Emit order:created failed', emitErr); }
+        }
+
         // Return response IMMEDIATELY after local save
         res.status(201).json({
             success: true,
@@ -1083,7 +1102,7 @@ export const createOrder = async (req, res) => {
                     // Ignore notification errors
                 }
 
-                // 4. Emit Socket.IO events
+                // 4. Emit Socket.IO events (legacy — already emitted synchronously above for <100ms, keep for safety)
                 if (req.io) {
                     try {
                         req.io.notifyOrderUpdate("created", responseData, req.user.organization);
@@ -1092,7 +1111,12 @@ export const createOrder = async (req, res) => {
                     }
                     if (table) {
                         try {
-                            req.io.emit('table-status-update', { tableId: table, status: 'occupied' });
+                            const orgId = req.user.organization?._id || req.user.organization;
+                            const orgStr = String(orgId);
+                            const tblData2 = { tableId: table, status: 'occupied' };
+                            req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('table:statusChanged', tblData2);
+                            req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('table-status-update', tblData2);
+                            req.io.notifyTableStatusUpdate(tblData2, req.user.organization);
                         } catch (socketError) {
                             Logger.error('فشل إرسال حدث تحديث حالة الطاولة', socketError);
                         }
@@ -1756,6 +1780,34 @@ export const updateOrder = async (req, res) => {
             .populate("organization", "name")
             .lean();
 
+        // ── Real-time emit (<100ms) — before response
+        if (req.io) {
+            try {
+                const orgId = req.user.organization?._id || req.user.organization;
+                const orgStr = String(orgId);
+                req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('order:updated', updatedOrder);
+                req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('order:created', updatedOrder); // compat
+                req.io.notifyOrderUpdate("updated", updatedOrder, req.user.organization);
+                if (updatedOrder.table) {
+                    const tid = updatedOrder.table._id || updatedOrder.table;
+                    const tblData = { tableId: tid, status: 'occupied' };
+                    req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('table:statusChanged', tblData);
+                    req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('table-status-update', tblData);
+                }
+                if (order.bill) {
+                    // also emit bill updated because order change affects bill
+                    try {
+                        const BillModel = (await import("../models/Bill.js")).default;
+                        const bdoc = await BillModel.findById(order.bill).lean();
+                        if (bdoc) {
+                            req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('bill:updated', bdoc);
+                            req.io.notifyBillUpdate("updated", bdoc, req.user.organization);
+                        }
+                    } catch {}
+                }
+            } catch (emitErr) { Logger.error('Emit order:updated failed', emitErr); }
+        }
+
         // Update bill totals in background (non-blocking)
         if (order.bill) {
             setImmediate(() => {
@@ -1769,7 +1821,7 @@ export const updateOrder = async (req, res) => {
             });
         }
 
-        // Emit Socket.IO event in background (non-blocking)
+        // Emit Socket.IO event in background (legacy — already emitted above for instant)
         if (req.io) {
             setImmediate(() => {
                 try {
@@ -1933,12 +1985,14 @@ export const deleteOrder = async (req, res) => {
                                     await tableDoc.save();
                                     Logger.info(`✓ تم تحديث حالة الطاولة ${tableDoc.number} إلى فارغة`);
 
-                                    // Emit table status update event
+                                    // Emit table status update event — scoped
                                     if (req.io) {
-                                        req.io.emit('table-status-update', { 
-                                            tableId: tableIdToUpdate, 
-                                            status: 'empty' 
-                                        });
+                                        const orgId2 = req.user.organization?._id || req.user.organization;
+                                        const orgStr2 = String(orgId2);
+                                        const tblDataInner = { tableId: tableIdToUpdate, status: 'empty' };
+                                        req.io.to(`org:${orgStr2}`).to(`org-${orgStr2}`).emit('table-status-update', tblDataInner);
+                                        req.io.to(`org:${orgStr2}`).to(`org-${orgStr2}`).emit('table:statusChanged', tblDataInner);
+                                        try { req.io.notifyTableStatusUpdate(tblDataInner, req.user.organization); } catch {}
                                     }
                                 }
                             } catch (tableError) {
@@ -1990,10 +2044,19 @@ export const deleteOrder = async (req, res) => {
             Logger.info(`🔓 Sync middleware re-enabled`);
         }
 
-        // Emit Socket.IO event for order deletion
+        // Emit Socket.IO event for order deletion — instant <100ms with colon
         if (req.io) {
             try {
+                const orgId = req.user.organization?._id || req.user.organization;
+                const orgStr = String(orgId);
+                req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('order:deleted', { _id: req.params.id });
+                req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('order:updated', { _id: req.params.id, _deleted: true });
                 req.io.notifyOrderUpdate("deleted", { _id: req.params.id }, req.user.organization);
+                if (tableIdToUpdate) {
+                    const tblData = { tableId: tableIdToUpdate, status: 'empty' };
+                    req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('table:statusChanged', tblData);
+                    req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('table-status-update', tblData);
+                }
             } catch (socketError) {
                 Logger.error('فشل إرسال حدث Socket.IO', socketError);
             }
@@ -2155,6 +2218,16 @@ export const cancelOrder = async (req, res) => {
             }
         }
         await order.save();
+        writeToAtlas('orders', 'upsert', order.toObject ? order.toObject() : order, { _id: order._id });
+        if (req.io) {
+            try {
+                const orgId = req.user.organization?._id || req.user.organization;
+                const orgStr = String(orgId);
+                req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('order:updated', order);
+                req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('order:deleted', { _id: order._id });
+                req.io.notifyOrderUpdate("updated", order, req.user.organization);
+            } catch {}
+        }
 
         res.json({
             success: true,
@@ -2209,6 +2282,15 @@ export const updateOrderItemStatus = async (req, res) => {
         }
 
         await order.save();
+        writeToAtlas('orders', 'upsert', order.toObject ? order.toObject() : order, { _id: order._id });
+        if (req.io) {
+            try {
+                const orgId = req.user.organization?._id || req.user.organization;
+                const orgStr = String(orgId);
+                req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('order:updated', order);
+                req.io.notifyOrderUpdate("updated", order, req.user.organization);
+            } catch {}
+        }
 
         res.json({
             success: true,
@@ -2362,10 +2444,15 @@ export const updateOrderStatus = async (req, res) => {
             //
         }
 
-        // Emit socket event for real-time updates
+        // Emit socket event for real-time updates — instant <100ms with colon events
         if (req.io) {
             try {
+                const orgId = req.user.organization?._id || req.user.organization;
+                const orgStr = String(orgId);
+                req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('order:updated', updatedOrder);
+                req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('order:created', updatedOrder);
                 req.io.notifyOrderUpdate("status-changed", updatedOrder, req.user.organization);
+                req.io.notifyOrderUpdate("updated", updatedOrder, req.user.organization);
             } catch (socketError) {
                 Logger.error('فشل إرسال حدث Socket.IO', socketError);
             }
@@ -2506,6 +2593,18 @@ export const updateOrderItemPrepared = async (req, res) => {
         }
 
         await order.save();
+        writeToAtlas('orders', 'upsert', order.toObject ? order.toObject() : order, { _id: order._id });
+
+        // ── Real-time emit (<100ms) ──
+        if (req.io) {
+            try {
+                const orgId = req.user.organization?._id || req.user.organization;
+                const orgStr = String(orgId);
+                // emit immediately after save, before populate
+                req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('order:updated', order);
+                req.io.notifyOrderUpdate("updated", order, req.user.organization);
+            } catch {}
+        }
 
         // Populate the order with related data for response
         const updatedOrder = await Order.findById(order._id)
@@ -2515,6 +2614,16 @@ export const updateOrderItemPrepared = async (req, res) => {
             .populate("createdBy", "name")
             .populate("preparedBy", "name")
             .populate("deliveredBy", "name");
+
+        // also emit populated version for full data
+        if (req.io) {
+            try {
+                const orgId2 = req.user.organization?._id || req.user.organization;
+                const orgStr2 = String(orgId2);
+                req.io.to(`org:${orgStr2}`).to(`org-${orgStr2}`).emit('order:updated', updatedOrder);
+                req.io.notifyOrderUpdate("updated", updatedOrder, req.user.organization);
+            } catch {}
+        }
 
         // Create notification for order status change
         try {
@@ -2684,6 +2793,15 @@ export const deductOrderInventory = async (req, res) => {
         order.preparedBy = req.user._id;
 
         await order.save();
+        writeToAtlas('orders', 'upsert', order.toObject ? order.toObject() : order, { _id: order._id });
+        if (req.io) {
+            try {
+                const orgId = req.user.organization?._id || req.user.organization;
+                const orgStr = String(orgId);
+                req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('order:updated', order);
+                req.io.notifyOrderUpdate("updated", order, req.user.organization);
+            } catch {}
+        }
 
         // Populate the order with related data for response
         const updatedOrder = await Order.findById(order._id)
@@ -2693,6 +2811,15 @@ export const deductOrderInventory = async (req, res) => {
             .populate("createdBy", "name")
             .populate("preparedBy", "name")
             .populate("deliveredBy", "name");
+
+        if (req.io) {
+            try {
+                const orgId2 = req.user.organization?._id || req.user.organization;
+                const orgStr2 = String(orgId2);
+                req.io.to(`org:${orgStr2}`).to(`org-${orgStr2}`).emit('order:updated', updatedOrder);
+                req.io.notifyOrderUpdate("updated", updatedOrder, req.user.organization);
+            } catch {}
+        }
 
         // Create notification for order status change
         try {
@@ -2858,6 +2985,15 @@ export const deliverItem = async (req, res) => {
         }
 
         await order.save();
+        writeToAtlas('orders', 'upsert', order.toObject ? order.toObject() : order, { _id: order._id });
+        if (req.io) {
+            try {
+                const orgId = req.user.organization?._id || req.user.organization;
+                const orgStr = String(orgId);
+                req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('order:updated', order);
+                req.io.notifyOrderUpdate("updated", order, req.user.organization);
+            } catch {}
+        }
 
         // Populate the order for response
         await order.populate(
@@ -2865,9 +3001,15 @@ export const deliverItem = async (req, res) => {
             "name"
         );
 
-        // Notify via Socket.IO
+        // Notify via Socket.IO — instant
         if (req.io) {
-            req.io.notifyOrderUpdate("item-delivered", order, req.user.organization);
+            try {
+                const orgId2 = req.user.organization?._id || req.user.organization;
+                const orgStr2 = String(orgId2);
+                req.io.to(`org:${orgStr2}`).to(`org-${orgStr2}`).emit('order:updated', order);
+                req.io.notifyOrderUpdate("item-delivered", order, req.user.organization);
+                req.io.notifyOrderUpdate("updated", order, req.user.organization);
+            } catch {}
         }
 
         res.json({
@@ -2960,6 +3102,15 @@ export const deliverOrderSection = async (req, res) => {
         }
 
         await order.save();
+        writeToAtlas('orders', 'upsert', order.toObject ? order.toObject() : order, { _id: order._id });
+        if (req.io) {
+            try {
+                const orgId = req.user.organization?._id || req.user.organization;
+                const orgStr = String(orgId);
+                req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('order:updated', order);
+                req.io.notifyOrderUpdate("updated", order, req.user.organization);
+            } catch {}
+        }
 
         await order.populate([
             "createdBy",
@@ -2968,7 +3119,13 @@ export const deliverOrderSection = async (req, res) => {
         ], "name");
 
         if (req.io) {
-            req.io.notifyOrderUpdate("item-delivered", order, req.user.organization);
+            try {
+                const orgId2 = req.user.organization?._id || req.user.organization;
+                const orgStr2 = String(orgId2);
+                req.io.to(`org:${orgStr2}`).to(`org-${orgStr2}`).emit('order:updated', order);
+                req.io.notifyOrderUpdate("item-delivered", order, req.user.organization);
+                req.io.notifyOrderUpdate("updated", order, req.user.organization);
+            } catch {}
         }
 
         res.json({
