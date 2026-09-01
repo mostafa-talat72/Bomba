@@ -259,5 +259,3 @@ export const deleteTableSection = async (req, res) => {
 
 
 
-
-

@@ -566,5 +566,3 @@ export const fixTableStatuses = async (req, res) => {
     }
 };
 
-
-
