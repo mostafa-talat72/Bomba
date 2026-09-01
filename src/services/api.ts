@@ -453,7 +453,6 @@ class ApiClient {
   private baseURL: string;
   private token: string | null = null;
   private refreshPromise: Promise<boolean> | null = null;
-  private pendingRequests: Map<string, Promise<ApiResponse<any>>> = new Map();
 
   constructor(baseURL: string) {
     this.baseURL = `${baseURL}/api`;
@@ -465,24 +464,18 @@ class ApiClient {
     options: RequestInit = {},
     retryOn401: boolean = true
   ): Promise<ApiResponse<T>> {
-    // Deduplication مع الأخذ في الاعتبار التوكن (يمنع إرجاع 401 مكاش للطلب بعد تسجيل الدخول)
-    const method = options.method || 'GET';
-    const tokenPart = this.token || localStorage.getItem('token') || 'noauth';
-    const cacheKey = method === 'GET' ? `${method}:${endpoint}:${tokenPart.slice(-8)}` : null;
-    if (cacheKey) {
-      const existing = this.pendingRequests.get(cacheKey);
-      if (existing) return existing as Promise<ApiResponse<T>>;
-    }
-
     try {
       const url = `${this.baseURL}${endpoint}`;
       const config: RequestInit = {
+        ...options,
         headers: {
           'Content-Type': 'application/json',
           'x-instance-id': getInstanceId(),
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          Pragma: 'no-cache',
           ...options.headers,
         },
-        ...options,
+        cache: 'no-store',
       };
 
       if (this.getToken()) {
@@ -492,10 +485,8 @@ class ApiClient {
         };
       }
 
-      let promise: Promise<ApiResponse<T>>;
-      const responsePromise = fetch(url, config);
-
-      promise = (async () => {
+      return await (async () => {
+        const responsePromise = fetch(url, config);
         try {
           const response = await responsePromise;
           if (!response.ok && response.status === 0) {
@@ -556,13 +547,8 @@ class ApiClient {
           }
           const inner = (data as any)?.data !== undefined ? (data as any).data as T : data as T;
           return { success: true, data: inner, message: data.message };
-        } finally {
-          if (cacheKey) this.pendingRequests.delete(cacheKey);
         }
       })();
-
-      if (cacheKey) this.pendingRequests.set(cacheKey, promise);
-      return promise;
     } catch (error: unknown) {
       if (error instanceof TypeError && error.message.includes('fetch')) {
         return {
@@ -585,12 +571,15 @@ class ApiClient {
     try {
       const url = `${this.baseURL}${endpoint}`;
       const config: RequestInit = {
+        ...options,
         headers: {
           'Content-Type': 'application/json',
           'x-instance-id': getInstanceId(),
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          Pragma: 'no-cache',
           ...options.headers,
         },
-        ...options,
+        cache: 'no-store',
       };
 
       const response = await fetch(url, config);
@@ -1374,17 +1363,26 @@ class ApiClient {
   }
 
   // Bills endpoints
-  async getBills(params?: { status?: string; table?: string; page?: number; limit?: number; customerName?: string; q?: string }): Promise<ApiResponse<Bill[]>> {
+  async getBills(params?: { status?: string; table?: string; page?: number; limit?: number; customerName?: string; q?: string; fresh?: boolean }): Promise<ApiResponse<Bill[]>> {
     const searchParams = new URLSearchParams();
     if (params) {
       Object.entries(params).forEach(([key, value]) => {
-        if (value !== undefined) {
+        if (value !== undefined && key !== 'fresh') {
           searchParams.append(key, value.toString());
         }
       });
     }
+    if (params?.fresh) {
+      searchParams.append('_fresh', Date.now().toString());
+    }
 
-    const response = await this.request<Bill[]>(`/billing?${searchParams.toString()}`);
+    const response = await this.request<Bill[]>(`/billing?${searchParams.toString()}`, {
+      cache: 'no-store',
+      headers: {
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        Pragma: 'no-cache',
+      },
+    });
     if (response.success && response.data) {
       response.data = this.normalizeArray(response.data);
     }

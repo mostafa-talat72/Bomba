@@ -558,7 +558,6 @@ const loadInitialData = async () => {
 
     // إعادة الاتصال — جلب كل شيء من جديد
     socket.on('reconnect', () => {
-      invalidateTablesCache();
       Promise.all([fetchBills(), fetchTables(), fetchOrders()]).then(() => fetchAllTableStatuses()).catch(() => {});
     });
 
@@ -1035,9 +1034,7 @@ const loadInitialData = async () => {
     formatCurrencyUtil(amount, i18n.language, localStorage.getItem('organizationCurrency') || 'EGP'),
   [i18n.language]);
 
-  // ── tableCardData — بيانات كل طاولة مع cache فردي للطاولات ──
-  // liveExtra: تكلفة الجلسات النشطة الحية (تتحدث كل 10 ثوانٍ فقط للطاولات اللي فيها جلسات)
-  const tableCardDataCache = useRef(new Map<string, { tBills: Bill[]; tOrdersCount: number; activeSessionType: 'playstation' | 'computer' | 'both' | null; liveExtra: number }>());
+  // ── tableCardData — بيانات كل طاولة ──
   const tableCardData = useMemo(() => {
     const result = new Map<string, {
       tBills: Bill[];
@@ -1064,7 +1061,6 @@ const loadInitialData = async () => {
       tidToOrderCount.set(oid, (tidToOrderCount.get(oid) || 0) + 1);
     });
 
-    const cache = tableCardDataCache.current;
     activeTables.forEach((table: Table) => {
       const tid = (table._id || (table as any).id).toString();
       const tBills = tidToBills.get(tid) ?? EMPTY_BILLS;
@@ -1082,16 +1078,7 @@ const loadInitialData = async () => {
       // السيرفر الآن يحسب الفاتورة حية، لا حاجة لـ delta على الكارت — نعتمد على bill.remaining الحي من السيرفر
       const liveExtra = 0;
 
-      // إعادة استخدام المرجع القديم لو البيانات لم تتغير (يمنع re-render غير ضروري)
-      // للطاولات الفارغة أو المشغولة بدون جلسة: liveExtra دائماً 0 → لا تتأثر بـ tick
-      const prev = cache.get(tid);
-      if (prev && prev.tOrdersCount === tOrdersCount && prev.activeSessionType === activeSessionType && prev.liveExtra === liveExtra && prev.tBills.length === tBills.length && prev.tBills.every((b, i) => b._id === tBills[i]._id && b.status === tBills[i].status && b.remaining === tBills[i].remaining)) {
-        result.set(tid, prev);
-      } else {
-        const entry = { tBills, tOrdersCount, activeSessionType, liveExtra };
-        result.set(tid, entry);
-        cache.set(tid, entry);
-      }
+      result.set(tid, { tBills, tOrdersCount, activeSessionType, liveExtra });
     });
     return result;
   }, [bills, orders, activeTables, getSessionCost]);
@@ -1691,7 +1678,6 @@ const loadInitialData = async () => {
         // تحديث متفائل — createOrder في DataContext حدث orders+bills، نحدث tableOrders فقط
         setTableOrders(p => [...p, order]);
         // إبطال كاش الطاولات لضمان إعادة الرسم الفوري
-        invalidateTablesCache();
         // لا حاجة لـ fetchBills/fetchOrders المكرر — scheduleBackgroundRefetch للتأكيد فقط
         scheduleBackgroundRefetch(true);
       }
@@ -1789,7 +1775,6 @@ const loadInitialData = async () => {
             showNotification(t('cafe.orderDeletedSuccess'), 'success');
             fetchAvailableMenuItems();
             setTableOrders(prev => prev.filter(o => (o as any).id !== order.id && (o as any)._id !== order.id));
-            invalidateTablesCache();
             scheduleBackgroundRefetch(true);
           } else {
             showNotification(t('cafe.orderDeletedError'), 'error');
@@ -1909,7 +1894,6 @@ const loadInitialData = async () => {
         await paySinglePart(updatedAfterFirst || { ...selectedBill, paid: (selectedBill.paid || 0) + a1 }, a2, method2, effectiveTotal, discountAmount, discountPercentage);
         handleClosePaymentModal();
         showNotification(t('billing.notifications.paymentSuccess'), 'success');
-        invalidateTablesCache();
         scheduleBackgroundRefetch(true);
         return;
       }
@@ -1924,7 +1908,6 @@ const loadInitialData = async () => {
       await paySinglePart(selectedBill, payVal, paymentMethod, effectiveTotal, discountAmount, discountPercentage);
       handleClosePaymentModal();
       showNotification(t('billing.notifications.paymentSuccess'), 'success');
-      invalidateTablesCache();
       scheduleBackgroundRefetch(true);
     } catch { showNotification(t('billing.notifications.paymentError'), 'error'); }
     finally { setIsProcessingPayment(false); splitPartsRef.current = null; }
@@ -1993,8 +1976,6 @@ const loadInitialData = async () => {
         setIsProcessingPayment(false);
         setShowPaymentSuccessAnim(true);
         setTimeout(() => setShowPaymentSuccessAnim(false), 2500);
-        tableCardDataCache.current.clear();
-        invalidateTablesCache();
         await fetchTables();
         fetchBills().catch(()=>{});
         showNotification(t('billing.notifications.payFullBillSuccess'), 'success');
@@ -2035,7 +2016,6 @@ const loadInitialData = async () => {
         setSelectedTable(null);
       }
       // مسح كاش كروت الطاولات عشان اللون يتحدث فورا
-      tableCardDataCache.current.clear();
       const result = await api.updatePayment((bill as any).id || (bill as any)._id, {
         paid: (bill.paid || 0) + remaining, remaining: 0, status: 'paid',
         paymentAmount: remaining, method: 'cash', reference: '',
@@ -2051,11 +2031,9 @@ const loadInitialData = async () => {
           }
           return next;
         });
-        tableCardDataCache.current.clear();
         setIsProcessingPayment(false);
         setShowPaymentSuccessAnim(true);
         setTimeout(() => setShowPaymentSuccessAnim(false), 2500);
-        invalidateTablesCache();
         await fetchTables();
         // fetch فوري بدون throttle عشان حالة الطاولة تتأكد
         fetchBills().catch(()=>{});
@@ -2114,7 +2092,6 @@ const loadInitialData = async () => {
         if (response.data) {
           setBills(prev => prev.map(b => String(b._id || b.id) === String(selectedBill._id || selectedBill.id) ? response.data : b));
           setSelectedBill(response.data as Bill);
-          invalidateTablesCache();
           scheduleBackgroundRefetch(true);
           if ((response.data as Bill).status === 'paid') {
             setShowPartialPaymentModal(false);
@@ -2241,7 +2218,6 @@ const loadInitialData = async () => {
         }
 const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBill?.id || selectedBill?._id;
 
-        invalidateTablesCache();
         scheduleBackgroundRefetch(true);
         if (billId) {
           api.getBill(billId as string).then(r => { if (r?.data) setSelectedBill(r.data); }).catch(() => {});
