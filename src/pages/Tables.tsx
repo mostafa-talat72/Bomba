@@ -110,6 +110,8 @@ const Tables: React.FC = () => {
     title: string; message: string; onConfirm: () => void;
     confirmText?: string; cancelText?: string; confirmColor?: string;
   } | null>(null);
+  const [orderPrintSelection, setOrderPrintSelection] = useState<{ order: Order; sectionIds: string[]; sections: Array<{ id: string; name: string }> } | null>(null);
+  const [selectedOrderPrintSections, setSelectedOrderPrintSections] = useState<string[]>([]);
 
   // ── Billing state ────────────────────────────────────────────────────────
   const [selectedBill, setSelectedBill] = useState<Bill | null>(null);
@@ -1752,7 +1754,36 @@ const loadInitialData = async () => {
     if (!order.items || !Array.isArray(order.items)) { showNotification(t('cafe.notifications.orderHasNoItems'), 'error'); return; }
     const map = new Map();
     menuItems.forEach(mi => { map.set(mi.id, mi); map.set(mi._id, mi); });
-    await printOrder({ ...order, items: order.items.map((item: any, idx: number) => ({ ...item, _id: item._id || item.id || `temp-${idx}` })), createdAt: order.createdAt instanceof Date ? order.createdAt.toISOString() : order.createdAt } as any, menuSections, map, user?.organizationName || '', i18n.language, t, getTableSectionName(order.table));
+    const normalizedOrder = { ...order, items: order.items.map((item: any, idx: number) => ({ ...item, _id: item._id || item.id || `temp-${idx}` })), createdAt: order.createdAt instanceof Date ? order.createdAt.toISOString() : order.createdAt } as any;
+    const sectionMap = new Map<string, string>();
+    order.items.forEach((item: any) => {
+      const menuItem = typeof item.menuItem === 'object' ? item.menuItem : map.get(item.menuItem);
+      const section = menuItem?.category?.section;
+      const id = typeof section === 'object' ? section?._id || section?.id : section;
+      if (id) {
+        const sectionData = menuSections.find(s => String(s._id || s.id) === String(id));
+        sectionMap.set(String(id), sectionData?.name || t('orderPrint.unspecifiedSection'));
+      } else {
+        sectionMap.set('other', t('orderPrint.otherSection'));
+      }
+    });
+    const sections = Array.from(sectionMap, ([id, name]) => ({ id, name }));
+    const prompt = user?.organization?.printSettings?.promptOrderPrintSections === true;
+    if (prompt && sections.length > 1) {
+      setSelectedOrderPrintSections(sections.map(section => section.id));
+      setOrderPrintSelection({ order: normalizedOrder, sectionIds: sections.map(section => section.id), sections });
+      return;
+    }
+    await printOrder(normalizedOrder, menuSections, map, user?.organizationName || '', i18n.language, t, getTableSectionName(order.table), sections.map(section => section.id));
+  };
+
+  const confirmOrderPrintSections = async () => {
+    if (!orderPrintSelection || selectedOrderPrintSections.length === 0) return;
+    const map = new Map();
+    menuItems.forEach(mi => { map.set(mi.id, mi); map.set(mi._id, mi); });
+    const selection = orderPrintSelection;
+    setOrderPrintSelection(null);
+    await printOrder(selection.order, menuSections, map, user?.organizationName || '', i18n.language, t, getTableSectionName(selection.order.table), selectedOrderPrintSections);
   };
 
   const showConfirm = (title: string, message: string, onConfirm: () => void, confirmText = 'تأكيد', cancelText = 'إلغاء', confirmColor = 'bg-red-600 hover:bg-red-700') => {
@@ -4007,6 +4038,37 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
         <TableModalComp formData={tableFormData} setFormData={setTableFormData} tableSections={tableSections} editingTable={editingTable}
           onSave={async () => { if (!tableFormData.number || tableFormData.number.trim() === '') { showNotification(t('cafe.enterTableNumber'), 'error'); return; } if (!tableFormData.section) { showNotification(t('cafe.notifications.selectSection'), 'error'); return; } const numberStr = tableFormData.number.trim(); const editingId = String((editingTable as any)?._id || (editingTable as any)?.id || ''); const dup = tables.find(tb => { const tbSec = typeof tb.section === 'string' ? tb.section : (tb.section as any)?.id || (tb.section as any)?._id; const tbId = String((tb as any)._id || (tb as any).id); return tbSec === tableFormData.section && String(tb.number).toString() === numberStr && tbId !== editingId; }); if (dup) { showNotification(`الطاولة "${numberStr}" موجودة بالفعل في هذا القسم`, 'error'); return; } editingTable ? await updateTable(editingTable.id, { number: tableFormData.number, section: tableFormData.section }) : await createTable({ number: tableFormData.number, section: tableFormData.section }); setShowTableModal(false); setEditingTable(null); setTableFormData({ number: '', section: '' }); }}
           onClose={() => { setShowTableModal(false); setEditingTable(null); setTableFormData({ number: '', section: '' }); }} />
+      )}
+
+      {orderPrintSelection && (
+        <ModalPortal>
+          <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[300] p-4">
+            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md">
+              <div className="p-5 border-b border-gray-200 dark:border-gray-700">
+                <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100">{t('orderPrint.chooseSections')}</h3>
+              </div>
+              <div className="p-5 space-y-3">
+                {orderPrintSelection.sections.map(section => (
+                  <label key={section.id} className="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={selectedOrderPrintSections.includes(section.id)}
+                      onChange={() => setSelectedOrderPrintSections(current => current.includes(section.id)
+                        ? current.filter(id => id !== section.id)
+                        : [...current, section.id])}
+                      className="h-5 w-5 accent-orange-600"
+                    />
+                    <span className="text-lg text-gray-800 dark:text-gray-100">{section.name}</span>
+                  </label>
+                ))}
+              </div>
+              <div className="p-5 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-3">
+                <button onClick={() => setOrderPrintSelection(null)} className="px-4 py-2 rounded-lg bg-gray-200 dark:bg-gray-700">{t('common.cancel')}</button>
+                <button onClick={confirmOrderPrintSections} disabled={selectedOrderPrintSections.length === 0} className="px-4 py-2 rounded-lg bg-orange-600 text-white disabled:opacity-50">{t('orderPrint.printSelected')}</button>
+              </div>
+            </div>
+          </div>
+        </ModalPortal>
       )}
 
       {/* ── Confirm Modal ── */}

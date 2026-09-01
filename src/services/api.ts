@@ -2836,6 +2836,13 @@ class ApiClient {
     });
   }
 
+  async autoDetectAndOpenCashDrawer(mode: 'bill' | 'payment' = 'payment', organization?: any): Promise<ApiResponse<any>> {
+    return this.request('/print/cash-drawer/auto-detect', {
+      method: 'POST',
+      body: JSON.stringify({ mode, organization }),
+    });
+  }
+
   async printConsumptionReport(data: {
     reportData: any;
     organization: any;

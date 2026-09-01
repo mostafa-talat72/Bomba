@@ -1835,6 +1835,8 @@
         "openCashDrawerOnPayment": "Open cash drawer on full payment",
         "openCashDrawerOnPaymentDesc": "Automatically open cash drawer when paying bill in full (can also be opened manually)",
         "autoPrintOnPayment": "Auto print bill on payment",
+        "promptOrderPrintSections": "Choose order sections before printing",
+        "promptOrderPrintSectionsDesc": "Show a section selector when an order contains multiple sections",
         "autoPrintOnPaymentDesc": "Automatically print bill when paying in full (can be disabled)",
         "charactersPerLine": "Characters per line",
         "charactersPerLineDesc": "Number of characters per line (default: 48)",
@@ -2144,6 +2146,8 @@
     }
   },
   "orderPrint": {
+    "chooseSections": "Choose order sections to print",
+    "printSelected": "Print selected sections",
     "title": "Dial number",
     "table": "The table",
     "customer": "Client",

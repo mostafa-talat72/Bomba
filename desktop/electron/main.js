@@ -467,22 +467,48 @@ mainWindow.webContents.setWindowOpenHandler(({ url: targetUrl }) => {
     }
   });
 
-  // Direct print to default printer without preview
-  ipcMain.handle('direct-print', async (event) => {
+  // Direct print receipt HTML to the first available non-virtual printer.
+  ipcMain.handle('direct-print', async (event, data = {}) => {
+    let printWindow = null;
     try {
-      if (mainWindow && mainWindow.webContents) {
-        // Print directly to the default printer without showing preview
-        await mainWindow.webContents.print({ 
-          preview: false,
-          silent: true,  // No print dialog
-          printBackground: true
-        });
-        return { success: true, message: 'Printed successfully' };
+      if (!data.html || typeof data.html !== 'string') {
+        return { success: false, message: 'Printable HTML is required' };
       }
-      return { success: false, message: 'Window not available' };
+
+      const printers = await mainWindow?.webContents?.getPrintersAsync();
+      const virtualPrinterNames = ['Microsoft Print to PDF', 'Microsoft XPS', 'OneNote', 'Fax', 'PDF24', 'Adobe PDF'];
+      const availablePrinter = (printers || []).find(printer =>
+        !virtualPrinterNames.some(name => printer.name.includes(name))
+      );
+      const printerName = data.printerName || availablePrinter?.name;
+      if (!printerName) {
+        return { success: false, message: 'No physical printer detected' };
+      }
+
+      printWindow = new BrowserWindow({
+        show: false,
+        parent: mainWindow || undefined,
+        webPreferences: { contextIsolation: true, sandbox: true }
+      });
+      await printWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(data.html)}`);
+
+      const printed = await new Promise((resolve) => {
+        printWindow.webContents.print({
+          preview: false,
+          silent: true,
+          deviceName: printerName,
+          printBackground: true
+        }, (success, failureReason) => resolve({ success, failureReason }));
+      });
+      if (!printed.success) {
+        return { success: false, message: printed.failureReason || 'Electron print failed', printerName };
+      }
+      return { success: true, message: 'Printed successfully', printerName };
     } catch (error) {
       console.error('Direct print error:', error);
       return { success: false, message: error.message };
+    } finally {
+      if (printWindow && !printWindow.isDestroyed()) printWindow.close();
     }
   });
 }
@@ -566,4 +592,3 @@ if (!gotLock) {
     }
   });
 }
-
