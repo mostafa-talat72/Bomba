@@ -4467,7 +4467,7 @@ interface OrderModalProps {
 
 
 const OrderModal: React.FC<OrderModalProps> = ({
-  table, orderItems, orderNotes, setOrderNotes, menuSections, menuCategories, menuItems,
+  table, orderItems, setOrderItems, orderNotes, setOrderNotes, menuSections, menuCategories, menuItems,
   expandedSections, expandedCategories, toggleSection, toggleCategory, getCategoriesForSection,
   getItemsForCategory, addItemToOrder, updateItemQuantity, updateItemNotes, removeItemFromOrder,
   calculateTotal, onSave, onSaveAndPrint, onSaveAndSend, onClose, loading, isEdit,

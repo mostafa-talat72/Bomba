@@ -737,6 +737,68 @@ export const buildBillPrintHTML = async (
   return receiptHTML;
 };
 
+const fallbackToBrowserPrint = (content: string, language: string) => {
+  const printWindow = window.open('', '_blank', 'noopener,noreferrer');
+  if (printWindow) {
+    printWindow.document.open();
+    printWindow.document.write(content);
+    printWindow.document.close();
+    printWindow.onload = () => {
+      setTimeout(() => {
+        printWindow.print();
+        setTimeout(() => {
+          if (!printWindow.closed) {
+            printWindow.close();
+          }
+        }, 100);
+      }, 50);
+    };
+    return true;
+  }
+
+  const printFrame = document.createElement('iframe');
+  printFrame.style.position = 'absolute';
+  printFrame.style.top = '-1000px';
+  printFrame.style.left = '-1000px';
+  printFrame.style.width = '0';
+  printFrame.style.height = '0';
+  printFrame.style.border = 'none';
+  document.body.appendChild(printFrame);
+
+  const frameDoc = printFrame.contentDocument || printFrame.contentWindow?.document;
+  if (frameDoc) {
+    frameDoc.open();
+    frameDoc.write(content);
+    frameDoc.close();
+    setTimeout(() => {
+      try {
+        printFrame.contentWindow?.focus();
+        printFrame.contentWindow?.print();
+        setTimeout(() => {
+          if (document.body.contains(printFrame)) {
+            document.body.removeChild(printFrame);
+          }
+        }, 100);
+      } catch (error) {
+        console.error('Print error:', error);
+        if (document.body.contains(printFrame)) {
+          document.body.removeChild(printFrame);
+        }
+      }
+    }, 50);
+    return true;
+  }
+
+  document.body.removeChild(printFrame);
+  const alertMsg = language === 'ar'
+    ? 'الرجاء السماح بالنوافذ المنبثقة لطباعة الفاتورة'
+    : language === 'fr'
+    ? 'Veuillez autoriser les fenêtres contextuelles pour imprimer la facture'
+    : 'Please allow pop-ups to print the bill';
+  alert(alertMsg);
+  return false;
+};
+
 export const printBill = async (
   bill: Bill, 
   fallbackOrganizationName?: string,
@@ -777,15 +839,14 @@ export const printBill = async (
       throw new Error(response.message || 'Print failed');
     }
   } catch (error: any) {
-    if (error?.message !== 'print-timeout') console.error('Direct print failed, falling back to window print:', error);
+    if (error?.message !== 'print-timeout') console.error('Direct print failed, falling back to browser print:', error);
     else console.error('Direct print timed out');
     if (isElectron) {
       const msg = error?.message === 'print-timeout'
-        ? (language === 'ar' ? 'انتهت مهلة الطباعة المباشرة — تأكد من توصيل الطابعة' : 'Direct print timeout')
-        : (language === 'ar' ? 'فشلت الطباعة المباشرة' : 'Direct print failed');
-      if ((window as any).showNotification) (window as any).showNotification(msg, 'error');
+        ? (language === 'ar' ? 'انتهت مهلة الطباعة المباشرة — سيتم استخدام الطباعة من المتصفح' : 'Direct print timed out — browser print will be used')
+        : (language === 'ar' ? 'فشلت الطباعة المباشرة — سيتم استخدام الطباعة من المتصفح' : 'Direct print failed — browser print will be used');
+      if ((window as any).showNotification) (window as any).showNotification(msg, 'warning');
       else alert(msg);
-      return;
     }
   }
 
@@ -805,109 +866,41 @@ export const printBill = async (
       printFrame.style.width = '0';
       printFrame.style.height = '0';
       printFrame.style.border = 'none';
-      
+        
       document.body.appendChild(printFrame);
-      
+        
       const frameDoc = printFrame.contentDocument || printFrame.contentWindow?.document;
       if (frameDoc) {
         frameDoc.open();
         frameDoc.write(receiptHTML);
         frameDoc.close();
-        
-        // Wait for content to load then invoke Electron direct print
+          
         setTimeout(async () => {
           try {
             await (window as any).bombaDesktop.directPrint();
-            // Clean up after printing
             setTimeout(() => {
               if (document.body.contains(printFrame)) {
                 document.body.removeChild(printFrame);
               }
             }, 100);
+            return;
           } catch (error) {
             console.error('Electron direct print error:', error);
-            // Clean up iframe on error
             if (document.body.contains(printFrame)) {
               document.body.removeChild(printFrame);
             }
+            fallbackToBrowserPrint(receiptHTML, language);
           }
         }, 100);
+        return;
       }
-      return;
     } catch (error) {
       console.error('Electron direct print setup error:', error);
-      // Fall through to standard print dialog on error
     }
   }
 
-  // A real popup window is preferred for printing: in Electron, printing an
-  // iframe can print the dark parent page instead of the receipt (all black).
-  const printWindow = window.open('', '_blank');
-  if (printWindow) {
-    printWindow.document.open();
-    printWindow.document.write(receiptHTML);
-    printWindow.document.close();
-    printWindow.onload = () => {
-      setTimeout(() => {
-        printWindow.print();
-        setTimeout(() => {
-          if (!printWindow.closed) {
-            printWindow.close();
-          }
-        }, 100);
-      }, 50);
-    };
+  if (fallbackToBrowserPrint(receiptHTML, language)) {
     return;
-  }
-
-  // Fallback: hidden iframe (when pop-ups are blocked)
-  const printFrame = document.createElement('iframe');
-  printFrame.style.position = 'absolute';
-  printFrame.style.top = '-1000px';
-  printFrame.style.left = '-1000px';
-  printFrame.style.width = '0';
-  printFrame.style.height = '0';
-  printFrame.style.border = 'none';
-  
-  document.body.appendChild(printFrame);
-  
-  const frameDoc = printFrame.contentDocument || printFrame.contentWindow?.document;
-  if (frameDoc) {
-    frameDoc.open();
-    frameDoc.write(receiptHTML);
-    frameDoc.close();
-    
-    // Wait for content to load then print
-    setTimeout(() => {
-      try {
-        printFrame.contentWindow?.focus();
-        printFrame.contentWindow?.print();
-        
-        // Clean up after printing
-        setTimeout(() => {
-          document.body.removeChild(printFrame);
-        }, 100);
-      } catch (error) {
-        console.error('Print error:', error);
-        // Clean up iframe
-        document.body.removeChild(printFrame);
-        const alertMsg = language === 'ar' 
-          ? 'الرجاء السماح بالنوافذ المنبثقة لطباعة الفاتورة'
-          : language === 'fr'
-          ? 'Veuillez autoriser les fenêtres contextuelles pour imprimer la facture'
-          : 'Please allow pop-ups to print the bill';
-        alert(alertMsg);
-      }
-    }, 50);
-  } else {
-    // Clean up iframe
-    document.body.removeChild(printFrame);
-    const alertMsg = language === 'ar' 
-      ? 'الرجاء السماح بالنوافذ المنبثقة لطباعة الفاتورة'
-      : language === 'fr'
-      ? 'Veuillez autoriser les fenêtres contextuelles pour imprimer la facture'
-      : 'Please allow pop-ups to print the bill';
-    alert(alertMsg);
   }
 };
 
