@@ -1,3 +1,4 @@
+import api from '../services/api';
 import { formatDecimal, formatCurrency as formatCurrencyUtil, getCurrencySymbol, getDisplayNumber } from './formatters';
 import { getLocaleFromLanguage } from './localeMapper';
 import type { TFunction } from 'i18next';
@@ -529,6 +530,7 @@ export const printOrder = async (
   t: TFunction = ((key: string) => key) as TFunction,
   tableSectionName?: string
 ) => {
+  const isElectron = typeof window !== 'undefined' && !!((window as any).bombaDesktop?.isDesktop || (window as any).electronAPI);
   try {
     // استخدام الاكتشاف التلقائي للطابعة الحرارية
     const directPrint = api.autoDetectAndPrintOrder({ 
@@ -556,6 +558,13 @@ export const printOrder = async (
     }
   } catch (error: any) {
     if (error?.message !== 'print-timeout') console.error('Direct print failed, falling back to window print:', error);
+    else console.error('Direct print timed out');
+    if (isElectron) {
+      const msg = error?.message === 'print-timeout' ? (language === 'ar' ? 'انتهت مهلة الطباعة — تأكد من توصيل الطابعة' : 'Direct print timeout') : (language === 'ar' ? 'فشلت طباعة الطلب' : 'Direct print failed');
+      if ((window as any).showNotification) (window as any).showNotification(msg, 'error');
+      else alert(msg);
+      return;
+    }
   }
 
   // Fallback: استخدام الطريقة القديمة أو Electron direct print إذا فشلت الطباعة المباشرة

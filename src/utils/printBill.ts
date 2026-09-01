@@ -744,6 +744,7 @@ export const printBill = async (
   t: TFunction = ((key: string) => key) as TFunction,
   tableSectionName?: string
 ) => {
+  const isElectron = typeof window !== 'undefined' && !!((window as any).bombaDesktop?.isDesktop || (window as any).electronAPI);
   try {
     // استخدام الاكتشاف التلقائي للطابعة الحرارية
     // بدلاً من الاستدعاء المباشر للـ API
@@ -777,6 +778,15 @@ export const printBill = async (
     }
   } catch (error: any) {
     if (error?.message !== 'print-timeout') console.error('Direct print failed, falling back to window print:', error);
+    else console.error('Direct print timed out');
+    if (isElectron) {
+      const msg = error?.message === 'print-timeout'
+        ? (language === 'ar' ? 'انتهت مهلة الطباعة المباشرة — تأكد من توصيل الطابعة' : 'Direct print timeout')
+        : (language === 'ar' ? 'فشلت الطباعة المباشرة' : 'Direct print failed');
+      if ((window as any).showNotification) (window as any).showNotification(msg, 'error');
+      else alert(msg);
+      return;
+    }
   }
 
   // Fallback: استخدام الطريقة القديمة أو Electron direct print إذا فشلت الطباعة المباشرة

@@ -167,13 +167,13 @@ class PrinterService {
 
   /**
    * فتح درج الكاشير
+   * @param {boolean} executeNow - إذا true ينفذ فوراً، إذا false يضيف الأمر للمخزن فقط (يُستعمل داخل printDocument)
    */
-  async openCashDrawer() {
+  async openCashDrawer(executeNow = true) {
     if (!this.isConnected || !this.printer) {
       console.log('Printer not connected, cannot open cash drawer');
       return false;
     }
-
     try {
       // إرسال أمر فتح درج الكاشير (ESC/POS command)
       // الأمر الصحيح: 1B700019FA (HEX) = [0x1B, 0x70, 0x00, 0x19, 0xFA]
@@ -237,26 +237,14 @@ class PrinterService {
     }
 
     try {
-      // طباعة المحتوى
       this.printer.println(content);
-
-      // فتح درج الكاشير إذا طُلب
-      if (openDrawer) {
-        await this.openCashDrawer();
-      }
-
-      // قص الورق إذا طُلب
-      if (autoCut) {
-        await this.cutPaper();
-      } else {
-        await this.feedLines(3);
-      }
-
-      // تنفيذ الطباعة
+      if (openDrawer) await this.openCashDrawer(false);
+      if (autoCut) await this.cutPaper();
+      else await this.feedLines(3);
       await this.printer.execute();
-      
+      if (openDrawer) console.log('Cash drawer opened successfully');
       console.log('Document printed successfully');
-      return { success: true };
+      return { success: true, cashDrawerTried: openDrawer };
     } catch (error) {
       console.error('Error printing document:', error);
       return { success: false, error: error.message };

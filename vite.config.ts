@@ -45,12 +45,7 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks(id) {
-          if (id.includes('node_modules')) {
-            if (id.includes('antd') || id.includes('@ant-design/icons')) return 'vendor-antd';
-            if (id.includes('recharts')) return 'vendor-recharts';
-            if (id.includes('jspdf') || id.includes('jspdf-autotable') || id.includes('xlsx') || id.includes('qrcode')) return 'vendor-heavy';
-            return 'vendor-core';
-          }
+          if (id.includes('node_modules')) return 'vendor';
         },
       },
     },
