@@ -57,7 +57,8 @@ class PrinterService {
         type: printerModel,
         interface: iface,
         driver: printerDriver,
-        options: { timeout: 1000 }
+        characterSet: 'WPC1256_ARABIC',
+        options: { timeout: 5000 }
       });
       if (this.winUseRawFallback) {
         // لا نتحقق من وجود الملف قبل الكتابة

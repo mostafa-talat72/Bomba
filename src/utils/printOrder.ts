@@ -538,7 +538,7 @@ export const printOrder = async (
       organization: order.organization, 
       language 
     });
-    const timeout = new Promise<never>((_, reject) => setTimeout(() => reject(new Error('print-timeout')), 900));
+    const timeout = new Promise<never>((_, reject) => setTimeout(() => reject(new Error('print-timeout')), 15000));
     const response: any = await Promise.race([directPrint, timeout]);
     if (response?.success) {
       const successMsg = language === 'ar' ? 'تمت طباعة الطلب بنجاح' : language === 'fr' ? 'Commande imprimée avec succès' : 'Order printed successfully';

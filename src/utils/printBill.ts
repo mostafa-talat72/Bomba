@@ -754,7 +754,7 @@ export const printBill = async (
       language, 
       tableSectionName 
     });
-    const timeout = new Promise<never>((_, reject) => setTimeout(() => reject(new Error('print-timeout')), 900));
+    const timeout = new Promise<never>((_, reject) => setTimeout(() => reject(new Error('print-timeout')), 15000));
     const response: any = await Promise.race([directPrint, timeout]);
     if (response?.success) {
       const successMsg = language === 'ar' 
