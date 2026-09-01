@@ -227,26 +227,27 @@ class PrinterDetectionService {
       throw new Error('Organization is required');
     }
 
-    if (!organization.devicePrinters) {
-      organization.devicePrinters = [];
-    }
-
-    // إزالة أي إدخال سابق لنفس المستخدم/الجهاز
-    organization.devicePrinters = organization.devicePrinters.filter(
-      p => !(p.userId?.toString() === userId?.toString() && p.deviceId === deviceId)
+    // Use one atomic update so concurrent device registrations cannot conflict
+    // with Mongoose's optimistic versioning on the organization document.
+    const OrganizationModel = organization.constructor;
+    return OrganizationModel.findByIdAndUpdate(
+      organization._id,
+      {
+        $pull: {
+          devicePrinters: { userId, deviceId }
+        },
+        $push: {
+          devicePrinters: {
+            userId,
+            deviceId,
+            printerPath,
+            printerName,
+            lastUsed: new Date()
+          }
+        }
+      },
+      { new: true, runValidators: true }
     );
-
-    // إضافة الإدخال الجديد
-    organization.devicePrinters.push({
-      userId,
-      deviceId,
-      printerPath,
-      printerName,
-      lastUsed: new Date()
-    });
-
-    await organization.save();
-    return organization;
   }
 
   /**
