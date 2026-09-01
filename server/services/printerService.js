@@ -57,8 +57,23 @@ class PrinterService {
         type: printerModel,
         interface: iface,
         driver: printerDriver,
-        options: { timeout: 1000 }
+        options: { timeout: 1000 },
+        characterSet: 'PC1256'
       });
+      if (typeof this.printer?.setCharacterSet === 'function') {
+        try {
+          this.printer.setCharacterSet('PC1256');
+        } catch (error) {
+          console.warn('Printer character set fallback not supported:', error.message);
+        }
+      }
+      if (typeof this.printer?.setEncoding === 'function') {
+        try {
+          this.printer.setEncoding('CP1256');
+        } catch (error) {
+          console.warn('Printer encoding fallback not supported:', error.message);
+        }
+      }
       if (this.winUseRawFallback) {
         // لا نتحقق من وجود الملف قبل الكتابة
         this.isConnected = true;
@@ -84,6 +99,38 @@ class PrinterService {
   /**
    * طباعة نص بسيط
    */
+  getPrinterEncoding(language = 'ar') {
+    return language === 'ar' ? 'cp1256' : 'cp1252';
+  }
+
+  buildWindowsRawPrintBuffer(content, { openDrawer = false, autoCut = false, language = 'ar' } = {}) {
+    const normalized = String(content ?? '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+    const textBuffer = Buffer.from(normalized, this.getPrinterEncoding(language));
+    const chunks = [];
+    chunks.push(Buffer.from([0x1b, 0x40]));
+    chunks.push(Buffer.from([0x1b, 0x74, 0x11]));
+    chunks.push(textBuffer);
+    if (openDrawer) {
+      chunks.push(Buffer.from([0x1b, 0x70, 0x00, 0x19, 0xfa]));
+    }
+    if (autoCut) {
+      chunks.push(Buffer.from([0x1d, 0x56, 0x00]));
+    }
+    chunks.push(Buffer.from([0x0a, 0x0a, 0x0a]));
+    return Buffer.concat(chunks);
+  }
+
+  toRawPrinterBuffer(text, language = 'ar') {
+    const normalized = String(text ?? '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+    const encoding = this.getPrinterEncoding(language);
+    try {
+      return Buffer.from(normalized, encoding);
+    } catch (error) {
+      console.warn('Falling back to latin1 encoding for printer output:', error.message);
+      return Buffer.from(normalized, 'latin1');
+    }
+  }
+
   async printText(text, options = {}) {
     if (!this.isConnected || !this.printer) {
       console.log('Printer not connected');
@@ -104,7 +151,10 @@ class PrinterService {
         this.printer.setTextSize(options.size);
       }
 
-      this.printer.println(text);
+      const language = options.language || 'ar';
+      const printBuffer = this.toRawPrinterBuffer(text, language);
+      this.printer.raw(printBuffer);
+      this.printer.raw(Buffer.from('\n'));
 
       // إعادة تعيين التنسيقات
       this.printer.bold(false);
@@ -129,48 +179,51 @@ class PrinterService {
 
     try {
       const separator = char.repeat(length);
-      this.printer.println(separator);
-      return true;
-    } catch (error) {
-      console.error('Error printing separator:', error);
-      return false;
-    }
+     this.printer.raw(this.toRawPrinterBuffer(separator, 'ar'));
+     this.printer.raw(Buffer.from('\n'));
+     return true;
+   } catch (error) {
+     console.error('Error printing separator:', error);
+     return false;
+   }
   }
 
   /**
    * طباعة جدول
    */
   async printTable(headers, rows, columnWidths) {
-    if (!this.isConnected || !this.printer) {
-      return false;
-    }
+   if (!this.isConnected || !this.printer) {
+     return false;
+   }
 
-    try {
-      // طباعة الرأس
-      this.printer.bold(true);
-      let headerRow = '';
-      headers.forEach((header, index) => {
-        const width = columnWidths[index] || 10;
-        headerRow += this.padText(header, width);
-      });
-      this.printer.println(headerRow);
-      this.printer.bold(false);
+   try {
+     // طباعة الرأس
+     this.printer.bold(true);
+     let headerRow = '';
+     headers.forEach((header, index) => {
+       const width = columnWidths[index] || 10;
+       headerRow += this.padText(header, width);
+     });
+     this.printer.raw(this.toRawPrinterBuffer(headerRow, 'ar'));
+     this.printer.raw(Buffer.from('\n'));
+     this.printer.bold(false);
 
-      // طباعة الصفوف
-      rows.forEach(row => {
-        let rowText = '';
-        row.forEach((cell, index) => {
-          const width = columnWidths[index] || 10;
-          rowText += this.padText(cell, width);
-        });
-        this.printer.println(rowText);
-      });
+     // طباعة الصفوف
+     rows.forEach(row => {
+       let rowText = '';
+       row.forEach((cell, index) => {
+         const width = columnWidths[index] || 10;
+         rowText += this.padText(cell, width);
+       });
+       this.printer.raw(this.toRawPrinterBuffer(rowText, 'ar'));
+       this.printer.raw(Buffer.from('\n'));
+     });
 
-      return true;
-    } catch (error) {
-      console.error('Error printing table:', error);
-      return false;
-    }
+     return true;
+   } catch (error) {
+     console.error('Error printing table:', error);
+     return false;
+   }
   }
 
   /**
@@ -256,28 +309,37 @@ class PrinterService {
       return { success: false, error: 'Printer not connected' };
     }
     try {
-      this.printer.println(content);
+      const printLanguage = typeof content === 'string' && /[\u0600-\u06FF]/.test(content) ? 'ar' : 'en';
+
+      if (this.winUseRawFallback) {
+        const filePath = this.printer?.interface || this.printer?.Interface?.path;
+        if (!filePath) {
+          throw new Error('Windows raw fallback file path missing');
+        }
+
+        const rawBuffer = this.buildWindowsRawPrintBuffer(content, {
+          openDrawer,
+          autoCut,
+          language: printLanguage
+        });
+
+        fs.writeFileSync(filePath, rawBuffer);
+
+        const ps = `powershell -Command "Get-Content -Path '${filePath.replace(/'/g, "''")}' -Encoding Byte -ReadCount 0 | Out-Printer -Name '${this.winPrinterName.replace(/'/g, "''")}'"`;
+        await execPromise(ps, { timeout: 10000 });
+
+        try { fs.unlinkSync(filePath); } catch {}
+        if (openDrawer) console.log('Cash drawer opened successfully');
+        console.log('Document printed successfully');
+        return { success: true, cashDrawerTried: openDrawer };
+      }
+
+      const printBuffer = this.toRawPrinterBuffer(content, printLanguage);
+      this.printer.raw(printBuffer);
       if (openDrawer) await this.openCashDrawer(false);
       if (autoCut) await this.cutPaper();
       else await this.feedLines(3);
       await this.printer.execute();
-      if (this.winUseRawFallback) {
-        // أرسل الملف المؤقت إلى الطابعة الحقيقية عبر PowerShell
-        try {
-          const tmpFile = this.printer.Interface?.path || this.printer.interface;
-          const filePath = typeof tmpFile === 'string' ? tmpFile : this.printer.Interface?.path;
-          if (filePath && fs.existsSync(filePath)) {
-            const ps = `powershell -Command "Get-Content -Path '${filePath.replace(/'/g, "''")}' -Encoding Byte -ReadCount 0 | Out-Printer -Name '${this.winPrinterName.replace(/'/g, "''")}'"`;
-            await execPromise(ps, { timeout: 8000 });
-            console.log(`Raw buffer sent to Windows printer "${this.winPrinterName}" via Out-Printer`);
-            try { fs.unlinkSync(filePath); } catch {}
-          }
-        } catch (e) {
-          console.error('Windows raw fallback print failed, trying direct file write:', e.message);
-          // محاولة أخيرة: اكتب مباشرة إلى \\.\pipe أو استخدم print command
-          throw e;
-        }
-      }
       if (openDrawer) console.log('Cash drawer opened successfully');
       console.log('Document printed successfully');
       return { success: true, cashDrawerTried: openDrawer };
