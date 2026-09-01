@@ -294,12 +294,18 @@ const Tables: React.FC = () => {
   }, [user?.role, user?.permissions]);
 
   // ── Cache constants ──────────────────────────────────────────────────────────
-const TABLES_CACHE_KEY = 'tables_cache_v2';
+const TABLES_CACHE_KEY = 'tables_cache_v3';
 const TABLES_CACHE_TTL = 10000; // 10 ثانية
+const organizationValue = user?.organization;
+const tablesCacheScope = String(
+  (typeof organizationValue === 'object' ? organizationValue?._id || organizationValue?.id : organizationValue)
+  || user?.organizationId
+  || 'unknown'
+);
 
 function readTablesCache() {
   try {
-    const raw = localStorage.getItem(TABLES_CACHE_KEY);
+    const raw = localStorage.getItem(`${TABLES_CACHE_KEY}:${tablesCacheScope}`);
     if (!raw) return null;
     const { data, ts } = JSON.parse(raw);
     if (Date.now() - ts > TABLES_CACHE_TTL) return null;
@@ -309,12 +315,12 @@ function readTablesCache() {
 
 function writeTablesCache(tables: any[], sections: any[]) {
   try {
-    localStorage.setItem(TABLES_CACHE_KEY, JSON.stringify({ data: { tables, sections }, ts: Date.now() }));
+    localStorage.setItem(`${TABLES_CACHE_KEY}:${tablesCacheScope}`, JSON.stringify({ data: { tables, sections }, ts: Date.now() }));
   } catch {}
 }
 
 function invalidateTablesCache() {
-  try { localStorage.removeItem(TABLES_CACHE_KEY); } catch {}
+  try { localStorage.removeItem(`${TABLES_CACHE_KEY}:${tablesCacheScope}`); } catch {}
 }
 
 // ── Load initial data ────────────────────────────────────────────────────
@@ -331,8 +337,6 @@ const loadInitialData = async () => {
     // المرحلة 1 — الطاولات من السيرفر (30ms)
     await Promise.all([fetchTableSections(), fetchTables()]);
     setLoading(false);
-    // تحديث الكاش بعد نجاح الجلب
-    writeTablesCache(tables, tableSections);
     // المرحلة 2 — باقي البيانات في الخلفية
     Promise.all([
       fetchBills(),
@@ -354,6 +358,13 @@ const loadInitialData = async () => {
     }
     return () => { hasLoadedDataRef.current = false; };
   }, []);
+
+  // Persist the latest server result, not the stale values captured by loadInitialData.
+  useEffect(() => {
+    if (tables.length > 0 || tableSections.length > 0) {
+      writeTablesCache(tables, tableSections);
+    }
+  }, [tables, tableSections, tablesCacheScope]);
 
 
   // ── Table statuses + billsMap — دمج العمليتين في useMemo واحد بدلاً من useEffect مزدوج ──
@@ -954,8 +965,22 @@ const loadInitialData = async () => {
   }, [tables, bills, location.state]);
 
   // ── Memos ────────────────────────────────────────────────────────────────
-  const activeTableSections = useMemo(() =>
-    tableSections.filter(s => s.isActive !== false).sort((a, b) => a.sortOrder - b.sortOrder), [tableSections]);
+  const activeTableSections = useMemo(() => {
+    const active = tableSections
+      .filter(s => s.isActive !== false)
+      .sort((a, b) => a.sortOrder - b.sortOrder);
+    const activeIds = new Set(active.map(s => String(s._id || s.id)));
+    const orphanTables = tables.filter(table => {
+      if (table.isActive === false) return false;
+      const raw = typeof table.section === 'object'
+        ? table.section?._id || table.section?.id
+        : table.section;
+      return !raw || !activeIds.has(String(raw));
+    });
+    return orphanTables.length > 0
+      ? [...active, { id: '__unassigned__', _id: '__unassigned__', name: 'غير مصنف', sortOrder: Number.MAX_SAFE_INTEGER, isActive: true }]
+      : active;
+  }, [tableSections, tables]);
 
   const activeTables = useMemo(() => tables.filter(t => t.isActive !== false), [tables]);
 
@@ -996,7 +1021,10 @@ const loadInitialData = async () => {
   const getTablesBySection = useMemo(() => {
     const map: Record<string, Table[]> = {};
     activeTables.forEach(table => {
-      const sec = typeof table.section === 'string' ? table.section : (table.section as TableSection)?._id || (table.section as TableSection)?.id;
+      const rawSec = typeof table.section === 'string' ? table.section : (table.section as TableSection)?._id || (table.section as TableSection)?.id;
+      const sec = rawSec && tableSections.some(s => String(s._id || s.id) === String(rawSec) && s.isActive !== false)
+        ? String(rawSec)
+        : '__unassigned__';
       if (sec) {
         if (!map[sec]) map[sec] = [];
         map[sec].push(table);
@@ -1010,7 +1038,7 @@ const loadInitialData = async () => {
       });
     });
     return map;
-  }, [activeTables]);
+  }, [activeTables, tableSections]);
 
   const filteredTableOrders = useMemo(() =>
     tableOrders.filter((o: Order) => {
