@@ -388,7 +388,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     if (!user) return;
 
     try {
-      const response = await api.getBills();
+      const response = await api.getBills({ fresh: true });
       if (response.success && response.data) {
         setBills(response.data);
       } else {
@@ -1649,13 +1649,6 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setBills([]);
     setSessions([]);
 
-    if (typeof window !== 'undefined') {
-      try {
-        Object.keys(localStorage)
-          .filter(key => key.startsWith('tables_cache_v'))
-          .forEach(key => localStorage.removeItem(key));
-      } catch {}
-    }
 
     await refreshData(0);
   };
