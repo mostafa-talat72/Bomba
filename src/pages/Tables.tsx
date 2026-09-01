@@ -293,48 +293,11 @@ const Tables: React.FC = () => {
     return false;
   }, [user?.role, user?.permissions]);
 
-  // ── Cache constants ──────────────────────────────────────────────────────────
-const TABLES_CACHE_KEY = 'tables_cache_v3';
-const TABLES_CACHE_TTL = 10000; // 10 ثانية
-const organizationValue = user?.organization;
-const tablesCacheScope = String(
-  (typeof organizationValue === 'object' ? organizationValue?._id || organizationValue?.id : organizationValue)
-  || user?.organizationId
-  || 'unknown'
-);
-
-function readTablesCache() {
-  try {
-    const raw = localStorage.getItem(`${TABLES_CACHE_KEY}:${tablesCacheScope}`);
-    if (!raw) return null;
-    const { data, ts } = JSON.parse(raw);
-    if (Date.now() - ts > TABLES_CACHE_TTL) return null;
-    return data;
-  } catch { return null; }
-}
-
-function writeTablesCache(tables: any[], sections: any[]) {
-  try {
-    localStorage.setItem(`${TABLES_CACHE_KEY}:${tablesCacheScope}`, JSON.stringify({ data: { tables, sections }, ts: Date.now() }));
-  } catch {}
-}
-
-function invalidateTablesCache() {
-  try { localStorage.removeItem(`${TABLES_CACHE_KEY}:${tablesCacheScope}`); } catch {}
-}
-
 // ── Load initial data ────────────────────────────────────────────────────
 const loadInitialData = async () => {
   setLoading(true);
   try {
-    // قراءة الكاش فوراً للرسم الأولي (<50ms)
-    const cached = readTablesCache();
-    if (cached?.tables?.length) {
-      setTables(cached.tables);
-      setTableSections(cached.sections || []);
-      setLoading(false);
-    }
-    // المرحلة 1 — الطاولات من السيرفر (30ms)
+    // Always use the server as the source of truth for tables.
     await Promise.all([fetchTableSections(), fetchTables()]);
     setLoading(false);
     // المرحلة 2 — باقي البيانات في الخلفية
@@ -358,13 +321,6 @@ const loadInitialData = async () => {
     }
     return () => { hasLoadedDataRef.current = false; };
   }, []);
-
-  // Persist the latest server result, not the stale values captured by loadInitialData.
-  useEffect(() => {
-    if (tables.length > 0 || tableSections.length > 0) {
-      writeTablesCache(tables, tableSections);
-    }
-  }, [tables, tableSections, tablesCacheScope]);
 
 
   // ── Table statuses + billsMap — دمج العمليتين في useMemo واحد بدلاً من useEffect مزدوج ──
