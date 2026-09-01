@@ -1,3 +1,4 @@
+import api from '../services/api';
 import { formatDecimal, formatCurrency as formatCurrencyUtil, getCurrencySymbol, getDisplayNumber } from './formatters';
 import { getLocaleFromLanguage } from './localeMapper';
 import type { TFunction } from 'i18next';
@@ -529,20 +530,36 @@ export const printOrder = async (
   t: TFunction = ((key: string) => key) as TFunction,
   tableSectionName?: string
 ) => {
+  const isElectron = typeof window !== 'undefined' && !!((window as any).bombaDesktop?.isDesktop || (window as any).electronAPI);
   try {
     const directPrint = api.printOrder({ order, organization: order.organization, language });
-    const timeout = new Promise<never>((_, reject) => setTimeout(() => reject(new Error('print-timeout')), 900));
+    const timeoutMs = isElectron ? 8000 : 900;
+    const timeout = new Promise<never>((_, reject) => setTimeout(() => reject(new Error('print-timeout')), timeoutMs));
     const response: any = await Promise.race([directPrint, timeout]);
     if (response?.success) {
       const successMsg = language === 'ar' ? 'تمت طباعة الطلب بنجاح' : language === 'fr' ? 'Commande imprimée avec succès' : 'Order printed successfully';
       if (typeof window !== 'undefined' && (window as any).showNotification) (window as any).showNotification(successMsg, 'success');
       return;
     }
+    console.error('Direct print returned non-success:', response);
+    if (isElectron) {
+      const msg = response?.message || (language === 'ar' ? 'فشلت طباعة الطلب' : 'Direct print failed');
+      if ((window as any).showNotification) (window as any).showNotification(msg + (response?.error ? `: ${response.error}` : ''), 'error');
+      else alert(msg);
+      return;
+    }
   } catch (error: any) {
     if (error?.message !== 'print-timeout') console.error('Direct print failed, falling back to window print:', error);
+    else console.error('Direct print timed out');
+    if (isElectron) {
+      const msg = error?.message === 'print-timeout' ? (language === 'ar' ? 'انتهت مهلة الطباعة — تأكد من توصيل الطابعة' : 'Direct print timeout') : (language === 'ar' ? 'فشلت طباعة الطلب' : 'Direct print failed');
+      if ((window as any).showNotification) (window as any).showNotification(msg, 'error');
+      else alert(msg);
+      return;
+    }
   }
 
-  // Fallback: استخدام الطريقة القديمة إذا فشلت الطباعة المباشرة
+  // Fallback (ويب فقط): استخدام الطريقة القديمة إذا فشلت الطباعة المباشرة
   const printContent = await buildOrderPrintHTML(order, menuSections, menuItemsMap, fallbackOrganizationName, language, t, tableSectionName);
 
   // Create a hidden iframe for printing

@@ -744,9 +744,11 @@ export const printBill = async (
   t: TFunction = ((key: string) => key) as TFunction,
   tableSectionName?: string
 ) => {
+  const isElectron = typeof window !== 'undefined' && !!((window as any).bombaDesktop?.isDesktop || (window as any).electronAPI);
   try {
     const directPrint = api.printBill({ bill, organization: bill.organization, language, tableSectionName });
-    const timeout = new Promise<never>((_, reject) => setTimeout(() => reject(new Error('print-timeout')), 900));
+    const timeoutMs = isElectron ? 8000 : 900;
+    const timeout = new Promise<never>((_, reject) => setTimeout(() => reject(new Error('print-timeout')), timeoutMs));
     const response: any = await Promise.race([directPrint, timeout]);
     if (response?.success) {
       const successMsg = language === 'ar' 
@@ -757,11 +759,29 @@ export const printBill = async (
       if (typeof window !== 'undefined' && (window as any).showNotification) (window as any).showNotification(successMsg, 'success');
       return;
     }
+    // رد غير ناجح بدون استثناء — اطبع السبب وانتقل للـ fallback/الخطأ
+    console.error('Direct print returned non-success:', response);
+    if (isElectron) {
+      const msg = response?.message || (language === 'ar' ? 'فشلت الطباعة المباشرة' : 'Direct print failed');
+      const cashMsg = response?.error ? `: ${response.error}` : '';
+      if ((window as any).showNotification) (window as any).showNotification(msg + cashMsg, 'error');
+      else alert(msg + cashMsg);
+      return;
+    }
   } catch (error: any) {
     if (error?.message !== 'print-timeout') console.error('Direct print failed, falling back to window print:', error);
+    else console.error('Direct print timed out');
+    if (isElectron) {
+      const msg = error?.message === 'print-timeout'
+        ? (language === 'ar' ? 'انتهت مهلة الطباعة المباشرة — تأكد من توصيل الطابعة' : 'Direct print timeout')
+        : (language === 'ar' ? 'فشلت الطباعة المباشرة' : 'Direct print failed');
+      if ((window as any).showNotification) (window as any).showNotification(msg, 'error');
+      else alert(msg);
+      return;
+    }
   }
 
-  // Fallback: استخدام الطريقة القديمة إذا فشلت الطباعة المباشرة
+  // Fallback (ويب فقط): استخدام الطريقة القديمة إذا فشلت الطباعة المباشرة
   const receiptHTML = await buildBillPrintHTML(bill, fallbackOrganizationName, language, t, tableSectionName);
 
   // A real popup window is preferred for printing: in Electron, printing an
