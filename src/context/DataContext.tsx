@@ -1380,8 +1380,12 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const response = await api.getTableSections();
       if (response.success && response.data) {
         setTableSections(response.data);
+        return response.data;
       }
+      throw new Error(response.message || 'Failed to load table sections');
     } catch (error) {
+      console.error('Failed to load table sections:', error);
+      throw error;
     }
   };
 
@@ -1438,8 +1442,12 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const response = await api.getTables(sectionId ? { section: sectionId } : undefined);
       if (response.success && response.data) {
         setTables(response.data);
+        return response.data;
       }
+      throw new Error(response.message || 'Failed to load tables');
     } catch (error) {
+      console.error('Failed to load tables:', error);
+      throw error;
     }
   };
 
@@ -1642,7 +1650,11 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setSessions([]);
 
     if (typeof window !== 'undefined') {
-      try { localStorage.removeItem('tables_cache_v2'); } catch {}
+      try {
+        Object.keys(localStorage)
+          .filter(key => key.startsWith('tables_cache_v'))
+          .forEach(key => localStorage.removeItem(key));
+      } catch {}
     }
 
     await refreshData(0);
