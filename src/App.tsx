@@ -59,7 +59,7 @@ const EditableFocusGuard = () => {
       if (!(target instanceof HTMLElement)) return;
 
       const editable = target.closest<HTMLElement>('input, textarea, select, [contenteditable="true"]');
-      if (!(editable instanceof HTMLInputElement || editable instanceof HTMLTextAreaElement ||
+      if (!editable || !(editable instanceof HTMLInputElement || editable instanceof HTMLTextAreaElement ||
         editable instanceof HTMLSelectElement || editable.isContentEditable)) {
         return;
       }
