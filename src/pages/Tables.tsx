@@ -848,13 +848,13 @@ const loadInitialData = async () => {
   useEffect(() => {
     const isTyping = () => {
       const el = document.activeElement as HTMLElement | null;
-      return !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable);
+      return !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable === true);
     };
     const handler = (e: KeyboardEvent) => {
       if (e.ctrlKey || e.altKey || e.metaKey) return;
 
       if (e.key === 'Escape') {
-        if (isTyping()) { (document.activeElement as HTMLElement).blur(); return; }
+        if (isTyping()) { (document.activeElement as HTMLElement | null)?.blur(); return; }
         // إلغاء الإدخال السريع
         if (quickDigits) { setQuickDigits(''); if (quickDigitTimer.current) clearTimeout(quickDigitTimer.current); }
         if (quickPickerTables) { setQuickPickerTables(null); return; }
