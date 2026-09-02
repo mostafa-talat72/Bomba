@@ -1,3 +1,4 @@
+import { getOrganizationId, organizationFilter } from '../utils/organization.js';
 import crypto from "crypto";
 import mongoose from "mongoose";
 import Bill from "../models/Bill.js";
@@ -38,13 +39,13 @@ const VALID_SUBSCRIPTION_AMOUNTS = { monthly: 299, yearly: 2999 };
 function emitBillUpdated(req, bill) {
     if (!req.io || !bill) return;
     try {
-        const orgId = req.user?.organization?._id || req.user?.organization;
+        const orgId = getOrganizationId(req.user);
         if (!orgId) return;
         const orgStr = String(orgId);
         // colon + dash rooms, both event names for compatibility
         req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('bill:updated', bill);
         req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('bill-update', { type: 'updated', bill });
-        try { req.io.notifyBillUpdate("updated", bill, req.user.organization); } catch {}
+        try { req.io.notifyBillUpdate("updated", bill, getOrganizationId(req.user)); } catch {}
         // table status if bill has table
         if (bill.table) {
             const tid = bill.table?._id || bill.table?.id || bill.table;
@@ -52,7 +53,7 @@ function emitBillUpdated(req, bill) {
                 const payload = { tableId: tid, status: (bill.status === 'paid' || bill.status === 'cancelled') ? 'empty' : 'occupied' };
                 req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('table:statusChanged', payload);
                 req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('table-status-update', payload);
-                try { req.io.notifyTableStatusUpdate(payload, req.user.organization); } catch {}
+                try { req.io.notifyTableStatusUpdate(payload, getOrganizationId(req.user)); } catch {}
             }
         }
     } catch (e) { Logger.warn('emitBillUpdated failed', e.message); }
@@ -60,13 +61,13 @@ function emitBillUpdated(req, bill) {
 function emitBillDeleted(req, billId, tableId) {
     if (!req.io) return;
     try {
-        const orgId = req.user?.organization?._id || req.user?.organization;
+        const orgId = getOrganizationId(req.user);
         if (!orgId) return;
         const orgStr = String(orgId);
         const payload = { _id: billId };
         req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('bill:updated', payload);
         req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('bill-update', { type: 'deleted', bill: payload });
-        try { req.io.notifyBillUpdate("deleted", payload, req.user.organization); } catch {}
+        try { req.io.notifyBillUpdate("deleted", payload, getOrganizationId(req.user)); } catch {}
         if (tableId) {
             const tid = tableId?._id || tableId?.id || tableId;
             const tp = { tableId: tid, status: 'empty' };
@@ -101,7 +102,7 @@ async function updateTableStatusIfNeeded(tableId, organizationId, io = null) {
     try {
         const table = await Table.findOne({
             _id: actualTableId,
-            organization: organizationId,
+            ...organizationFilter(organizationId),
         }).select("number");
 
         if (!table) {
@@ -115,7 +116,7 @@ async function updateTableStatusIfNeeded(tableId, organizationId, io = null) {
                 { tableNumber: table.number },
             ],
             status: { $in: ["draft", "partial", "overdue"] },
-            organization: organizationId,
+            ...organizationFilter(organizationId),
         });
 
         // Determine new status: occupied if there are unpaid bills, empty otherwise
@@ -123,7 +124,7 @@ async function updateTableStatusIfNeeded(tableId, organizationId, io = null) {
 
         // Update table status
         await Table.findOneAndUpdate(
-            { _id: actualTableId, organization: organizationId },
+            { _id: actualTableId, ...organizationFilter(organizationId) },
             { status: newStatus }
         );
 
@@ -220,7 +221,7 @@ export const getBills = async (req, res) => {
             query.status = { $in: unpaidStatuses };
         }
 
-        query.organization = req.user.organization;
+        query.organization = getOrganizationId(req.user);
 
         // Pagination: default no limit for unpaid (<200), if all=true then paginate with limit 50
         const pageNum = Math.max(1, parseInt(page, 10) || 1);
@@ -471,7 +472,7 @@ export const getBill = async (req, res) => {
         }
 
         // تحقق من وجود المستخدم والمنشأة للمسار المحمي
-        if (!req.user || !req.user.organization) {
+        if (!req.user || !getOrganizationId(req.user)) {
             return res.status(401).json({
                 success: false,
                 message:
@@ -483,7 +484,7 @@ export const getBill = async (req, res) => {
         if (req.query.upgrade === '1') {
             setImmediate(async () => {
                 try {
-                    const fresh = await Bill.findOne({ _id: req.params.id, organization: req.user.organization });
+                    const fresh = await Bill.findOne({ _id: req.params.id, ...organizationFilter(req.user) });
                     if (fresh && typeof fresh.upgradeItemPaymentsToNewFormat === 'function') {
                         const r = await fresh.upgradeItemPaymentsToNewFormat();
                         if (r?.upgraded) {
@@ -500,7 +501,7 @@ export const getBill = async (req, res) => {
         // READ-ONLY fetch with lean() and minimal populate - no writes
         const bill = await Bill.findOne({
             _id: req.params.id,
-            organization: req.user.organization,
+            ...organizationFilter(req.user),
         })
             .populate({
                 path: "orders",
@@ -711,7 +712,7 @@ export const createBill = async (req, res) => {
                 const activeSession = await Session.findOne({
                     table: firstOrder.table._id,
                     status: 'active',
-                    organization: req.user.organization
+                    ...organizationFilter(req.user)
                 }).select('deviceNumber deviceId');
                 if (activeSession && activeSession.deviceNumber) {
                     deviceNumber = activeSession.deviceNumber;
@@ -747,7 +748,7 @@ export const createBill = async (req, res) => {
                     billType: billType || "cafe",
                     dueDate,
                     createdBy: req.user._id,
-                    organization: req.user.organization,
+                    organization: getOrganizationId(req.user),
                     instanceId: instanceId,
                 });
                 break;
@@ -781,7 +782,7 @@ export const createBill = async (req, res) => {
 
         // Update table status SYNCHRONOUSLY before response (fix stale status)
         if (bill.table) {
-            await updateTableStatusIfNeeded(bill.table, req.user.organization, req.io);
+            await updateTableStatusIfNeeded(bill.table, getOrganizationId(req.user), req.io);
         }
 
         // Fire-and-forget Atlas write
@@ -824,13 +825,13 @@ export const createBill = async (req, res) => {
             try {
                 // Notify via Socket.IO
                 if (req.io) {
-                    req.io.notifyBillUpdate("created", bill, req.user.organization);
+                    req.io.notifyBillUpdate("created", bill, getOrganizationId(req.user));
                 }
 
                 // Create notification for new bill
                 try {
                     const userLanguage = req.user.preferences?.language || 'ar';
-                    const organization = await Organization.findById(req.user.organization).select('currency');
+                    const organization = await Organization.findById(getOrganizationId(req.user)).select('currency');
                     const currency = organization?.currency || 'EGP';
 
                     await NotificationService.createBillingNotification(
@@ -875,7 +876,7 @@ export const updateBill = async (req, res) => {
             table, // إضافة table (ID)
         } = req.body;
 
-        const bill = await Bill.findOne({ _id: req.params.id, organization: req.user.organization });
+        const bill = await Bill.findOne({ _id: req.params.id, ...organizationFilter(req.user) });
 
         if (!bill) {
             return res.status(404).json({
@@ -914,7 +915,7 @@ export const updateBill = async (req, res) => {
                 const existingBillInNewTable = await Bill.findOne({
                     _id: { $ne: bill._id }, // ليست نفس الفاتورة
                     table: newTableId,
-                    organization: req.user.organization,
+                    ...organizationFilter(req.user),
                     status: { $in: ['draft', 'partial', 'overdue'] }
                 }).sort({ createdAt: -1 });
 
@@ -1077,12 +1078,12 @@ export const updateBill = async (req, res) => {
                     // STEP 3: حذف الفاتورة القديمة (التي أصبحت فارغة)
                     const { deleteFromBothDatabases } = await import('../utils/deleteHelper.js');
                     await deleteFromBothDatabases(bill, 'bills', `bill ${oldBillNumber}`);
-                    try { await createTombstone('bills', oldBillId, req.user.organization, req.user._id); } catch (e) {}
+                    try { await createTombstone('bills', oldBillId, getOrganizationId(req.user), req.user._id); } catch (e) {}
                     Logger.info(`✅ STEP 3: تم حذف الفاتورة القديمة ${oldBillNumber}`);
                     
                     // تحديث حالة الطاولة القديمة
                     if (oldTableId) {
-                        await updateTableStatusIfNeeded(oldTableId, req.user.organization, req.io);
+                        await updateTableStatusIfNeeded(oldTableId, getOrganizationId(req.user), req.io);
                     }
                     
                     // إعادة تحميل الفاتورة المدمجة مع البيانات الكاملة
@@ -1095,8 +1096,8 @@ export const updateBill = async (req, res) => {
                     
                     // Emit Socket.IO events
                     if (req.io) {
-                        req.io.notifyBillUpdate("deleted", { _id: oldBillId, billNumber: oldBillNumber }, req.user.organization);
-                        req.io.notifyBillUpdate("updated", reloadedBill, req.user.organization);
+                        req.io.notifyBillUpdate("deleted", { _id: oldBillId, billNumber: oldBillNumber }, getOrganizationId(req.user));
+                        req.io.notifyBillUpdate("updated", reloadedBill, getOrganizationId(req.user));
                     }
                     
                     Logger.info(`✅ تم دمج الفواتير بنجاح - الفاتورة النهائية: ${reloadedBill.billNumber}`);
@@ -1152,7 +1153,7 @@ export const updateBill = async (req, res) => {
                     
                     // تحديث حالة الطاولة القديمة
                     if (oldTableId) {
-                        await updateTableStatusIfNeeded(oldTableId, req.user.organization, req.io);
+                        await updateTableStatusIfNeeded(oldTableId, getOrganizationId(req.user), req.io);
                     }
                     
                     Logger.info(`✅ تم تغيير طاولة الفاتورة ${bill.billNumber} إلى الطاولة ${newTableId}`);
@@ -1198,7 +1199,7 @@ export const updateBill = async (req, res) => {
         // Update table status SYNCHRONOUSLY before response (fix stale status)
         // Handle both old and new table cases: updatedBill.table is the new/current table
         if (updatedBill.table) {
-            await updateTableStatusIfNeeded(updatedBill.table, req.user.organization, req.io);
+            await updateTableStatusIfNeeded(updatedBill.table, getOrganizationId(req.user), req.io);
         }
 
         // Fire-and-forget Atlas write
@@ -1241,13 +1242,13 @@ export const updateBill = async (req, res) => {
             try {
                 // Notify via Socket.IO
                 if (req.io) {
-                    req.io.notifyBillUpdate("updated", updatedBill, req.user.organization);
+                    req.io.notifyBillUpdate("updated", updatedBill, getOrganizationId(req.user));
                 }
 
                 if (prevStatus !== "paid" && updatedBill.status === "paid") {
                     try {
                         const userLanguage = req.user.preferences?.language || 'ar';
-                        const organization = await Organization.findById(req.user.organization).select('currency');
+                        const organization = await Organization.findById(getOrganizationId(req.user)).select('currency');
                         const currency = organization?.currency || 'EGP';
 
                         await NotificationService.createBillingNotification(
@@ -1291,7 +1292,7 @@ export const addPayment = async (req, res) => {
             discountPercentage,
         } = req.body;
 
-        const bill = await Bill.findOne({ _id: req.params.id, organization: req.user.organization });
+        const bill = await Bill.findOne({ _id: req.params.id, ...organizationFilter(req.user) });
 
         if (!bill) {
             return res.status(404).json({
@@ -1513,7 +1514,7 @@ export const addPayment = async (req, res) => {
 
         // Update table status SYNCHRONOUSLY before response (fix stale status)
         if (bill.table) {
-            await updateTableStatusIfNeeded(bill.table, req.user.organization, req.io);
+            await updateTableStatusIfNeeded(bill.table, getOrganizationId(req.user), req.io);
         }
 
         emitBillUpdated(req, bill);
@@ -1532,7 +1533,7 @@ export const addPayment = async (req, res) => {
         // Notify via Socket.IO (non-blocking)
         if (req.io) {
             setImmediate(() => {
-                req.io.notifyBillUpdate("payment-received", bill, req.user.organization);
+                req.io.notifyBillUpdate("payment-received", bill, getOrganizationId(req.user));
             });
         }
 
@@ -1541,7 +1542,7 @@ export const addPayment = async (req, res) => {
             try {
                 // Get user language and organization currency
                 const userLanguage = req.user.preferences?.language || 'ar';
-                const organization = await Organization.findById(req.user.organization).select('currency');
+                const organization = await Organization.findById(getOrganizationId(req.user)).select('currency');
                 const currency = organization?.currency || 'EGP';
                 
                 if (bill.status === "paid") {
@@ -1596,7 +1597,7 @@ export const addOrderToBill = async (req, res) => {
     try {
         const { orderId } = req.body;
 
-        const bill = await Bill.findOne({ _id: req.params.id, organization: req.user.organization });
+        const bill = await Bill.findOne({ _id: req.params.id, ...organizationFilter(req.user) });
 
         if (!bill) {
             return res.status(404).json({
@@ -1672,7 +1673,7 @@ export const removeOrderFromBill = async (req, res) => {
     try {
         const { id, orderId } = req.params;
 
-        const bill = await Bill.findOne({ _id: id, organization: req.user.organization });
+        const bill = await Bill.findOne({ _id: id, ...organizationFilter(req.user) });
 
         if (!bill) {
             return res.status(404).json({
@@ -1716,7 +1717,7 @@ export const removeOrderFromBill = async (req, res) => {
         emitBillUpdated(req, bill);
 
         // Check if bill is now empty (no orders and no sessions)
-        const updatedBill = await Bill.findOne({ _id: id, organization: req.user.organization });
+        const updatedBill = await Bill.findOne({ _id: id, ...organizationFilter(req.user) });
         if (
             updatedBill &&
             (!updatedBill.orders || updatedBill.orders.length === 0) &&
@@ -1726,11 +1727,11 @@ export const removeOrderFromBill = async (req, res) => {
             Logger.info(`🗑️ Deleting empty bill ${updatedBill.billNumber} after removing order`);
             const { deleteFromBothDatabases } = await import('../utils/deleteHelper.js');
             await deleteFromBothDatabases(updatedBill, 'bills', `bill ${updatedBill.billNumber}`);
-            try { await createTombstone('bills', updatedBill._id, req.user.organization, req.user._id); } catch (e) {}
+            try { await createTombstone('bills', updatedBill._id, getOrganizationId(req.user), req.user._id); } catch (e) {}
             
             // Update table status if bill had a table
             if (updatedBill.table) {
-                await updateTableStatusIfNeeded(updatedBill.table, req.user.organization, req.io);
+                await updateTableStatusIfNeeded(updatedBill.table, getOrganizationId(req.user), req.io);
             }
         }
 
@@ -1761,7 +1762,7 @@ export const addSessionToBill = async (req, res) => {
     try {
         const { sessionId } = req.body;
 
-        const bill = await Bill.findOne({ _id: req.params.id, organization: req.user.organization });
+        const bill = await Bill.findOne({ _id: req.params.id, ...organizationFilter(req.user) });
 
         if (!bill) {
             return res.status(404).json({
@@ -1861,7 +1862,7 @@ export const getBillByQR = async (req, res) => {
 // @access  Private
 export const cancelBill = async (req, res) => {
     try {
-        const bill = await Bill.findOne({ _id: req.params.id, organization: req.user.organization });
+        const bill = await Bill.findOne({ _id: req.params.id, ...organizationFilter(req.user) });
 
         if (!bill) {
             return res.status(404).json({
@@ -1889,7 +1890,7 @@ export const cancelBill = async (req, res) => {
 
         // Update table status SYNCHRONOUSLY before response (fix stale status)
         if (bill.table) {
-            await updateTableStatusIfNeeded(bill.table, req.user.organization, req.io);
+            await updateTableStatusIfNeeded(bill.table, getOrganizationId(req.user), req.io);
         }
 
         emitBillUpdated(req, bill);
@@ -1920,7 +1921,7 @@ export const cancelBill = async (req, res) => {
 // @access  Private
 export const deleteBill = async (req, res) => {
     try {
-        const bill = await Bill.findOne({ _id: req.params.id, organization: req.user.organization }).populate('table');
+        const bill = await Bill.findOne({ _id: req.params.id, ...organizationFilter(req.user) }).populate('table');
 
         if (!bill) {
             return res.status(404).json({
@@ -2112,7 +2113,7 @@ export const deleteBill = async (req, res) => {
         // Emit bill-deleted event — instant
         if (req.io) {
             emitBillDeleted(req, bill._id, tableId);
-            req.io.notifyBillUpdate("deleted", { _id: bill._id, billNumber: bill.billNumber }, req.user.organization);
+            req.io.notifyBillUpdate("deleted", { _id: bill._id, billNumber: bill.billNumber }, getOrganizationId(req.user));
         }
 
         res.json({
@@ -2143,7 +2144,7 @@ export const addPartialPayment = async (req, res) => {
             items: items
         });
 
-        const bill = await Bill.findOne({ _id: req.params.id, organization: req.user.organization }).populate("orders");
+        const bill = await Bill.findOne({ _id: req.params.id, ...organizationFilter(req.user) }).populate("orders");
 
         if (!bill) {
             return res.status(404).json({
@@ -2330,7 +2331,7 @@ export const addPartialPayment = async (req, res) => {
 
         // Update table status SYNCHRONOUSLY before response (fix stale status)
         if (bill.table) {
-            await updateTableStatusIfNeeded(bill.table, req.user.organization, req.io);
+            await updateTableStatusIfNeeded(bill.table, getOrganizationId(req.user), req.io);
         }
 
         // Populate للاستجابة
@@ -2381,7 +2382,7 @@ export const addPartialPayment = async (req, res) => {
 // @access  Private
 export const redistributePayments = async (req, res) => {
     try {
-        const bill = await Bill.findOne({ _id: req.params.id, organization: req.user.organization }).populate("orders");
+        const bill = await Bill.findOne({ _id: req.params.id, ...organizationFilter(req.user) }).populate("orders");
 
         if (!bill) {
             return res.status(404).json({
@@ -2427,7 +2428,7 @@ export const redistributePayments = async (req, res) => {
 // @access  Private
 export const cleanupBillPayments = async (req, res) => {
     try {
-        const bill = await Bill.findOne({ _id: req.params.id, organization: req.user.organization }).populate("orders");
+        const bill = await Bill.findOne({ _id: req.params.id, ...organizationFilter(req.user) }).populate("orders");
 
         if (!bill) {
             return res.status(404).json({
@@ -2490,7 +2491,7 @@ export const cleanupBillPayments = async (req, res) => {
 // @access  Private
 export const getBillItems = async (req, res) => {
     try {
-        const bill = await Bill.findOne({ _id: req.params.id, organization: req.user.organization }).populate("orders");
+        const bill = await Bill.findOne({ _id: req.params.id, ...organizationFilter(req.user) }).populate("orders");
 
         if (!bill) {
             return res.status(404).json({
@@ -2636,7 +2637,7 @@ export const getAvailableBillsForSession = async (req, res) => {
         // جلب الفواتير غير المدفوعة أو الملغاة
         const bills = await Bill.find({
             status: { $nin: ["paid", "cancelled"] },
-            organization: req.user.organization,
+            ...organizationFilter(req.user),
         }).populate("sessions");
 
         // فلترة الفواتير التي لا تحتوي على جلسة نشطة من نفس النوع
@@ -3013,7 +3014,7 @@ export const payForItems = async (req, res) => {
         }
 
         // Find the bill
-        const bill = await Bill.findOne({ _id: req.params.id, organization: req.user.organization });
+        const bill = await Bill.findOne({ _id: req.params.id, ...organizationFilter(req.user) });
 
         if (!bill) {
             return res.status(404).json({
@@ -3101,7 +3102,7 @@ export const payForItems = async (req, res) => {
 
             // Update table status based on all unpaid bills
             if (bill.table) {
-                await updateTableStatusIfNeeded(bill.table, req.user.organization, req.io);
+                await updateTableStatusIfNeeded(bill.table, getOrganizationId(req.user), req.io);
             }
 
             // Populate bill data for response
@@ -3120,14 +3121,14 @@ export const payForItems = async (req, res) => {
 
             // Notify via Socket.IO
             if (req.io) {
-                req.io.notifyBillUpdate("payment-received", bill, req.user.organization);
+                req.io.notifyBillUpdate("payment-received", bill, getOrganizationId(req.user));
             }
 
             // Create notification for item payment
             try {
                 // Get user language and organization currency
                 const userLanguage = req.user.preferences?.language || 'ar';
-                const organization = await Organization.findById(req.user.organization).select('currency');
+                const organization = await Organization.findById(getOrganizationId(req.user)).select('currency');
                 const currency = organization?.currency || 'EGP';
                 
                 await NotificationService.createBillingNotification(
@@ -3201,7 +3202,7 @@ export const paySessionPartial = async (req, res) => {
         }
 
         // Find the bill
-        const bill = await Bill.findOne({ _id: req.params.id, organization: req.user.organization });
+        const bill = await Bill.findOne({ _id: req.params.id, ...organizationFilter(req.user) });
 
         if (!bill) {
             return res.status(404).json({
@@ -3259,7 +3260,7 @@ export const paySessionPartial = async (req, res) => {
 
             // Update table status based on all unpaid bills (Requirement 2.4)
             if (bill.table) {
-                await updateTableStatusIfNeeded(bill.table, req.user.organization, req.io);
+                await updateTableStatusIfNeeded(bill.table, getOrganizationId(req.user), req.io);
             }
 
             // Populate bill data for response
@@ -3278,14 +3279,14 @@ export const paySessionPartial = async (req, res) => {
 
             // Notify via Socket.IO (Requirement 8.2)
             if (req.io) {
-                req.io.notifyBillUpdate("payment-received", bill, req.user.organization);
+                req.io.notifyBillUpdate("payment-received", bill, getOrganizationId(req.user));
             }
 
             // Create notification for session payment
             try {
                 // Get user language and organization currency
                 const userLanguage = req.user.preferences?.language || 'ar';
-                const organization = await Organization.findById(req.user.organization).select('currency');
+                const organization = await Organization.findById(getOrganizationId(req.user)).select('currency');
                 const currency = organization?.currency || 'EGP';
                 
                 await NotificationService.createBillingNotification(
@@ -3338,7 +3339,7 @@ export const getBillAggregatedItems = async (req, res) => {
     try {
         const bill = await Bill.findOne({
             _id: req.params.id,
-            organization: req.user.organization,
+            ...organizationFilter(req.user),
         }).populate('orders').populate('sessions');
 
         if (!bill) {
@@ -3398,7 +3399,7 @@ export const addPartialPaymentAggregated = async (req, res) => {
             items: items
         });
 
-        const bill = await Bill.findOne({ _id: req.params.id, organization: req.user.organization }).populate("orders");
+        const bill = await Bill.findOne({ _id: req.params.id, ...organizationFilter(req.user) }).populate("orders");
 
         if (!bill) {
             return res.status(404).json({
@@ -3592,7 +3593,7 @@ export const addPartialPaymentAggregated = async (req, res) => {
 
         // Update table status SYNCHRONOUSLY before response (fix stale status)
         if (bill.table) {
-            await updateTableStatusIfNeeded(bill.table, req.user.organization, req.io);
+            await updateTableStatusIfNeeded(bill.table, getOrganizationId(req.user), req.io);
         }
 
         // Populate للاستجابة
@@ -3650,7 +3651,7 @@ export const updateBillAggregatedItems = async (req, res) => {
             return res.status(400).json({ success: false, message: "معرف الفاتورة غير صحيح" });
         }
 
-        const bill = await Bill.findOne({ _id: id, organization: req.user.organization }).populate("orders");
+        const bill = await Bill.findOne({ _id: id, ...organizationFilter(req.user) }).populate("orders");
         if (!bill) {
             return res.status(404).json({ success: false, message: "الفاتورة غير موجودة" });
         }
@@ -3679,7 +3680,7 @@ export const updateBillAggregatedItems = async (req, res) => {
         const menuItemIds = finalRaw.filter((it) => it.menuItem).map((it) => it.menuItem);
         const menuItemsMap = new Map();
         if (menuItemIds.length > 0) {
-            const menuItems = await MenuItem.find({ _id: { $in: menuItemIds }, organization: req.user.organization }).lean();
+            const menuItems = await MenuItem.find({ _id: { $in: menuItemIds }, ...organizationFilter(req.user) }).lean();
             menuItems.forEach((mi) => menuItemsMap.set(mi._id.toString(), mi));
         }
 
@@ -3851,7 +3852,7 @@ export const updateBillAggregatedItems = async (req, res) => {
             // Clear all orders
             for (const ord of existingOrders) {
                 await Order.deleteOne({ _id: ord._id });
-                try { await createTombstone("Order", ord._id, req.user.organization, ord.table); } catch {}
+                try { await createTombstone("Order", ord._id, getOrganizationId(req.user), ord.table); } catch {}
             }
             bill.orders = [];
         } else if (existingOrders.length === 0) {
@@ -3865,7 +3866,7 @@ export const updateBillAggregatedItems = async (req, res) => {
                 subtotal,
                 finalAmount: subtotal,
                 totalCost,
-                organization: req.user.organization,
+                organization: getOrganizationId(req.user),
                 createdBy: req.user._id,
                 status: "pending",
                 instanceId,
@@ -3890,7 +3891,7 @@ export const updateBillAggregatedItems = async (req, res) => {
             // Delete other orders (inventory already adjusted via delta, so no extra restore)
             for (let i = 1; i < sorted.length; i++) {
                 await Order.deleteOne({ _id: sorted[i]._id });
-                try { await createTombstone("Order", sorted[i]._id, req.user.organization, sorted[i].table); } catch {}
+                try { await createTombstone("Order", sorted[i]._id, getOrganizationId(req.user), sorted[i].table); } catch {}
             }
             bill.orders = [primary._id];
         }
@@ -3952,7 +3953,7 @@ export const updateBillAggregatedItems = async (req, res) => {
             for (const [itemId, details] of currentOrderItems) {
                 if (!existingIds.has(itemId)) {
                     let menuItemId = null;
-                    const mi = await MenuItem.findOne({ name: details.name, organization: req.user.organization }).select("_id");
+                    const mi = await MenuItem.findOne({ name: details.name, ...organizationFilter(req.user) }).select("_id");
                     if (mi) menuItemId = mi._id;
                     bill.itemPayments.push({
                         orderId: details.orderId,
@@ -4046,7 +4047,7 @@ export const updateBillAggregatedItems = async (req, res) => {
         if (req.io) {
             try {
                 req.io.emit("bill-update", { type: "updated", bill });
-                req.io.notifyBillUpdate?.("updated", bill, req.user.organization);
+                req.io.notifyBillUpdate?.("updated", bill, getOrganizationId(req.user));
             } catch {}
         }
 

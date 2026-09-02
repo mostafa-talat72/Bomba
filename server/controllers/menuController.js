@@ -1,3 +1,4 @@
+import { getOrganizationId, organizationFilter } from '../utils/organization.js';
 import MenuItem from "../models/MenuItem.js";
 import MenuCategory from "../models/MenuCategory.js";
 import { writeToAtlas } from "../utils/atlasWrite.js";
@@ -99,7 +100,7 @@ export const getAllMenuItems = async (req, res) => {
         } = req.query;
 
         // تحقق من وجود المستخدم والمنشأة
-        if (!req.user || !req.user.organization) {
+        if (!req.user || !getOrganizationId(req.user)) {
             return res.status(401).json({
                 success: false,
                 message:
@@ -117,7 +118,7 @@ export const getAllMenuItems = async (req, res) => {
         if (search) {
             filter.$text = { $search: search };
         }
-        filter.organization = req.user.organization;
+        filter.organization = getOrganizationId(req.user);
 
         // Build sort object
         const sort = {};
@@ -128,7 +129,7 @@ export const getAllMenuItems = async (req, res) => {
 
         // Execute query
         const menuItems = await MenuItem.find({
-            organization: req.user.organization,
+            ...organizationFilter(req.user),
             ...filter,
         })
             .sort(sort)
@@ -218,7 +219,7 @@ export const getMenuItemById = async (req, res) => {
         const { id } = req.params;
         const menuItem = await MenuItem.findOne({
             _id: id,
-            organization: req.user.organization,
+            ...organizationFilter(req.user),
         })
             .populate("category", "name section")
             .populate("category.section", "name")
@@ -316,7 +317,7 @@ export const createMenuItem = async (req, res) => {
         const menuItemData = {
             ...req.body,
             createdBy: req.user.id,
-            organization: req.user.organization,
+            organization: getOrganizationId(req.user),
         };
 
         const menuItem = new MenuItem(menuItemData);
@@ -350,7 +351,7 @@ export const createMenuItem = async (req, res) => {
         setImmediate(async () => {
             try {
                 if (req.io) {
-                    try { req.io.notifyMenuUpdate("created", menuItem, req.user.organization); } catch (e) {}
+                    try { req.io.notifyMenuUpdate("created", menuItem, getOrganizationId(req.user)); } catch (e) {}
                 }
             } catch (bgError) {
                 Logger.error('Background tasks failed for createMenuItem:', bgError);
@@ -430,7 +431,7 @@ export const updateMenuItem = async (req, res) => {
         };
 
         const menuItem = await MenuItem.findOneAndUpdate(
-            { _id: id, organization: req.user.organization },
+            { _id: id, ...organizationFilter(req.user) },
             updateData,
             {
                 new: true,
@@ -480,7 +481,7 @@ export const updateMenuItem = async (req, res) => {
                 await menuItem.populate("updatedBy", "name");
 
                 if (req.io) {
-                    try { req.io.notifyMenuUpdate("updated", menuItem, req.user.organization); } catch (e) {}
+                    try { req.io.notifyMenuUpdate("updated", menuItem, getOrganizationId(req.user)); } catch (e) {}
                 }
             } catch (bgError) {
                 Logger.error('Background tasks failed for updateMenuItem:', bgError);
@@ -509,7 +510,7 @@ export const deleteMenuItem = async (req, res) => {
 
         const menuItem = await MenuItem.findOne({
             _id: id,
-            organization: req.user.organization,
+            ...organizationFilter(req.user),
         });
 
         if (!menuItem) {
@@ -535,7 +536,7 @@ export const deleteMenuItem = async (req, res) => {
         setImmediate(async () => {
             try {
                 if (req.io) {
-                    try { req.io.notifyMenuUpdate("deleted", { _id: id }, req.user.organization); } catch (e) {}
+                    try { req.io.notifyMenuUpdate("deleted", { _id: id }, getOrganizationId(req.user)); } catch (e) {}
                 }
             } catch (bgError) {
                 Logger.error('Background tasks failed for deleteMenuItem:', bgError);
@@ -718,7 +719,7 @@ export const toggleMenuItemAvailability = async (req, res) => {
         setImmediate(async () => {
             try {
                 if (req.io) {
-                    try { req.io.notifyMenuUpdate("updated", menuItem, req.user.organization); } catch (e) {}
+                    try { req.io.notifyMenuUpdate("updated", menuItem, getOrganizationId(req.user)); } catch (e) {}
                 }
             } catch (bgError) {
                 Logger.error('Background tasks failed for toggleMenuItemAvailability:', bgError);
@@ -740,7 +741,7 @@ export const getMenuCategories = async (req, res) => {
         // Get categories from MenuCategory model instead of MenuItem
         const MenuCategory = (await import("../models/MenuCategory.js")).default;
         const categories = await MenuCategory.find({
-            organization: req.user?.organization || null,
+            ...organizationFilter(req.user),
         })
             .populate("section", "name")
             .sort({ sortOrder: 1, name: 1 });
@@ -766,7 +767,7 @@ export const getPopularMenuItems = async (req, res) => {
         const popularItems = await MenuItem.find({
             isPopular: true,
             isAvailable: true,
-            organization: req.user?.organization,
+            ...organizationFilter(req.user),
         })
             .sort({ sortOrder: 1, name: 1 })
             .limit(parseInt(limit))
@@ -809,7 +810,7 @@ export const updateMenuItemsOrder = async (req, res) => {
         await Promise.all(updatePromises);
 
         if (req.io) {
-            try { req.io.notifyMenuUpdate("updated", null, req.user.organization); } catch (e) {}
+            try { req.io.notifyMenuUpdate("updated", null, getOrganizationId(req.user)); } catch (e) {}
         }
 
         res.json({
@@ -876,7 +877,7 @@ export const mergeMenuItems = async (req, res) => {
             });
         }
 
-        if (!req.user || !req.user.organization) {
+        if (!req.user || !getOrganizationId(req.user)) {
             return res.status(401).json({
                 success: false,
                 message: "يجب تسجيل الدخول للوصول إلى عناصر المنيو",
@@ -885,7 +886,7 @@ export const mergeMenuItems = async (req, res) => {
 
         const items = await MenuItem.find({
             _id: { $in: uniqueIds },
-            organization: req.user.organization,
+            ...organizationFilter(req.user),
         });
 
         if (items.length !== uniqueIds.length) {
@@ -934,7 +935,7 @@ export const mergeMenuItems = async (req, res) => {
         writeToAtlas('menuitems', 'upsert', baseItem.toObject ? baseItem.toObject() : baseItem, { _id: baseItem._id });
 
         if (idsToDelete.length > 0) {
-            await MenuItem.deleteMany({ _id: { $in: idsToDelete }, organization: req.user.organization });
+            await MenuItem.deleteMany({ _id: { $in: idsToDelete }, ...organizationFilter(req.user) });
             // Fire-and-forget Atlas deletes
             idsToDelete.forEach(id => {
                 writeToAtlas('menuitems', 'delete', null, { _id: id });
@@ -949,8 +950,8 @@ export const mergeMenuItems = async (req, res) => {
         await baseItem.populate("updatedBy", "name");
 
         if (req.io) {
-            try { req.io.notifyMenuUpdate("updated", baseItem, req.user.organization); } catch (e) {}
-            try { idsToDelete.forEach(id => req.io.notifyMenuUpdate("deleted", { _id: id }, req.user.organization)); } catch (e) {}
+            try { req.io.notifyMenuUpdate("updated", baseItem, getOrganizationId(req.user)); } catch (e) {}
+            try { idsToDelete.forEach(id => req.io.notifyMenuUpdate("deleted", { _id: id }, getOrganizationId(req.user))); } catch (e) {}
         }
 
         return res.json({
@@ -966,5 +967,4 @@ export const mergeMenuItems = async (req, res) => {
         });
     }
 };
-
 

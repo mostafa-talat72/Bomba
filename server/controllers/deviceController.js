@@ -1,3 +1,4 @@
+import { getOrganizationId, organizationFilter } from '../utils/organization.js';
 import Device from "../models/Device.js";
 import Session from "../models/Session.js";
 import DeviceValidator from "../services/validation/deviceValidator.js";
@@ -36,7 +37,7 @@ const deviceController = {
 
             // Execute query with pagination
             const devices = await Device.find({
-                organization: req.user.organization,
+                ...organizationFilter(req.user),
                 ...query,
             })
                 .sort(sort)
@@ -44,7 +45,7 @@ const deviceController = {
                 .skip((page - 1) * limit);
 
             const total = await Device.countDocuments({
-                organization: req.user.organization,
+                ...organizationFilter(req.user),
                 ...query,
             });
 
@@ -72,7 +73,7 @@ const deviceController = {
 
             const device = await Device.findOne({
                 _id: id,
-                organization: req.user.organization,
+                ...organizationFilter(req.user),
             });
 
             if (!device) {
@@ -155,7 +156,7 @@ const deviceController = {
 
             const existingDevice = await Device.findOne({
                 number: deviceNumber,
-                organization: req.user.organization,
+                ...organizationFilter(req.user),
             });
             if (existingDevice) {
                 return res.status(400).json({
@@ -214,7 +215,7 @@ const deviceController = {
                 type: type || "playstation",
                 status: status || "available",
                 controllers: controllers || 2,
-                organization: req.user.organization,
+                organization: getOrganizationId(req.user),
             };
             
             if ((type === "computer") && hourlyRate !== undefined) {
@@ -276,7 +277,7 @@ const deviceController = {
             setImmediate(async () => {
                 try {
                     if (req.io) {
-                        try { req.io.notifyDeviceUpdate("created", device, req.user.organization); } catch (e) {}
+                        try { req.io.notifyDeviceUpdate("created", device, getOrganizationId(req.user)); } catch (e) {}
                     }
                 } catch (bgError) {
                     Logger.error('Background tasks failed for createDevice:', bgError);
@@ -344,7 +345,7 @@ const deviceController = {
             // Check if device exists
             const existingDevice = await Device.findOne({
                 _id: id,
-                organization: req.user.organization,
+                ...organizationFilter(req.user),
             });
             if (!existingDevice) {
                 return res.status(404).json({
@@ -361,7 +362,7 @@ const deviceController = {
                 const deviceNumber = `${prefix}${number}`;
                 const numberConflict = await Device.findOne({
                     number: deviceNumber,
-                    organization: req.user.organization,
+                    ...organizationFilter(req.user),
                     _id: { $ne: id },
                 });
                 if (numberConflict) {
@@ -443,7 +444,7 @@ const deviceController = {
             }
 
 const device = await Device.findOneAndUpdate(
-            { _id: id, organization: req.user.organization },
+            { _id: id, ...organizationFilter(req.user) },
             updateData,
             {
                 new: true,
@@ -476,7 +477,7 @@ const device = await Device.findOneAndUpdate(
             setImmediate(async () => {
                 try {
                     if (req.io) {
-                        try { req.io.notifyDeviceUpdate("updated", device, req.user.organization); } catch (e) {}
+                        try { req.io.notifyDeviceUpdate("updated", device, getOrganizationId(req.user)); } catch (e) {}
                     }
                 } catch (bgError) {
                     Logger.error('Background tasks failed for updateDevice:', bgError);
@@ -516,7 +517,7 @@ const device = await Device.findOneAndUpdate(
             }
 
 const device = await Device.findOneAndUpdate(
-            { _id: id, organization: req.user.organization },
+            { _id: id, ...organizationFilter(req.user) },
             { status },
             { new: true, runValidators: true }
         );
@@ -553,7 +554,7 @@ const device = await Device.findOneAndUpdate(
         setImmediate(async () => {
             try {
                 if (req.io) {
-                    try { req.io.notifyDeviceUpdate("updated", device, req.user.organization); } catch (e) {}
+                    try { req.io.notifyDeviceUpdate("updated", device, getOrganizationId(req.user)); } catch (e) {}
                 }
             } catch (bgError) {
                 Logger.error('Background tasks failed for updateDeviceStatus:', bgError);
@@ -585,7 +586,7 @@ const device = await Device.findOneAndUpdate(
             // Check if device exists
             const device = await Device.findOne({
                 _id: id,
-                organization: req.user.organization,
+                ...organizationFilter(req.user),
             });
             if (!device) {
                 return res.status(404).json({
@@ -611,7 +612,7 @@ const device = await Device.findOneAndUpdate(
             // Check if device has any sessions (for data integrity)
             const sessionCount = await Session.countDocuments({
                 deviceId: device._id,
-                organization: req.user.organization,
+                ...organizationFilter(req.user),
             });
 
             if (sessionCount > 0) {
@@ -624,7 +625,7 @@ const device = await Device.findOneAndUpdate(
 
 const deletedDevice = await Device.findOneAndDelete({
             _id: id,
-            organization: req.user.organization,
+            ...organizationFilter(req.user),
         });
 
             // Fire-and-forget Atlas write for delete
@@ -645,7 +646,7 @@ const deletedDevice = await Device.findOneAndDelete({
             setImmediate(async () => {
                 try {
                     if (req.io) {
-                        try { req.io.notifyDeviceUpdate("deleted", { _id: id }, req.user.organization); } catch (e) {}
+                        try { req.io.notifyDeviceUpdate("deleted", { _id: id }, getOrganizationId(req.user)); } catch (e) {}
                     }
                 } catch (bgError) {
                     Logger.error('Background tasks failed for deleteDevice:', bgError);
@@ -756,7 +757,7 @@ const deletedDevice = await Device.findOneAndDelete({
 const result = await Device.updateMany(
             {
                 _id: { $in: deviceIds },
-                organization: req.user.organization,
+                ...organizationFilter(req.user),
             },
             updates,
             { runValidators: true }
@@ -785,7 +786,7 @@ const result = await Device.updateMany(
             setImmediate(async () => {
                 try {
                     if (req.io) {
-                        try { req.io.notifyDeviceUpdate("updated", null, req.user.organization); } catch (e) {}
+                        try { req.io.notifyDeviceUpdate("updated", null, getOrganizationId(req.user)); } catch (e) {}
                     }
                 } catch (bgError) {
                     Logger.error('Background tasks failed for bulkUpdateDevices:', bgError);
