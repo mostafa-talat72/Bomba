@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import {
   ShoppingCart, Plus, Edit, Trash2, X, Printer,
   Settings, AlertTriangle, Search, CheckCircle, DollarSign,
@@ -78,6 +78,7 @@ const Tables: React.FC = () => {
   const hasLoadedDataRef = useRef(false);
   const paymentActionLockRef = useRef(false);
   const backgroundSyncRef = useRef(false);
+  const billRepairRef = useRef(new Map<string, number>());
 
   // ── Unified modal state ──────────────────────────────────────────────────
   const [showUnifiedTableModal, setShowUnifiedTableModal] = useState(false);
@@ -1171,6 +1172,60 @@ const loadInitialData = async () => {
     return bill.customerName;
   };
 
+  const repairBill = useCallback(async (bill: Bill, tableId?: string) => {
+    const billId = String(bill._id || bill.id || '');
+    const lastRepair = billRepairRef.current.get(billId) || 0;
+    if (!billId || Date.now() - lastRepair < 300000) return;
+    billRepairRef.current.set(billId, Date.now());
+    try {
+      const result = await api.recalculateBillTotals(billId);
+      if (result.success && result.data) {
+        setBills(prev => prev.map(current =>
+          String(current._id || current.id) === billId
+            ? { ...current, ...result.data }
+            : current
+        ));
+        if (result.data.status === 'paid' && tableId) {
+          setTables(prev => prev.map(current =>
+            String(current._id || current.id) === tableId ? { ...current, status: 'empty' } : current
+          ));
+        }
+      }
+    } catch (error) {
+      billRepairRef.current.delete(billId);
+      console.warn('Failed to repair bill totals:', error);
+    }
+  }, [setBills, setTables]);
+
+  const repairTableBills = useCallback(async (table: Table) => {
+    const tableId = String(table._id || (table as any).id || '');
+    if (!tableId) return;
+    const tableBills = bills.filter((bill: any) => {
+      const billTableId = String(bill.table?._id || bill.table?.id || bill.table || '');
+      return billTableId === tableId && bill.status !== 'cancelled';
+    });
+    const activeBills = tableBills.filter((bill: any) =>
+      ['draft', 'partial', 'overdue'].includes(bill.status)
+    );
+
+    if (activeBills.length === 0) {
+      if ((table as any).status === 'occupied' || (table as any).status === 'reserved') {
+        try {
+          const result = await api.syncTableStatus(tableId);
+          const status = result.data?.status || 'empty';
+          setTables(prev => prev.map(current =>
+            String(current._id || current.id) === tableId ? { ...current, status } : current
+          ));
+        } catch (error) {
+          console.warn('Failed to sync table status:', error);
+        }
+      }
+      return;
+    }
+
+    await Promise.all(activeBills.map((bill: any) => repairBill(bill, tableId)));
+  }, [bills, repairBill, setBills]);
+
   // ── Order functions ───────────────────────────────────────────────────────
   const handleTableClick = (table: Table) => {
     setSelectedTable(table);
@@ -1183,6 +1238,7 @@ const loadInitialData = async () => {
     // بناء السجل عند الفتح — الـ useEffect سيحدثه تلقائياً بعد كده
     const tableId = table._id || (table as any).id;
     buildActivityLog(tableId);
+    void repairTableBills(table);
   };
 
   // دالة البحث والفتح بعد بناء الرقم (تعتمد على activeTables + handleTableClick)
@@ -1830,6 +1886,7 @@ const loadInitialData = async () => {
 
   // ── Billing functions ─────────────────────────────────────────────────────
   const handlePaymentClick = async (bill: Bill) => {
+    void repairBill(bill, String((bill.table as any)?._id || (bill.table as any)?.id || bill.table || ''));
     // افتح المودال فوراً بالبيانات الموجودة
     setSelectedBill(bill);
     setOriginalAmount(bill.remaining?.toString() || '0');
@@ -2345,7 +2402,10 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
   const stableTableClick = useCallback((tb: Table) => { lastFocusedTableRef.current = tb; handleTableClick(tb); }, []);
   const stableQuickOrder = useCallback((tb: Table, e: React.MouseEvent) => { lastFocusedTableRef.current = tb; handleQuickOrder(tb, e); }, []);
   const stableQuickBilling = useCallback((tb: Table, e: React.MouseEvent) => { lastFocusedTableRef.current = tb; handleQuickBilling(tb, e); }, [handleQuickBilling]);
-  const stableHoverChange = useCallback((tb: Table | null) => { lastFocusedTableRef.current = tb; }, []);
+  const stableHoverChange = useCallback((tb: Table | null) => {
+    lastFocusedTableRef.current = tb;
+    if (tb) void repairTableBills(tb);
+  }, [repairTableBills]);
 
   const handleQuickPrint = useCallback(async (tb: Table, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -3361,9 +3421,7 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
                               (p: any) => p.sessionId === sessId || p.session === sessId
                             );
                             const spPaid      = Number(sp?.paidAmount) || 0;
-                            const spRemaining = isActive
-                              ? Math.max(0, cost - spPaid)
-                              : sp ? Math.max(0, sp.remainingAmount !== undefined && sp.remainingAmount !== null ? Number(sp.remainingAmount) : (cost - spPaid)) : Math.max(0, cost - spPaid);
+                            const spRemaining = Math.max(0, cost - spPaid);
 
                             return (
                               <div key={sessId || idx}
@@ -3749,11 +3807,16 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
             <div className="p-3 sm:p-6 space-y-3 sm:space-y-4">
               {selectedBill.sessions?.map((session: any) => {
                 const sid = session._id || session.id;
-                const sp = selectedBill.sessionPayments?.find(p => p.sessionId === sid);
+                const sp = selectedBill.sessionPayments?.find((p: any) =>
+                  String(p.sessionId?._id || p.sessionId?.id || p.sessionId) === String(sid)
+                );
                 const isActive = session.status === 'active';
                 const totalCost = sp?.sessionCost || getSessionCost(session);
-                const paidAmt = sp?.paidAmount || 0;
-                const remainingAmt = isActive ? totalCost - paidAmt : (sp?.remainingAmount !== undefined ? sp.remainingAmount : totalCost - paidAmt);
+                const recordedPaid = Array.isArray((sp as any)?.payments)
+                  ? (sp as any).payments.reduce((sum: number, payment: any) => sum + (Number(payment?.amount) || 0), 0)
+                  : 0;
+                const paidAmt = Math.min(totalCost, Math.max(Number(sp?.paidAmount) || 0, recordedPaid));
+                const remainingAmt = Math.max(0, totalCost - paidAmt);
                 const isFullyPaid = !isActive && remainingAmt <= 0;
                 return (
                   <div key={sid} className={`border-2 rounded-xl p-3 sm:p-4 ${isFullyPaid ? 'border-green-300 dark:border-green-700 bg-green-50 dark:bg-green-900/20' : isActive ? 'border-blue-300 dark:border-blue-700 bg-blue-50 dark:bg-blue-900/20' : 'border-orange-300 dark:border-orange-700 bg-orange-50 dark:bg-orange-900/20'}`}>

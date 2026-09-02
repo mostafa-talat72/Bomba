@@ -5,6 +5,7 @@ import Bill from "../models/Bill.js";
 import { writeToAtlas } from "../utils/atlasWrite.js";
 import Logger from "../middleware/logger.js";
 import dualDatabaseManager from "../config/dualDatabaseManager.js";
+import { updateTableStatusIfNeeded } from "../utils/tableUtils.js";
 
 // Get all tables
 export const getAllTables = async (req, res) => {
@@ -182,6 +183,26 @@ export const getTableStatus = async (req, res) => {
         res.status(500).json({
             success: false,
             message: "خطأ في جلب حالة الطاولة",
+            error: error.message,
+        });
+    }
+};
+
+export const syncTableStatus = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const table = await Table.findOne({ _id: id, ...organizationFilter(req.user) }).select("_id status");
+        if (!table) {
+            return res.status(404).json({ success: false, message: "الطاولة غير موجودة" });
+        }
+
+        const status = await updateTableStatusIfNeeded(table._id, getOrganizationId(req.user), req.io);
+        return res.json({ success: true, data: { tableId: table._id, status: status || "empty" } });
+    } catch (error) {
+        Logger.error("خطأ في مزامنة حالة الطاولة", error);
+        return res.status(500).json({
+            success: false,
+            message: "خطأ في مزامنة حالة الطاولة",
             error: error.message,
         });
     }
