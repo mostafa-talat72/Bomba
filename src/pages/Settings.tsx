@@ -93,6 +93,11 @@ interface OrganizationData {
   printSettings: {
     printQRCode: boolean;
     promptOrderPrintSections?: boolean;
+    printerType?: string;
+    printerDevice?: string;
+    printerIP?: string;
+    printerPort?: number;
+    openCashDrawer?: boolean;
     openCashDrawerOnPayment?: boolean;
     autoPrintOnPayment?: boolean;
     charactersPerLine?: number;
@@ -1319,8 +1324,7 @@ const Settings: FC = () => {
                         ref={folderInputRef}
                         type="file"
                         style={{ display: 'none' }}
-                        webkitdirectory
-                        directory
+                        {...({ webkitdirectory: true, directory: true } as React.InputHTMLAttributes<HTMLInputElement> & { webkitdirectory?: boolean; directory?: boolean })}
                         onChange={handleFolderInputChange}
                       />
                       <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">

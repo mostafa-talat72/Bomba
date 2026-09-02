@@ -79,6 +79,7 @@ const Tables: React.FC = () => {
 
   // ── Unified modal state ──────────────────────────────────────────────────
   const [showUnifiedTableModal, setShowUnifiedTableModal] = useState(false);
+  const [activeTab, setActiveTab] = useState<'orders' | 'billing' | 'sessions'>('orders');
 
   // ── Orders state ─────────────────────────────────────────────────────────
   const [loading, setLoading] = useState(false);
@@ -1641,7 +1642,7 @@ const loadInitialData = async () => {
         return i;
       }
       return i.menuItem === id ? { ...i, notes } : i;
-    }), []));
+    })), []);
 
   const removeItemFromOrder = useCallback((id: string, variant?: string | null) =>
     setCurrentOrderItems(p => {
@@ -3526,8 +3527,8 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
         setNewTableNumber={setNewTableNumber}
         setShowSessionPaymentModal={setShowSessionPaymentModal}
         setShowPaymentModal={setShowPaymentModal}
-        setActiveTab={setActiveTab}
-        setActiveTab3={setActiveTab3}
+        setActiveTab={(tab: string) => setActiveTab(tab as 'orders' | 'billing' | 'sessions')}
+        setActiveTab3={(tab: string) => setActiveTab3(tab as 'orders' | 'billing' | 'sessions' | 'log')}
         getSessionCost={getSessionCost}
         formatCurrency={formatCurrency}
         showNotification={showNotification}

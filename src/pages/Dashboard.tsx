@@ -47,7 +47,7 @@ const Dashboard = () => {
   const { t, i18n } = useTranslation();
   const { isRTL } = useLanguage();
   const { formatDate, formatTime } = useOrganization();
-  const { sessions, orders, bills, isAuthenticated, getRecentActivity, refreshData } = useApp();
+  const { sessions, orders, bills, isAuthenticated, getRecentActivity, refreshData, fetchBills, fetchOrders, fetchSessions, fetchTables } = useApp();
   const [dashboardStats, setDashboardStats] = useState<DashboardStats | null>(null);
   const [recentActivity, setRecentActivity] = useState<RecentActivity[]>([]);
   const [loading, setLoading] = useState(true);

@@ -68,8 +68,9 @@ i18n
 for (const lng of preloadLocales) {
     const mod = localeModules[`./locales/${lng}.json`];
     if (mod) {
-        mod().then((resources: Record<string, Record<string, string>>) => {
-            i18n.addResourceBundle(lng, 'translation', resources.default || resources, true, true);
+        mod().then((resources) => {
+            const loadedResources = resources as Record<string, Record<string, string>>;
+            i18n.addResourceBundle(lng, 'translation', loadedResources.default || loadedResources, true, true);
         });
     }
 }

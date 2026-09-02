@@ -50,7 +50,7 @@ const ResetPassword: React.FC = () => {
     setMessage(null);
 
     try {
-      const response = await resetPassword(token, password, email || undefined);
+      const response = await resetPassword(token, password);
 
       if (response.success) {
         setMessage({ type: 'success', text: response.message || t('auth.resetPasswordSuccess') });

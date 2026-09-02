@@ -9,6 +9,7 @@ function getCtx(): AudioContext | null {
       ctx = new AC();
     }
     const audioContext = ctx;
+    if (!audioContext) return null;
     if (audioContext.state === 'suspended') audioContext.resume();
     return audioContext;
   } catch { return null; }

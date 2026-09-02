@@ -6,7 +6,7 @@ import api from '../../services/api';
 import dayjs from 'dayjs';
 import { numberOnlyInputProps, integerOnlyInputProps } from '../../utils/inputHelpers';
 import { useTranslation } from 'react-i18next';
-import { useLanguage } from '../../contexts/LanguageContext';
+import { useLanguage } from '../../context/LanguageContext';
 import arEG from 'antd/locale/ar_EG';
 import enUS from 'antd/locale/en_US';
 import frFR from 'antd/locale/fr_FR';
@@ -335,7 +335,7 @@ const AttendanceManagement: React.FC<AttendanceManagementProps> = ({ preSelected
         const dateStr = date.format('YYYY-MM-DD');
         
         // تحديد الأوقات حسب الوضع المختار (فقط للحالات التي تحتاج أوقات)
-        let checkIn = null, checkOut = null;
+        let checkIn: any = null, checkOut: any = null;
         
         if (needsTimes) {
           if (timeMode === 'same') {
