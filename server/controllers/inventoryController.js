@@ -1,3 +1,4 @@
+import { getOrganizationId, organizationFilter } from '../utils/organization.js';
 import InventoryItem from "../models/InventoryItem.js";
 import WarehouseItem from "../models/WarehouseItem.js";
 import Logger from "../middleware/logger.js";
@@ -12,7 +13,7 @@ import { writeToAtlas } from "../utils/atlasWrite.js";
 export const getInventoryItems = async (req, res) => {
     try {
         // Validate user organization
-        if (!req.user || !req.user.organization) {
+        if (!req.user || !getOrganizationId(req.user)) {
             return res.status(400).json({
                 success: false,
                 message: "معلومات المستخدم غير صحيحة",
@@ -30,7 +31,7 @@ export const getInventoryItems = async (req, res) => {
         if (search) {
             query.name = { $regex: search, $options: "i" };
         }
-        query.organization = req.user.organization;
+        query.organization = getOrganizationId(req.user);
 
         // جلب كل العناصر بلا limit مع projection لتقليل الحمولة (stockMovements تُجلب في التفاصيل فقط)
         let itemsQuery = InventoryItem.find(query)
@@ -69,7 +70,7 @@ export const getInventoryItems = async (req, res) => {
 export const getInventoryItem = async (req, res) => {
     try {
         // Validate user organization
-        if (!req.user || !req.user.organization) {
+        if (!req.user || !getOrganizationId(req.user)) {
             return res.status(400).json({
                 success: false,
                 message: "معلومات المستخدم غير صحيحة",
@@ -105,7 +106,7 @@ export const getInventoryItem = async (req, res) => {
 // @access  Private
 export const getItemByBarcode = async (req, res) => {
     try {
-        if (!req.user || !req.user.organization) {
+        if (!req.user || !getOrganizationId(req.user)) {
             return res.status(400).json({
                 success: false,
                 message: "معلومات المستخدم غير صحيحة",
@@ -122,7 +123,7 @@ export const getItemByBarcode = async (req, res) => {
 
         const item = await InventoryItem.findOne({
             barcode: barcode,
-            organization: req.user.organization,
+            ...organizationFilter(req.user),
             isActive: true,
         }).populate("recipe.ingredient", "name unit");
 
@@ -182,7 +183,7 @@ export const createInventoryItem = async (req, res) => {
         }
 
         // Validate user organization
-        if (!req.user || !req.user.organization) {
+        if (!req.user || !getOrganizationId(req.user)) {
             return res.status(400).json({
                 success: false,
                 message: "معلومات المستخدم غير صحيحة",
@@ -207,7 +208,7 @@ export const createInventoryItem = async (req, res) => {
             recipe,
             expiryDate,
             warehouseItem: warehouseItem || null,
-            organization: req.user.organization,
+            organization: getOrganizationId(req.user),
         });
 
         // إذا كان هناك كمية أولية، أضفها كحركة مخزون
@@ -229,7 +230,7 @@ export const createInventoryItem = async (req, res) => {
             const inventoryCategoryName = "مخزون";
             let inventoryCategory = await CostCategory.findOne({
                 name: inventoryCategoryName,
-                organization: req.user.organization,
+                ...organizationFilter(req.user),
             });
 
             // If no inventory category exists, skip cost creation
@@ -250,7 +251,7 @@ export const createInventoryItem = async (req, res) => {
                     paymentMethod: "cash",
                     vendor: supplier || undefined,
                     createdBy: req.user._id,
-                    organization: req.user.organization,
+                    organization: getOrganizationId(req.user),
                     notes: `إضافة تلقائية عند إضافة منتج جديد للمخزون (${name})`,
                 });
             }
@@ -289,7 +290,7 @@ export const createInventoryItem = async (req, res) => {
                 // Emit inventory update on every create (not only low-stock) — لحظية لكل الأجهزة
                 if (req.io) {
                     try {
-                        req.io.notifyInventoryUpdate(item, req.user.organization);
+                        req.io.notifyInventoryUpdate(item, getOrganizationId(req.user));
                     } catch (ioError) {
                         Logger.error("فشل في إرسال إشعار تحديث المخزون", {
                             error: ioError.message,
@@ -335,7 +336,7 @@ export const createInventoryItem = async (req, res) => {
 export const updateInventoryItem = async (req, res) => {
     try {
         // Validate user organization
-        if (!req.user || !req.user.organization) {
+        if (!req.user || !getOrganizationId(req.user)) {
             return res.status(400).json({
                 success: false,
                 message: "معلومات المستخدم غير صحيحة",
@@ -420,7 +421,7 @@ export const updateInventoryItem = async (req, res) => {
                 // Emit inventory update on every update (لحظية)
                 if (req.io) {
                     try {
-                        req.io.notifyInventoryUpdate(item, req.user.organization);
+                        req.io.notifyInventoryUpdate(item, getOrganizationId(req.user));
                     } catch (ioError) {
                         Logger.error("فشل في إرسال إشعار تحديث المخزون", {
                             error: ioError.message,
@@ -466,7 +467,7 @@ export const updateInventoryItem = async (req, res) => {
 export const updateStock = async (req, res) => {
     try {
         // Validate user organization
-        if (!req.user || !req.user.organization) {
+        if (!req.user || !getOrganizationId(req.user)) {
             return res.status(400).json({
                 success: false,
                 message: "معلومات المستخدم غير صحيحة",
@@ -727,7 +728,7 @@ export const updateStock = async (req, res) => {
                         const inventoryCategoryName = "مخزون";
                         const inventoryCategory = await CostCategory.findOne({
                             name: inventoryCategoryName,
-                            organization: req.user.organization,
+                            ...organizationFilter(req.user),
                         });
 
                         // Only create cost if category exists
@@ -746,7 +747,7 @@ export const updateStock = async (req, res) => {
                                 date: date || new Date(),
                                 vendor: supplier || item.supplier || "",
                                 createdBy: req.user._id,
-                                organization: req.user.organization,
+                                organization: getOrganizationId(req.user),
                                 notes: reason || "",
                                 status: costStatus,
                             });
@@ -789,7 +790,7 @@ export const updateStock = async (req, res) => {
                 // Emit inventory update on every stock change (لحظية — ليس فقط low-stock)
                 if (req.io) {
                     try {
-                        req.io.notifyInventoryUpdate(item, req.user.organization);
+                        req.io.notifyInventoryUpdate(item, getOrganizationId(req.user));
                     } catch (ioError) {
                         Logger.error("فشل في إرسال إشعار تحديث المخزون", {
                             error: ioError.message,
@@ -815,7 +816,7 @@ export const updateStock = async (req, res) => {
 export const getLowStockItems = async (req, res) => {
     try {
         // Validate user organization
-        if (!req.user || !req.user.organization) {
+        if (!req.user || !getOrganizationId(req.user)) {
             return res.status(400).json({
                 success: false,
                 message: "معلومات المستخدم غير صحيحة",
@@ -847,7 +848,7 @@ export const getLowStockItems = async (req, res) => {
 export const getStockMovements = async (req, res) => {
     try {
         // Validate user organization
-        if (!req.user || !req.user.organization) {
+        if (!req.user || !getOrganizationId(req.user)) {
             return res.status(400).json({
                 success: false,
                 message: "معلومات المستخدم غير صحيحة",
@@ -910,7 +911,7 @@ export const getStockMovements = async (req, res) => {
 export const deleteInventoryItem = async (req, res) => {
     try {
         // Validate user organization
-        if (!req.user || !req.user.organization) {
+        if (!req.user || !getOrganizationId(req.user)) {
             return res.status(400).json({
                 success: false,
                 message: "معلومات المستخدم غير صحيحة",
@@ -944,7 +945,7 @@ export const deleteInventoryItem = async (req, res) => {
             try {
                 if (req.io) {
                     try {
-                        req.io.notifyInventoryUpdate(item, req.user.organization);
+                        req.io.notifyInventoryUpdate(item, getOrganizationId(req.user));
                     } catch (ioError) {
                         Logger.error("فشل في إرسال إشعار تحديث المخزون عند الحذف", {
                             error: ioError.message,
@@ -969,7 +970,7 @@ export const deleteInventoryItem = async (req, res) => {
 // @access  Private
 export const deleteStockMovement = async (req, res) => {
     try {
-        if (!req.user || !req.user.organization) {
+        if (!req.user || !getOrganizationId(req.user)) {
             return res.status(400).json({
                 success: false,
                 message: "معلومات المستخدم غير صحيحة",
@@ -1154,7 +1155,7 @@ export const deleteStockMovement = async (req, res) => {
 // @access  Private
 export const updateStockMovement = async (req, res) => {
     try {
-        if (!req.user || !req.user.organization) {
+        if (!req.user || !getOrganizationId(req.user)) {
             return res.status(400).json({
                 success: false,
                 message: "معلومات المستخدم غير صحيحة",

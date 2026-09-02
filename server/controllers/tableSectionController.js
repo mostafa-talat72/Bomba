@@ -1,3 +1,4 @@
+import { getOrganizationId, organizationFilter } from '../utils/organization.js';
 import TableSection from "../models/TableSection.js";
 import Table from "../models/Table.js";
 import { writeToAtlas } from "../utils/atlasWrite.js";
@@ -7,7 +8,7 @@ import dualDatabaseManager from "../config/dualDatabaseManager.js";
 // Get all table sections
 export const getAllTableSections = async (req, res) => {
     try {
-        if (!req.user || !req.user.organization) {
+        if (!req.user || !getOrganizationId(req.user)) {
             return res.status(401).json({
                 success: false,
                 message: "يجب تسجيل الدخول للوصول إلى أقسام الطاولات",
@@ -15,7 +16,7 @@ export const getAllTableSections = async (req, res) => {
         }
 
         const sections = await TableSection.find({
-            organization: req.user.organization,
+            ...organizationFilter(req.user),
         })
             .sort({ sortOrder: 1, name: 1 })
             .populate("createdBy", "name")
@@ -41,7 +42,7 @@ export const getTableSectionById = async (req, res) => {
         const { id } = req.params;
         const section = await TableSection.findOne({
             _id: id,
-            organization: req.user.organization,
+            ...organizationFilter(req.user),
         })
             .populate("createdBy", "name")
             .populate("updatedBy", "name");
@@ -82,7 +83,7 @@ export const createTableSection = async (req, res) => {
             name: name.trim(),
             description: description?.trim() || null,
             sortOrder: sortOrder || 0,
-            organization: req.user.organization,
+            organization: getOrganizationId(req.user),
             createdBy: req.user.id,
         };
 
@@ -114,7 +115,7 @@ export const createTableSection = async (req, res) => {
                 await section.populate("createdBy", "name");
 
                 if (req.io) {
-                    try { req.io.notifyTableSectionUpdate("created", section, req.user.organization); } catch (e) {}
+                    try { req.io.notifyTableSectionUpdate("created", section, getOrganizationId(req.user)); } catch (e) {}
                 }
             } catch (bgError) {
                 Logger.error('Background tasks failed for createTableSection:', bgError);
@@ -145,7 +146,7 @@ export const updateTableSection = async (req, res) => {
         if (isActive !== undefined) updateData.isActive = isActive;
 
         const section = await TableSection.findOneAndUpdate(
-            { _id: id, organization: req.user.organization },
+            { _id: id, ...organizationFilter(req.user) },
             updateData,
             { new: true, runValidators: true }
         );
@@ -184,7 +185,7 @@ export const updateTableSection = async (req, res) => {
                 await section.populate("updatedBy", "name");
 
                 if (req.io) {
-                    try { req.io.notifyTableSectionUpdate("updated", section, req.user.organization); } catch (e) {}
+                    try { req.io.notifyTableSectionUpdate("updated", section, getOrganizationId(req.user)); } catch (e) {}
                 }
             } catch (bgError) {
                 Logger.error('Background tasks failed for updateTableSection:', bgError);
@@ -207,7 +208,7 @@ export const deleteTableSection = async (req, res) => {
         // التحقق من وجود طاولات مرتبطة بهذا القسم
         const tablesCount = await Table.countDocuments({
             section: id,
-            organization: req.user.organization,
+            ...organizationFilter(req.user),
         });
 
         if (tablesCount > 0) {
@@ -219,7 +220,7 @@ export const deleteTableSection = async (req, res) => {
 
         const section = await TableSection.findOneAndDelete({
             _id: id,
-            organization: req.user.organization,
+            ...organizationFilter(req.user),
         });
 
         if (!section) {
@@ -242,7 +243,7 @@ export const deleteTableSection = async (req, res) => {
         setImmediate(async () => {
             try {
                 if (req.io) {
-                    try { req.io.notifyTableSectionUpdate("deleted", { _id: id }, req.user.organization); } catch (e) {}
+                    try { req.io.notifyTableSectionUpdate("deleted", { _id: id }, getOrganizationId(req.user)); } catch (e) {}
                 }
             } catch (bgError) {
                 Logger.error('Background tasks failed for deleteTableSection:', bgError);
@@ -256,6 +257,5 @@ export const deleteTableSection = async (req, res) => {
         });
     }
 };
-
 
 

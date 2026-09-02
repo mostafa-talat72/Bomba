@@ -1,3 +1,4 @@
+import { getOrganizationId, organizationFilter } from '../utils/organization.js';
 import MenuCategory from "../models/MenuCategory.js";
 import MenuItem from "../models/MenuItem.js";
 import { writeToAtlas } from "../utils/atlasWrite.js";
@@ -7,7 +8,7 @@ import dualDatabaseManager from "../config/dualDatabaseManager.js";
 // Get all menu categories
 export const getAllMenuCategories = async (req, res) => {
     try {
-        if (!req.user || !req.user.organization) {
+        if (!req.user || !getOrganizationId(req.user)) {
             return res.status(401).json({
                 success: false,
                 message: "يجب تسجيل الدخول للوصول إلى فئات المنيو",
@@ -17,7 +18,7 @@ export const getAllMenuCategories = async (req, res) => {
         const { section } = req.query;
 
         const filter = {
-            organization: req.user.organization,
+            ...organizationFilter(req.user),
         };
 
         if (section) {
@@ -50,7 +51,7 @@ export const getMenuCategoryById = async (req, res) => {
         const { id } = req.params;
         const category = await MenuCategory.findOne({
             _id: id,
-            organization: req.user.organization,
+            ...organizationFilter(req.user),
         })
             .populate("section", "name")
             .populate("createdBy", "name")
@@ -100,7 +101,7 @@ export const createMenuCategory = async (req, res) => {
             description: description?.trim() || null,
             section: section,
             sortOrder: sortOrder || 0,
-            organization: req.user.organization,
+            organization: getOrganizationId(req.user),
             createdBy: req.user.id,
         };
 
@@ -162,7 +163,7 @@ export const updateMenuCategory = async (req, res) => {
         if (isActive !== undefined) updateData.isActive = isActive;
 
         const category = await MenuCategory.findOneAndUpdate(
-            { _id: id, organization: req.user.organization },
+            { _id: id, ...organizationFilter(req.user) },
             updateData,
             { new: true, runValidators: true }
         );
@@ -222,7 +223,7 @@ export const deleteMenuCategory = async (req, res) => {
         // التحقق من وجود عناصر مرتبطة بهذه الفئة
         const itemsCount = await MenuItem.countDocuments({
             category: id,
-            organization: req.user.organization,
+            ...organizationFilter(req.user),
         });
 
         if (itemsCount > 0) {
@@ -234,7 +235,7 @@ export const deleteMenuCategory = async (req, res) => {
 
         const category = await MenuCategory.findOneAndDelete({
             _id: id,
-            organization: req.user.organization,
+            ...organizationFilter(req.user),
         });
 
         if (!category) {
@@ -269,4 +270,3 @@ export const deleteMenuCategory = async (req, res) => {
         });
     }
 };
-
