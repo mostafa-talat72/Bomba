@@ -238,6 +238,8 @@ const Tables: React.FC = () => {
     const sec = tableSections.find((s: any) => s._id === raw || s.id === raw);
     return sec ? String(sec.id) : String(raw);
   };
+  const getSectionKey = (section: any): string =>
+    String(section?._id || section?.id || '');
 
   // #7 - Activity log tab
   const [activeTab3, setActiveTab3] = useState<'orders' | 'billing' | 'log' | 'sessions'>('orders');
@@ -924,7 +926,7 @@ const loadInitialData = async () => {
     const active = tableSections
       .filter(s => s.isActive !== false)
       .sort((a, b) => a.sortOrder - b.sortOrder);
-    const activeIds = new Set(active.map(s => String(s._id || s.id)));
+    const activeIds = new Set(active.map(getSectionKey));
     const orphanTables = tables.filter(table => {
       if (table.isActive === false) return false;
       const raw = typeof table.section === 'object'
@@ -963,7 +965,7 @@ const loadInitialData = async () => {
   // #6 — filtered sections for section-tab
   const filteredSectionsForDisplay = useMemo(() => {
     if (activeSectionFilter === 'all') return activeTableSections;
-    return activeTableSections.filter(s => s.id === activeSectionFilter);
+    return activeTableSections.filter(s => getSectionKey(s) === activeSectionFilter);
   }, [activeTableSections, activeSectionFilter]);
 
   const tableStats = useMemo(() => {
@@ -977,7 +979,7 @@ const loadInitialData = async () => {
     const map: Record<string, Table[]> = {};
     activeTables.forEach(table => {
       const rawSec = typeof table.section === 'string' ? table.section : (table.section as TableSection)?._id || (table.section as TableSection)?.id;
-      const sec = rawSec && tableSections.some(s => String(s._id || s.id) === String(rawSec) && s.isActive !== false)
+      const sec = rawSec && tableSections.some(s => getSectionKey(s) === String(rawSec) && s.isActive !== false)
         ? String(rawSec)
         : '__unassigned__';
       if (sec) {
@@ -2566,13 +2568,14 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
               <span className={"text-[10px] px-1.5 py-0.5 rounded-full font-bold " + (activeSectionFilter === 'all' ? 'bg-white/25 text-white' : 'bg-blue-100 dark:bg-gray-700 text-blue-700 dark:text-gray-300')}>{activeTables.length}</span>
             </button>
             {activeTableSections.map(sec => {
-              const cnt = (getTablesBySection[sec.id] || []).length;
-              const occ = (getTablesBySection[sec.id] || []).filter(tb => tableStatuses[String((tb as any)._id || (tb as any).id)]?.hasUnpaid).length;
+              const sectionKey = getSectionKey(sec);
+              const cnt = (getTablesBySection[sectionKey] || []).length;
+              const occ = (getTablesBySection[sectionKey] || []).filter(tb => tableStatuses[String((tb as any)._id || (tb as any).id)]?.hasUnpaid).length;
               if (cnt === 0) return null;
-              const isActive = activeSectionFilter === sec.id;
+              const isActive = activeSectionFilter === sectionKey;
               return (
-                <button key={sec.id}
-                  onClick={() => { scrollToTop(); setActiveSectionFilter(sec.id); }}
+                <button key={sectionKey}
+                  onClick={() => { scrollToTop(); setActiveSectionFilter(sectionKey); }}
                   className={"flex-shrink-0 w-20 sm:w-24 h-20 sm:h-24 flex flex-col items-center justify-center gap-1 rounded-xl border-2 text-xs sm:text-sm font-bold transition-all " + (isActive
                     ? 'bg-blue-600 border-blue-700 text-white shadow-md scale-[1.02]'
                     : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:border-blue-400 hover:shadow-sm')}>
@@ -2635,10 +2638,11 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
           ) : (
             <div className="space-y-2 sm:space-y-3">
               {filteredSectionsForDisplay.map(section => {
-                const shownTables = (getTablesBySection[section.id] || []).filter(matchesTableFilter);
+                const sectionKey = getSectionKey(section);
+                const shownTables = (getTablesBySection[sectionKey] || []).filter(matchesTableFilter);
                 if (shownTables.length === 0) return null;
                 return (
-                  <div key={section.id} className="border-2 border-gray-200 dark:border-gray-700 rounded-xl p-2.5 sm:p-3 bg-gradient-to-br from-gray-50 to-white dark:from-gray-800 dark:to-gray-900 shadow-md">
+                  <div key={sectionKey} className="border-2 border-gray-200 dark:border-gray-700 rounded-xl p-2.5 sm:p-3 bg-gradient-to-br from-gray-50 to-white dark:from-gray-800 dark:to-gray-900 shadow-md">
                     <h3 className="text-base sm:text-lg font-bold text-gray-900 dark:text-gray-100 mb-2 sm:mb-3 flex items-center gap-2">
                       <div className="w-1 h-5 sm:h-6 bg-gradient-to-b from-blue-500 to-purple-500 rounded-full flex-shrink-0"></div>
                       <span className="truncate">{section.name}</span>
