@@ -999,6 +999,29 @@ export const createOrder = async (req, res) => {
             }
         }
 
+        // Link the order to its bill before responding.  This used to happen
+        // in the background job, leaving other clients with a stale bill for
+        // several seconds after the order had already appeared.
+        let realtimeBill = null;
+        if (billToUse) {
+            try {
+                const billDoc = await Bill.findById(billToUse);
+                if (billDoc) {
+                    if (!billDoc.orders.some((orderId) => String(orderId) === String(order._id))) {
+                        billDoc.orders.push(order._id);
+                    }
+                    await billDoc.calculateSubtotal();
+                    await billDoc.save();
+                    realtimeBill = await Bill.findById(billDoc._id)
+                        .populate('orders')
+                        .populate('sessions')
+                        .populate('table');
+                }
+            } catch (billError) {
+                Logger.error('خطأ في إضافة الطلب للفاتورة:', billError);
+            }
+        }
+
         // Fire-and-forget Atlas write
         writeToAtlas('orders', 'upsert', order.toObject ? order.toObject() : order, { _id: order._id });
 
@@ -1030,7 +1053,10 @@ export const createOrder = async (req, res) => {
                 req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('order:created', responseData);
                 req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('order:updated', responseData);
                 // also via helper for legacy hyphen events
-                try { req.io.notifyOrderUpdate("created", responseData, getOrganizationId(req.user)); } catch {}
+                try { req.io.notifyOrderUpdate("created", responseData, req.user.organization); } catch {}
+                if (realtimeBill) {
+                    try { req.io.notifyBillUpdate("updated", realtimeBill, req.user.organization); } catch {}
+                }
                 if (table) {
                     const tblData = { tableId: table, status: 'occupied' };
                     req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('table:statusChanged', tblData);
@@ -1069,28 +1095,7 @@ export const createOrder = async (req, res) => {
                     }, getOrganizationId(req.user));
                 }
 
-                // 2. Add order to bill if bill exists
-                if (billToUse) {
-                    try {
-                        const billDoc = await Bill.findById(billToUse);
-                        if (billDoc) {
-                            if (!billDoc.orders.includes(order._id)) {
-                                Logger.info(`✓ إضافة الطلب ${order.orderNumber} إلى الفاتورة ${billDoc.billNumber}`);
-                                billDoc.orders.push(order._id);
-                                billDoc.markModified('orders');
-                                await billDoc.save();
-                                Logger.info(`✓ تم حفظ الفاتورة وتحديث itemPayments`);
-                            } else {
-                                Logger.info(`⚠️ الطلب ${order.orderNumber} موجود بالفعل في الفاتورة ${billDoc.billNumber}`);
-                            }
-                            await billDoc.calculateSubtotal();
-                        }
-                    } catch (error) {
-                        Logger.error('خطأ في إضافة الطلب للفاتورة:', error);
-                    }
-                }
-
-                // 3. Create notification for new order
+                // 2. Create notification for new order
                 try {
                     const userLanguage = req.user.preferences?.language || 'ar';
                     await NotificationService.createOrderNotification(
@@ -1103,7 +1108,9 @@ export const createOrder = async (req, res) => {
                     // Ignore notification errors
                 }
 
-                // 4. Emit Socket.IO events (legacy — already emitted synchronously above for <100ms, keep for safety)
+                // 3. Emit the legacy order event again for clients that
+                // connected during the response (the bill was already emitted
+                // synchronously above).
                 if (req.io) {
                     try {
                         req.io.notifyOrderUpdate("created", responseData, getOrganizationId(req.user));
