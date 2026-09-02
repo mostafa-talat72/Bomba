@@ -241,6 +241,17 @@ const Tables: React.FC = () => {
   const getSectionKey = (section: any): string =>
     String(section?._id || section?.id || '');
 
+  const getCanonicalTableSectionKey = (table: any): string => {
+    const raw = typeof table?.section === 'object'
+      ? table.section?._id || table.section?.id
+      : table?.section;
+    if (!raw) return '__unassigned__';
+    const section = tableSections.find(s =>
+      String(s?._id || s?.id || '') === String(raw)
+    );
+    return section ? getSectionKey(section) : '__unassigned__';
+  };
+
   // #7 - Activity log tab
   const [activeTab3, setActiveTab3] = useState<'orders' | 'billing' | 'log' | 'sessions'>('orders');
   const [tableActivityLog, setTableActivityLog] = useState<Array<{type: string; message: string; time: Date; color: string}>>([]);
@@ -929,10 +940,7 @@ const loadInitialData = async () => {
     const activeIds = new Set(active.map(getSectionKey));
     const orphanTables = tables.filter(table => {
       if (table.isActive === false) return false;
-      const raw = typeof table.section === 'object'
-        ? table.section?._id || table.section?.id
-        : table.section;
-      return !raw || !activeIds.has(String(raw));
+      return !activeIds.has(getCanonicalTableSectionKey(table));
     });
     return orphanTables.length > 0
       ? [...active, { id: '__unassigned__', _id: '__unassigned__', name: 'غير مصنف', sortOrder: Number.MAX_SAFE_INTEGER, isActive: true }]
@@ -978,10 +986,7 @@ const loadInitialData = async () => {
   const getTablesBySection = useMemo(() => {
     const map: Record<string, Table[]> = {};
     activeTables.forEach(table => {
-      const rawSec = typeof table.section === 'string' ? table.section : (table.section as TableSection)?._id || (table.section as TableSection)?.id;
-      const sec = rawSec && tableSections.some(s => getSectionKey(s) === String(rawSec) && s.isActive !== false)
-        ? String(rawSec)
-        : '__unassigned__';
+      const sec = getCanonicalTableSectionKey(table);
       if (sec) {
         if (!map[sec]) map[sec] = [];
         map[sec].push(table);
