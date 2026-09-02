@@ -1,5 +1,6 @@
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import mongoose from 'mongoose';
 
 const execPromise = promisify(exec);
 let SerialPort = null;
@@ -227,26 +228,45 @@ class PrinterDetectionService {
       throw new Error('Organization is required');
     }
 
-    if (!organization.devicePrinters) {
-      organization.devicePrinters = [];
-    }
-
-    // إزالة أي إدخال سابق لنفس المستخدم/الجهاز
-    organization.devicePrinters = organization.devicePrinters.filter(
-      p => !(p.userId?.toString() === userId?.toString() && p.deviceId === deviceId)
-    );
-
-    // إضافة الإدخال الجديد
-    organization.devicePrinters.push({
-      userId,
+    // Use one atomic update so concurrent device registrations cannot conflict
+    // with Mongoose's optimistic versioning on the organization document.
+    const OrganizationModel = organization.constructor;
+    const printer = {
+      _id: new mongoose.Types.ObjectId(),
+      userId: new mongoose.Types.ObjectId(userId),
       deviceId,
       printerPath,
       printerName,
       lastUsed: new Date()
-    });
+    };
 
-    await organization.save();
-    return organization;
+    return OrganizationModel.findByIdAndUpdate(
+      organization._id,
+      [{
+        $set: {
+          devicePrinters: {
+            $concatArrays: [
+              {
+                $filter: {
+                  input: { $ifNull: ['$devicePrinters', []] },
+                  as: 'savedPrinter',
+                  cond: {
+                    $not: [{
+                      $and: [
+                        { $eq: ['$$savedPrinter.userId', printer.userId] },
+                        { $eq: ['$$savedPrinter.deviceId', printer.deviceId] }
+                      ]
+                    }]
+                  }
+                }
+              },
+              [printer]
+            ]
+          }
+        }
+      }],
+      { new: true }
+    );
   }
 
   /**

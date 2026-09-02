@@ -1,3 +1,4 @@
+import { getOrganizationId, organizationFilter } from '../utils/organization.js';
 import Table from "../models/Table.js";
 import Order from "../models/Order.js";
 import Bill from "../models/Bill.js";
@@ -8,7 +9,7 @@ import dualDatabaseManager from "../config/dualDatabaseManager.js";
 // Get all tables
 export const getAllTables = async (req, res) => {
     try {
-        if (!req.user || !req.user.organization) {
+        if (!req.user || !getOrganizationId(req.user)) {
             return res.status(401).json({
                 success: false,
                 message: "يجب تسجيل الدخول للوصول إلى الطاولات",
@@ -17,7 +18,7 @@ export const getAllTables = async (req, res) => {
 
         const { section } = req.query;
         const query = {
-            organization: req.user.organization,
+            ...organizationFilter(req.user),
         };
 
         if (section) {
@@ -50,7 +51,7 @@ export const getTableById = async (req, res) => {
         const { id } = req.params;
         const table = await Table.findOne({
             _id: id,
-            organization: req.user.organization,
+            ...organizationFilter(req.user),
         })
             .populate("section", "name")
             .populate("createdBy", "name")
@@ -83,7 +84,7 @@ export const getTableStatus = async (req, res) => {
 
         const table = await Table.findOne({
             _id: id,
-            organization: req.user.organization,
+            ...organizationFilter(req.user),
         });
 
         if (!table) {
@@ -96,7 +97,7 @@ export const getTableStatus = async (req, res) => {
         // Find all orders for this table that are not cancelled
         const orders = await Order.find({
             table: table._id,
-            organization: req.user.organization,
+            ...organizationFilter(req.user),
             status: { $ne: "cancelled" },
         })
         .populate({
@@ -108,7 +109,7 @@ export const getTableStatus = async (req, res) => {
         // Also check for orders with tableNumber (old format) - for backward compatibility
         const oldFormatOrders = await Order.find({
             tableNumber: table.number,
-            organization: req.user.organization,
+            ...organizationFilter(req.user),
             status: { $ne: "cancelled" },
         })
         .populate({
@@ -122,7 +123,7 @@ export const getTableStatus = async (req, res) => {
         // Find all bills (including playstation bills) linked to this table
         const bills = await Bill.find({
             table: table._id,
-            organization: req.user.organization,
+            ...organizationFilter(req.user),
             status: { $nin: ["paid", "cancelled"] },
         }).populate({
             path: "sessions",
@@ -132,7 +133,7 @@ export const getTableStatus = async (req, res) => {
         // Also check for bills with tableNumber (old format)
         const oldFormatBills = await Bill.find({
             tableNumber: table.number,
-            organization: req.user.organization,
+            ...organizationFilter(req.user),
             status: { $nin: ["paid", "cancelled"] },
         }).populate({
             path: "sessions",
@@ -210,7 +211,7 @@ export const createTable = async (req, res) => {
         const existingTable = await Table.findOne({
             number,
             section,
-            organization: req.user.organization,
+            ...organizationFilter(req.user),
         });
 
         if (existingTable) {
@@ -224,7 +225,7 @@ export const createTable = async (req, res) => {
         const tableData = {
             number: typeof number === 'string' ? number.trim() : number,
             section,
-            organization: req.user.organization,
+            organization: getOrganizationId(req.user),
             createdBy: req.user.id,
         };
 
@@ -238,11 +239,11 @@ export const createTable = async (req, res) => {
         // ── Real-time emit (<100ms) — before response ──
         if (req.io) {
             try {
-                const orgId = req.user.organization?._id || req.user.organization;
+                const orgId = getOrganizationId(req.user);
                 const orgStr = String(orgId);
                 req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('table:created', table);
                 req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('table:updated', table);
-                try { req.io.notifyTableUpdate("created", table, req.user.organization); } catch {}
+                try { req.io.notifyTableUpdate("created", table, getOrganizationId(req.user)); } catch {}
             } catch {}
         }
 
@@ -269,7 +270,7 @@ export const createTable = async (req, res) => {
                 await table.populate("createdBy", "name");
 
                 if (req.io) {
-                    try { req.io.notifyTableUpdate("created", table, req.user.organization); } catch (e) {}
+                    try { req.io.notifyTableUpdate("created", table, getOrganizationId(req.user)); } catch (e) {}
                 }
             } catch (bgError) {
                 Logger.error('Background tasks failed for createTable:', bgError);
@@ -322,7 +323,7 @@ export const updateTable = async (req, res) => {
                 _id: { $ne: id },
                 number: finalNumber,
                 section: finalSection,
-                organization: req.user.organization,
+                ...organizationFilter(req.user),
             });
 
             if (existingTable) {
@@ -334,7 +335,7 @@ export const updateTable = async (req, res) => {
         }
 
         const table = await Table.findOneAndUpdate(
-            { _id: id, organization: req.user.organization },
+            { _id: id, ...organizationFilter(req.user) },
             updateData,
             { new: true, runValidators: true }
         );
@@ -352,10 +353,10 @@ export const updateTable = async (req, res) => {
         // ── Real-time emit (<100ms) ──
         if (req.io) {
             try {
-                const orgId = req.user.organization?._id || req.user.organization;
+                const orgId = getOrganizationId(req.user);
                 const orgStr = String(orgId);
                 req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('table:updated', table);
-                try { req.io.notifyTableUpdate("updated", table, req.user.organization); } catch {}
+                try { req.io.notifyTableUpdate("updated", table, getOrganizationId(req.user)); } catch {}
             } catch {}
         }
 
@@ -384,7 +385,7 @@ export const updateTable = async (req, res) => {
                 await table.populate("updatedBy", "name");
 
                 if (req.io) {
-                    try { req.io.notifyTableUpdate("updated", table, req.user.organization); } catch (e) {}
+                    try { req.io.notifyTableUpdate("updated", table, getOrganizationId(req.user)); } catch (e) {}
                 }
             } catch (bgError) {
                 Logger.error('Background tasks failed for updateTable:', bgError);
@@ -415,7 +416,7 @@ export const deleteTable = async (req, res) => {
 
         const activeOrders = await Order.countDocuments({
             table: table._id,
-            organization: req.user.organization,
+            ...organizationFilter(req.user),
             status: { $ne: "cancelled" },
         });
 
@@ -428,7 +429,7 @@ export const deleteTable = async (req, res) => {
 
         const deletedTable = await Table.findOneAndDelete({
             _id: id,
-            organization: req.user.organization,
+            ...organizationFilter(req.user),
         });
 
         if (!deletedTable) {
@@ -444,11 +445,11 @@ export const deleteTable = async (req, res) => {
         // ── Real-time emit (<100ms) ──
         if (req.io) {
             try {
-                const orgId = req.user.organization?._id || req.user.organization;
+                const orgId = getOrganizationId(req.user);
                 const orgStr = String(orgId);
                 req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('table:deleted', { _id: id });
                 req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('table:updated', { _id: id, _deleted: true });
-                try { req.io.notifyTableUpdate("deleted", { _id: id }, req.user.organization); } catch {}
+                try { req.io.notifyTableUpdate("deleted", { _id: id }, getOrganizationId(req.user)); } catch {}
             } catch {}
         }
 
@@ -462,7 +463,7 @@ export const deleteTable = async (req, res) => {
         setImmediate(async () => {
             try {
                 if (req.io) {
-                    try { req.io.notifyTableUpdate("deleted", { _id: id }, req.user.organization); } catch (e) {}
+                    try { req.io.notifyTableUpdate("deleted", { _id: id }, getOrganizationId(req.user)); } catch (e) {}
                 }
             } catch (bgError) {
                 Logger.error('Background tasks failed for deleteTable:', bgError);
@@ -481,7 +482,7 @@ export const deleteTable = async (req, res) => {
 // Also reused by auto-fix jobs; efficient: uses Bill.exists + bulkWrite
 export const fixTableStatuses = async (req, res) => {
     try {
-        const tables = await Table.find({ organization: req.user.organization }).select("_id number status organization").lean();
+        const tables = await Table.find({ ...organizationFilter(req.user) }).select("_id number status organization").lean();
 
         let occupied = 0;
         let empty = 0;
@@ -528,7 +529,7 @@ export const fixTableStatuses = async (req, res) => {
 
             // Emit updates for fixed tables — scoped to org, both event names
             if (req.io) {
-                const orgId = req.user.organization?._id || req.user.organization;
+                const orgId = getOrganizationId(req.user);
                 const orgStr = orgId ? String(orgId) : null;
                 for (const e of emitQueue) {
                     try {
@@ -536,7 +537,7 @@ export const fixTableStatuses = async (req, res) => {
                         if (orgStr) {
                             req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit("table-status-update", payload);
                             req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit("table:statusChanged", payload);
-                            try { req.io.notifyTableStatusUpdate(payload, req.user.organization); } catch {}
+                            try { req.io.notifyTableStatusUpdate(payload, getOrganizationId(req.user)); } catch {}
                         } else {
                             req.io.emit("table-status-update", payload);
                         }
@@ -565,6 +566,3 @@ export const fixTableStatuses = async (req, res) => {
         });
     }
 };
-
-
-

@@ -1,6 +1,6 @@
 import { Bill, Order, Session, ItemPayment, SessionPayment } from '../services/api';
 import { aggregateItemsWithPayments, AggregatedItem } from './billAggregation';
-import { formatDecimal, formatCurrency as formatCurrencyUtil, getCurrencySymbol, getDisplayNumber } from './formatters';
+import { formatDecimal, getCurrencySymbol, getDisplayNumber } from './formatters';
 import QRCode from 'qrcode';
 import { api } from '../services/api';
 import { getLocaleFromLanguage } from './localeMapper';
@@ -410,8 +410,8 @@ export const buildBillPrintHTML = async (
           font-size: 11px; 
           color: #000; 
           font-weight: 600;
-          width: auto;
-          max-width: auto;
+          width: 80mm;
+          max-width: 80mm;
           text-align: center;
           direction: ${dir};
         }
@@ -635,7 +635,7 @@ export const buildBillPrintHTML = async (
             margin: 0; 
             padding: 0; 
             font-weight: 600;
-            width: auto;
+            width: 80mm;
           }
           .no-print { display: none !important; }
           .items-table {
@@ -655,7 +655,7 @@ export const buildBillPrintHTML = async (
         
         @media screen {
           body {
-            max-width: auto;
+            max-width: 80mm;
             margin: 0 auto;
             background: #fff;
           }
@@ -804,19 +804,42 @@ export const printBill = async (
   fallbackOrganizationName?: string,
   language: string = 'ar',
   t: TFunction = ((key: string) => key) as TFunction,
-  tableSectionName?: string
+  tableSectionName?: string,
+  drawerMode: 'bill' | 'payment' = 'bill'
 ) => {
   const isElectron = typeof window !== 'undefined' && !!((window as any).bombaDesktop?.isDesktop || (window as any).electronAPI);
   try {
+    if (isElectron && (window as any).bombaDesktop?.directPrint) {
+      const receiptHTML = await buildBillPrintHTML(bill, fallbackOrganizationName, language, t, tableSectionName);
+      const printResponse = await (window as any).bombaDesktop.directPrint(receiptHTML);
+      if (!printResponse?.success) {
+        throw new Error(printResponse?.message || 'Desktop print failed');
+      }
+
+      const organization = typeof bill.organization === 'object' ? bill.organization : undefined;
+      const settingName = drawerMode === 'payment' ? 'openCashDrawerOnPayment' : 'openCashDrawer';
+      const shouldOpenDrawer = organization?.printSettings?.[settingName] !== false;
+      const drawerResponse = shouldOpenDrawer
+        ? await api.autoDetectAndOpenCashDrawer(drawerMode, bill.organization)
+        : { success: true };
+      if (!drawerResponse?.success && !drawerResponse?.disabled) {
+        console.warn('Bill printed, but cash drawer could not be opened:', drawerResponse?.message);
+      }
+      const successMsg = language === 'ar' ? 'تمت طباعة الفاتورة بنجاح' : 'Bill printed successfully';
+      if ((window as any).showNotification) (window as any).showNotification(successMsg, 'success');
+      return;
+    }
+
     // استخدام الاكتشاف التلقائي للطابعة الحرارية
     // بدلاً من الاستدعاء المباشر للـ API
     const directPrint = api.autoDetectAndPrintBill({ 
       bill, 
       organization: bill.organization, 
       language, 
-      tableSectionName 
+      tableSectionName,
+      drawerMode
     });
-    const timeout = new Promise<never>((_, reject) => setTimeout(() => reject(new Error('print-timeout')), 900));
+    const timeout = new Promise<never>((_, reject) => setTimeout(() => reject(new Error('print-timeout')), 15000));
     const response: any = await Promise.race([directPrint, timeout]);
     if (response?.success) {
       const successMsg = language === 'ar' 
@@ -857,43 +880,14 @@ export const printBill = async (
   const isDesktopApp = typeof window !== 'undefined' && (window as any).bombaDesktop?.isDesktop;
   
   if (isDesktopApp) {
-    // On Electron, use direct print without preview
     try {
-      const printFrame = document.createElement('iframe');
-      printFrame.style.position = 'absolute';
-      printFrame.style.top = '-1000px';
-      printFrame.style.left = '-1000px';
-      printFrame.style.width = '0';
-      printFrame.style.height = '0';
-      printFrame.style.border = 'none';
-        
-      document.body.appendChild(printFrame);
-        
-      const frameDoc = printFrame.contentDocument || printFrame.contentWindow?.document;
-      if (frameDoc) {
-        frameDoc.open();
-        frameDoc.write(receiptHTML);
-        frameDoc.close();
-          
-        setTimeout(async () => {
-          try {
-            await (window as any).bombaDesktop.directPrint();
-            setTimeout(() => {
-              if (document.body.contains(printFrame)) {
-                document.body.removeChild(printFrame);
-              }
-            }, 100);
-            return;
-          } catch (error) {
-            console.error('Electron direct print error:', error);
-            if (document.body.contains(printFrame)) {
-              document.body.removeChild(printFrame);
-            }
-            fallbackToBrowserPrint(receiptHTML, language);
-          }
-        }, 100);
+      const printResponse = await (window as any).bombaDesktop.directPrint(receiptHTML);
+      if (printResponse?.success) {
+        const successMsg = language === 'ar' ? 'تمت طباعة الفاتورة بنجاح' : 'Bill printed successfully';
+        if ((window as any).showNotification) (window as any).showNotification(successMsg, 'success');
         return;
       }
+      console.warn('Electron direct print failed for bill:', printResponse?.message || 'unknown');
     } catch (error) {
       console.error('Electron direct print setup error:', error);
     }

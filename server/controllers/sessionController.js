@@ -1,3 +1,4 @@
+import { getOrganizationId, organizationFilter } from '../utils/organization.js';
 import mongoose from "mongoose";
 import Session from "../models/Session.js";
 import Device from "../models/Device.js";
@@ -18,7 +19,7 @@ import { updateTableStatusIfNeeded } from "../utils/tableUtils.js";
 function emitSessionInstant(req, session, bill, type = "updated") {
     if (!req.io) return;
     try {
-        const orgId = req.user?.organization?._id || req.user?.organization;
+        const orgId = getOrganizationId(req.user);
         if (!orgId) return;
         const orgStr = String(orgId);
         req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit(type === "started" ? 'session:created' : 'session:updated', session);
@@ -528,7 +529,7 @@ const sessionController = {
             const query = {};
             if (status) query.status = status;
             if (deviceType) query.deviceType = deviceType;
-            query.organization = req.user.organization;
+            query.organization = getOrganizationId(req.user);
             
             // Add date filtering if provided
             if (startDate || endDate) {
@@ -590,7 +591,7 @@ const sessionController = {
         try {
             const session = await Session.findOne({
                 _id: req.params.id,
-                organization: req.user.organization,
+                ...organizationFilter(req.user),
             })
                 .populate("createdBy", "name")
                 .populate("updatedBy", "name");
@@ -665,7 +666,7 @@ const sessionController = {
                 customerName: `${t('customer', userLanguage)} (${deviceName})`,
                 controllers: controllers || 1,
                 createdBy: req.user._id,
-                organization: req.user.organization,
+                organization: getOrganizationId(req.user),
             });
 
             // Get instanceId from header (web) or generate (desktop)
@@ -693,7 +694,7 @@ const sessionController = {
                 let tableNumber = null;
                 if (table) {
                     // Get table info for logging and customer name
-                    const tableDoc = await Table.findOne({ _id: table, organization: req.user.organization });
+                    const tableDoc = await Table.findOne({ _id: table, ...organizationFilter(req.user) });
                     tableNumber = tableDoc ? tableDoc.number : table;
                     
                     // إذا كانت الجلسة مرتبطة بطاولة، اسم العميل يكون اسم الطاولة
@@ -703,7 +704,7 @@ const sessionController = {
                     // OPTIMIZED: البحث عن فاتورة موجودة للطاولة باستخدام index
                     const existingBill = await Bill.findOne({
                         table: table,
-                        organization: req.user.organization,
+                        ...organizationFilter(req.user),
                         status: { $in: ['draft', 'partial', 'overdue'] }
                     })
                     .select('_id billNumber billType status orders sessions') // جلب الحقول الضرورية فقط
@@ -742,7 +743,7 @@ const sessionController = {
                         billType: billType,
                         status: "draft", // فاتورة مسودة حتى تنتهي الجلسة
                         createdBy: req.user._id,
-                        organization: req.user.organization,
+                        organization: getOrganizationId(req.user),
                         instanceId: instanceId,
                     };
 
@@ -843,7 +844,7 @@ const sessionController = {
                         // Create notification for session start
                         try {
                             const userLanguage = req.user.preferences?.language || 'ar';
-                            const organization = await Organization.findById(req.user.organization).select('currency');
+                            const organization = await Organization.findById(getOrganizationId(req.user)).select('currency');
                             const currency = organization?.currency || 'EGP';
                             
                             await NotificationService.createSessionNotification(
@@ -862,7 +863,7 @@ const sessionController = {
 
                         // Update device status to active
                         await Device.findOneAndUpdate(
-                            { _id: deviceId, organization: req.user.organization, status: { $ne: "active" } },
+                            { _id: deviceId, ...organizationFilter(req.user), status: { $ne: "active" } },
                             { status: "active" }
                         );
 
@@ -872,9 +873,9 @@ const sessionController = {
                         }
 
                         if (req.io) {
-                            try { req.io.notifySessionUpdate("started", session, req.user.organization); } catch (e) {}
-                            try { if (bill) req.io.notifyBillUpdate("updated", bill, req.user.organization); } catch (e) {}
-                            try { req.io.notifyTableStatusUpdate({ tableId: table || null }, req.user.organization); } catch (e) {}
+                            try { req.io.notifySessionUpdate("started", session, getOrganizationId(req.user)); } catch (e) {}
+                            try { if (bill) req.io.notifyBillUpdate("updated", bill, getOrganizationId(req.user)); } catch (e) {}
+                            try { req.io.notifyTableStatusUpdate({ tableId: table || null }, getOrganizationId(req.user)); } catch (e) {}
                         }
                     } catch (bgError) {
                         Logger.error('Background tasks failed for createSession:', bgError);
@@ -906,7 +907,7 @@ const sessionController = {
 
             const session = await Session.findOne({
                 _id: sessionId,
-                organization: req.user.organization,
+                ...organizationFilter(req.user),
             });
 
             if (!session) {
@@ -973,7 +974,7 @@ const sessionController = {
                     });
 
                     if (req.io) {
-                        try { req.io.notifySessionUpdate("controllers-changed", session, req.user.organization); } catch (e) {}
+                        try { req.io.notifySessionUpdate("controllers-changed", session, getOrganizationId(req.user)); } catch (e) {}
                     }
                 } catch (bgError) {
                     Logger.error('Background tasks failed for updateControllers:', bgError);
@@ -1013,7 +1014,7 @@ const sessionController = {
 
             const session = await Session.findOne({
                 _id: sessionId,
-                organization: req.user.organization,
+                ...organizationFilter(req.user),
             });
 
             if (!session) {
@@ -1180,12 +1181,12 @@ const sessionController = {
                     // إعادة حساب إجمالي الفاتورة
                     const sessionsInBill = await Session.find({ 
                         bill: bill._id,
-                        organization: req.user.organization 
+                        ...organizationFilter(req.user),
                     });
                     
                     const ordersInBill = await mongoose.model('Order').find({ 
                         bill: bill._id,
-                        organization: req.user.organization 
+                        ...organizationFilter(req.user),
                     });
                     
                     // حساب إجمالي الجلسات
@@ -1225,7 +1226,7 @@ const sessionController = {
             });
 
             if (req.io) {
-                try { req.io.notifySessionUpdate("updated", session, req.user.organization); } catch (e) {}
+                try { req.io.notifySessionUpdate("updated", session, getOrganizationId(req.user)); } catch (e) {}
             }
 
             res.json({
@@ -1251,7 +1252,7 @@ const sessionController = {
 
             const session = await Session.findOne({
                 _id: sessionId,
-                organization: req.user.organization,
+                ...organizationFilter(req.user),
             });
 
             if (!session) {
@@ -1369,7 +1370,7 @@ const sessionController = {
 
             const session = await Session.findOne({
                 _id: id,
-                organization: req.user.organization,
+                ...organizationFilter(req.user),
             }).populate("bill");
 
             if (!session) {
@@ -1472,7 +1473,7 @@ const sessionController = {
             const cappedIds = ids.slice(0, 100); // حد أقصى للأمان
             const sessions = await Session.find({
                 _id: { $in: cappedIds },
-                organization: req.user.organization,
+                ...organizationFilter(req.user),
                 status: "active",
             }).populate("bill", "_id");
 
@@ -1540,7 +1541,7 @@ const sessionController = {
 
             const session = await Session.findOne({
                 _id: id,
-                organization: req.user.organization,
+                ...organizationFilter(req.user),
             }).populate("bill");
 
             if (!session) {
@@ -1730,7 +1731,7 @@ const sessionController = {
                         billType: deviceType === "playstation" ? "playstation" : deviceType === "computer" ? "computer" : "cafe",
                         status: "partial",
                         createdBy: req.user._id,
-                        organization: req.user.organization,
+                        organization: getOrganizationId(req.user),
                         deviceNumber: updatedSession.deviceNumber, // Pass deviceNumber for bill number generation
                     };
 
@@ -1820,7 +1821,7 @@ const sessionController = {
                     // Create notification for session end
                     try {
                         const userLanguage = req.user.preferences?.language || 'ar';
-                        const organization = await Organization.findById(req.user.organization).select('currency');
+                        const organization = await Organization.findById(getOrganizationId(req.user)).select('currency');
                         const currency = organization?.currency || 'EGP';
                         
                         await NotificationService.createSessionNotification(
@@ -1900,7 +1901,7 @@ const sessionController = {
             }
 
             // Check if bill exists and is not paid/cancelled
-            const bill = await Bill.findOne({ _id: billId, organization: req.user.organization });
+            const bill = await Bill.findOne({ _id: billId, ...organizationFilter(req.user) });
             if (!bill) {
                 return res.status(404).json({
                     success: false,
@@ -1931,7 +1932,7 @@ const sessionController = {
                 controllers: controllers || 1,
                 createdBy: req.user._id,
                 bill: billId, // Link to existing bill
-                organization: req.user.organization,
+                organization: getOrganizationId(req.user),
             });
 
             // Save session
@@ -1963,7 +1964,7 @@ const sessionController = {
             try {
                 // Get user language and organization currency
                 const userLanguage = req.user.preferences?.language || 'ar';
-                const organization = await Organization.findById(req.user.organization).select('currency');
+                const organization = await Organization.findById(getOrganizationId(req.user)).select('currency');
                 const currency = organization?.currency || 'EGP';
                 
                 await NotificationService.createSessionNotification(
@@ -2015,7 +2016,7 @@ const sessionController = {
         try {
             const sessions = await Session.find({
                 status: "active",
-                organization: req.user.organization,
+                ...organizationFilter(req.user),
             })
                 .populate("createdBy", "name")
                 .populate({
@@ -2052,7 +2053,7 @@ const sessionController = {
             // Find the session
             const session = await Session.findOne({
                 _id: sessionId,
-                organization: req.user.organization,
+                ...organizationFilter(req.user),
             }).populate("bill");
 
             if (!session) {
@@ -2147,7 +2148,7 @@ const sessionController = {
                     billType: deviceType === "playstation" ? "playstation" : deviceType === "computer" ? "computer" : "cafe",
                     status: "draft",
                     createdBy: req.user._id,
-                    organization: req.user.organization,
+                    organization: getOrganizationId(req.user),
                     deviceNumber: session.deviceNumber, // Pass deviceNumber for bill number generation
                 });
 
@@ -2335,7 +2336,7 @@ const sessionController = {
 
             // Create notification
             try {
-                if (req.user && req.user.organization) {
+                if (req.user && getOrganizationId(req.user)) {
                     await NotificationService.createNotification({
                         type: "session",
                         category: "session",
@@ -2356,7 +2357,7 @@ const sessionController = {
             Logger.info("🧹 Scheduling automatic cleanup in background after unlinking...");
             
             // Run cleanup in background without blocking the response
-            performCleanupHelper(req.user.organization)
+            performCleanupHelper(getOrganizationId(req.user))
                 .then(cleanupResult => {
                     Logger.info(`✅ Background cleanup completed: ${cleanupResult.cleanedCount} references cleaned, ${cleanupResult.deletedBillsCount} bills deleted`);
                 })
@@ -2370,7 +2371,7 @@ const sessionController = {
             
             const allBillsWithSession = await Bill.find({
                 sessions: session._id,
-                organization: req.user.organization
+                ...organizationFilter(req.user),
             }).select('_id billNumber sessions orders');
             
             if (allBillsWithSession.length > 1) {
@@ -2398,7 +2399,7 @@ const sessionController = {
                             const ordersCount = updatedWrongBill.orders ? updatedWrongBill.orders.length : 0;
                             if (updatedWrongBill.sessions.length === 0 && ordersCount === 0) {
                                 const delId = updatedWrongBill._id;
-                                const delOrg = updatedWrongBill.organization || req.user.organization;
+                                const delOrg = updatedWrongBill.organization || getOrganizationId(req.user);
                                 await updatedWrongBill.deleteOne();
                                 try { await createTombstone('bills', delId, delOrg, req.user._id); } catch (e) {}
                                 Logger.info(`🗑️ Deleted empty bill ${wrongBill.billNumber} during emergency cleanup`);
@@ -2410,7 +2411,7 @@ const sessionController = {
                 // Verify again after cleanup
                 const finalCheck = await Bill.find({
                     sessions: session._id,
-                    organization: req.user.organization
+                    ...organizationFilter(req.user),
                 }).select('_id billNumber');
                 
                 if (finalCheck.length > 1) {
@@ -2467,7 +2468,7 @@ const sessionController = {
             // Find the session
             const session = await Session.findOne({
                 _id: sessionId,
-                organization: req.user.organization,
+                ...organizationFilter(req.user),
             }).populate("bill");
 
             if (!session) {
@@ -2489,7 +2490,7 @@ const sessionController = {
             // Verify table exists
             const table = await Table.findOne({
                 _id: tableId,
-                organization: req.user.organization,
+                ...organizationFilter(req.user),
             });
 
             if (!table) {
@@ -2523,7 +2524,7 @@ const sessionController = {
             // Search for existing unpaid bill on the table
             const existingTableBill = await Bill.findOne({
                 table: tableId,
-                organization: req.user.organization,
+                ...organizationFilter(req.user),
                 status: { $in: ['draft', 'partial', 'overdue'] }
             }).sort({ createdAt: -1 });
 
@@ -2765,7 +2766,7 @@ const sessionController = {
 
             // Create notification
             try {
-                if (req.user && req.user.organization) {
+                if (req.user && getOrganizationId(req.user)) {
                     await NotificationService.createNotification({
                         type: "session",
                         category: "session",
@@ -2786,7 +2787,7 @@ const sessionController = {
             Logger.info("🧹 Scheduling automatic cleanup in background after linking...");
             
             // Run cleanup in background without blocking the response
-            performCleanupHelper(req.user.organization)
+            performCleanupHelper(getOrganizationId(req.user))
                 .then(cleanupResult => {
                     Logger.info(`✅ Background cleanup completed: ${cleanupResult.cleanedCount} references cleaned, ${cleanupResult.deletedBillsCount} bills deleted`);
                 })
@@ -2800,7 +2801,7 @@ const sessionController = {
             
             const allBillsWithSession = await Bill.find({
                 sessions: session._id,
-                organization: req.user.organization
+                ...organizationFilter(req.user),
             }).select('_id billNumber sessions orders');
             
             if (allBillsWithSession.length > 1) {
@@ -2828,7 +2829,7 @@ const sessionController = {
                             const ordersCount = updatedWrongBill.orders ? updatedWrongBill.orders.length : 0;
                             if (updatedWrongBill.sessions.length === 0 && ordersCount === 0) {
                                 const delId = updatedWrongBill._id;
-                                const delOrg = updatedWrongBill.organization || req.user.organization;
+                                const delOrg = updatedWrongBill.organization || getOrganizationId(req.user);
                                 await updatedWrongBill.deleteOne();
                                 try { await createTombstone('bills', delId, delOrg, req.user._id); } catch (e) {}
                                 Logger.info(`🗑️ Deleted empty bill ${wrongBill.billNumber} during emergency cleanup`);
@@ -2840,7 +2841,7 @@ const sessionController = {
                 // Verify again after cleanup
                 const finalCheck = await Bill.find({
                     sessions: session._id,
-                    organization: req.user.organization
+                    ...organizationFilter(req.user),
                 }).select('_id billNumber');
                 
                 if (finalCheck.length > 1) {
@@ -2900,7 +2901,7 @@ const sessionController = {
             // Find the session
             const session = await Session.findOne({
                 _id: sessionId,
-                organization: req.user.organization,
+                ...organizationFilter(req.user),
             }).populate("bill");
 
             if (!session) {
@@ -2922,7 +2923,7 @@ const sessionController = {
             // Verify new table exists
             const newTable = await Table.findOne({
                 _id: newTableId,
-                organization: req.user.organization,
+                ...organizationFilter(req.user),
             });
 
             if (!newTable) {
@@ -2959,7 +2960,7 @@ const sessionController = {
             // Search for existing unpaid bill on the new table
             const existingNewTableBill = await Bill.findOne({
                 table: newTableId,
-                organization: req.user.organization,
+                ...organizationFilter(req.user),
                 status: { $in: ['draft', 'partial', 'overdue'] }
             }).sort({ createdAt: -1 });
 
@@ -3114,7 +3115,7 @@ const sessionController = {
                     orders: [],
                     billType: "cafe",
                     status: "draft",
-                    organization: req.user.organization,
+                    organization: getOrganizationId(req.user),
                     createdBy: req.user._id,
                     updatedBy: req.user._id,
                 });
@@ -3454,7 +3455,7 @@ const sessionController = {
 
             // Create notification
             try {
-                if (req.user && req.user.organization) {
+                if (req.user && getOrganizationId(req.user)) {
                     await NotificationService.createNotification({
                         type: "session",
                         category: "session",
@@ -3481,7 +3482,7 @@ const sessionController = {
             Logger.info("🧹 Scheduling automatic cleanup in background after table change...");
             
             // Run cleanup in background without blocking the response
-            performCleanupHelper(req.user.organization)
+            performCleanupHelper(getOrganizationId(req.user))
                 .then(cleanupResult => {
                     Logger.info(`✅ Background cleanup completed: ${cleanupResult.cleanedCount} references cleaned, ${cleanupResult.deletedBillsCount} bills deleted`);
                 })
@@ -3495,7 +3496,7 @@ const sessionController = {
             
             const allBillsWithSession = await Bill.find({
                 sessions: session._id,
-                organization: req.user.organization
+                ...organizationFilter(req.user),
             }).select('_id billNumber sessions orders');
             
             if (allBillsWithSession.length > 1) {
@@ -3523,7 +3524,7 @@ const sessionController = {
                             const ordersCount = updatedWrongBill.orders ? updatedWrongBill.orders.length : 0;
                             if (updatedWrongBill.sessions.length === 0 && ordersCount === 0) {
                                 const delId = updatedWrongBill._id;
-                                const delOrg = updatedWrongBill.organization || req.user.organization;
+                                const delOrg = updatedWrongBill.organization || getOrganizationId(req.user);
                                 await updatedWrongBill.deleteOne();
                                 try { await createTombstone('bills', delId, delOrg, req.user._id); } catch (e) {}
                                 Logger.info(`🗑️ Deleted empty bill ${wrongBill.billNumber} during emergency cleanup`);
@@ -3535,7 +3536,7 @@ const sessionController = {
                 // Verify again after cleanup
                 const finalCheck = await Bill.find({
                     sessions: session._id,
-                    organization: req.user.organization
+                    ...organizationFilter(req.user),
                 }).select('_id billNumber');
                 
                 if (finalCheck.length > 1) {
@@ -3594,7 +3595,7 @@ const sessionController = {
     // Clean up duplicate session references in bills - can be called automatically
     cleanupDuplicateSessionReferences: async (req, res) => {
         try {
-            const result = await performCleanupHelper(req.user.organization);
+            const result = await performCleanupHelper(getOrganizationId(req.user));
             
             res.json({
                 success: true,
@@ -3640,7 +3641,7 @@ const sessionController = {
             // Find the session
             const session = await Session.findOne({
                 _id: id,
-                organization: req.user.organization,
+                ...organizationFilter(req.user),
             }).populate("bill");
 
             if (!session) {
@@ -3731,7 +3732,7 @@ const sessionController = {
 
             // Create notification
             try {
-                if (req.user && req.user.organization) {
+                if (req.user && getOrganizationId(req.user)) {
                     const userLocale = getUserLocale(req.user);
                     await NotificationService.createNotification({
                         type: "session",
@@ -3790,7 +3791,7 @@ const sessionController = {
             // Find the session
             const session = await Session.findOne({
                 _id: id,
-                organization: req.user.organization,
+                ...organizationFilter(req.user),
             }).populate("bill");
 
             if (!session) {
@@ -3904,14 +3905,14 @@ const sessionController = {
 
             // Create notification
             try {
-                if (req.user && req.user.organization) {
+                if (req.user && getOrganizationId(req.user)) {
                     const userLocale = getUserLocale(req.user);
                     await NotificationService.createNotification({
                         type: "session",
                         category: "session",
                         title: "تعديل أوقات الجلسة",
                         message: `تم تعديل أوقات جلسة ${session.deviceName}`,
-                        organization: req.user.organization,
+                        organization: getOrganizationId(req.user),
                         createdBy: req.user._id,
                     }, req.user);
                 }

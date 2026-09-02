@@ -4,7 +4,7 @@ import { DollarSign, Calendar, TrendingUp, TrendingDown, Clock } from 'lucide-re
 import api from '../../services/api';
 import dayjs from 'dayjs';
 import { useTranslation } from 'react-i18next';
-import { useLanguage } from '../../contexts/LanguageContext';
+import { useLanguage } from '../../context/LanguageContext';
 import 'dayjs/locale/ar';
 import 'dayjs/locale/en';
 import 'dayjs/locale/fr';
@@ -307,7 +307,7 @@ const PayrollHistory: React.FC = () => {
                                               }
                                               className="text-xs"
                                             >
-                                              {t(`payroll.payrollHistory.${record.status}`, record.status)}
+                                              {String(t(`payroll.payrollHistory.${record.status}`, record.status))}
                                             </Tag>
                                           </td>
                                           <td className="px-2 py-1">

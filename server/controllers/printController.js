@@ -2,6 +2,18 @@ import printerService from '../services/printerService.js';
 import printerDetectionService from '../services/printerDetectionService.js';
 import Organization from '../models/Organization.js';
 import { aggregateItemsWithPayments } from '../utils/billAggregation.js';
+import { organizationFilter, resolvePrintSettings } from '../utils/organization.js';
+
+async function loadPrintSettings(organization) {
+  if (organization && typeof organization === 'object' && organization.printSettings) {
+    return resolvePrintSettings(organization);
+  }
+
+  if (!organization) return {};
+  const storedOrganization = await Organization.findOne(organizationFilter(organization))
+    .select('printSettings devicePrinters');
+  return resolvePrintSettings(storedOrganization || {});
+}
 
 class PrintController {
   constructor() {
@@ -16,30 +28,20 @@ class PrintController {
     this.openCashDrawerOnly = this.openCashDrawerOnly.bind(this);
     this.autoDetectAndPrintBill = this.autoDetectAndPrintBill.bind(this);
     this.autoDetectAndPrintOrder = this.autoDetectAndPrintOrder.bind(this);
+    this.autoDetectAndOpenCashDrawer = this.autoDetectAndOpenCashDrawer.bind(this);
   }
   /**
    * طباعة فاتورة مباشرة
    */
   async printBill(req, res) {
     try {
-      const { bill, organization, language = 'ar', tableSectionName } = req.body;
+      const { bill, organization, language = 'ar', tableSectionName, drawerMode = 'bill' } = req.body;
 
       if (!bill) {
         return res.status(400).json({ success: false, message: 'Bill data is required' });
       }
       // الحصول على إعدادات الطابعة من المنشأة
-      let printSettings = {};
-      if (organization) {
-        if (typeof organization === 'object' && organization.printSettings) {
-          printSettings = organization.printSettings;
-        } else if (typeof organization === 'string') {
-          const org = await Organization.findById(organization);
-          if (org) {
-            printSettings = org.printSettings || {};
-          }
-        }
-
-      }
+      const printSettings = await loadPrintSettings(organization);
 
       // التحقق من أن الطابعة معدة
       if (!printSettings || printSettings.printerType === 'none') {
@@ -62,7 +64,10 @@ class PrintController {
       const content = await this.generateBillContent(bill, organization, language, tableSectionName, printSettings);
 
       // طباعة الفاتورة مع فتح درج الكاشير إذا كان مفعلاً
-      const openDrawer = printSettings.openCashDrawer !== false;
+      const openDrawerSetting = drawerMode === 'payment'
+        ? 'openCashDrawerOnPayment'
+        : 'openCashDrawer';
+      const openDrawer = printSettings[openDrawerSetting] !== false;
       const autoCut = printSettings.autoCut === true;
 
       const result = await printerService.printDocument(content, openDrawer, autoCut);
@@ -106,18 +111,7 @@ class PrintController {
       }
 
       // الحصول على إعدادات الطابعة
-      let printSettings = {};
-      if (organization) {
-        if (typeof organization === 'object' && organization.printSettings) {
-          printSettings = organization.printSettings;
-        } else if (typeof organization === 'string') {
-          const org = await Organization.findById(organization);
-          if (org) {
-            printSettings = org.printSettings || {};
-          }
-        }
-
-      }
+      const printSettings = await loadPrintSettings(organization);
 
       if (!printSettings || printSettings.printerType === 'none') {
         return res.status(400).json({ 
@@ -172,17 +166,7 @@ class PrintController {
         return res.status(400).json({ success: false, message: 'Report data is required' });
       }
 
-      let printSettings = {};
-      if (organization) {
-        if (typeof organization === 'object' && organization.printSettings) {
-          printSettings = organization.printSettings;
-        } else if (typeof organization === 'string') {
-          const org = await Organization.findById(organization);
-          if (org) {
-            printSettings = org.printSettings || {};
-          }
-        }
-      }
+      const printSettings = await loadPrintSettings(organization);
 
       if (!printSettings || printSettings.printerType === 'none') {
         return res.status(400).json({ 
@@ -467,14 +451,21 @@ class PrintController {
       const organization = await Organization.findById(organizationId);
       if (!organization) return res.status(404).json({ success: false, message: 'Organization not found' });
 
-      // حفظ إعدادات الطابعة للجهاز
       await printerDetectionService.savePrinterForDevice(
-        organization, 
-        userId, 
-        deviceId || 'default', 
-        printerPath, 
+        organization,
+        userId,
+        deviceId || 'default',
+        printerPath,
         printerName
       );
+
+      organization.printSettings = {
+        ...(organization.printSettings || {}),
+        printerType: 'usb',
+        printerDevice: printerPath,
+        printerName,
+      };
+      await organization.save();
 
       return res.json({ 
         success: true, 
@@ -538,17 +529,7 @@ class PrintController {
       }
 
       // الحصول على إعدادات الطابعة من المنشأة
-      let printSettings = {};
-      if (organization) {
-        if (typeof organization === 'object' && organization.printSettings) {
-          printSettings = organization.printSettings;
-        } else if (typeof organization === 'string') {
-          const org = await Organization.findById(organization);
-          if (org) {
-            printSettings = org.printSettings || {};
-          }
-        }
-      }
+      const printSettings = await loadPrintSettings(organization);
 
       // التحقق من أن الطابعة معدة وأن فتح الدفع مفعلاً
       if (!printSettings || printSettings.printerType === 'none') {
@@ -561,6 +542,7 @@ class PrintController {
       if (printSettings.openCashDrawerOnPayment === false) {
         return res.status(400).json({ 
           success: false, 
+          disabled: true,
           message: 'Cash drawer opening on payment is disabled in settings' 
         });
       }
@@ -637,7 +619,7 @@ class PrintController {
    */
   async autoDetectAndPrintBill(req, res) {
     try {
-      const { bill, organization, language = 'ar', tableSectionName } = req.body;
+      const { bill, organization, language = 'ar', tableSectionName, drawerMode = 'bill' } = req.body;
 
       if (!bill) {
         return res.status(400).json({ success: false, message: 'Bill data is required' });
@@ -661,6 +643,11 @@ class PrintController {
       console.log('Selected printer:', selectedPrinter.name, 'at port:', selectedPrinter.path);
 
       // 3. إعداد إعدادات الطابعة المكتشفة تلقائياً
+      const printSettings = await loadPrintSettings(organization);
+      const openDrawerSetting = drawerMode === 'payment'
+        ? 'openCashDrawerOnPayment'
+        : 'openCashDrawer';
+      const openDrawer = printSettings[openDrawerSetting] !== false;
       const autoDetectedSettings = {
         printerType: 'usb',
         printerDevice: selectedPrinter.path,
@@ -669,7 +656,7 @@ class PrintController {
         printerPort: null,
         printerModel: 'epson',
         autoCut: true,
-        openCashDrawer: true
+        openCashDrawer: openDrawer
       };
 
       // 4. تهيئة الطابعة بالإعدادات المكتشفة
@@ -685,7 +672,7 @@ class PrintController {
       const content = await this.generateBillContent(bill, organization, language, tableSectionName, autoDetectedSettings);
 
       // 6. طباعة الفاتورة مع فتح درج الكاشير
-      const result = await printerService.printDocument(content, true, true);
+      const result = await printerService.printDocument(content, openDrawer, true);
 
       // 7. إغلاق الاتصال بالطابعة
       await printerService.disconnect();
@@ -694,7 +681,7 @@ class PrintController {
         return res.json({ 
           success: true, 
           message: 'Bill printed successfully',
-          cashDrawerOpened: true,
+          cashDrawerOpened: openDrawer,
           printerUsed: selectedPrinter.name
         });
       } else {
@@ -795,6 +782,43 @@ class PrintController {
         message: 'Internal server error during auto-detect order printing',
         error: error.message
       });
+    }
+  }
+
+  async autoDetectAndOpenCashDrawer(req, res) {
+      try {
+        const { mode = 'payment', organization } = req.body || {};
+        const settingName = mode === 'bill' ? 'openCashDrawer' : 'openCashDrawerOnPayment';
+          const printSettings = await loadPrintSettings(organization);
+        if (printSettings?.[settingName] === false) {
+          return res.json({ success: false, disabled: true, message: 'Cash drawer opening is disabled in settings' });
+        }
+
+        const detectedPrinters = await printerDetectionService.detectUSBPrinters();
+        if (!detectedPrinters || detectedPrinters.length === 0) {
+          return res.status(400).json({ success: false, message: 'No thermal printer detected' });
+        }
+
+        const selectedPrinter = detectedPrinters[0];
+        const settings = {
+          printerType: 'usb',
+          printerDevice: selectedPrinter.path,
+          printerName: selectedPrinter.name,
+          printerModel: 'epson'
+        };
+        if (!await printerService.initializePrinter(settings)) {
+          return res.status(500).json({ success: false, message: 'Failed to connect to detected printer' });
+        }
+
+        const opened = await printerService.openCashDrawer();
+        await printerService.disconnect();
+        return opened
+          ? res.json({ success: true, printerUsed: selectedPrinter.name })
+          : res.status(500).json({ success: false, message: 'Failed to open cash drawer' });
+    } catch (error) {
+      console.error('Error in autoDetectAndOpenCashDrawer:', error);
+      await printerService.disconnect();
+      return res.status(500).json({ success: false, message: 'Internal server error opening cash drawer', error: error.message });
     }
   }
 }

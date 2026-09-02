@@ -476,7 +476,7 @@ export function KitchenDisplay() {
                                   )}
                                 </span>
                               </div>
-                              <span className="text-gray-500 font-medium flex-shrink-0 ms-2">{t('common.quantity', { count: formatNumber(item.quantity) })}</span>
+                              <span className="text-gray-500 font-medium flex-shrink-0 ms-2">                              {t('common.quantity', { count: item.quantity })}</span>
                             </li>
                           );
                         })}
@@ -598,7 +598,7 @@ function GroupedItemsBySection({ order, sections, getSectionName, onItemToggle, 
                         )}
                       </span>
                     </div>
-                    <span className="text-gray-500 font-medium flex-shrink-0 ms-2">{t('common.quantity', { count: formatNumber(item.quantity) })}</span>
+                    <span className="text-gray-500 font-medium flex-shrink-0 ms-2">                    {t('common.quantity', { count: item.quantity })}</span>
                   </li>
                 );
               })}

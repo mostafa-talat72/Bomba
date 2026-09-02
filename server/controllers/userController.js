@@ -1,3 +1,4 @@
+import { getOrganizationId, organizationFilter, sameObjectId } from '../utils/organization.js';
 import User from "../models/User.js";
 import { createTombstone } from "../utils/tombstoneHelper.js";
 // bcrypt is not needed here as password hashing is handled in the User model
@@ -18,7 +19,7 @@ export const getUsers = async (req, res) => {
         } = req.query;
 
         // Build query
-        const query = { organization: req.user.organization };
+        const query = { ...organizationFilter(req.user) };
 
         if (search) {
             query.$or = [
@@ -80,7 +81,7 @@ export const getUser = async (req, res) => {
         }
 
         // Check if user belongs to same organization
-        if (user.organization.toString() !== req.user.organization.toString()) {
+        if (!sameObjectId(user.organization, req.user)) {
             return res.status(403).json({
                 success: false,
                 message: "ليس لديك صلاحية لعرض هذا المستخدم",
@@ -163,7 +164,7 @@ export const createUser = async (req, res) => {
             salary,
             notes,
             status: status || "active",
-            organization: req.user.organization,
+            organization: getOrganizationId(req.user),
         });
 
         // Remove password from response
@@ -215,7 +216,7 @@ export const updateUser = async (req, res) => {
         }
 
         // Check if user belongs to same organization
-        if (user.organization.toString() !== req.user.organization.toString()) {
+        if (!sameObjectId(user.organization, req.user)) {
             return res.status(403).json({
                 success: false,
                 message: "ليس لديك صلاحية لتعديل هذا المستخدم",
@@ -242,7 +243,7 @@ export const updateUser = async (req, res) => {
         if (isTargetAdmin && !isEditingSelf) {
             // جلب المنشأة من قاعدة البيانات للتحقق من المالك
             const Organization = (await import('../models/Organization.js')).default;
-            const organization = await Organization.findById(req.user.organization);
+            const organization = await Organization.findById(getOrganizationId(req.user));
             
          
             if (!organization) {
@@ -358,7 +359,7 @@ export const deleteUser = async (req, res) => {
         }
 
         // Check if user belongs to same organization
-        if (user.organization.toString() !== req.user.organization.toString()) {
+        if (!sameObjectId(user.organization, req.user)) {
             return res.status(403).json({
                 success: false,
                 message: "ليس لديك صلاحية لحذف هذا المستخدم",
@@ -393,7 +394,7 @@ export const deleteUser = async (req, res) => {
         if (isTargetAdmin) {
             // جلب المنشأة من قاعدة البيانات للتحقق من المالك
             const Organization = (await import('../models/Organization.js')).default;
-            const organization = await Organization.findById(req.user.organization);
+            const organization = await Organization.findById(getOrganizationId(req.user));
             
          
             if (!organization) {
@@ -415,7 +416,7 @@ export const deleteUser = async (req, res) => {
 
         const deletedUser = await User.findByIdAndDelete(req.params.id);
         if (deletedUser) {
-            try { await createTombstone('users', deletedUser._id, req.user.organization, req.user._id); } catch (e) {}
+            try { await createTombstone('users', deletedUser._id, getOrganizationId(req.user), req.user._id); } catch (e) {}
         }
 
         res.json({
@@ -589,7 +590,7 @@ export const updateUserPermissions = async (req, res) => {
         }
 
         // Check if user belongs to same organization
-        if (user.organization.toString() !== req.user.organization.toString()) {
+        if (!sameObjectId(user.organization, req.user)) {
             return res.status(403).json({
                 success: false,
                 message: "ليس لديك صلاحية لتعديل صلاحيات هذا المستخدم",
@@ -650,7 +651,7 @@ export const updateUserStatus = async (req, res) => {
         }
 
         // Check if user belongs to same organization
-        if (user.organization.toString() !== req.user.organization.toString()) {
+        if (!sameObjectId(user.organization, req.user)) {
             return res.status(403).json({
                 success: false,
                 message: "ليس لديك صلاحية لتعديل حالة هذا المستخدم",

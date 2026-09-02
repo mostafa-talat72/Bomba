@@ -1,3 +1,4 @@
+import { getOrganizationId, organizationFilter } from '../utils/organization.js';
 import Order from "../models/Order.js";
 import InventoryItem from "../models/InventoryItem.js";
 import MenuItem from "../models/MenuItem.js";
@@ -468,7 +469,7 @@ export const getOrders = async (req, res) => {
             }
         }
         if (table) query.table = table;
-        query.organization = req.user.organization;
+        Object.assign(query, organizationFilter(req.user));
 
         // NEW: Date range filtering
         if (startDate || endDate) {
@@ -507,7 +508,7 @@ export const getOrders = async (req, res) => {
         if (!status) {
             const fourMonthsAgo = new Date(Date.now() - 120 * 24 * 60 * 60 * 1000);
             const visibleBillIds = await Bill.distinct("_id", {
-                organization: req.user.organization,
+                ...organizationFilter(req.user),
                 $or: [
                     { status: { $in: ["draft", "partial", "overdue"] } },
                     { createdAt: { $gte: fourMonthsAgo } },
@@ -573,7 +574,7 @@ export const getOrder = async (req, res) => {
     try {
         const order = await Order.findOne({
             _id: req.params.id,
-            organization: req.user.organization,
+            ...organizationFilter(req.user),
         })
             .populate("createdBy", "name")
             .populate("preparedBy", "name")
@@ -717,7 +718,7 @@ export const createOrder = async (req, res) => {
             }
 
             // Verify table exists
-            const tableDoc = await Table.findOne({ _id: table, organization: req.user.organization });
+            const tableDoc = await Table.findOne({ _id: table, ...organizationFilter(req.user) });
             if (!tableDoc) {
                 return res.status(404).json({
                     success: false,
@@ -860,7 +861,7 @@ export const createOrder = async (req, res) => {
             const activeSession = await Session.findOne({
                 table: table,
                 status: 'active',
-                organization: req.user.organization
+                ...organizationFilter(req.user)
             }).select('deviceNumber deviceId');
             if (activeSession && activeSession.deviceNumber) {
                 deviceNumber = activeSession.deviceNumber;
@@ -879,7 +880,7 @@ export const createOrder = async (req, res) => {
             items: processedItems, // استخدام العناصر المعالجة
             subtotal: subtotal, // تعيين القيمة المحسوبة
             finalAmount: subtotal - (req.body.discount || 0), // حساب المبلغ النهائي
-            organization: req.user.organization,
+            organization: getOrganizationId(req.user),
             createdBy: req.user._id,
             status: status || 'pending',
             // سيتم إنشاء رقم الطلب تلقائيًا في الخطاف pre-save
@@ -909,13 +910,13 @@ export const createOrder = async (req, res) => {
         // إذا كان هناك table ولم يكن bill محدداً، ابحث عن فاتورة غير مدفوعة
         if (table && !billToUse) {
             // Get table info for logging
-            const tableDoc = await Table.findOne({ _id: table, organization: req.user.organization });
+            const tableDoc = await Table.findOne({ _id: table, ...organizationFilter(req.user) });
             const tableNumber = tableDoc ? tableDoc.number : table;
             
             // البحث عن فاتورة غير مدفوعة للطاولة (draft, partial, overdue)
             const existingBill = await Bill.findOne({
                 table: table,
-                organization: req.user.organization,
+                ...organizationFilter(req.user),
                 status: { $in: ['draft', 'partial', 'overdue'] }
             }).sort({ createdAt: -1 });
 
@@ -952,7 +953,7 @@ export const createOrder = async (req, res) => {
                     paymentMethod: 'cash',
                     billType: 'cafe',
                     createdBy: req.user._id,
-                    organization: req.user.organization,
+                    organization: getOrganizationId(req.user),
                 };
 
                 let newBill;
@@ -1046,7 +1047,7 @@ export const createOrder = async (req, res) => {
         // ── Real-time emit (<100ms) — immediate, before response, keep DB writes immediate ──
         if (req.io) {
             try {
-                const orgId = req.user.organization?._id || req.user.organization;
+                const orgId = getOrganizationId(req.user);
                 const orgStr = String(orgId);
                 // colon + dash rooms for compatibility
                 req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('order:created', responseData);
@@ -1060,7 +1061,7 @@ export const createOrder = async (req, res) => {
                     const tblData = { tableId: table, status: 'occupied' };
                     req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('table:statusChanged', tblData);
                     req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('table-status-update', tblData);
-                    try { req.io.notifyTableStatusUpdate(tblData, req.user.organization); } catch {}
+                    try { req.io.notifyTableStatusUpdate(tblData, getOrganizationId(req.user)); } catch {}
                 }
             } catch (emitErr) { Logger.error('Emit order:created failed', emitErr); }
         }
@@ -1091,7 +1092,7 @@ export const createOrder = async (req, res) => {
                         orderId: order._id,
                         orderNumber: order.orderNumber,
                         timestamp: new Date()
-                    }, req.user.organization);
+                    }, getOrganizationId(req.user));
                 }
 
                 // 2. Create notification for new order
@@ -1112,18 +1113,18 @@ export const createOrder = async (req, res) => {
                 // synchronously above).
                 if (req.io) {
                     try {
-                        req.io.notifyOrderUpdate("created", responseData, req.user.organization);
+                        req.io.notifyOrderUpdate("created", responseData, getOrganizationId(req.user));
                     } catch (socketError) {
                         Logger.error('فشل إرسال حدث Socket.IO', socketError);
                     }
                     if (table) {
                         try {
-                            const orgId = req.user.organization?._id || req.user.organization;
+                            const orgId = getOrganizationId(req.user);
                             const orgStr = String(orgId);
                             const tblData2 = { tableId: table, status: 'occupied' };
                             req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('table:statusChanged', tblData2);
                             req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('table-status-update', tblData2);
-                            req.io.notifyTableStatusUpdate(tblData2, req.user.organization);
+                            req.io.notifyTableStatusUpdate(tblData2, getOrganizationId(req.user));
                         } catch (socketError) {
                             Logger.error('فشل إرسال حدث تحديث حالة الطاولة', socketError);
                         }
@@ -1164,7 +1165,7 @@ export const updateOrder = async (req, res) => {
 
         const order = await Order.findOne({
             _id: req.params.id,
-            organization: req.user.organization,
+            ...organizationFilter(req.user),
         });
 
         if (!order) {
@@ -1481,7 +1482,7 @@ export const updateOrder = async (req, res) => {
                 try {
                     await adjustInventoryForOrderUpdate(oldOrderDataForInventory, order, req.user._id);
                     Logger.info(`✓ تم تعديل المخزون للطلب ${order.orderNumber}`);
-                    if (req.io) req.io.notifyInventoryUpdate({ type: 'adjusted', orderId: order._id, orderNumber: order.orderNumber, timestamp: new Date() }, req.user.organization);
+                    if (req.io) req.io.notifyInventoryUpdate({ type: 'adjusted', orderId: order._id, orderNumber: order.orderNumber, timestamp: new Date() }, getOrganizationId(req.user));
                 } catch (inventoryError) {
                     Logger.error('خطأ في تعديل المخزون:', inventoryError);
                 }
@@ -1790,11 +1791,11 @@ export const updateOrder = async (req, res) => {
         // ── Real-time emit (<100ms) — before response
         if (req.io) {
             try {
-                const orgId = req.user.organization?._id || req.user.organization;
+                const orgId = getOrganizationId(req.user);
                 const orgStr = String(orgId);
                 req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('order:updated', updatedOrder);
                 req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('order:created', updatedOrder); // compat
-                req.io.notifyOrderUpdate("updated", updatedOrder, req.user.organization);
+                req.io.notifyOrderUpdate("updated", updatedOrder, getOrganizationId(req.user));
                 if (updatedOrder.table) {
                     const tid = updatedOrder.table._id || updatedOrder.table;
                     const tblData = { tableId: tid, status: 'occupied' };
@@ -1808,7 +1809,7 @@ export const updateOrder = async (req, res) => {
                         const bdoc = await BillModel.findById(order.bill).lean();
                         if (bdoc) {
                             req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('bill:updated', bdoc);
-                            req.io.notifyBillUpdate("updated", bdoc, req.user.organization);
+                            req.io.notifyBillUpdate("updated", bdoc, getOrganizationId(req.user));
                         }
                     } catch {}
                 }
@@ -1832,7 +1833,7 @@ export const updateOrder = async (req, res) => {
         if (req.io) {
             setImmediate(() => {
                 try {
-                    req.io.notifyOrderUpdate("updated", updatedOrder, req.user.organization);
+                    req.io.notifyOrderUpdate("updated", updatedOrder, getOrganizationId(req.user));
                 } catch (socketError) {
                     Logger.error('فشل إرسال حدث Socket.IO', socketError);
                 }
@@ -1877,7 +1878,7 @@ export const deleteOrder = async (req, res) => {
     try {
         const order = await Order.findOne({
             _id: req.params.id,
-            organization: req.user.organization,
+            ...organizationFilter(req.user),
         });
 
         if (!order) {
@@ -1901,7 +1902,7 @@ export const deleteOrder = async (req, res) => {
                     orderId: order._id,
                     orderNumber: order.orderNumber,
                     timestamp: new Date()
-                }, req.user.organization);
+                }, getOrganizationId(req.user));
                 
             } else {
                 console.error('❌ req.io is not available in deleteOrder');
@@ -1978,7 +1979,7 @@ export const deleteOrder = async (req, res) => {
                         // Delete the bill from Local and Atlas
                         Logger.info(`🗑️ Deleting empty bill ${billDoc.billNumber}`);
                         const billIdForTombstone = billDoc._id;
-                        const billOrgForTombstone = billDoc.organization || req.user.organization;
+                        const billOrgForTombstone = billDoc.organization || getOrganizationId(req.user);
                         const { deleteFromBothDatabases } = await import('../utils/deleteHelper.js');
                         await deleteFromBothDatabases(billDoc, 'bills', `bill ${billDoc.billNumber}`);
                         try { await createTombstone('bills', billIdForTombstone, billOrgForTombstone, req.user._id); } catch (e) {}
@@ -1994,12 +1995,12 @@ export const deleteOrder = async (req, res) => {
 
                                     // Emit table status update event — scoped
                                     if (req.io) {
-                                        const orgId2 = req.user.organization?._id || req.user.organization;
+                                        const orgId2 = getOrganizationId(req.user);
                                         const orgStr2 = String(orgId2);
                                         const tblDataInner = { tableId: tableIdToUpdate, status: 'empty' };
                                         req.io.to(`org:${orgStr2}`).to(`org-${orgStr2}`).emit('table-status-update', tblDataInner);
                                         req.io.to(`org:${orgStr2}`).to(`org-${orgStr2}`).emit('table:statusChanged', tblDataInner);
-                                        try { req.io.notifyTableStatusUpdate(tblDataInner, req.user.organization); } catch {}
+                                        try { req.io.notifyTableStatusUpdate(tblDataInner, getOrganizationId(req.user)); } catch {}
                                     }
                                 }
                             } catch (tableError) {
@@ -2044,7 +2045,7 @@ export const deleteOrder = async (req, res) => {
                 Logger.warn(`⚠️ Atlas connection not available - order will be synced later`);
             }
             // Tombstone لمنع الإحياء لمدة سنة
-            try { await createTombstone('orders', orderId, req.user.organization, req.user._id); } catch(e) {}
+            try { await createTombstone('orders', orderId, getOrganizationId(req.user), req.user._id); } catch(e) {}
         } finally {
             // إعادة تفعيل المزامنة
             syncConfig.enabled = originalSyncEnabled;
@@ -2054,11 +2055,11 @@ export const deleteOrder = async (req, res) => {
         // Emit Socket.IO event for order deletion — instant <100ms with colon
         if (req.io) {
             try {
-                const orgId = req.user.organization?._id || req.user.organization;
+                const orgId = getOrganizationId(req.user);
                 const orgStr = String(orgId);
                 req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('order:deleted', { _id: req.params.id });
                 req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('order:updated', { _id: req.params.id, _deleted: true });
-                req.io.notifyOrderUpdate("deleted", { _id: req.params.id }, req.user.organization);
+                req.io.notifyOrderUpdate("deleted", { _id: req.params.id }, getOrganizationId(req.user));
                 if (tableIdToUpdate) {
                     const tblData = { tableId: tableIdToUpdate, status: 'empty' };
                     req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('table:statusChanged', tblData);
@@ -2098,7 +2099,7 @@ export const getPendingOrders = async (req, res) => {
     try {
         const orders = await Order.find({
             status: { $in: ["pending", "preparing"] },
-            organization: req.user.organization,
+            ...organizationFilter(req.user),
         })
             .populate("items.menuItem", "name arabicName preparationTime")
             .populate("bill", "billNumber customerName table")
@@ -2185,7 +2186,7 @@ export const cancelOrder = async (req, res) => {
 
         const order = await Order.findOne({
             _id: id,
-            organization: req.user.organization,
+            ...organizationFilter(req.user),
         });
         if (!order) {
             return res.status(404).json({
@@ -2228,11 +2229,11 @@ export const cancelOrder = async (req, res) => {
         writeToAtlas('orders', 'upsert', order.toObject ? order.toObject() : order, { _id: order._id });
         if (req.io) {
             try {
-                const orgId = req.user.organization?._id || req.user.organization;
+                const orgId = getOrganizationId(req.user);
                 const orgStr = String(orgId);
                 req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('order:updated', order);
                 req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('order:deleted', { _id: order._id });
-                req.io.notifyOrderUpdate("updated", order, req.user.organization);
+                req.io.notifyOrderUpdate("updated", order, getOrganizationId(req.user));
             } catch {}
         }
 
@@ -2260,7 +2261,7 @@ export const updateOrderItemStatus = async (req, res) => {
 
         const order = await Order.findOne({
             _id: id,
-            organization: req.user.organization,
+            ...organizationFilter(req.user),
         });
         if (!order) {
             return res.status(404).json({
@@ -2292,10 +2293,10 @@ export const updateOrderItemStatus = async (req, res) => {
         writeToAtlas('orders', 'upsert', order.toObject ? order.toObject() : order, { _id: order._id });
         if (req.io) {
             try {
-                const orgId = req.user.organization?._id || req.user.organization;
+                const orgId = getOrganizationId(req.user);
                 const orgStr = String(orgId);
                 req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('order:updated', order);
-                req.io.notifyOrderUpdate("updated", order, req.user.organization);
+                req.io.notifyOrderUpdate("updated", order, getOrganizationId(req.user));
             } catch {}
         }
 
@@ -2330,7 +2331,7 @@ export const updateOrderStatus = async (req, res) => {
 
         const order = await Order.findOne({
             _id: id,
-            organization: req.user.organization,
+            ...organizationFilter(req.user),
         });
         if (!order) {
             return res.status(404).json({
@@ -2412,7 +2413,7 @@ export const updateOrderStatus = async (req, res) => {
             }
         }
 
-        const updatedOrder = await Order.findOneAndUpdate({ _id: id, organization: req.user.organization }, updateData, {
+        const updatedOrder = await Order.findOneAndUpdate({ _id: id, ...organizationFilter(req.user) }, updateData, {
             new: true,
             runValidators: true,
         })
@@ -2454,12 +2455,12 @@ export const updateOrderStatus = async (req, res) => {
         // Emit socket event for real-time updates — instant <100ms with colon events
         if (req.io) {
             try {
-                const orgId = req.user.organization?._id || req.user.organization;
+                const orgId = getOrganizationId(req.user);
                 const orgStr = String(orgId);
                 req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('order:updated', updatedOrder);
                 req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('order:created', updatedOrder);
-                req.io.notifyOrderUpdate("status-changed", updatedOrder, req.user.organization);
-                req.io.notifyOrderUpdate("updated", updatedOrder, req.user.organization);
+                req.io.notifyOrderUpdate("status-changed", updatedOrder, getOrganizationId(req.user));
+                req.io.notifyOrderUpdate("updated", updatedOrder, getOrganizationId(req.user));
             } catch (socketError) {
                 Logger.error('فشل إرسال حدث Socket.IO', socketError);
             }
@@ -2489,7 +2490,7 @@ export const updateOrderItemPrepared = async (req, res) => {
 
         const order = await Order.findOne({
             _id: orderId,
-            organization: req.user.organization,
+            ...organizationFilter(req.user),
         });
         if (!order) {
             return res
@@ -2605,11 +2606,11 @@ export const updateOrderItemPrepared = async (req, res) => {
         // ── Real-time emit (<100ms) ──
         if (req.io) {
             try {
-                const orgId = req.user.organization?._id || req.user.organization;
+                const orgId = getOrganizationId(req.user);
                 const orgStr = String(orgId);
                 // emit immediately after save, before populate
                 req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('order:updated', order);
-                req.io.notifyOrderUpdate("updated", order, req.user.organization);
+                req.io.notifyOrderUpdate("updated", order, getOrganizationId(req.user));
             } catch {}
         }
 
@@ -2625,10 +2626,10 @@ export const updateOrderItemPrepared = async (req, res) => {
         // also emit populated version for full data
         if (req.io) {
             try {
-                const orgId2 = req.user.organization?._id || req.user.organization;
+                const orgId2 = getOrganizationId(req.user);
                 const orgStr2 = String(orgId2);
                 req.io.to(`org:${orgStr2}`).to(`org-${orgStr2}`).emit('order:updated', updatedOrder);
-                req.io.notifyOrderUpdate("updated", updatedOrder, req.user.organization);
+                req.io.notifyOrderUpdate("updated", updatedOrder, getOrganizationId(req.user));
             } catch {}
         }
 
@@ -2672,7 +2673,7 @@ export const deductOrderInventory = async (req, res) => {
 
         const order = await Order.findOne({
             _id: orderId,
-            organization: req.user.organization,
+            ...organizationFilter(req.user),
         });
 
         if (!order) {
@@ -2803,10 +2804,10 @@ export const deductOrderInventory = async (req, res) => {
         writeToAtlas('orders', 'upsert', order.toObject ? order.toObject() : order, { _id: order._id });
         if (req.io) {
             try {
-                const orgId = req.user.organization?._id || req.user.organization;
+                const orgId = getOrganizationId(req.user);
                 const orgStr = String(orgId);
                 req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('order:updated', order);
-                req.io.notifyOrderUpdate("updated", order, req.user.organization);
+                req.io.notifyOrderUpdate("updated", order, getOrganizationId(req.user));
             } catch {}
         }
 
@@ -2821,10 +2822,10 @@ export const deductOrderInventory = async (req, res) => {
 
         if (req.io) {
             try {
-                const orgId2 = req.user.organization?._id || req.user.organization;
+                const orgId2 = getOrganizationId(req.user);
                 const orgStr2 = String(orgId2);
                 req.io.to(`org:${orgStr2}`).to(`org-${orgStr2}`).emit('order:updated', updatedOrder);
-                req.io.notifyOrderUpdate("updated", updatedOrder, req.user.organization);
+                req.io.notifyOrderUpdate("updated", updatedOrder, getOrganizationId(req.user));
             } catch {}
         }
 
@@ -2881,7 +2882,7 @@ export const getTodayOrdersStats = async (req, res) => {
                 $gte: startOfDay,
                 $lt: endOfDay,
             },
-            organization: req.user.organization,
+            ...organizationFilter(req.user),
         }).select("finalAmount totalAmount status createdAt");
 
         // Calculate statistics
@@ -2933,7 +2934,7 @@ export const deliverItem = async (req, res) => {
 
         const order = await Order.findOne({
             _id: id,
-            organization: req.user.organization,
+            ...organizationFilter(req.user),
         });
         if (!order) {
             return res.status(404).json({
@@ -2995,10 +2996,10 @@ export const deliverItem = async (req, res) => {
         writeToAtlas('orders', 'upsert', order.toObject ? order.toObject() : order, { _id: order._id });
         if (req.io) {
             try {
-                const orgId = req.user.organization?._id || req.user.organization;
+                const orgId = getOrganizationId(req.user);
                 const orgStr = String(orgId);
                 req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('order:updated', order);
-                req.io.notifyOrderUpdate("updated", order, req.user.organization);
+                req.io.notifyOrderUpdate("updated", order, getOrganizationId(req.user));
             } catch {}
         }
 
@@ -3011,11 +3012,11 @@ export const deliverItem = async (req, res) => {
         // Notify via Socket.IO — instant
         if (req.io) {
             try {
-                const orgId2 = req.user.organization?._id || req.user.organization;
+                const orgId2 = getOrganizationId(req.user);
                 const orgStr2 = String(orgId2);
                 req.io.to(`org:${orgStr2}`).to(`org-${orgStr2}`).emit('order:updated', order);
-                req.io.notifyOrderUpdate("item-delivered", order, req.user.organization);
-                req.io.notifyOrderUpdate("updated", order, req.user.organization);
+                req.io.notifyOrderUpdate("item-delivered", order, getOrganizationId(req.user));
+                req.io.notifyOrderUpdate("updated", order, getOrganizationId(req.user));
             } catch {}
         }
 
@@ -3056,7 +3057,7 @@ export const deliverOrderSection = async (req, res) => {
 
         const order = await Order.findOne({
             _id: orderId,
-            organization: req.user.organization,
+            ...organizationFilter(req.user),
         });
 
         if (!order) {
@@ -3112,10 +3113,10 @@ export const deliverOrderSection = async (req, res) => {
         writeToAtlas('orders', 'upsert', order.toObject ? order.toObject() : order, { _id: order._id });
         if (req.io) {
             try {
-                const orgId = req.user.organization?._id || req.user.organization;
+                const orgId = getOrganizationId(req.user);
                 const orgStr = String(orgId);
                 req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('order:updated', order);
-                req.io.notifyOrderUpdate("updated", order, req.user.organization);
+                req.io.notifyOrderUpdate("updated", order, getOrganizationId(req.user));
             } catch {}
         }
 
@@ -3127,11 +3128,11 @@ export const deliverOrderSection = async (req, res) => {
 
         if (req.io) {
             try {
-                const orgId2 = req.user.organization?._id || req.user.organization;
+                const orgId2 = getOrganizationId(req.user);
                 const orgStr2 = String(orgId2);
                 req.io.to(`org:${orgStr2}`).to(`org-${orgStr2}`).emit('order:updated', order);
-                req.io.notifyOrderUpdate("item-delivered", order, req.user.organization);
-                req.io.notifyOrderUpdate("updated", order, req.user.organization);
+                req.io.notifyOrderUpdate("item-delivered", order, getOrganizationId(req.user));
+                req.io.notifyOrderUpdate("updated", order, getOrganizationId(req.user));
             } catch {}
         }
 

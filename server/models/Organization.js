@@ -127,6 +127,7 @@ const OrganizationSchema = new mongoose.Schema({
         openCashDrawer: { type: Boolean, default: true }, // فتح درج الكاشير عند طباعة الفواتير
         openCashDrawerOnPayment: { type: Boolean, default: true }, // فتح درج الكاشير عند الدفع الكامل
         autoPrintOnPayment: { type: Boolean, default: true }, // طباعة الفاتورة تلقائياً عند الدفع الكامل
+        promptOrderPrintSections: { type: Boolean, default: false }, // اختيار أقسام الطلب قبل الطباعة
         charactersPerLine: { type: Number, default: 48 }, // عدد الأحرف في السطر
         printHeader: { type: Boolean, default: true }, // طباعة الرأس
         printFooter: { type: Boolean, default: true }, // طباعة التذييل

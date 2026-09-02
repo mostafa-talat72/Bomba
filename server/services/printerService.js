@@ -57,12 +57,12 @@ class PrinterService {
         type: printerModel,
         interface: iface,
         driver: printerDriver,
-        options: { timeout: 1000 },
-        characterSet: 'PC1256'
+        characterSet: 'WPC1256_ARABIC',
+        options: { timeout: 3000 }
       });
       if (typeof this.printer?.setCharacterSet === 'function') {
         try {
-          this.printer.setCharacterSet('PC1256');
+          this.printer.setCharacterSet('WPC1256_ARABIC');
         } catch (error) {
           console.warn('Printer character set fallback not supported:', error.message);
         }
@@ -325,8 +325,44 @@ class PrinterService {
 
         fs.writeFileSync(filePath, rawBuffer);
 
-        const ps = `powershell -Command "Get-Content -Path '${filePath.replace(/'/g, "''")}' -Encoding Byte -ReadCount 0 | Out-Printer -Name '${this.winPrinterName.replace(/'/g, "''")}'"`;
-        await execPromise(ps, { timeout: 10000 });
+        const escapedPath = filePath.replace(/'/g, "''");
+        const escapedPrinter = this.winPrinterName.replace(/'/g, "''");
+        const rawPrintScript = `
+$bytes = [System.IO.File]::ReadAllBytes('${escapedPath}')
+Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+public static class RawPrint {
+  [StructLayout(LayoutKind.Sequential, CharSet=CharSet.Unicode)]
+  public class DocInfo { public string DocName; public string OutputFile; public string DataType; }
+  [DllImport("winspool.drv", CharSet=CharSet.Unicode, SetLastError=true)]
+  static extern bool OpenPrinter(string name, out IntPtr handle, IntPtr defaults);
+  [DllImport("winspool.drv", SetLastError=true)] static extern bool ClosePrinter(IntPtr handle);
+  [DllImport("winspool.drv", CharSet=CharSet.Unicode, SetLastError=true)]
+  static extern int StartDocPrinter(IntPtr handle, int level, DocInfo info);
+  [DllImport("winspool.drv", SetLastError=true)] static extern bool EndDocPrinter(IntPtr handle);
+  [DllImport("winspool.drv", SetLastError=true)] static extern bool StartPagePrinter(IntPtr handle);
+  [DllImport("winspool.drv", SetLastError=true)] static extern bool EndPagePrinter(IntPtr handle);
+  [DllImport("winspool.drv", SetLastError=true)]
+  static extern bool WritePrinter(IntPtr handle, byte[] bytes, int count, out int written);
+  public static bool Send(string name, byte[] bytes) {
+    IntPtr handle;
+    if (!OpenPrinter(name, out handle, IntPtr.Zero)) return false;
+    try {
+      var info = new DocInfo { DocName = "MTE Receipt", DataType = "RAW" };
+      if (StartDocPrinter(handle, 1, info) == 0 || !StartPagePrinter(handle)) return false;
+      int written;
+      var ok = WritePrinter(handle, bytes, bytes.Length, out written);
+      EndPagePrinter(handle); EndDocPrinter(handle);
+      return ok && written == bytes.Length;
+    } finally { ClosePrinter(handle); }
+  }
+}
+"@
+if (-not [RawPrint]::Send('${escapedPrinter}', $bytes)) { throw 'Raw print failed' }
+`;
+        const encodedScript = Buffer.from(rawPrintScript, 'utf16le').toString('base64');
+        await execPromise(`powershell -NoProfile -EncodedCommand ${encodedScript}`, { timeout: 10000 });
 
         try { fs.unlinkSync(filePath); } catch {}
         if (openDrawer) console.log('Cash drawer opened successfully');

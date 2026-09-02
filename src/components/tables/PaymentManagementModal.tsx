@@ -331,7 +331,7 @@ const PaymentManagementModal: React.FC<PaymentManagementModalProps> = ({
                             ))}
                           </div>
                           {/* دفع مقسوم — طريقتان */}
-                          {onSplitSubmit && selectedBill?.status !== 'paid' && (
+                          {onSplitSubmit && selectedBill && !(['paid'] as string[]).includes(selectedBill.status) && (
                             <div className="pt-0.5">
                               <button onClick={() => setSplitEnabled(v => !v)}
                                 className={`w-full py-1.5 rounded-lg text-[11px] font-bold border transition-all flex items-center justify-center gap-1.5 ${

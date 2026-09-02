@@ -18,6 +18,7 @@ import { setupSocketIO } from "./socket/socketHandler.js";
 import { startAutoOrderCompleter } from "./services/autoOrderCompleter.js";
 import { initializeScheduler } from "./utils/scheduler.js";
 import { fixAllTableStatuses } from "./utils/tableUtils.js";
+import "./utils/organization.js";
 import Logger from "./middleware/logger.js";
 import jwt from "jsonwebtoken";
 import Bill from "./models/Bill.js";
@@ -497,6 +498,17 @@ async function initializeBidirectionalSync() {
 
 const app = express();
 const server = createServer(app);
+// API responses are always read from the database; do not allow browser,
+// Electron, proxy, or service-worker caches to serve stale data.
+app.use("/api", (req, res, next) => {
+    res.set({
+        "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+        Pragma: "no-cache",
+        Expires: "0",
+        "Surrogate-Control": "no-store",
+    });
+    next();
+});
 const isLanOrigin = (origin) => {
     if (!origin) return true;
     try {

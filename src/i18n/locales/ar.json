@@ -1827,6 +1827,8 @@
         "openCashDrawerOnPayment": "فتح درج الكاشير عند الدفع الكامل",
         "openCashDrawerOnPaymentDesc": "فتح درج الكاشير تلقائياً عند دفع الفاتورة بالكامل (يمكن أيضاً فتحه يدوياً)",
         "autoPrintOnPayment": "طباعة الفاتورة تلقائياً عند الدفع",
+        "promptOrderPrintSections": "اختيار أقسام الطلب قبل الطباعة",
+        "promptOrderPrintSectionsDesc": "إظهار نافذة لاختيار أقسام الطلب عند وجود أكثر من قسم",
         "autoPrintOnPaymentDesc": "طباعة الفاتورة تلقائياً عند دفع الفاتورة بالكامل (يمكن تعطيلها)",
         "charactersPerLine": "عدد الأحرف في السطر",
         "charactersPerLineDesc": "عدد الأحرف في كل سطر (الافتراضي: 48)",
@@ -2136,6 +2138,8 @@
     }
   },
   "orderPrint": {
+    "chooseSections": "اختيار أقسام الطلب للطباعة",
+    "printSelected": "طباعة الأقسام المحددة",
     "title": "طلب رقم",
     "table": "الطاولة",
     "customer": "العميل",

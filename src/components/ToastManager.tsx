@@ -101,7 +101,6 @@ const ToastManager: React.FC<ToastManagerProps> = ({ children }) => {
       pauseOnHover: true,
       draggable: true,
       className: `custom-toast ${getBackgroundColor()}`,
-      bodyClassName: 'custom-toast-body',
       progressClassName: 'custom-toast-progress',
     };
 

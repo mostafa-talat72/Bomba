@@ -192,7 +192,7 @@ const Costs = () => {
       if (dateFrom) params.startDate = dateFrom;
       if (dateTo) params.endDate = dateTo;
 
-      const response = await api.getCosts(params);
+      const response: any = await api.getCosts(params);
       
       // Handle API response format
       if (response.success) {

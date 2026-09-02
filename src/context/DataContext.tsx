@@ -132,12 +132,12 @@ interface DataContextType {
   updateMenuCategory: (id: string, updates: any) => Promise<MenuCategory | null>;
   deleteMenuCategory: (id: string) => Promise<boolean>;
 
-  fetchTableSections: () => Promise<void>;
+  fetchTableSections: () => Promise<any>;
   createTableSection: (sectionData: any) => Promise<any>;
   updateTableSection: (id: string, updates: any) => Promise<any>;
   deleteTableSection: (id: string) => Promise<boolean>;
 
-  fetchTables: (sectionId?: string) => Promise<void>;
+  fetchTables: (sectionId?: string) => Promise<any>;
   getTableStatus: (id: string) => Promise<{ table: any; hasUnpaidOrders: boolean; orders: Order[]; bills?: Bill[] } | null>;
   createTable: (tableData: any) => Promise<any>;
   updateTable: (id: string, updates: any) => Promise<any>;
@@ -388,7 +388,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     if (!user) return;
 
     try {
-      const response = await api.getBills();
+      const response = await api.getBills({ fresh: true });
       if (response.success && response.data) {
         setBills(response.data);
       } else {
@@ -1398,8 +1398,12 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const response = await api.getTableSections();
       if (response.success && response.data) {
         setTableSections(response.data);
+        return response.data;
       }
+      throw new Error(response.message || 'Failed to load table sections');
     } catch (error) {
+      console.error('Failed to load table sections:', error);
+      throw error;
     }
   };
 
@@ -1456,8 +1460,12 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const response = await api.getTables(sectionId ? { section: sectionId } : undefined);
       if (response.success && response.data) {
         setTables(response.data);
+        return response.data;
       }
+      throw new Error(response.message || 'Failed to load tables');
     } catch (error) {
+      console.error('Failed to load tables:', error);
+      throw error;
     }
   };
 
@@ -1659,9 +1667,6 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setBills([]);
     setSessions([]);
 
-    if (typeof window !== 'undefined') {
-      try { localStorage.removeItem('tables_cache_v2'); } catch {}
-    }
 
     await refreshData(0);
   };

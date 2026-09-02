@@ -303,6 +303,7 @@ const [formData, setFormData] = useState({
     setFormData({
       name: '',
       email: '',
+      username: '',
       password: '',
       confirmPassword: '',
       role: 'staff',
@@ -430,6 +431,7 @@ const [formData, setFormData] = useState({
     setFormData({
       name: u.name || '',
       email: u.email || '',
+      username: u.username || '',
       password: '',
       confirmPassword: '',
       role: u.role || 'staff',

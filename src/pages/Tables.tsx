@@ -1,8 +1,8 @@
 ﻿import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import {
-  ShoppingCart, Plus, Minus, Edit, Trash2, X, Printer,
+  ShoppingCart, Plus, Edit, Trash2, X, Printer,
   Settings, AlertTriangle, Search, CheckCircle, DollarSign,
-  Calendar, User, Receipt, QrCode, Table as TableIcon, Eye, EyeOff,
+  Calendar, Receipt, Table as TableIcon, Eye, EyeOff,
   Gamepad2, ChevronDown, ChevronUp, ChefHat,
   Clock, History, FileText, Zap, Layers
 } from 'lucide-react';
@@ -15,13 +15,10 @@ import { useTablesHeader } from '../context/TablesHeaderContext';
 import { MenuItem, MenuSection, MenuCategory, TableSection, Table, Order, Bill, Session } from '../services/api';
 import { api } from '../services/api';
 import { formatCurrency as formatCurrencyUtil, formatDecimal } from '../utils/formatters';
-import { formatTime } from '../utils/dateHelpers';
 import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
 import { printOrder } from '../utils/printOrder';
 import { printBill } from '../utils/printBill';
-import { aggregateItemsWithPayments, getItemIdsForAggregatedItem } from '../utils/billAggregation';
 import { useBillAggregation } from '../hooks/useBillAggregation';
-import { i18n } from '../i18n';
 import {
   canAddOrder, canEditOrder, canDeleteOrder,
   canPartialPayment, canPayFullBill, canDeleteBill,
@@ -35,11 +32,11 @@ import '../styles/billing-animations.css';
 import TableButton from '../components/tables/TableButton';
 import PlaystationBillItem from '../components/tables/PlaystationBillItem';
 import { ItemCard, OrderItemRow } from '../components/tables/OrderItems';
-import { getTableDisplay, getAgeLabel, getTableAgeColor, formatCurrencyArabic } from '../components/tables/tableHelpers';
+import { getTableDisplay } from '../components/tables/tableHelpers';
 import type { LocalOrderItem } from '../components/tables/tableHelpers';
 import ModalPortal from '../components/ModalPortal';
 import UndoBar, { UndoRequest } from '../components/UndoBar';
-import { playWarnBeep, playDangerBeep, isSoundEnabled, setSoundEnabled } from '../utils/sound';
+import { playWarnBeep, playDangerBeep, isSoundEnabled } from '../utils/sound';
 import BillItemsEditModal from '../components/tables/BillItemsEditModal';
 import PriceEditModal from '../components/tables/PriceEditModal';
 import { canEditItemPrice } from '../utils/permissionHelper';
@@ -79,10 +76,11 @@ const Tables: React.FC = () => {
   const selectedTableRef = useRef<Table | null>(null);
   const tablesRef = useRef<Table[]>(tables);
   const hasLoadedDataRef = useRef(false);
+  const paymentActionLockRef = useRef(false);
 
   // ── Unified modal state ──────────────────────────────────────────────────
   const [showUnifiedTableModal, setShowUnifiedTableModal] = useState(false);
-  const [activeTab, setActiveTab] = useState<'orders' | 'billing'>('orders');
+  const [activeTab, setActiveTab] = useState<'orders' | 'billing' | 'sessions'>('orders');
 
   // ── Orders state ─────────────────────────────────────────────────────────
   const [loading, setLoading] = useState(false);
@@ -110,6 +108,8 @@ const Tables: React.FC = () => {
     title: string; message: string; onConfirm: () => void;
     confirmText?: string; cancelText?: string; confirmColor?: string;
   } | null>(null);
+  const [orderPrintSelection, setOrderPrintSelection] = useState<{ order: Order; sectionIds: string[]; sections: Array<{ id: string; name: string }> } | null>(null);
+  const [selectedOrderPrintSections, setSelectedOrderPrintSections] = useState<string[]>([]);
 
   // ── Billing state ────────────────────────────────────────────────────────
   const [selectedBill, setSelectedBill] = useState<Bill | null>(null);
@@ -236,6 +236,19 @@ const Tables: React.FC = () => {
     const sec = tableSections.find((s: any) => s._id === raw || s.id === raw);
     return sec ? String(sec.id) : String(raw);
   };
+  const getSectionKey = (section: any): string =>
+    String(section?._id || section?.id || '');
+
+  const getCanonicalTableSectionKey = (table: any): string => {
+    const raw = typeof table?.section === 'object'
+      ? table.section?._id || table.section?.id
+      : table?.section;
+    if (!raw) return '__unassigned__';
+    const section = tableSections.find(s =>
+      String(s?._id || s?.id || '') === String(raw)
+    );
+    return section ? getSectionKey(section) : '__unassigned__';
+  };
 
   // #7 - Activity log tab
   const [activeTab3, setActiveTab3] = useState<'orders' | 'billing' | 'log' | 'sessions'>('orders');
@@ -291,46 +304,13 @@ const Tables: React.FC = () => {
     return false;
   }, [user?.role, user?.permissions]);
 
-  // ── Cache constants ──────────────────────────────────────────────────────────
-const TABLES_CACHE_KEY = 'tables_cache_v2';
-const TABLES_CACHE_TTL = 10000; // 10 ثانية
-
-function readTablesCache() {
-  try {
-    const raw = localStorage.getItem(TABLES_CACHE_KEY);
-    if (!raw) return null;
-    const { data, ts } = JSON.parse(raw);
-    if (Date.now() - ts > TABLES_CACHE_TTL) return null;
-    return data;
-  } catch { return null; }
-}
-
-function writeTablesCache(tables: any[], sections: any[]) {
-  try {
-    localStorage.setItem(TABLES_CACHE_KEY, JSON.stringify({ data: { tables, sections }, ts: Date.now() }));
-  } catch {}
-}
-
-function invalidateTablesCache() {
-  try { localStorage.removeItem(TABLES_CACHE_KEY); } catch {}
-}
-
 // ── Load initial data ────────────────────────────────────────────────────
 const loadInitialData = async () => {
   setLoading(true);
   try {
-    // قراءة الكاش فوراً للرسم الأولي (<50ms)
-    const cached = readTablesCache();
-    if (cached?.tables?.length) {
-      setTables(cached.tables);
-      setTableSections(cached.sections || []);
-      setLoading(false);
-    }
-    // المرحلة 1 — الطاولات من السيرفر (30ms)
+    // Always use the server as the source of truth for tables.
     await Promise.all([fetchTableSections(), fetchTables()]);
     setLoading(false);
-    // تحديث الكاش بعد نجاح الجلب
-    writeTablesCache(tables, tableSections);
     // المرحلة 2 — باقي البيانات في الخلفية
     Promise.all([
       fetchBills(),
@@ -589,7 +569,6 @@ const loadInitialData = async () => {
 
     // إعادة الاتصال — جلب كل شيء من جديد
     socket.on('reconnect', () => {
-      invalidateTablesCache();
       Promise.all([fetchBills(), fetchTables(), fetchOrders()]).then(() => fetchAllTableStatuses()).catch(() => {});
     });
 
@@ -908,7 +887,7 @@ const loadInitialData = async () => {
         const tb = lastFocusedTableRef.current;
         if (!tb) { showNotification('مرّر مؤشر الفأرة على طاولة أولاً', 'info'); return; }
         handleTableClick(tb);
-        setTimeout(() => { setActiveTab3('sessions'); setActiveTab('sessions'); }, 0);
+        setTimeout(() => { setActiveTab3('sessions'); }, 0);
       } else if (/^[0-9]$/.test(e.key)) {
         // ── بناء رقم الطاولة ──
         e.preventDefault();
@@ -958,10 +937,21 @@ const loadInitialData = async () => {
   }, [tables, bills, location.state]);
 
   // ── Memos ────────────────────────────────────────────────────────────────
-  const activeTableSections = useMemo(() =>
-    tableSections.filter(s => s.isActive).sort((a, b) => a.sortOrder - b.sortOrder), [tableSections]);
+  const activeTableSections = useMemo(() => {
+    const active = tableSections
+      .filter(s => s.isActive !== false)
+      .sort((a, b) => a.sortOrder - b.sortOrder);
+    const activeIds = new Set(active.map(getSectionKey));
+    const orphanTables = tables.filter(table => {
+      if (table.isActive === false) return false;
+      return !activeIds.has(getCanonicalTableSectionKey(table));
+    });
+    return orphanTables.length > 0
+      ? [...active, { id: '__unassigned__', _id: '__unassigned__', name: 'غير مصنف', sortOrder: Number.MAX_SAFE_INTEGER, isActive: true }]
+      : active;
+  }, [tableSections, tables]);
 
-  const activeTables = useMemo(() => tables.filter(t => t.isActive), [tables]);
+  const activeTables = useMemo(() => tables.filter(t => t.isActive !== false), [tables]);
 
   // ── فلتر كروت الطاولات (بحث + حالة) ─────────────────────────────────────
   const matchesTableFilter = useCallback((tb: Table) => {
@@ -987,7 +977,7 @@ const loadInitialData = async () => {
   // #6 — filtered sections for section-tab
   const filteredSectionsForDisplay = useMemo(() => {
     if (activeSectionFilter === 'all') return activeTableSections;
-    return activeTableSections.filter(s => s.id === activeSectionFilter);
+    return activeTableSections.filter(s => getSectionKey(s) === activeSectionFilter);
   }, [activeTableSections, activeSectionFilter]);
 
   const tableStats = useMemo(() => {
@@ -1000,7 +990,7 @@ const loadInitialData = async () => {
   const getTablesBySection = useMemo(() => {
     const map: Record<string, Table[]> = {};
     activeTables.forEach(table => {
-      const sec = typeof table.section === 'string' ? table.section : (table.section as TableSection)?._id || (table.section as TableSection)?.id;
+      const sec = getCanonicalTableSectionKey(table);
       if (sec) {
         if (!map[sec]) map[sec] = [];
         map[sec].push(table);
@@ -1014,7 +1004,7 @@ const loadInitialData = async () => {
       });
     });
     return map;
-  }, [activeTables]);
+  }, [activeTables, tableSections]);
 
   const filteredTableOrders = useMemo(() =>
     tableOrders.filter((o: Order) => {
@@ -1055,9 +1045,7 @@ const loadInitialData = async () => {
     formatCurrencyUtil(amount, i18n.language, localStorage.getItem('organizationCurrency') || 'EGP'),
   [i18n.language]);
 
-  // ── tableCardData — بيانات كل طاولة مع cache فردي للطاولات ──
-  // liveExtra: تكلفة الجلسات النشطة الحية (تتحدث كل 10 ثوانٍ فقط للطاولات اللي فيها جلسات)
-  const tableCardDataCache = useRef(new Map<string, { tBills: Bill[]; tOrdersCount: number; activeSessionType: 'playstation' | 'computer' | 'both' | null; liveExtra: number }>());
+  // ── tableCardData — بيانات كل طاولة ──
   const tableCardData = useMemo(() => {
     const result = new Map<string, {
       tBills: Bill[];
@@ -1084,7 +1072,6 @@ const loadInitialData = async () => {
       tidToOrderCount.set(oid, (tidToOrderCount.get(oid) || 0) + 1);
     });
 
-    const cache = tableCardDataCache.current;
     activeTables.forEach((table: Table) => {
       const tid = (table._id || (table as any).id).toString();
       const tBills = tidToBills.get(tid) ?? EMPTY_BILLS;
@@ -1102,16 +1089,7 @@ const loadInitialData = async () => {
       // السيرفر الآن يحسب الفاتورة حية، لا حاجة لـ delta على الكارت — نعتمد على bill.remaining الحي من السيرفر
       const liveExtra = 0;
 
-      // إعادة استخدام المرجع القديم لو البيانات لم تتغير (يمنع re-render غير ضروري)
-      // للطاولات الفارغة أو المشغولة بدون جلسة: liveExtra دائماً 0 → لا تتأثر بـ tick
-      const prev = cache.get(tid);
-      if (prev && prev.tOrdersCount === tOrdersCount && prev.activeSessionType === activeSessionType && prev.liveExtra === liveExtra && prev.tBills.length === tBills.length && prev.tBills.every((b, i) => b._id === tBills[i]._id && b.status === tBills[i].status && b.remaining === tBills[i].remaining)) {
-        result.set(tid, prev);
-      } else {
-        const entry = { tBills, tOrdersCount, activeSessionType, liveExtra };
-        result.set(tid, entry);
-        cache.set(tid, entry);
-      }
+      result.set(tid, { tBills, tOrdersCount, activeSessionType, liveExtra });
     });
     return result;
   }, [bills, orders, activeTables, getSessionCost]);
@@ -1671,7 +1649,7 @@ const loadInitialData = async () => {
         return i;
       }
       return i.menuItem === id ? { ...i, notes } : i;
-    }), []));
+    })), []);
 
   const removeItemFromOrder = useCallback((id: string, variant?: string | null) =>
     setCurrentOrderItems(p => {
@@ -1711,7 +1689,6 @@ const loadInitialData = async () => {
         // تحديث متفائل — createOrder في DataContext حدث orders+bills، نحدث tableOrders فقط
         setTableOrders(p => [...p, order]);
         // إبطال كاش الطاولات لضمان إعادة الرسم الفوري
-        invalidateTablesCache();
         // لا حاجة لـ fetchBills/fetchOrders المكرر — scheduleBackgroundRefetch للتأكيد فقط
         scheduleBackgroundRefetch(true);
       }
@@ -1758,7 +1735,36 @@ const loadInitialData = async () => {
     if (!order.items || !Array.isArray(order.items)) { showNotification(t('cafe.notifications.orderHasNoItems'), 'error'); return; }
     const map = new Map();
     menuItems.forEach(mi => { map.set(mi.id, mi); map.set(mi._id, mi); });
-    await printOrder({ ...order, items: order.items.map((item: any, idx: number) => ({ ...item, _id: item._id || item.id || `temp-${idx}` })), createdAt: order.createdAt instanceof Date ? order.createdAt.toISOString() : order.createdAt } as any, menuSections, map, user?.organizationName || '', i18n.language, t, getTableSectionName(order.table));
+    const normalizedOrder = { ...order, items: order.items.map((item: any, idx: number) => ({ ...item, _id: item._id || item.id || `temp-${idx}` })), createdAt: order.createdAt instanceof Date ? order.createdAt.toISOString() : order.createdAt } as any;
+    const sectionMap = new Map<string, string>();
+    order.items.forEach((item: any) => {
+      const menuItem = typeof item.menuItem === 'object' ? item.menuItem : map.get(item.menuItem);
+      const section = menuItem?.category?.section;
+      const id = typeof section === 'object' ? section?._id || section?.id : section;
+      if (id) {
+        const sectionData = menuSections.find(s => String(s._id || s.id) === String(id));
+        sectionMap.set(String(id), sectionData?.name || t('orderPrint.unspecifiedSection'));
+      } else {
+        sectionMap.set('other', t('orderPrint.otherSection'));
+      }
+    });
+    const sections = Array.from(sectionMap, ([id, name]) => ({ id, name }));
+    const prompt = user?.organization?.printSettings?.promptOrderPrintSections === true;
+    if (prompt && sections.length > 1) {
+      setSelectedOrderPrintSections(sections.map(section => section.id));
+      setOrderPrintSelection({ order: normalizedOrder, sectionIds: sections.map(section => section.id), sections });
+      return;
+    }
+    await printOrder(normalizedOrder, menuSections, map, user?.organizationName || '', i18n.language, t, getTableSectionName(order.table), sections.map(section => section.id));
+  };
+
+  const confirmOrderPrintSections = async () => {
+    if (!orderPrintSelection || selectedOrderPrintSections.length === 0) return;
+    const map = new Map();
+    menuItems.forEach(mi => { map.set(mi.id, mi); map.set(mi._id, mi); });
+    const selection = orderPrintSelection;
+    setOrderPrintSelection(null);
+    await printOrder(selection.order, menuSections, map, user?.organizationName || '', i18n.language, t, getTableSectionName(selection.order.table), selectedOrderPrintSections);
   };
 
   const showConfirm = (title: string, message: string, onConfirm: () => void, confirmText = 'تأكيد', cancelText = 'إلغاء', confirmColor = 'bg-red-600 hover:bg-red-700') => {
@@ -1780,7 +1786,6 @@ const loadInitialData = async () => {
             showNotification(t('cafe.orderDeletedSuccess'), 'success');
             fetchAvailableMenuItems();
             setTableOrders(prev => prev.filter(o => (o as any).id !== order.id && (o as any)._id !== order.id));
-            invalidateTablesCache();
             scheduleBackgroundRefetch(true);
           } else {
             showNotification(t('cafe.orderDeletedError'), 'error');
@@ -1900,7 +1905,6 @@ const loadInitialData = async () => {
         await paySinglePart(updatedAfterFirst || { ...selectedBill, paid: (selectedBill.paid || 0) + a1 }, a2, method2, effectiveTotal, discountAmount, discountPercentage);
         handleClosePaymentModal();
         showNotification(t('billing.notifications.paymentSuccess'), 'success');
-        invalidateTablesCache();
         scheduleBackgroundRefetch(true);
         return;
       }
@@ -1915,7 +1919,6 @@ const loadInitialData = async () => {
       await paySinglePart(selectedBill, payVal, paymentMethod, effectiveTotal, discountAmount, discountPercentage);
       handleClosePaymentModal();
       showNotification(t('billing.notifications.paymentSuccess'), 'success');
-      invalidateTablesCache();
       scheduleBackgroundRefetch(true);
     } catch { showNotification(t('billing.notifications.paymentError'), 'error'); }
     finally { setIsProcessingPayment(false); splitPartsRef.current = null; }
@@ -1954,7 +1957,8 @@ const loadInitialData = async () => {
   };
 
   const confirmPayFullBill = async () => {
-    if (!billToPayFull) return;
+    if (!billToPayFull || paymentActionLockRef.current) return;
+    paymentActionLockRef.current = true;
     try {
       setIsProcessingPayment(true);
       if (selectedBill && (selectedBill.id === billToPayFull.id || selectedBill._id === billToPayFull._id)) {
@@ -1962,7 +1966,6 @@ const loadInitialData = async () => {
         setShowPayFullBillConfirmModal(false); setBillToPayFull(null); return;
       }
       const remaining = billToPayFull.remaining || 0;
-      // تحديث متفائل
       const optimisticFull: any = { ...billToPayFull, paid: (billToPayFull.paid || 0) + remaining, remaining: 0, status: 'paid' };
       setBills(prev => prev.map(b => String(b._id || b.id) === String(billToPayFull._id || billToPayFull.id) ? optimisticFull : b));
       const result = await api.updatePayment(billToPayFull.id || billToPayFull._id, {
@@ -1981,23 +1984,26 @@ const loadInitialData = async () => {
           return next;
         });
         setShowPayFullBillConfirmModal(false); setBillToPayFull(null);
-        setIsProcessingPayment(false);
         setShowPaymentSuccessAnim(true);
         setTimeout(() => setShowPaymentSuccessAnim(false), 2500);
-        tableCardDataCache.current.clear();
-        invalidateTablesCache();
         await fetchTables();
         fetchBills().catch(()=>{});
         showNotification(t('billing.notifications.payFullBillSuccess'), 'success');
 
-        if (user?.organization?.printSettings?.openCashDrawerOnPayment !== false) {
+        if (user?.organization?.printSettings?.openCashDrawerOnPayment !== false &&
+            !(user?.organization?.printSettings?.autoPrintOnPayment ?? true)) {
           await handleOpenCashDrawer();
         }
         if (user?.organization?.printSettings?.autoPrintOnPayment ?? true) {
-          try { await printBill(finalPaidBill, user?.organizationName, i18n.language, t, getTableSectionName(finalPaidBill.table)); } catch {}
+          try { await printBill(finalPaidBill, user?.organizationName, i18n.language, t, getTableSectionName(finalPaidBill.table), 'payment'); } catch {}
         }
       }
-    } catch { showNotification(t('billing.notifications.payFullBillError'), 'error'); setIsProcessingPayment(false); }
+    } catch {
+      showNotification(t('billing.notifications.payFullBillError'), 'error');
+    } finally {
+      paymentActionLockRef.current = false;
+      setIsProcessingPayment(false);
+    }
   };
 
   const handleDirectPayFull = async (bill: Bill) => {
@@ -2026,7 +2032,6 @@ const loadInitialData = async () => {
         setSelectedTable(null);
       }
       // مسح كاش كروت الطاولات عشان اللون يتحدث فورا
-      tableCardDataCache.current.clear();
       const result = await api.updatePayment((bill as any).id || (bill as any)._id, {
         paid: (bill.paid || 0) + remaining, remaining: 0, status: 'paid',
         paymentAmount: remaining, method: 'cash', reference: '',
@@ -2042,21 +2047,20 @@ const loadInitialData = async () => {
           }
           return next;
         });
-        tableCardDataCache.current.clear();
         setIsProcessingPayment(false);
         setShowPaymentSuccessAnim(true);
         setTimeout(() => setShowPaymentSuccessAnim(false), 2500);
-        invalidateTablesCache();
         await fetchTables();
         // fetch فوري بدون throttle عشان حالة الطاولة تتأكد
         fetchBills().catch(()=>{});
         showNotification(t('billing.notifications.payFullBillSuccess'), 'success');
 
-        if (user?.organization?.printSettings?.openCashDrawerOnPayment !== false) {
+        if (user?.organization?.printSettings?.openCashDrawerOnPayment !== false &&
+            !(user?.organization?.printSettings?.autoPrintOnPayment ?? true)) {
           await handleOpenCashDrawer();
         }
         if (user?.organization?.printSettings?.autoPrintOnPayment ?? true) {
-          await printBill(finalPaidBill, user?.organizationName, i18n.language, t, getTableSectionName(finalPaidBill.table));
+          await printBill(finalPaidBill, user?.organizationName, i18n.language, t, getTableSectionName(finalPaidBill.table), 'payment');
         }
       } else {
         setIsProcessingPayment(false);
@@ -2105,7 +2109,6 @@ const loadInitialData = async () => {
         if (response.data) {
           setBills(prev => prev.map(b => String(b._id || b.id) === String(selectedBill._id || selectedBill.id) ? response.data : b));
           setSelectedBill(response.data as Bill);
-          invalidateTablesCache();
           scheduleBackgroundRefetch(true);
           if ((response.data as Bill).status === 'paid') {
             setShowPartialPaymentModal(false);
@@ -2232,7 +2235,6 @@ const loadInitialData = async () => {
         }
 const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBill?.id || selectedBill?._id;
 
-        invalidateTablesCache();
         scheduleBackgroundRefetch(true);
         if (billId) {
           api.getBill(billId as string).then(r => { if (r?.data) setSelectedBill(r.data); }).catch(() => {});
@@ -2581,13 +2583,14 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
               <span className={"text-[10px] px-1.5 py-0.5 rounded-full font-bold " + (activeSectionFilter === 'all' ? 'bg-white/25 text-white' : 'bg-blue-100 dark:bg-gray-700 text-blue-700 dark:text-gray-300')}>{activeTables.length}</span>
             </button>
             {activeTableSections.map(sec => {
-              const cnt = (getTablesBySection[sec.id] || []).length;
-              const occ = (getTablesBySection[sec.id] || []).filter(tb => tableStatuses[String((tb as any)._id || (tb as any).id)]?.hasUnpaid).length;
+              const sectionKey = getSectionKey(sec);
+              const cnt = (getTablesBySection[sectionKey] || []).length;
+              const occ = (getTablesBySection[sectionKey] || []).filter(tb => tableStatuses[String((tb as any)._id || (tb as any).id)]?.hasUnpaid).length;
               if (cnt === 0) return null;
-              const isActive = activeSectionFilter === sec.id;
+              const isActive = activeSectionFilter === sectionKey;
               return (
-                <button key={sec.id}
-                  onClick={() => { scrollToTop(); setActiveSectionFilter(sec.id); }}
+                <button key={sectionKey}
+                  onClick={() => { scrollToTop(); setActiveSectionFilter(sectionKey); }}
                   className={"flex-shrink-0 w-20 sm:w-24 h-20 sm:h-24 flex flex-col items-center justify-center gap-1 rounded-xl border-2 text-xs sm:text-sm font-bold transition-all " + (isActive
                     ? 'bg-blue-600 border-blue-700 text-white shadow-md scale-[1.02]'
                     : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:border-blue-400 hover:shadow-sm')}>
@@ -2650,10 +2653,11 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
           ) : (
             <div className="space-y-2 sm:space-y-3">
               {filteredSectionsForDisplay.map(section => {
-                const shownTables = (getTablesBySection[section.id] || []).filter(matchesTableFilter);
+                const sectionKey = getSectionKey(section);
+                const shownTables = (getTablesBySection[sectionKey] || []).filter(matchesTableFilter);
                 if (shownTables.length === 0) return null;
                 return (
-                  <div key={section.id} className="border-2 border-gray-200 dark:border-gray-700 rounded-xl p-2.5 sm:p-3 bg-gradient-to-br from-gray-50 to-white dark:from-gray-800 dark:to-gray-900 shadow-md">
+                  <div key={sectionKey} className="border-2 border-gray-200 dark:border-gray-700 rounded-xl p-2.5 sm:p-3 bg-gradient-to-br from-gray-50 to-white dark:from-gray-800 dark:to-gray-900 shadow-md">
                     <h3 className="text-base sm:text-lg font-bold text-gray-900 dark:text-gray-100 mb-2 sm:mb-3 flex items-center gap-2">
                       <div className="w-1 h-5 sm:h-6 bg-gradient-to-b from-blue-500 to-purple-500 rounded-full flex-shrink-0"></div>
                       <span className="truncate">{section.name}</span>
@@ -3536,8 +3540,8 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
         setNewTableNumber={setNewTableNumber}
         setShowSessionPaymentModal={setShowSessionPaymentModal}
         setShowPaymentModal={setShowPaymentModal}
-        setActiveTab={setActiveTab}
-        setActiveTab3={setActiveTab3}
+        setActiveTab={(tab: string) => setActiveTab(tab as 'orders' | 'billing' | 'sessions')}
+        setActiveTab3={(tab: string) => setActiveTab3(tab as 'orders' | 'billing' | 'sessions' | 'log')}
         getSessionCost={getSessionCost}
         formatCurrency={formatCurrency}
         showNotification={showNotification}
@@ -4015,6 +4019,37 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
           onClose={() => { setShowTableModal(false); setEditingTable(null); setTableFormData({ number: '', section: '' }); }} />
       )}
 
+      {orderPrintSelection && (
+        <ModalPortal>
+          <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[300] p-4">
+            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md">
+              <div className="p-5 border-b border-gray-200 dark:border-gray-700">
+                <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100">{t('orderPrint.chooseSections')}</h3>
+              </div>
+              <div className="p-5 space-y-3">
+                {orderPrintSelection.sections.map(section => (
+                  <label key={section.id} className="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={selectedOrderPrintSections.includes(section.id)}
+                      onChange={() => setSelectedOrderPrintSections(current => current.includes(section.id)
+                        ? current.filter(id => id !== section.id)
+                        : [...current, section.id])}
+                      className="h-5 w-5 accent-orange-600"
+                    />
+                    <span className="text-lg text-gray-800 dark:text-gray-100">{section.name}</span>
+                  </label>
+                ))}
+              </div>
+              <div className="p-5 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-3">
+                <button onClick={() => setOrderPrintSelection(null)} className="px-4 py-2 rounded-lg bg-gray-200 dark:bg-gray-700">{t('common.cancel')}</button>
+                <button onClick={confirmOrderPrintSections} disabled={selectedOrderPrintSections.length === 0} className="px-4 py-2 rounded-lg bg-orange-600 text-white disabled:opacity-50">{t('orderPrint.printSelected')}</button>
+              </div>
+            </div>
+          </div>
+        </ModalPortal>
+      )}
+
       {/* ── Confirm Modal ── */}
       {showConfirmModal && confirmModalData && (
         <ModalPortal>
@@ -4102,11 +4137,12 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
               }
               return next;
             });
-            if (user?.organization?.printSettings?.openCashDrawerOnPayment !== false) {
+            if (user?.organization?.printSettings?.openCashDrawerOnPayment !== false &&
+                !(user?.organization?.printSettings?.autoPrintOnPayment ?? true)) {
               await handleOpenCashDrawer();
             }
             if (user?.organization?.printSettings?.autoPrintOnPayment ?? true) {
-              try { await printBill(updatedBill, user?.organizationName, i18n.language, t, getTableSectionName((updatedBill as any).table)); } catch {}
+              try { await printBill(updatedBill, user?.organizationName, i18n.language, t, getTableSectionName((updatedBill as any).table), 'payment'); } catch {}
             }
           }
           showNotification('تم تحديث أصناف الفاتورة بنجاح', 'success');
@@ -5064,7 +5100,7 @@ const TableModalComp: React.FC<{
             <select value={formData.section} onChange={e => setFormData({ ...formData, section: e.target.value })}
               className="w-full border border-gray-300 dark:border-gray-600 rounded-xl px-3 py-2.5 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-lg sm:text-xl focus:ring-2 focus:ring-green-500">
               <option value="">{t('cafe.tableModal.selectSection')}</option>
-              {tableSections.filter(s => s.isActive).sort((a, b) => a.sortOrder - b.sortOrder).map(s => (
+              {tableSections.filter(s => s.isActive !== false).sort((a, b) => a.sortOrder - b.sortOrder).map(s => (
                 <option key={s.id} value={s.id}>{s.name}</option>
               ))}
             </select>

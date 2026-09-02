@@ -5,6 +5,7 @@ import api from '../services/api';
 
 interface LanguageContextType {
   currentLanguage: string;
+  language: string;
   changeLanguage: (lang: string, saveToDatabase?: boolean) => Promise<void>;
   languages: typeof languages;
   isRTL: boolean;
@@ -121,6 +122,7 @@ export const LanguageProvider: React.FC<{ children: ReactNode }> = ({ children }
     <LanguageContext.Provider
       value={{
         currentLanguage,
+        language: currentLanguage,
         changeLanguage,
         languages,
         isRTL,

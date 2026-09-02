@@ -1,10 +1,9 @@
 import api from '../services/api';
-import { formatDecimal, formatCurrency as formatCurrencyUtil, getCurrencySymbol, getDisplayNumber } from './formatters';
-import { getLocaleFromLanguage } from './localeMapper';
+import { formatDecimal, getCurrencySymbol, getDisplayNumber } from './formatters';
 import type { TFunction } from 'i18next';
 
 interface OrderItem {
-  _id: string;
+  _id?: string;
   name: string;
   arabicName?: string;
   price: number;
@@ -18,7 +17,7 @@ interface OrderItem {
     price: number;
     quantity: number;
   }>;
-  menuItem?: {
+  menuItem?: string | {
     category?: {
       section?: {
         _id?: string;
@@ -31,7 +30,7 @@ interface OrderItem {
 interface Order {
   _id: string;
   orderNumber: string;
-  status: 'pending' | 'preparing' | 'ready' | 'delivered' | 'cancelled';
+  status: 'draft' | 'pending' | 'preparing' | 'ready' | 'delivered' | 'cancelled';
   table?: {
     _id: string;
     number: string | number;
@@ -42,7 +41,7 @@ interface Order {
   totalAmount?: number;
   finalAmount?: number;
   notes?: string;
-  createdAt: string;
+  createdAt: string | Date;
   updatedAt?: string;
   organization?: string | { _id: string; name: string };
 }
@@ -60,7 +59,8 @@ export const buildOrderPrintHTML = async (
   fallbackOrganizationName?: string,
   language: string = 'ar',
   t: TFunction = ((key: string) => key) as TFunction,
-  tableSectionName?: string
+  tableSectionName?: string,
+  selectedSectionIds?: string[]
 ): Promise<string> => {
   // Get establishment name from order data or use fallback
   let establishmentName = fallbackOrganizationName || t('orderPrint.defaultEstablishment') || 'Cafe Management System';
@@ -91,7 +91,7 @@ export const buildOrderPrintHTML = async (
   // Check if order.items exists and is an array
   if (!order.items || !Array.isArray(order.items)) {
     console.error('Order items is undefined or not an array:', order);
-    return;
+    return '';
   }
 
   // Group items by menu section
@@ -181,7 +181,9 @@ export const buildOrderPrintHTML = async (
   });
 
   // Print all sections on same page
-  const sectionsArray = Array.from(itemsBySection.entries()).map(([sectionId, items]) => {
+  const sectionsArray = Array.from(itemsBySection.entries()).filter(([sectionId]) =>
+    !selectedSectionIds || selectedSectionIds.includes(sectionId)
+  ).map(([sectionId, items]) => {
     const sectionName = sectionId === 'other' 
       ? t('orderPrint.otherSection')
       : menuSections.find(s => 
@@ -344,8 +346,10 @@ const printAllSectionsInOnePage = (
 body {
   direction: ${dir};
   font-family: 'Arial', sans-serif;
+  width: 80mm;
+  max-width: 80mm;
   margin: 0 auto;
-  padding: 0 4mm;
+  padding: 0 3mm;
   background: white;
   color: #000;
   font-size: 15px;
@@ -590,17 +594,29 @@ export const printOrder = async (
   fallbackOrganizationName?: string,
   language: string = 'ar',
   t: TFunction = ((key: string) => key) as TFunction,
-  tableSectionName?: string
+  tableSectionName?: string,
+  selectedSectionIds?: string[]
 ) => {
   const isElectron = typeof window !== 'undefined' && !!((window as any).bombaDesktop?.isDesktop || (window as any).electronAPI);
   try {
+    if (isElectron && (window as any).bombaDesktop?.directPrint) {
+      const printContent = await buildOrderPrintHTML(order, menuSections, menuItemsMap, fallbackOrganizationName, language, t, tableSectionName, selectedSectionIds);
+      const printResponse = await (window as any).bombaDesktop.directPrint(printContent);
+      if (!printResponse?.success) {
+        throw new Error(printResponse?.message || 'Desktop print failed');
+      }
+      const successMsg = language === 'ar' ? 'تمت طباعة الطلب بنجاح' : 'Order printed successfully';
+      if ((window as any).showNotification) (window as any).showNotification(successMsg, 'success');
+      return;
+    }
+
     // استخدام الاكتشاف التلقائي للطابعة الحرارية
     const directPrint = api.autoDetectAndPrintOrder({ 
       order, 
       organization: order.organization, 
       language 
     });
-    const timeout = new Promise<never>((_, reject) => setTimeout(() => reject(new Error('print-timeout')), 900));
+    const timeout = new Promise<never>((_, reject) => setTimeout(() => reject(new Error('print-timeout')), 15000));
     const response: any = await Promise.race([directPrint, timeout]);
     if (response?.success) {
       const successMsg = language === 'ar' ? 'تمت طباعة الطلب بنجاح' : language === 'fr' ? 'Commande imprimée avec succès' : 'Order printed successfully';
@@ -631,49 +647,20 @@ export const printOrder = async (
   }
 
   // Fallback: استخدام الطريقة القديمة أو Electron direct print إذا فشلت الطباعة المباشرة
-  const printContent = await buildOrderPrintHTML(order, menuSections, menuItemsMap, fallbackOrganizationName, language, t, tableSectionName);
+  const printContent = await buildOrderPrintHTML(order, menuSections, menuItemsMap, fallbackOrganizationName, language, t, tableSectionName, selectedSectionIds);
 
   // Check if running on Electron desktop app
   const isDesktopApp = typeof window !== 'undefined' && (window as any).bombaDesktop?.isDesktop;
   
   if (isDesktopApp) {
-    // On Electron, use direct print without preview
     try {
-      const printFrame = document.createElement('iframe');
-      printFrame.style.position = 'absolute';
-      printFrame.style.top = '-1000px';
-      printFrame.style.left = '-1000px';
-      printFrame.style.width = '0';
-      printFrame.style.height = '0';
-      printFrame.style.border = 'none';
-        
-      document.body.appendChild(printFrame);
-        
-      const frameDoc = printFrame.contentDocument || printFrame.contentWindow?.document;
-      if (frameDoc) {
-        frameDoc.open();
-        frameDoc.write(printContent);
-        frameDoc.close();
-          
-        setTimeout(async () => {
-          try {
-            await (window as any).bombaDesktop.directPrint();
-            setTimeout(() => {
-              if (document.body.contains(printFrame)) {
-                document.body.removeChild(printFrame);
-              }
-            }, 100);
-            return;
-          } catch (error) {
-            console.error('Electron direct print error:', error);
-            if (document.body.contains(printFrame)) {
-              document.body.removeChild(printFrame);
-            }
-            fallbackToBrowserPrint(printContent, language);
-          }
-        }, 100);
+      const printResponse = await (window as any).bombaDesktop.directPrint(printContent);
+      if (printResponse?.success) {
+        const successMsg = language === 'ar' ? 'تمت طباعة الطلب بنجاح' : 'Order printed successfully';
+        if ((window as any).showNotification) (window as any).showNotification(successMsg, 'success');
         return;
       }
+      console.warn('Electron direct print failed for order:', printResponse?.message || 'unknown');
     } catch (error) {
       console.error('Electron direct print setup error:', error);
     }
