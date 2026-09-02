@@ -2,17 +2,17 @@ import printerService from '../services/printerService.js';
 import printerDetectionService from '../services/printerDetectionService.js';
 import Organization from '../models/Organization.js';
 import { aggregateItemsWithPayments } from '../utils/billAggregation.js';
-import { organizationFilter } from '../utils/organization.js';
+import { organizationFilter, resolvePrintSettings } from '../utils/organization.js';
 
 async function loadPrintSettings(organization) {
   if (organization && typeof organization === 'object' && organization.printSettings) {
-    return organization.printSettings;
+    return resolvePrintSettings(organization);
   }
 
   if (!organization) return {};
   const storedOrganization = await Organization.findOne(organizationFilter(organization))
-    .select('printSettings');
-  return storedOrganization?.printSettings || {};
+    .select('printSettings devicePrinters');
+  return resolvePrintSettings(storedOrganization || {});
 }
 
 class PrintController {
@@ -451,14 +451,21 @@ class PrintController {
       const organization = await Organization.findById(organizationId);
       if (!organization) return res.status(404).json({ success: false, message: 'Organization not found' });
 
-      // حفظ إعدادات الطابعة للجهاز
       await printerDetectionService.savePrinterForDevice(
-        organization, 
-        userId, 
-        deviceId || 'default', 
-        printerPath, 
+        organization,
+        userId,
+        deviceId || 'default',
+        printerPath,
         printerName
       );
+
+      organization.printSettings = {
+        ...(organization.printSettings || {}),
+        printerType: 'usb',
+        printerDevice: printerPath,
+        printerName,
+      };
+      await organization.save();
 
       return res.json({ 
         success: true, 

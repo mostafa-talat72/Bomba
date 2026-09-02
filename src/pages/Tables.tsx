@@ -76,6 +76,7 @@ const Tables: React.FC = () => {
   const selectedTableRef = useRef<Table | null>(null);
   const tablesRef = useRef<Table[]>(tables);
   const hasLoadedDataRef = useRef(false);
+  const paymentActionLockRef = useRef(false);
 
   // ── Unified modal state ──────────────────────────────────────────────────
   const [showUnifiedTableModal, setShowUnifiedTableModal] = useState(false);
@@ -1950,7 +1951,8 @@ const loadInitialData = async () => {
   };
 
   const confirmPayFullBill = async () => {
-    if (!billToPayFull) return;
+    if (!billToPayFull || paymentActionLockRef.current) return;
+    paymentActionLockRef.current = true;
     try {
       setIsProcessingPayment(true);
       if (selectedBill && (selectedBill.id === billToPayFull.id || selectedBill._id === billToPayFull._id)) {
@@ -1958,7 +1960,6 @@ const loadInitialData = async () => {
         setShowPayFullBillConfirmModal(false); setBillToPayFull(null); return;
       }
       const remaining = billToPayFull.remaining || 0;
-      // تحديث متفائل
       const optimisticFull: any = { ...billToPayFull, paid: (billToPayFull.paid || 0) + remaining, remaining: 0, status: 'paid' };
       setBills(prev => prev.map(b => String(b._id || b.id) === String(billToPayFull._id || billToPayFull.id) ? optimisticFull : b));
       const result = await api.updatePayment(billToPayFull.id || billToPayFull._id, {
@@ -1977,7 +1978,6 @@ const loadInitialData = async () => {
           return next;
         });
         setShowPayFullBillConfirmModal(false); setBillToPayFull(null);
-        setIsProcessingPayment(false);
         setShowPaymentSuccessAnim(true);
         setTimeout(() => setShowPaymentSuccessAnim(false), 2500);
         await fetchTables();
@@ -1992,7 +1992,12 @@ const loadInitialData = async () => {
           try { await printBill(finalPaidBill, user?.organizationName, i18n.language, t, getTableSectionName(finalPaidBill.table), 'payment'); } catch {}
         }
       }
-    } catch { showNotification(t('billing.notifications.payFullBillError'), 'error'); setIsProcessingPayment(false); }
+    } catch {
+      showNotification(t('billing.notifications.payFullBillError'), 'error');
+    } finally {
+      paymentActionLockRef.current = false;
+      setIsProcessingPayment(false);
+    }
   };
 
   const handleDirectPayFull = async (bill: Bill) => {
