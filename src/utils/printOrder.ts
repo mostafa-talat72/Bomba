@@ -346,8 +346,10 @@ const printAllSectionsInOnePage = (
 body {
   direction: ${dir};
   font-family: 'Arial', sans-serif;
+  width: 80mm;
+  max-width: 80mm;
   margin: 0 auto;
-  padding: 0 4mm;
+  padding: 0 3mm;
   background: white;
   color: #000;
   font-size: 15px;

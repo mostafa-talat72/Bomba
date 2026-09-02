@@ -410,8 +410,8 @@ export const buildBillPrintHTML = async (
           font-size: 11px; 
           color: #000; 
           font-weight: 600;
-          width: auto;
-          max-width: auto;
+          width: 80mm;
+          max-width: 80mm;
           text-align: center;
           direction: ${dir};
         }
@@ -635,7 +635,7 @@ export const buildBillPrintHTML = async (
             margin: 0; 
             padding: 0; 
             font-weight: 600;
-            width: auto;
+            width: 80mm;
           }
           .no-print { display: none !important; }
           .items-table {
@@ -655,7 +655,7 @@ export const buildBillPrintHTML = async (
         
         @media screen {
           body {
-            max-width: auto;
+            max-width: 80mm;
             margin: 0 auto;
             background: #fff;
           }
@@ -804,7 +804,8 @@ export const printBill = async (
   fallbackOrganizationName?: string,
   language: string = 'ar',
   t: TFunction = ((key: string) => key) as TFunction,
-  tableSectionName?: string
+  tableSectionName?: string,
+  drawerMode: 'bill' | 'payment' = 'bill'
 ) => {
   const isElectron = typeof window !== 'undefined' && !!((window as any).bombaDesktop?.isDesktop || (window as any).electronAPI);
   try {
@@ -816,11 +817,12 @@ export const printBill = async (
       }
 
       const organization = typeof bill.organization === 'object' ? bill.organization : undefined;
-      const shouldOpenDrawer = organization?.printSettings?.openCashDrawer !== false;
+      const settingName = drawerMode === 'payment' ? 'openCashDrawerOnPayment' : 'openCashDrawer';
+      const shouldOpenDrawer = organization?.printSettings?.[settingName] !== false;
       const drawerResponse = shouldOpenDrawer
-        ? await api.autoDetectAndOpenCashDrawer('bill', bill.organization)
+        ? await api.autoDetectAndOpenCashDrawer(drawerMode, bill.organization)
         : { success: true };
-      if (!drawerResponse?.success && !drawerResponse?.data?.disabled) {
+      if (!drawerResponse?.success && !drawerResponse?.disabled) {
         console.warn('Bill printed, but cash drawer could not be opened:', drawerResponse?.message);
       }
       const successMsg = language === 'ar' ? 'تمت طباعة الفاتورة بنجاح' : 'Bill printed successfully';
@@ -834,7 +836,8 @@ export const printBill = async (
       bill, 
       organization: bill.organization, 
       language, 
-      tableSectionName 
+      tableSectionName,
+      drawerMode
     });
     const timeout = new Promise<never>((_, reject) => setTimeout(() => reject(new Error('print-timeout')), 15000));
     const response: any = await Promise.race([directPrint, timeout]);

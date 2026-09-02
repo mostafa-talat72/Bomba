@@ -12,6 +12,7 @@ export const HEALTH_CHECK_URL = API_BASE_URL;
 export interface ApiResponse<T = any> {
   success: boolean;
   message?: string;
+  disabled?: boolean;
   errors?: unknown;
   details?: unknown;
   data?: T;
@@ -2792,6 +2793,7 @@ class ApiClient {
     organization: any;
     language?: string;
     tableSectionName?: string;
+    drawerMode?: 'bill' | 'payment';
   }): Promise<ApiResponse<any>> {
     return this.request('/print/bill', {
       method: 'POST',
@@ -2808,6 +2810,7 @@ class ApiClient {
     organization: any;
     language?: string;
     tableSectionName?: string;
+    drawerMode?: 'bill' | 'payment';
   }): Promise<ApiResponse<any>> {
     return this.request('/print/bill/auto-detect', {
       method: 'POST',
