@@ -35,26 +35,24 @@ const FAWRY_SECURE_KEY = process.env.FAWRY_SECURE_KEY || "YOUR_SECURE_KEY";
 const VALID_SUBSCRIPTION_AMOUNTS = { monthly: 299, yearly: 2999 };
 
 // ── Helper: instant <100ms emit for bills + table status, keeps DB writes immediate ──
-function emitBillUpdated(req, bill) {
+function emitBillUpdated(req, bill, type = "updated") {
     if (!req.io || !bill) return;
     try {
         const orgId = req.user?.organization?._id || req.user?.organization;
         if (!orgId) return;
         const orgStr = String(orgId);
         // colon + dash rooms, both event names for compatibility
-        req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('bill:updated', bill);
-        req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('bill-update', { type: 'updated', bill });
-        try { req.io.notifyBillUpdate("updated", bill, req.user.organization); } catch {}
-        // table status if bill has table
-        if (bill.table) {
-            const tid = bill.table?._id || bill.table?.id || bill.table;
-            if (tid) {
-                const payload = { tableId: tid, status: (bill.status === 'paid' || bill.status === 'cancelled') ? 'empty' : 'occupied' };
-                req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('table:statusChanged', payload);
-                req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('table-status-update', payload);
-                try { req.io.notifyTableStatusUpdate(payload, req.user.organization); } catch {}
+        req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('bill-update', { type, bill });
+        try {
+            if (typeof req.io.notifyBillUpdate === "function") {
+                req.io.notifyBillUpdate(type, bill, req.user.organization);
+            } else {
+                req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit(
+                    type === "created" ? "bill:created" : type === "deleted" ? "bill:deleted" : "bill:updated",
+                    bill
+                );
             }
-        }
+        } catch {}
     } catch (e) { Logger.warn('emitBillUpdated failed', e.message); }
 }
 function emitBillDeleted(req, billId, tableId) {
@@ -64,15 +62,16 @@ function emitBillDeleted(req, billId, tableId) {
         if (!orgId) return;
         const orgStr = String(orgId);
         const payload = { _id: billId };
-        req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('bill:updated', payload);
         req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('bill-update', { type: 'deleted', bill: payload });
-        try { req.io.notifyBillUpdate("deleted", payload, req.user.organization); } catch {}
-        if (tableId) {
-            const tid = tableId?._id || tableId?.id || tableId;
-            const tp = { tableId: tid, status: 'empty' };
-            req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('table:statusChanged', tp);
-            req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('table-status-update', tp);
-        }
+        try {
+            if (typeof req.io.notifyBillUpdate === "function") {
+                req.io.notifyBillUpdate("deleted", payload, req.user.organization);
+            } else {
+                req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('bill:deleted', payload);
+            }
+        } catch {}
+        // The caller recalculates table status from all remaining unpaid
+        // bills.  Do not optimistically emit "empty" here.
     } catch {}
 }
 
@@ -810,7 +809,7 @@ export const createBill = async (req, res) => {
         };
 
         // ── Real-time emit (<100ms) — keep DB writes immediate ──
-        emitBillUpdated(req, bill);
+        emitBillUpdated(req, bill, "created");
 
         // Return response IMMEDIATELY after local save (table status already updated)
         res.status(201).json({
@@ -902,10 +901,12 @@ export const updateBill = async (req, res) => {
         if (notes !== undefined) bill.notes = notes;
         if (dueDate !== undefined) bill.dueDate = dueDate;
         
+        let movedFromTableId = null;
         // إذا تم تغيير الطاولة (باستخدام ID)
         if (table !== undefined) {
             const oldTableId = bill.table ? bill.table.toString() : null;
             const newTableId = table ? table.toString() : null;
+            movedFromTableId = oldTableId !== newTableId ? oldTableId : null;
             
             if (oldTableId !== newTableId && newTableId) {
                 Logger.info(`🔄 تغيير الطاولة من ${oldTableId} إلى ${newTableId} للفاتورة ${bill.billNumber}`);
@@ -1150,11 +1151,6 @@ export const updateBill = async (req, res) => {
                         }
                     }
                     
-                    // تحديث حالة الطاولة القديمة
-                    if (oldTableId) {
-                        await updateTableStatusIfNeeded(oldTableId, req.user.organization, req.io);
-                    }
-                    
                     Logger.info(`✅ تم تغيير طاولة الفاتورة ${bill.billNumber} إلى الطاولة ${newTableId}`);
                 }
             }
@@ -1195,6 +1191,10 @@ export const updateBill = async (req, res) => {
         const updatedBill = await bill.save();
         emitBillUpdated(req, bill);
 
+        // Recalculate the source only after the bill no longer references it.
+        if (movedFromTableId) {
+            await updateTableStatusIfNeeded(movedFromTableId, req.user.organization, req.io);
+        }
         // Update table status SYNCHRONOUSLY before response (fix stale status)
         // Handle both old and new table cases: updatedBill.table is the new/current table
         if (updatedBill.table) {
@@ -1529,11 +1529,10 @@ export const addPayment = async (req, res) => {
             data: bill,
         });
 
-        // Notify via Socket.IO (non-blocking)
+        // Notify before returning so every connected client sees the same
+        // persisted payment immediately.
         if (req.io) {
-            setImmediate(() => {
-                req.io.notifyBillUpdate("payment-received", bill, req.user.organization);
-            });
+            req.io.notifyBillUpdate("payment-received", bill, req.user.organization);
         }
 
         // Create notification in background (non-blocking)
@@ -2353,17 +2352,9 @@ export const addPartialPayment = async (req, res) => {
             }
         });
 
-        // إرسال تحديث Socket.IO in background (non-blocking)
+        // إرسال تحديث Socket.IO before response
         if (req.io) {
-            setImmediate(() => {
-                req.io.emit('partial-payment-received', {
-                    type: 'partial-payment',
-                    bill: bill,
-                    amount: totalPaymentAmount,
-                    items: processedItems,
-                    message: 'تم إضافة الدفع الجزئي بنجاح'
-                });
-            });
+            req.io.notifyBillUpdate("partial-payment", bill, req.user.organization);
         }
 
     } catch (error) {
@@ -3615,17 +3606,9 @@ export const addPartialPaymentAggregated = async (req, res) => {
             }
         });
 
-        // إرسال تحديث Socket.IO in background (non-blocking)
+        // إرسال تحديث Socket.IO before response
         if (req.io) {
-            setImmediate(() => {
-                req.io.emit('partial-payment-received', {
-                    type: 'partial-payment',
-                    bill: bill,
-                    amount: totalPaymentAmount,
-                    items: processedItems,
-                    message: 'تم إضافة الدفع الجزئي بنجاح'
-                });
-            });
+            req.io.notifyBillUpdate("partial-payment", bill, req.user.organization);
         }
 
     } catch (error) {
@@ -4045,7 +4028,6 @@ export const updateBillAggregatedItems = async (req, res) => {
         // Socket notify
         if (req.io) {
             try {
-                req.io.emit("bill-update", { type: "updated", bill });
                 req.io.notifyBillUpdate?.("updated", bill, req.user.organization);
             } catch {}
         }

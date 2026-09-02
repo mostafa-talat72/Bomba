@@ -12,30 +12,20 @@ import { createTombstone, createTombstones } from "../utils/tombstoneHelper.js";
 import { getCustomerNameForDevice, getTableName, getSessionBillNote, getNewSessionBillNote, t } from "../utils/translations.js";
 import { getInstanceId } from "../utils/instanceId.js";
 import { writeToAtlas, writeBatchToAtlas } from "../utils/atlasWrite.js";
+import { updateTableStatusIfNeeded } from "../utils/tableUtils.js";
 
 // ── Helper: instant emit for session + bill + table, keeps DB writes immediate ──
-function emitSessionInstant(req, session, bill) {
+function emitSessionInstant(req, session, bill, type = "updated") {
     if (!req.io) return;
     try {
         const orgId = req.user?.organization?._id || req.user?.organization;
         if (!orgId) return;
         const orgStr = String(orgId);
-        req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('session:updated', session);
-        req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('session-update', { type: 'updated', session });
-        try { req.io.notifySessionUpdate("updated", session, req.user.organization); } catch {}
+        req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit(type === "started" ? 'session:created' : 'session:updated', session);
+        req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('session-update', { type, session });
+        try { req.io.notifySessionUpdate(type, session, req.user.organization); } catch {}
         if (bill) {
-            req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('bill:updated', bill);
             try { req.io.notifyBillUpdate("updated", bill, req.user.organization); } catch {}
-            const tid = bill.table?._id || bill.table?.id || bill.table || session.table;
-            if (tid) {
-                const payload = { tableId: tid, status: 'occupied' };
-                req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('table:statusChanged', payload);
-                req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('table-status-update', payload);
-            }
-        } else if (session.table) {
-            const payload = { tableId: session.table, status: 'occupied' };
-            req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('table:statusChanged', payload);
-            req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('table-status-update', payload);
         }
     } catch {}
 }
@@ -780,7 +770,6 @@ const sessionController = {
 
                 // Save session with bill reference
                 await session.save();
-            emitSessionInstant(req, session, null);
 
                 // Fire-and-forget Atlas write for session
                 writeToAtlas('sessions', 'upsert', session.toObject ? session.toObject() : session, { _id: session._id });
@@ -793,6 +782,9 @@ const sessionController = {
                     Logger.info(`ℹ️ الجلسة موجودة بالفعل في الفاتورة ${bill.billNumber}`);
                 }
                 await bill.save();
+                if (table) {
+                    await updateTableStatusIfNeeded(table, req.user.organization, req.io);
+                }
 
                 // Fire-and-forget Atlas write for bill
                 writeToAtlas('bills', 'upsert', bill.toObject ? bill.toObject() : bill, { _id: bill._id });
@@ -803,8 +795,8 @@ const sessionController = {
                 await session.populate("createdBy", "name");
             }
 
-            // ── Instant emit before response (<100ms) ──
-                emitSessionInstant(req, session, bill);
+            // Emit only after the session and its bill are both persisted.
+                emitSessionInstant(req, session, bill, "started");
 
             // Prepare minimal response data immediately
                 const responseSession = {
@@ -1772,6 +1764,10 @@ const sessionController = {
                 { status: "available" }
             );
 
+            if (updatedSession.table) {
+                await updateTableStatusIfNeeded(updatedSession.table, req.user.organization, req.io);
+            }
+
             // Fire-and-forget Atlas write for device
             writeToAtlas('devices', 'upsert', 
                 { status: "available" }, 
@@ -1844,7 +1840,6 @@ const sessionController = {
                     if (req.io) {
                         try { req.io.notifySessionUpdate("ended", updatedSession, req.user.organization); } catch (e) {}
                         try { if (updatedBill) req.io.notifyBillUpdate("updated", updatedBill, req.user.organization); } catch (e) {}
-                        try { req.io.notifyTableStatusUpdate({ tableId: updatedSession.table || null }, req.user.organization); } catch (e) {}
                     }
                 } catch (bgError) {
                     Logger.error('Background tasks failed for endSession:', bgError);
@@ -1941,7 +1936,6 @@ const sessionController = {
 
             // Save session
             await session.save();
-            emitSessionInstant(req, session, null);
             await session.populate(["createdBy", "bill"], "name");
 
             // Add session to bill without updating customer name
@@ -1958,8 +1952,12 @@ const sessionController = {
             }
 
             // Save bill without modifying customer name
-            await Bill.findByIdAndUpdate(bill._id, updateData, { new: true });
-            await bill.populate(["sessions", "createdBy"], "name");
+            const updatedBill = await Bill.findByIdAndUpdate(bill._id, updateData, { new: true })
+                .populate(["sessions", "createdBy"], "name");
+            if (table || updatedBill?.table) {
+                await updateTableStatusIfNeeded(table || updatedBill.table, req.user.organization, req.io);
+            }
+            emitSessionInstant(req, session, updatedBill, "started");
 
             // إرسال إشعار بدء الجلسة
             try {

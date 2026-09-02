@@ -620,6 +620,11 @@ const loadInitialData = async () => {
 
       // إذا كان في data.bill — حدّث الـ state مباشرة بدون انتظار API
       if (data.bill) {
+        if (data.type === 'deleted') {
+          const deletedId = String(data.bill._id || data.bill.id || '');
+          setBills((prev: Bill[]) => prev.filter((b: any) => String(b._id || b.id) !== deletedId));
+          return;
+        }
         // تحديث selectedBill إذا كانت مفتوحة
         const cur = selectedBillRef.current;
         if (cur && (data.bill._id === cur._id || data.bill.id === cur.id)) {
@@ -752,13 +757,13 @@ const loadInitialData = async () => {
           setOriginalAmount(bill.remaining.toString());
         }
       }
-      // also update table status optimistically
-      if (bill.table) {
-        const tid = (bill.table as any)?._id || (bill.table as any)?.id || bill.table;
-        if (tid) {
-          const status = (bill.status === 'paid' || bill.status === 'cancelled') ? 'empty' : 'occupied';
-          setTables((prev: any[]) => prev.map((t: any) => String(t._id || (t as any).id) === String(tid) ? { ...t, status } : t));
-        }
+    };
+    const onBillDeletedColon = (bill: any) => {
+      const bid = bill?._id || bill?.id || bill;
+      if (!bid) return;
+      setBills((prev: any[]) => prev.filter((b: any) => String(b._id || b.id) !== String(bid)));
+      if (selectedBillRef.current && String(selectedBillRef.current._id || selectedBillRef.current.id) === String(bid)) {
+        setSelectedBill(null);
       }
     };
     const onTableStatusChangedColon = (payload: any) => {
@@ -798,6 +803,7 @@ const loadInitialData = async () => {
     socket.on('order:deleted', onOrderDeletedColon);
     socket.on('bill:updated', onBillUpdatedColon);
     socket.on('bill:created', onBillUpdatedColon);
+    socket.on('bill:deleted', onBillDeletedColon);
     socket.on('table:statusChanged', onTableStatusChangedColon);
     socket.on('table:created', onTableCreatedColon);
     socket.on('table:updated', onTableUpdatedColon);
@@ -823,7 +829,7 @@ const loadInitialData = async () => {
       if (import.meta.env.DEV) {
         ['reconnect', 'order-update', 'bill-update', 'payment-received', 'partial-payment-received',
          'table-status-update', 'session-update', 'inventory-update',
-         'order:created','order:updated','order:deleted','bill:updated','bill:created','table:statusChanged','table:created','table:updated','table:deleted','session:updated','session:created','session:ended'].forEach(e => socket.off(e));
+         'order:created','order:updated','order:deleted','bill:updated','bill:created','bill:deleted','table:statusChanged','table:created','table:updated','table:deleted','session:updated','session:created','session:ended'].forEach(e => socket.off(e));
       } else {
         socket.disconnect();
       }
