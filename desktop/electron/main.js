@@ -25,12 +25,104 @@ app.setPath("userData", path.join(app.getPath("appData"), "bomba-desktop"));
 let serverProcess = null;
 let mainWindow = null;
 let isQuitting = false;
+let localPrintServer = null;
+let localBackendPort = 5000;
 
 // ---- Paths (userData pinned to bomba-desktop for data compatibility) ----
 const userDataDir = app.getPath("userData");
 const dataDir = path.join(userDataDir, "data");
 const configPath = path.join(userDataDir, "config.json");
 const logPath = path.join(userDataDir, "server.log");
+
+async function printHtmlSilently(html, requestedPrinterName) {
+  let printWindow = null;
+  try {
+    const printers = await mainWindow?.webContents?.getPrintersAsync();
+    const virtualPrinterNames = ["Microsoft Print to PDF", "Microsoft XPS", "OneNote", "Fax", "PDF24", "Adobe PDF", "Send To OneNote 2016"];
+    const physicalPrinters = (printers || []).filter((printer) =>
+      !virtualPrinterNames.some((name) => printer.name.toLowerCase().includes(name.toLowerCase()))
+    );
+    const selectedPrinter = requestedPrinterName
+      ? (printers || []).find((printer) => printer.name === requestedPrinterName)
+      : physicalPrinters[0];
+    const printerName = selectedPrinter?.name;
+    if (!printerName) return { success: false, message: "No configured printer found" };
+
+    printWindow = new BrowserWindow({
+      show: false,
+      skipTaskbar: true,
+      backgroundColor: "#ffffff",
+      webPreferences: { contextIsolation: true, sandbox: true, javascript: false },
+      parent: mainWindow || undefined,
+    });
+    await printWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
+    const printed = await new Promise((resolve) => {
+      printWindow.webContents.print({
+        silent: true,
+        preview: false,
+        printBackground: true,
+        deviceName: printerName,
+        margins: { marginType: "none" },
+      }, (success, failureReason) => resolve({ success, failureReason }));
+    });
+    return printed.success
+      ? { success: true, printerName }
+      : { success: false, message: printed.failureReason || "Print job failed", printerName };
+  } finally {
+    if (printWindow && !printWindow.isDestroyed()) printWindow.close();
+  }
+}
+
+function startLocalPrintServer() {
+  localPrintServer = http.createServer(async (request, response) => {
+    response.setHeader("Access-Control-Allow-Origin", "*");
+    response.setHeader("Access-Control-Allow-Headers", "Content-Type");
+    response.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+    if (request.method === "OPTIONS") {
+      response.writeHead(204);
+      response.end();
+      return;
+    }
+    if (request.method !== "POST" || request.url !== "/print") {
+      response.writeHead(404, { "Content-Type": "application/json" });
+      response.end(JSON.stringify({ success: false, message: "Not found" }));
+      return;
+    }
+    let body = "";
+    request.on("data", (chunk) => { body += chunk; });
+    request.on("end", async () => {
+      try {
+        const payload = JSON.parse(body);
+        const result = await printHtmlSilently(payload.html, payload.printerName);
+        if (result.success && payload.openDrawer) {
+          const drawerResponse = await fetch(`http://127.0.0.1:${localBackendPort}/api/print/cash-drawer/auto-detect`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              ...(request.headers.authorization ? { Authorization: request.headers.authorization } : {}),
+            },
+            body: JSON.stringify({
+              mode: payload.drawerMode || "payment",
+              organization: payload.organization,
+            }),
+          });
+          if (!drawerResponse.ok) {
+            response.writeHead(503, { "Content-Type": "application/json" });
+            response.end(JSON.stringify({ success: false, message: "Cash drawer command failed" }));
+            return;
+          }
+        }
+        response.writeHead(result.success ? 200 : 503, { "Content-Type": "application/json" });
+        response.end(JSON.stringify(result));
+      } catch (error) {
+        response.writeHead(400, { "Content-Type": "application/json" });
+        response.end(JSON.stringify({ success: false, message: error.message }));
+      }
+    });
+  });
+  localPrintServer.on("error", (error) => console.error("Local print bridge error:", error.message));
+  localPrintServer.listen(9100, "127.0.0.1");
+}
 
 // ---- Helpers ----
 
@@ -510,8 +602,7 @@ mainWindow.webContents.setWindowOpenHandler(({ url: targetUrl }) => {
           deviceName: printerName,
           preview: false,
           margins: { marginType: 'none' },
-          pageSize: { width: 80, height: 2000, unit: 'mm' },
-          landscape: false
+          // Let the selected printer/driver provide its configured paper size.
         }, (success, failureReason) => resolve({ success, failureReason }));
       });
 
@@ -545,6 +636,8 @@ if (!gotLock) {
     ensureDirs();
     const { config, secrets } = loadOrCreateConfig();
     const port = config.port || 5000;
+    localBackendPort = port;
+    startLocalPrintServer();
 
     if (isDev) {
       // Dev mode: expects `npm run dev` (vite on :3000) already running
@@ -598,6 +691,10 @@ if (!gotLock) {
 
   app.on("before-quit", () => {
     isQuitting = true;
+    if (localPrintServer) {
+      localPrintServer.close();
+      localPrintServer = null;
+    }
     if (serverProcess && !serverProcess.killed) {
       try {
         serverProcess.kill();

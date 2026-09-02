@@ -1,6 +1,7 @@
 import api from '../services/api';
 import { formatDecimal, getCurrencySymbol, getDisplayNumber } from './formatters';
 import type { TFunction } from 'i18next';
+import { printThroughLocalBridge } from './localPrintBridge';
 
 interface OrderItem {
   _id?: string;
@@ -337,6 +338,12 @@ const printAllSectionsInOnePage = (
 <title>${t('orderPrint.printButton')} #${getDisplayNumber(order.orderNumber)}</title>
 
 <style>
+html {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
 @page {
   size: auto;
   margin: 0;
@@ -346,8 +353,8 @@ const printAllSectionsInOnePage = (
 body {
   direction: ${dir};
   font-family: 'Arial', sans-serif;
-  width: 80mm;
-  max-width: 80mm;
+  width: 100%;
+  max-width: 100%;
   margin: 0 auto;
   padding: 0 3mm;
   background: white;
@@ -356,6 +363,9 @@ body {
   line-height: 1;
   box-sizing: border-box;
   word-wrap: break-word;
+  overflow-x: hidden;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 /* ===== HEADER ===== */
@@ -432,6 +442,8 @@ body {
   vertical-align: middle;
   direction: ${dir};
   unicode-bidi: plaintext;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 /* ===== TABLE CELLS ===== */
@@ -462,7 +474,7 @@ body {
   color: #666;
   margin: 2px auto 0;
   padding: 0 4px;
-  max-width: 60mm;
+  max-width: 100%;
   text-align: center;
   font-style: italic;
 }
@@ -498,7 +510,7 @@ body {
 
 /* ===== PRINT ===== */
 @media print {
-  body { padding: 0; }
+  html, body { width: 100%; max-width: 100%; padding: 0; margin: 0; overflow-x: hidden; }
   .no-print { display: none !important; }
 
   .section-block {
@@ -525,68 +537,6 @@ body {
   return printContent;
 };
 
-const fallbackToBrowserPrint = (content: string, language: string) => {
-  const printWindow = window.open('', '_blank', 'noopener,noreferrer');
-  if (printWindow) {
-    printWindow.document.open();
-    printWindow.document.write(content);
-    printWindow.document.close();
-    printWindow.onload = () => {
-      setTimeout(() => {
-        printWindow.print();
-        setTimeout(() => {
-          if (!printWindow.closed) {
-            printWindow.close();
-          }
-        }, 100);
-      }, 50);
-    };
-    return true;
-  }
-
-  const printFrame = document.createElement('iframe');
-  printFrame.style.position = 'absolute';
-  printFrame.style.top = '-1000px';
-  printFrame.style.left = '-1000px';
-  printFrame.style.width = '0';
-  printFrame.style.height = '0';
-  printFrame.style.border = 'none';
-  document.body.appendChild(printFrame);
-
-  const frameDoc = printFrame.contentDocument || printFrame.contentWindow?.document;
-  if (frameDoc) {
-    frameDoc.open();
-    frameDoc.write(content);
-    frameDoc.close();
-    setTimeout(() => {
-      try {
-        printFrame.contentWindow?.focus();
-        printFrame.contentWindow?.print();
-        setTimeout(() => {
-          if (document.body.contains(printFrame)) {
-            document.body.removeChild(printFrame);
-          }
-        }, 100);
-      } catch (error) {
-        console.error('Print error:', error);
-        if (document.body.contains(printFrame)) {
-          document.body.removeChild(printFrame);
-        }
-      }
-    }, 50);
-    return true;
-  }
-
-  document.body.removeChild(printFrame);
-  const alertMsg = language === 'ar'
-    ? 'الرجاء السماح بالنوافذ المنبثقة لطباعة الطلب'
-    : language === 'fr'
-    ? 'Veuillez autoriser les fenêtres contextuelles pour imprimer la commande'
-    : 'Please allow pop-ups to print the order';
-  alert(alertMsg);
-  return false;
-};
-
 export const printOrder = async (
   order: Order,
   menuSections: MenuSection[] = [],
@@ -597,78 +547,11 @@ export const printOrder = async (
   tableSectionName?: string,
   selectedSectionIds?: string[]
 ) => {
-  const isElectron = typeof window !== 'undefined' && !!((window as any).bombaDesktop?.isDesktop || (window as any).electronAPI);
-  try {
-    if (isElectron && (window as any).bombaDesktop?.directPrint) {
-      const printContent = await buildOrderPrintHTML(order, menuSections, menuItemsMap, fallbackOrganizationName, language, t, tableSectionName, selectedSectionIds);
-      const printResponse = await (window as any).bombaDesktop.directPrint(printContent);
-      if (!printResponse?.success) {
-        throw new Error(printResponse?.message || 'Desktop print failed');
-      }
-      const successMsg = language === 'ar' ? 'تمت طباعة الطلب بنجاح' : 'Order printed successfully';
-      if ((window as any).showNotification) (window as any).showNotification(successMsg, 'success');
-      return;
-    }
-
-    // استخدام الاكتشاف التلقائي للطابعة الحرارية
-    const directPrint = api.autoDetectAndPrintOrder({ 
-      order, 
-      organization: order.organization, 
-      language 
-    });
-    const timeout = new Promise<never>((_, reject) => setTimeout(() => reject(new Error('print-timeout')), 15000));
-    const response: any = await Promise.race([directPrint, timeout]);
-    if (response?.success) {
-      const successMsg = language === 'ar' ? 'تمت طباعة الطلب بنجاح' : language === 'fr' ? 'Commande imprimée avec succès' : 'Order printed successfully';
-      if (typeof window !== 'undefined' && (window as any).showNotification) (window as any).showNotification(successMsg, 'success');
-      return;
-    }
-    
-    // إذا فشلت الطباعة لسبب ما (مثل عدم وجود طابعة)
-    if (response?.success === false) {
-      const errorMsg = response.message || (language === 'ar' 
-        ? 'فشل في طباعة الطلب'
-        : language === 'fr'
-        ? 'Impossible d\'imprimer la commande'
-        : 'Failed to print order');
-      if (typeof window !== 'undefined' && (window as any).showNotification) (window as any).showNotification(errorMsg, 'error');
-      throw new Error(response.message || 'Print failed');
-    }
-  } catch (error: any) {
-    if (error?.message !== 'print-timeout') console.error('Direct print failed, falling back to browser print:', error);
-    else console.error('Direct print timed out');
-    if (isElectron) {
-      const msg = error?.message === 'print-timeout'
-        ? (language === 'ar' ? 'انتهت مهلة الطباعة — سيتم استخدام الطباعة من المتصفح' : 'Direct print timed out — browser print will be used')
-        : (language === 'ar' ? 'فشلت طباعة الطلب — سيتم استخدام الطباعة من المتصفح' : 'Direct print failed — browser print will be used');
-      if ((window as any).showNotification) (window as any).showNotification(msg, 'warning');
-      else alert(msg);
-    }
-  }
-
-  // Fallback: استخدام الطريقة القديمة أو Electron direct print إذا فشلت الطباعة المباشرة
   const printContent = await buildOrderPrintHTML(order, menuSections, menuItemsMap, fallbackOrganizationName, language, t, tableSectionName, selectedSectionIds);
-
-  // Check if running on Electron desktop app
-  const isDesktopApp = typeof window !== 'undefined' && (window as any).bombaDesktop?.isDesktop;
-  
-  if (isDesktopApp) {
-    try {
-      const printResponse = await (window as any).bombaDesktop.directPrint(printContent);
-      if (printResponse?.success) {
-        const successMsg = language === 'ar' ? 'تمت طباعة الطلب بنجاح' : 'Order printed successfully';
-        if ((window as any).showNotification) (window as any).showNotification(successMsg, 'success');
-        return;
-      }
-      console.warn('Electron direct print failed for order:', printResponse?.message || 'unknown');
-    } catch (error) {
-      console.error('Electron direct print setup error:', error);
-    }
-  }
-
-  if (fallbackToBrowserPrint(printContent, language)) {
-    return;
-  }
+  const savedPrinter = await api.getDevicePrinter().catch(() => null);
+  const printerName = savedPrinter?.data?.printerName || savedPrinter?.data?.name;
+  if (await printThroughLocalBridge(printContent, printerName)) return;
+  return;
 };
 
 export default printOrder;

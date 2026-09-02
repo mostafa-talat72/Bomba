@@ -18,6 +18,7 @@ import { formatCurrency as formatCurrencyUtil, formatDecimal } from '../utils/fo
 import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
 import { printOrder } from '../utils/printOrder';
 import { printBill } from '../utils/printBill';
+import { printThroughLocalBridge } from '../utils/localPrintBridge';
 import { useBillAggregation } from '../hooks/useBillAggregation';
 import {
   canAddOrder, canEditOrder, canDeleteOrder,
@@ -1425,7 +1426,7 @@ const loadInitialData = async () => {
   }, [registerActions, unregisterActions, isFullscreen]);
 
   // #11 Print daily report
-  const handlePrintDailyReport = () => {
+  const handlePrintDailyReport = async () => {
     setIsPrintingReport(true);
     const today = new Date();
     const todayStr = today.toLocaleDateString('ar-EG', { weekday:'long', year:'numeric', month:'long', day:'numeric' });
@@ -1497,13 +1498,10 @@ const loadInitialData = async () => {
       </table>
       <div class="footer">طُبع في ${new Date().toLocaleTimeString('ar-EG')}</div>
       </body></html>`;
-    const w = window.open('', '_blank');
-    if (w) {
-      w.document.write(reportHtml);
-      w.document.close();
-      w.focus();
-      setTimeout(() => { w.print(); setIsPrintingReport(false); }, 500);
-    } else { setIsPrintingReport(false); }
+    const savedPrinter = await api.getDevicePrinter().catch(() => null);
+    const printerName = savedPrinter?.data?.printerName || savedPrinter?.data?.name;
+    await printThroughLocalBridge(reportHtml, printerName);
+    setIsPrintingReport(false);
   };
 
   const handlePaymentManagement = (table: Table) => {
