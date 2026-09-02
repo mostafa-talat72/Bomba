@@ -1500,9 +1500,10 @@ const sessionController = {
             for (const bid of billIdSet) {
                 for (let attempt = 0; attempt < 3; attempt++) {
                     try {
-                        const bill = await Bill.findById(bid);
+                        const bill = await Bill.findOne({ _id: bid, ...organizationFilter(req.user) });
                         if (!bill) break;
                         await bill.calculateSubtotal();
+                        await bill.save();
                         break;
                     } catch (e) {
                         if (attempt === 2) {
@@ -1658,14 +1659,13 @@ const sessionController = {
                         } else {
                             Logger.info(`✓ Bill is linked to table ${updatedBill.table}, keeping existing customer name: ${updatedBill.customerName}`);
                         }
-                        updatedBill.subtotal = updatedSession.finalCost || 0;
-                        updatedBill.total = updatedSession.finalCost || 0;
-                        updatedBill.discount = updatedSession.discount || 0;
-                        updatedBill.status = "partial"; // تغيير الحالة من draft إلى partial
+                        // Rebuild the bill from every linked order/session.  Assigning
+                        // the just-ended session's cost here used to overwrite totals
+                        // whenever a bill contained more than one session.
+                        await updatedBill.calculateSubtotal();
                         updatedBill.updatedBy = req.user._id;
 
                         await updatedBill.save();
-                        await updatedBill.calculateSubtotal();
                         await updatedBill.populate(["sessions", "createdBy"], "name");
 
                         // Fire-and-forget Atlas write for bill
@@ -1793,13 +1793,7 @@ const sessionController = {
             };
 
             const responseBill = updatedBill
-                ? {
-                    _id: updatedBill._id,
-                    billNumber: updatedBill.billNumber,
-                    customerName: updatedBill.customerName,
-                    total: updatedBill.total,
-                    status: updatedBill.status,
-                }
+                ? (updatedBill.toObject ? updatedBill.toObject() : updatedBill)
                 : null;
 
             // ── Instant emit (<100ms) before response ──

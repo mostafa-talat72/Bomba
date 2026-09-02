@@ -1754,17 +1754,35 @@ billSchema.methods.calculateSubtotal = async function () {
             
             // Update sessionPayments if session cost changed
             if (this.sessionPayments && this.sessionPayments.length > 0) {
-                const sessionPayment = this.sessionPayments.find(
+                let sessionPayment = this.sessionPayments.find(
                     sp => sp.sessionId.toString() === session._id.toString()
                 );
                 
-                if (sessionPayment && sessionPayment.sessionCost !== sessionCost) {
+                if (!sessionPayment) {
+                    sessionPayment = {
+                        sessionId: session._id,
+                        sessionCost,
+                        paidAmount: 0,
+                        remainingAmount: sessionCost,
+                        payments: [],
+                    };
+                    this.sessionPayments.push(sessionPayment);
+                }
+
+                if (sessionPayment) {
+                    // Rebuild the derived values every time. Older bills can
+                    // contain a stale remainingAmount (including zero) after
+                    // a session was ended or its cost changed.
+                    const recordedPayments = Array.isArray(sessionPayment.payments)
+                        ? sessionPayment.payments.reduce((sum, payment) => sum + (Number(payment.amount) || 0), 0)
+                        : 0;
+                    const paidAmount = Math.min(
+                        sessionCost,
+                        Math.max(Number(sessionPayment.paidAmount) || 0, recordedPayments)
+                    );
                     sessionPayment.sessionCost = sessionCost;
-                    
-                    if (sessionPayment.paidAmount > sessionCost) {
-                        sessionPayment.paidAmount = sessionCost;
-                    }
-                    sessionPayment.remainingAmount = sessionCost - sessionPayment.paidAmount;
+                    sessionPayment.paidAmount = paidAmount;
+                    sessionPayment.remainingAmount = Math.max(0, sessionCost - paidAmount);
                 }
             }
         }
