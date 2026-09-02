@@ -338,7 +338,7 @@ const Warehouse = () => {
   const openEditModal = (item: WarehouseItem) => {
     setSelectedItem(item);
     setAddForm({
-      name: item.name, category: normalizeCategory(item.category), quantity: '', price: String(item.price),
+      productId: '', name: item.name, category: normalizeCategory(item.category), quantity: '', price: String(item.price),
       supplier: item.supplier || '', minStock: String(item.minStock || ''),
       unit: normalizeUnit(item.unit || ''), date: getCairoDateTime(timezone),
       costStatus: 'pending', paidAmount: '', isRawMaterial: item.isRawMaterial || false,
@@ -555,7 +555,7 @@ const Warehouse = () => {
       if (res) {
         setSuccess(t('inventory.notifications.productUpdated')); toast.success(t('inventory.notifications.productUpdated'));
         await fetchWarehouseItems(); setShowEditModal(false);
-        setAddForm({ name: '', category: '', quantity: '', price: '', supplier: '', minStock: '', unit: '', date: getCairoDateTime(timezone), costStatus: 'pending', paidAmount: '', isRawMaterial: false });
+        setAddForm({ productId: '', name: '', category: '', quantity: '', price: '', supplier: '', minStock: '', unit: '', date: getCairoDateTime(timezone), costStatus: 'pending', paidAmount: '', isRawMaterial: false });
         setError(''); setSuccess('');
       } else { setError(t('inventory.notifications.productUpdateError')); }
     } catch (err) { const error = err as Error; setError(error.message || t('inventory.notifications.productUpdateError')); }

@@ -12,6 +12,8 @@ export const HEALTH_CHECK_URL = API_BASE_URL;
 export interface ApiResponse<T = any> {
   success: boolean;
   message?: string;
+  errors?: unknown;
+  details?: unknown;
   data?: T;
   count?: number;
   total?: number;
@@ -275,6 +277,16 @@ export interface Bill {
   organization?: {
     _id: string;
     name: string;
+    printSettings?: {
+      openCashDrawer?: boolean;
+      openCashDrawerOnPayment?: boolean;
+      autoPrintOnPayment?: boolean;
+      charactersPerLine?: number;
+      printHeader?: boolean;
+      printFooter?: boolean;
+      autoCut?: boolean;
+      printQRCode?: boolean;
+    };
   } | string; // يمكن أن يكون object مع populate أو string فقط
   createdBy: User;
   createdAt: Date;
