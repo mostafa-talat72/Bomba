@@ -168,7 +168,10 @@ const EmployeeList: React.FC<EmployeeListProps> = ({ onAdvanceAdded }) => {
                     // Show deleted records count if available
                     if (response.data?.deletedRecords) {
                       const records = response.data.deletedRecords;
-                      const total = Object.values(records).reduce((sum: number, count) => sum + (count as number), 0);
+                      const total = (Object.values(records) as unknown[]).reduce<number>(
+                        (sum, count) => sum + Number(count),
+                        0
+                      );
                       if (total > 0) {
                         message.info(t('payroll.employeeList.messages.deletedRecordsInfo', { count: total }));
                       }

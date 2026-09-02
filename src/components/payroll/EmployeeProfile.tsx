@@ -734,7 +734,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
         const date = dates[i];
         const dateStr = date.format('YYYY-MM-DD');
         
-        let checkIn = null, checkOut = null;
+        let checkIn: any = null, checkOut: any = null;
         
         if (needsTimes) {
           if (timeMode === 'same') {
@@ -1677,7 +1677,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
                     title={t('payroll.employeeProfile.table.type')}
                     dataIndex="type"
                     key="type"
-                    render={(type) => t(`payroll.bonusManagement.types.${type}`, type)}
+                    render={(type) => String(t(`payroll.bonusManagement.types.${type}`, type))}
                   />
                   <Table.Column
                     title={t('payroll.employeeProfile.table.amount')}

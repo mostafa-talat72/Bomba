@@ -115,7 +115,7 @@ function calculateAggregatedPaidQuantity(
   
   orders.forEach(order => {
     if (!order.items || !Array.isArray(order.items)) return;
-    order.items.forEach((_item, index) => {
+    order.items.forEach((item, index) => {
       const itemId = `${order._id}-${index}`;
       validItemIds.add(itemId);
       currentOrderItems.set(itemId, {

@@ -3,7 +3,7 @@ import { formatDecimal, getCurrencySymbol, getDisplayNumber } from './formatters
 import type { TFunction } from 'i18next';
 
 interface OrderItem {
-  _id: string;
+  _id?: string;
   name: string;
   arabicName?: string;
   price: number;
@@ -17,7 +17,7 @@ interface OrderItem {
     price: number;
     quantity: number;
   }>;
-  menuItem?: {
+  menuItem?: string | {
     category?: {
       section?: {
         _id?: string;
@@ -30,7 +30,7 @@ interface OrderItem {
 interface Order {
   _id: string;
   orderNumber: string;
-  status: 'pending' | 'preparing' | 'ready' | 'delivered' | 'cancelled';
+  status: 'draft' | 'pending' | 'preparing' | 'ready' | 'delivered' | 'cancelled';
   table?: {
     _id: string;
     number: string | number;
@@ -41,7 +41,7 @@ interface Order {
   totalAmount?: number;
   finalAmount?: number;
   notes?: string;
-  createdAt: string;
+  createdAt: string | Date;
   updatedAt?: string;
   organization?: string | { _id: string; name: string };
 }

@@ -606,7 +606,7 @@ const Menu: React.FC = () => {
 				newIngredients.forEach((ing, i) => { if (i !== index && ing.item === value) ing.item = ''; });
 			}
 
-			current[field] = field === 'item' ? (value as string) : value;
+			(current as any)[field] = field === 'item' ? (value as string) : value;
 			newIngredients[index] = current;
 			return { ...prev, ingredients: newIngredients };
 		});

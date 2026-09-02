@@ -153,7 +153,7 @@ const ConsumptionReport = () => {
       title: t('consumptionReport.table.itemName'),
       dataIndex: 'name',
       key: 'name',
-      align: (rtl.isRTL ? 'right' : 'left') as const,
+      align: (rtl.isRTL ? 'right' : 'left') as 'right' | 'left',
       render: (text: string) => <span className="font-semibold text-gray-900 dark:text-gray-100">{text}</span>,
     },
     {
@@ -243,7 +243,7 @@ const ConsumptionReport = () => {
         if (!item.name) return;
 
         // البحث عن MenuItem - أولاً بـ ID إذا كان متوفراً، ثم بالاسم كـ fallback
-        let menuItem = null;
+        let menuItem: any = null;
         
         // إذا كان العنصر يحتوي على menuItemId، استخدمه
         if ((item as any).menuItemId) {
@@ -1368,7 +1368,7 @@ const ConsumptionReport = () => {
 
   return (
     <ConfigProvider
-      direction={rtl.dir}
+      direction={rtl.dir as 'ltr' | 'rtl'}
       locale={getAntdLocale(i18n.language)}
       theme={{
         token: {

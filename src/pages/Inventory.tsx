@@ -85,6 +85,7 @@ const Inventory = () => {
 
   // Modal states
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showProductDropdown, setShowProductDropdown] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showMovementsModal, setShowMovementsModal] = useState(false);
@@ -145,7 +146,10 @@ const Inventory = () => {
   });
 
   // Add/Edit form state
-  const [addForm, setAddForm] = useState({
+  const [addForm, setAddForm] = useState<any>({
+    productId: '',
+    quantity: '',
+    date: '',
     name: '',
     category: '',
     price: '',
@@ -2930,5 +2934,3 @@ const Inventory = () => {
 };
 
 export default Inventory;
-
-

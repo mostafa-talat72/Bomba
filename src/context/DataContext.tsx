@@ -132,12 +132,12 @@ interface DataContextType {
   updateMenuCategory: (id: string, updates: any) => Promise<MenuCategory | null>;
   deleteMenuCategory: (id: string) => Promise<boolean>;
 
-  fetchTableSections: () => Promise<void>;
+  fetchTableSections: () => Promise<any>;
   createTableSection: (sectionData: any) => Promise<any>;
   updateTableSection: (id: string, updates: any) => Promise<any>;
   deleteTableSection: (id: string) => Promise<boolean>;
 
-  fetchTables: (sectionId?: string) => Promise<void>;
+  fetchTables: (sectionId?: string) => Promise<any>;
   getTableStatus: (id: string) => Promise<{ table: any; hasUnpaidOrders: boolean; orders: Order[]; bills?: Bill[] } | null>;
   createTable: (tableData: any) => Promise<any>;
   updateTable: (id: string, updates: any) => Promise<any>;

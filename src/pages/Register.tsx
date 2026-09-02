@@ -54,10 +54,10 @@ const Register: React.FC = () => {
   const clearForm = useCallback(() => {
     setFormData({
       name: '',
-      businessName: '',
-      email: '',
       username: '',
       phone: '',
+      businessName: '',
+      email: '',
       password: ''
     });
     setErrors({});
@@ -155,6 +155,8 @@ const Register: React.FC = () => {
         // Don't clear form immediately to show success message
         setFormData({
           name: '',
+          username: '',
+          phone: '',
           businessName: '',
           email: '',
           password: ''
