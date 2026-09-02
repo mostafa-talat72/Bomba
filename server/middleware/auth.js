@@ -94,7 +94,7 @@ export const authorize = (...permissions) => {
     if (!hasPermission) {
       return res.status(403).json({
         success: false,
-        message: `ليس لديك صلاحية لحذف هذا المستخدم. الصلاحيات المطلوبة: ${permissions.join(' أو ')}. صلاحياتك الحالية: ${req.user.permissions.join(', ')}`
+        message: `ليس لديك صلاحية لتنفيذ هذا الإجراء. الصلاحيات المطلوبة: ${permissions.join(' أو ')}. صلاحياتك الحالية: ${req.user.permissions.join(', ')}`
       });
     }
 
