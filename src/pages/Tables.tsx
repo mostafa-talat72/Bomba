@@ -77,6 +77,7 @@ const Tables: React.FC = () => {
   const tablesRef = useRef<Table[]>(tables);
   const hasLoadedDataRef = useRef(false);
   const paymentActionLockRef = useRef(false);
+  const backgroundSyncRef = useRef(false);
 
   // ── Unified modal state ──────────────────────────────────────────────────
   const [showUnifiedTableModal, setShowUnifiedTableModal] = useState(false);
@@ -331,6 +332,36 @@ const loadInitialData = async () => {
       loadInitialData();
     }
     return () => { hasLoadedDataRef.current = false; };
+  }, []);
+
+  // Socket.IO handles normal updates; this low-frequency sync covers direct
+  // database changes or missed events without competing with user actions.
+  useEffect(() => {
+    const syncActiveData = async () => {
+      if (backgroundSyncRef.current || document.visibilityState !== 'visible' || !navigator.onLine) return;
+      backgroundSyncRef.current = true;
+      try {
+        await Promise.all([fetchBills(), fetchOrders(), fetchTables()]);
+      } catch (error) {
+        console.warn('Background tables sync failed:', error);
+      } finally {
+        backgroundSyncRef.current = false;
+      }
+    };
+
+    const interval = window.setInterval(syncActiveData, 45000);
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') void syncActiveData();
+    };
+    const handleOnline = () => void syncActiveData();
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('online', handleOnline);
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('online', handleOnline);
+    };
   }, []);
 
 
@@ -1006,6 +1037,15 @@ const loadInitialData = async () => {
     return map;
   }, [activeTables, tableSections]);
 
+  const filteredTablesBySection = useMemo(() => {
+    const map: Record<string, Table[]> = {};
+    Object.entries(getTablesBySection).forEach(([sectionKey, sectionTables]) => {
+      const visible = sectionTables.filter(matchesTableFilter);
+      if (visible.length > 0) map[sectionKey] = visible;
+    });
+    return map;
+  }, [getTablesBySection, matchesTableFilter]);
+
   const filteredTableOrders = useMemo(() =>
     tableOrders.filter((o: Order) => {
       if (!o.bill) return true;
@@ -1054,15 +1094,6 @@ const loadInitialData = async () => {
       liveExtra: number;
     }>();
 
-    // index: tableId -> bills (مرة واحدة)
-    const tidToBills = new Map<string, Bill[]>();
-    bills.forEach((b: Bill) => {
-      if (!b.table) return;
-      const tid = ((b.table as any)._id || (b.table as any).id || b.table).toString();
-      if (!tidToBills.has(tid)) tidToBills.set(tid, []);
-      tidToBills.get(tid)!.push(b);
-    });
-
     // index: tableId -> active orders count (مرة واحدة)
     const tidToOrderCount = new Map<string, number>();
     orders.forEach((o: any) => {
@@ -1074,7 +1105,7 @@ const loadInitialData = async () => {
 
     activeTables.forEach((table: Table) => {
       const tid = (table._id || (table as any).id).toString();
-      const tBills = tidToBills.get(tid) ?? EMPTY_BILLS;
+      const tBills = tableBillsMap[tid]?.bills ?? EMPTY_BILLS;
       const tOrdersCount = tidToOrderCount.get(tid) ?? EMPTY_ORDERS_COUNT;
 
       // active sessions
@@ -2654,7 +2685,7 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
             <div className="space-y-2 sm:space-y-3">
               {filteredSectionsForDisplay.map(section => {
                 const sectionKey = getSectionKey(section);
-                const shownTables = (getTablesBySection[sectionKey] || []).filter(matchesTableFilter);
+                const shownTables = filteredTablesBySection[sectionKey] || [];
                 if (shownTables.length === 0) return null;
                 return (
                   <div key={sectionKey} className="border-2 border-gray-200 dark:border-gray-700 rounded-xl p-2.5 sm:p-3 bg-gradient-to-br from-gray-50 to-white dark:from-gray-800 dark:to-gray-900 shadow-md">
