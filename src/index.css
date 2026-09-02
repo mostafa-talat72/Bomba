@@ -143,6 +143,15 @@
 	box-sizing: border-box;
 }
 
+input,
+textarea,
+select,
+[contenteditable="true"] {
+	pointer-events: auto;
+	user-select: text;
+	-webkit-user-select: text;
+}
+
 html,
 body {
 	overflow-x: hidden;

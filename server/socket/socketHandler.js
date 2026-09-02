@@ -214,22 +214,20 @@ export const setupSocketIO = (io) => {
             else io.emit(event, data);
         };
         doEmit("bill-update", { type, bill });
-        // colon-style instant
-        doEmit("bill:updated", bill);
-        doEmit("bill:created", bill);
+        // Keep the colon events type-specific.  In particular, a delete must
+        // not be delivered as a create/update (which would resurrect a bill
+        // in clients that merge event payloads into their local state).
+        if (type === "created") {
+            doEmit("bill:created", bill);
+        } else if (type === "deleted") {
+            doEmit("bill:deleted", bill);
+        } else {
+            doEmit("bill:updated", bill);
+        }
         // also emit payment-specific for compatibility
         if (type === "payment-received" || type === "partial-payment" || type === "paid") {
             doEmit("payment-received", { bill, type });
             doEmit("partial-payment-received", { bill, type });
-        }
-        // if bill has table, also emit table status change
-        if (bill && bill.table) {
-            const tid = bill.table._id || bill.table.id || bill.table;
-            if (tid) {
-                const newStatus = (bill.status === 'paid' || bill.status === 'cancelled') ? 'empty' : 'occupied';
-                doEmit("table-status-update", { tableId: tid, status: newStatus });
-                doEmit("table:statusChanged", { tableId: tid, status: newStatus });
-            }
         }
     };
 
