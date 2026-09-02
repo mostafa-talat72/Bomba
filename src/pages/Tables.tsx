@@ -1,8 +1,8 @@
 ﻿import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import {
-  ShoppingCart, Plus, Minus, Edit, Trash2, X, Printer,
+  ShoppingCart, Plus, Edit, Trash2, X, Printer,
   Settings, AlertTriangle, Search, CheckCircle, DollarSign,
-  Calendar, User, Receipt, QrCode, Table as TableIcon, Eye, EyeOff,
+  Calendar, Receipt, Table as TableIcon, Eye, EyeOff,
   Gamepad2, ChevronDown, ChevronUp, ChefHat,
   Clock, History, FileText, Zap, Layers
 } from 'lucide-react';
@@ -15,13 +15,10 @@ import { useTablesHeader } from '../context/TablesHeaderContext';
 import { MenuItem, MenuSection, MenuCategory, TableSection, Table, Order, Bill, Session } from '../services/api';
 import { api } from '../services/api';
 import { formatCurrency as formatCurrencyUtil, formatDecimal } from '../utils/formatters';
-import { formatTime } from '../utils/dateHelpers';
 import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
 import { printOrder } from '../utils/printOrder';
 import { printBill } from '../utils/printBill';
-import { aggregateItemsWithPayments, getItemIdsForAggregatedItem } from '../utils/billAggregation';
 import { useBillAggregation } from '../hooks/useBillAggregation';
-import { i18n } from '../i18n';
 import {
   canAddOrder, canEditOrder, canDeleteOrder,
   canPartialPayment, canPayFullBill, canDeleteBill,
@@ -35,11 +32,11 @@ import '../styles/billing-animations.css';
 import TableButton from '../components/tables/TableButton';
 import PlaystationBillItem from '../components/tables/PlaystationBillItem';
 import { ItemCard, OrderItemRow } from '../components/tables/OrderItems';
-import { getTableDisplay, getAgeLabel, getTableAgeColor, formatCurrencyArabic } from '../components/tables/tableHelpers';
+import { getTableDisplay } from '../components/tables/tableHelpers';
 import type { LocalOrderItem } from '../components/tables/tableHelpers';
 import ModalPortal from '../components/ModalPortal';
 import UndoBar, { UndoRequest } from '../components/UndoBar';
-import { playWarnBeep, playDangerBeep, isSoundEnabled, setSoundEnabled } from '../utils/sound';
+import { playWarnBeep, playDangerBeep, isSoundEnabled } from '../utils/sound';
 import BillItemsEditModal from '../components/tables/BillItemsEditModal';
 import PriceEditModal from '../components/tables/PriceEditModal';
 import { canEditItemPrice } from '../utils/permissionHelper';
@@ -82,7 +79,6 @@ const Tables: React.FC = () => {
 
   // ── Unified modal state ──────────────────────────────────────────────────
   const [showUnifiedTableModal, setShowUnifiedTableModal] = useState(false);
-  const [activeTab, setActiveTab] = useState<'orders' | 'billing'>('orders');
 
   // ── Orders state ─────────────────────────────────────────────────────────
   const [loading, setLoading] = useState(false);
@@ -883,7 +879,7 @@ const loadInitialData = async () => {
         const tb = lastFocusedTableRef.current;
         if (!tb) { showNotification('مرّر مؤشر الفأرة على طاولة أولاً', 'info'); return; }
         handleTableClick(tb);
-        setTimeout(() => { setActiveTab3('sessions'); setActiveTab('sessions'); }, 0);
+        setTimeout(() => { setActiveTab3('sessions'); }, 0);
       } else if (/^[0-9]$/.test(e.key)) {
         // ── بناء رقم الطاولة ──
         e.preventDefault();

@@ -93,6 +93,12 @@ interface OrganizationData {
   printSettings: {
     printQRCode: boolean;
     promptOrderPrintSections?: boolean;
+    openCashDrawerOnPayment?: boolean;
+    autoPrintOnPayment?: boolean;
+    charactersPerLine?: number;
+    printHeader?: boolean;
+    printFooter?: boolean;
+    autoCut?: boolean;
   };
 }
 
