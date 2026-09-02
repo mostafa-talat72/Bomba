@@ -49,6 +49,30 @@ export function sameObjectId(left, right) {
     return leftId != null && rightId != null && String(leftId) === String(rightId);
 }
 
+export function resolvePrintSettings(organization, fallback = {}) {
+    const source = organization && typeof organization === 'object' ? organization : {};
+    const settings = { ...(source.printSettings || {}), ...fallback };
+    const preferredPrinter = Array.isArray(source.devicePrinters)
+        ? [...source.devicePrinters]
+            .filter((entry) => entry && (entry.printerPath || entry.printerName))
+            .sort((a, b) => new Date(b.lastUsed || 0).getTime() - new Date(a.lastUsed || 0).getTime())[0]
+        : null;
+
+    if (preferredPrinter) {
+        settings.printerType = settings.printerType || 'usb';
+        settings.printerDevice = settings.printerDevice || preferredPrinter.printerPath || '';
+        settings.printerName = settings.printerName || preferredPrinter.printerName || '';
+        if (preferredPrinter.printerPath && !settings.printerDevice) {
+            settings.printerDevice = preferredPrinter.printerPath;
+        }
+        if (preferredPrinter.printerName && !settings.printerName) {
+            settings.printerName = preferredPrinter.printerName;
+        }
+    }
+
+    return settings;
+}
+
 function isObjectIdValue(value) {
     return value instanceof mongoose.Types.ObjectId ||
         (typeof value === "string" && mongoose.isValidObjectId(value));

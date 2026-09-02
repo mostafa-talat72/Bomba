@@ -147,7 +147,10 @@ const Settings: FC = () => {
   
   // Printer detection states
   const [detectingPrinters, setDetectingPrinters] = useState(false);
+  const [testingPrinter, setTestingPrinter] = useState(false);
+  const [testingDrawer, setTestingDrawer] = useState(false);
   const [availablePrinters, setAvailablePrinters] = useState<any[]>([]);
+  const [printerStatus, setPrinterStatus] = useState<'idle' | 'ready' | 'offline'>('idle');
   
   // Alert state
   const [showAlert, setShowAlert] = useState(false);
@@ -816,6 +819,7 @@ const Settings: FC = () => {
   };
 
   const testPrinter = async (printer: any) => {
+    setTestingPrinter(true);
     try {
       const response = await api.testPrinter({
         printerPath: printer.path,
@@ -823,11 +827,13 @@ const Settings: FC = () => {
       });
       
       if (response.success) {
+        setPrinterStatus('ready');
         showAlertMessage(
           t('settings.organization.printSettings.testSuccess'),
           'success'
         );
       } else {
+        setPrinterStatus('offline');
         showAlertMessage(
           t('settings.organization.printSettings.testFailed', { error: response.message || 'Unknown error' }),
           'error'
@@ -835,7 +841,58 @@ const Settings: FC = () => {
       }
     } catch (error) {
       console.error('Error testing printer:', error);
+      setPrinterStatus('offline');
       showAlertMessage(t('settings.organization.printSettings.testFailed', { error: 'Connection error' }), 'error');
+    } finally {
+      setTestingPrinter(false);
+    }
+  };
+
+  const testDrawer = async () => {
+    setTestingDrawer(true);
+    try {
+      const response = await api.openCashDrawerOnly(organization);
+      if (response.success) {
+        showAlertMessage(t('settings.organization.printSettings.cashDrawerOpened'), 'success');
+      } else {
+        showAlertMessage(response.message || t('settings.organization.printSettings.cashDrawerFailed'), 'warning');
+      }
+    } catch (error) {
+      console.error('Error testing cash drawer:', error);
+      showAlertMessage(t('settings.organization.printSettings.cashDrawerFailed'), 'error');
+    } finally {
+      setTestingDrawer(false);
+    }
+  };
+
+  const printSampleReceipt = async () => {
+    try {
+      const sampleBill = {
+        _id: 'sample-bill',
+        billNumber: 'SAMPLE',
+        status: 'draft',
+        total: 45,
+        paid: 0,
+        remaining: 45,
+        items: [{ name: 'Sample Item', quantity: 1, price: 45 }],
+        createdAt: new Date().toISOString(),
+        organization: organization,
+        table: null,
+      };
+      const response = await api.printBill({
+        bill: sampleBill,
+        organization,
+        language: currentLanguage,
+        tableSectionName: 'Sample',
+      });
+      if (response.success) {
+        showAlertMessage('تمت طباعة نموذج الفاتورة بنجاح', 'success');
+      } else {
+        showAlertMessage(response.message || 'فشل في طباعة نموذج الفاتورة', 'error');
+      }
+    } catch (error) {
+      console.error('Error printing sample receipt:', error);
+      showAlertMessage('فشل في طباعة نموذج الفاتورة', 'error');
     }
   };
 
@@ -845,9 +902,21 @@ const Settings: FC = () => {
       const userId = (JSON.parse(localStorage.getItem('user') || '{}')?._id) || 'anon';
       localStorage.setItem(`printer_${deviceId}_${userId}`, JSON.stringify({ printerPath, printerName, lastUsed: Date.now() }));
       const response = await api.saveDevicePrinter({ printerPath, printerName, deviceId });
-      if (response.success) console.log('Printer settings saved for device');
+      if (response.success) {
+        setOrganization((prev) => ({
+          ...prev,
+          printSettings: {
+            ...prev.printSettings,
+            printerType: 'usb',
+            printerDevice: printerPath,
+            printerName,
+          },
+        }));
+        setPrinterStatus('ready');
+      }
     } catch (error) {
       console.error('Error saving device printer:', error);
+      setPrinterStatus('offline');
     }
   };
 
@@ -2555,10 +2624,25 @@ const Settings: FC = () => {
                     {t('settings.organization.printSettings.title')} — {t('settings.organization.printSettings.myDevice')}
                   </h4>
                   <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">{t('settings.organization.printSettings.myDeviceDesc')}</p>
-                  <div className="flex gap-2 mb-3">
+                  <div className="flex flex-wrap gap-2 mb-3">
                     <button onClick={detectPrinters} className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 text-sm">
-                      {t('settings.organization.printSettings.detectPrinters')}
+                      {detectingPrinters ? t('settings.organization.printSettings.detecting') : t('settings.organization.printSettings.detectPrinters')}
                     </button>
+                    <button onClick={testPrinter.bind(null, { path: organization.printSettings?.printerDevice || (availablePrinters[0]?.path || '') })} disabled={testingPrinter || !organization.printSettings?.printerDevice} className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 text-sm disabled:opacity-50 disabled:cursor-not-allowed">
+                      {testingPrinter ? '...' : t('settings.organization.printSettings.test')}
+                    </button>
+                    <button onClick={testDrawer} disabled={testingDrawer} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm disabled:opacity-50 disabled:cursor-not-allowed">
+                      {testingDrawer ? '...' : (currentLanguage === 'ar' ? 'اختبار درج الكاشير' : 'Test cash drawer')}
+                    </button>
+                    <button onClick={printSampleReceipt} className="px-4 py-2 bg-violet-600 text-white rounded-lg hover:bg-violet-700 text-sm">
+                      {currentLanguage === 'ar' ? 'طباعة نموذج فواتير' : 'Print sample receipt'}
+                    </button>
+                  </div>
+                  <div className="mb-3 flex items-center gap-2 text-sm">
+                    <span className={`inline-block h-2.5 w-2.5 rounded-full ${printerStatus === 'ready' ? 'bg-emerald-500' : printerStatus === 'offline' ? 'bg-red-500' : 'bg-gray-400'}`} />
+                    <span className="text-gray-700 dark:text-gray-300">
+                      {printerStatus === 'ready' ? (currentLanguage === 'ar' ? 'الطابعة جاهزة' : 'Printer ready') : printerStatus === 'offline' ? (currentLanguage === 'ar' ? 'الطابعة غير متصلة' : 'Printer offline') : (currentLanguage === 'ar' ? 'في انتظار اختبار الطابعة' : 'Waiting for printer test')}
+                    </span>
                   </div>
                   {availablePrinters.length > 0 && (
                     <div className="space-y-2 max-h-48 overflow-y-auto border rounded-lg p-2 bg-white dark:bg-gray-800">
