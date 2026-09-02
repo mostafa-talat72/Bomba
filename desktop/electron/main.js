@@ -476,37 +476,52 @@ mainWindow.webContents.setWindowOpenHandler(({ url: targetUrl }) => {
       }
 
       const printers = await mainWindow?.webContents?.getPrintersAsync();
-      const virtualPrinterNames = ['Microsoft Print to PDF', 'Microsoft XPS', 'OneNote', 'Fax', 'PDF24', 'Adobe PDF'];
-      const availablePrinter = (printers || []).find(printer =>
-        !virtualPrinterNames.some(name => printer.name.includes(name))
+      const virtualPrinterNames = ['Microsoft Print to PDF', 'Microsoft XPS', 'OneNote', 'Fax', 'PDF24', 'Adobe PDF', 'Send To OneNote 2016', 'Microsoft Print to PDF'];
+      const filteredPrinters = (printers || []).filter(printer =>
+        !virtualPrinterNames.some(name => printer.name.toLowerCase().includes(name.toLowerCase()))
       );
+      const availablePrinter = filteredPrinters[0] || (printers || [])[0];
       const printerName = data.printerName || availablePrinter?.name;
       if (!printerName) {
         return { success: false, message: 'No physical printer detected' };
       }
 
+      // Use the exact same HTML/CSS as browser print, but hidden and silent:
+      // this keeps the same receipt layout while avoiding the preview popup.
       printWindow = new BrowserWindow({
         show: false,
-        parent: mainWindow || undefined,
-        webPreferences: { contextIsolation: true, sandbox: true }
+        skipTaskbar: true,
+        autoHideMenuBar: true,
+        backgroundColor: '#ffffff',
+        webPreferences: {
+          contextIsolation: true,
+          sandbox: true,
+          offscreen: false,
+          javascript: false
+        },
+        parent: mainWindow || undefined
       });
       await printWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(data.html)}`);
 
       const printed = await new Promise((resolve) => {
         printWindow.webContents.print({
-          preview: false,
           silent: true,
+          printBackground: true,
           deviceName: printerName,
-          printBackground: true
+          preview: false,
+          margins: { marginType: 'none' },
+          pageSize: { width: 80, height: 2000, unit: 'mm' },
+          landscape: false
         }, (success, failureReason) => resolve({ success, failureReason }));
       });
+
       if (!printed.success) {
         return { success: false, message: printed.failureReason || 'Electron print failed', printerName };
       }
       return { success: true, message: 'Printed successfully', printerName };
     } catch (error) {
       console.error('Direct print error:', error);
-      return { success: false, message: error.message };
+      return { success: false, message: error.message || 'Direct print error' };
     } finally {
       if (printWindow && !printWindow.isDestroyed()) printWindow.close();
     }

@@ -880,43 +880,14 @@ export const printBill = async (
   const isDesktopApp = typeof window !== 'undefined' && (window as any).bombaDesktop?.isDesktop;
   
   if (isDesktopApp) {
-    // On Electron, use direct print without preview
     try {
-      const printFrame = document.createElement('iframe');
-      printFrame.style.position = 'absolute';
-      printFrame.style.top = '-1000px';
-      printFrame.style.left = '-1000px';
-      printFrame.style.width = '0';
-      printFrame.style.height = '0';
-      printFrame.style.border = 'none';
-        
-      document.body.appendChild(printFrame);
-        
-      const frameDoc = printFrame.contentDocument || printFrame.contentWindow?.document;
-      if (frameDoc) {
-        frameDoc.open();
-        frameDoc.write(receiptHTML);
-        frameDoc.close();
-          
-        setTimeout(async () => {
-          try {
-            await (window as any).bombaDesktop.directPrint();
-            setTimeout(() => {
-              if (document.body.contains(printFrame)) {
-                document.body.removeChild(printFrame);
-              }
-            }, 100);
-            return;
-          } catch (error) {
-            console.error('Electron direct print error:', error);
-            if (document.body.contains(printFrame)) {
-              document.body.removeChild(printFrame);
-            }
-            fallbackToBrowserPrint(receiptHTML, language);
-          }
-        }, 100);
+      const printResponse = await (window as any).bombaDesktop.directPrint(receiptHTML);
+      if (printResponse?.success) {
+        const successMsg = language === 'ar' ? 'تمت طباعة الفاتورة بنجاح' : 'Bill printed successfully';
+        if ((window as any).showNotification) (window as any).showNotification(successMsg, 'success');
         return;
       }
+      console.warn('Electron direct print failed for bill:', printResponse?.message || 'unknown');
     } catch (error) {
       console.error('Electron direct print setup error:', error);
     }
