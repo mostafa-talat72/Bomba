@@ -1,6 +1,6 @@
 import { Bill, Order, Session, ItemPayment, SessionPayment } from '../services/api';
 import { aggregateItemsWithPayments, AggregatedItem } from './billAggregation';
-import { formatDecimal, formatCurrency as formatCurrencyUtil, getCurrencySymbol, getDisplayNumber } from './formatters';
+import { formatDecimal, getCurrencySymbol, getDisplayNumber } from './formatters';
 import QRCode from 'qrcode';
 import { api } from '../services/api';
 import { getLocaleFromLanguage } from './localeMapper';
@@ -815,11 +815,12 @@ export const printBill = async (
         throw new Error(printResponse?.message || 'Desktop print failed');
       }
 
-      const shouldOpenDrawer = bill.organization?.printSettings?.openCashDrawer !== false;
+      const organization = typeof bill.organization === 'object' ? bill.organization : undefined;
+      const shouldOpenDrawer = organization?.printSettings?.openCashDrawer !== false;
       const drawerResponse = shouldOpenDrawer
         ? await api.autoDetectAndOpenCashDrawer('bill', bill.organization)
         : { success: true };
-      if (!drawerResponse?.success && !drawerResponse?.disabled) {
+      if (!drawerResponse?.success && !drawerResponse?.data?.disabled) {
         console.warn('Bill printed, but cash drawer could not be opened:', drawerResponse?.message);
       }
       const successMsg = language === 'ar' ? 'تمت طباعة الفاتورة بنجاح' : 'Bill printed successfully';

@@ -1,6 +1,5 @@
 import api from '../services/api';
-import { formatDecimal, formatCurrency as formatCurrencyUtil, getCurrencySymbol, getDisplayNumber } from './formatters';
-import { getLocaleFromLanguage } from './localeMapper';
+import { formatDecimal, getCurrencySymbol, getDisplayNumber } from './formatters';
 import type { TFunction } from 'i18next';
 
 interface OrderItem {
@@ -92,7 +91,7 @@ export const buildOrderPrintHTML = async (
   // Check if order.items exists and is an array
   if (!order.items || !Array.isArray(order.items)) {
     console.error('Order items is undefined or not an array:', order);
-    return;
+    return '';
   }
 
   // Group items by menu section
