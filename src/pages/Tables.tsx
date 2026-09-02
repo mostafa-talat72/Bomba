@@ -2386,6 +2386,8 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
     try {
       const targetTable = tables.find((t: any) => t._id === newTableNumber);
       if (!targetTable) { showNotification(t('billing.notifications.tableNotFound'), 'error'); return; }
+      const oldTableId = String((selectedBill.table as any)?._id || (selectedBill.table as any)?.id || selectedBill.table || '');
+      const targetTableId = String(targetTable._id || targetTable.id);
       const result = await api.updateBill(selectedBill.id || selectedBill._id, { table: targetTable._id });
       if (result?.success && result.data) {
         showNotification(t('billing.notifications.tableChangeSuccess', { tableNumber: targetTable?.number || newTableNumber }), 'success');
@@ -2393,10 +2395,31 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
         const returnedId = ((result.data as any).id || (result.data as any)._id) as string;
         // تحديث متفائل — لو حدث دمج نحذف القديم ونحدث بالجديد
         const oldId = String(selectedBill._id || (selectedBill as any).id);
-        if (String(returnedId) !== oldId) {
-          setBills(prev => prev.filter(b => String(b._id || (b as any).id) !== oldId).map(b => String(b._id || (b as any).id) === String(returnedId) ? result.data : b));
-        } else {
-          setBills(prev => prev.map(b => String(b._id || (b as any).id) === oldId ? result.data : b));
+        setBills(prev => {
+          const nextBills = String(returnedId) !== oldId
+            ? prev.filter(b => String(b._id || (b as any).id) !== oldId)
+              .map(b => String(b._id || (b as any).id) === String(returnedId) ? result.data : b)
+            : prev.map(b => String(b._id || (b as any).id) === oldId ? result.data : b);
+          const hasUnpaidBill = (tableId: string) => nextBills.some((bill: any) => {
+            const billTableId = String(bill.table?._id || bill.table?.id || bill.table || '');
+            return billTableId === tableId && ['draft', 'partial', 'overdue'].includes(bill.status);
+          });
+          setTables(prevTables => prevTables.map((table: any) => {
+            const tableId = String(table._id || table.id);
+            if (tableId === oldTableId || tableId === targetTableId) {
+              return { ...table, status: hasUnpaidBill(tableId) ? 'occupied' : 'empty' };
+            }
+            return table;
+          }));
+          return nextBills;
+        });
+        if (Array.isArray(selectedBill.orders) && oldTableId !== targetTableId) {
+          const movedOrderIds = new Set(selectedBill.orders.map((order: any) => String(order?._id || order?.id || order)));
+          setOrders(prev => prev.map((order: any) =>
+            movedOrderIds.has(String(order._id || order.id))
+              ? { ...order, table: targetTableId }
+              : order
+          ));
         }
         setSelectedBill(result.data);
         scheduleBackgroundRefetch(true);
