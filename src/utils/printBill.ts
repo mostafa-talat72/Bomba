@@ -5,6 +5,7 @@ import QRCode from 'qrcode';
 import { api } from '../services/api';
 import { getLocaleFromLanguage } from './localeMapper';
 import type { TFunction } from 'i18next';
+import { printThroughLocalBridge } from './localPrintBridge';
 
 // Function to determine the appropriate link for QR Code based on priority
 const getSocialLinkForQR = (socialLinks: any): { link: string; platform: string } | null => {
@@ -398,6 +399,7 @@ export const buildBillPrintHTML = async (
       <title>${getDisplayNumber(bill.billNumber) || ''}</title>
       <style>
         @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800;900&display=swap');
+        html { width: 100%; max-width: 100%; overflow-x: hidden; }
         * { 
           font-family: 'Tajawal', sans-serif; 
           -webkit-print-color-adjust: exact;
@@ -410,8 +412,8 @@ export const buildBillPrintHTML = async (
           font-size: 11px; 
           color: #000; 
           font-weight: 600;
-          width: 80mm;
-          max-width: 80mm;
+          width: 100%;
+          max-width: 100%;
           text-align: center;
           direction: ${dir};
         }
@@ -628,14 +630,26 @@ export const buildBillPrintHTML = async (
         
         @media print {
           @page { 
-            size:auto; 
+            size: auto;
             margin: 0; 
           }
           body { 
             margin: 0; 
             padding: 0; 
             font-weight: 600;
-            width: 80mm;
+            width: 100%;
+            max-width: 100%;
+            box-sizing: border-box;
+            overflow-x: hidden;
+              overflow-wrap: anywhere;
+              word-break: break-word;
+          }
+          table, img, div { max-width: 100%; box-sizing: border-box; }
+          .items-table { table-layout: fixed; width: 100%; }
+          html { width: 100%; max-width: 100%; overflow-x: hidden; }
+          .items-table th, .items-table td {
+            overflow-wrap: anywhere;
+            word-break: break-word;
           }
           .no-print { display: none !important; }
           .items-table {
@@ -655,7 +669,7 @@ export const buildBillPrintHTML = async (
         
         @media screen {
           body {
-            max-width: 80mm;
+            max-width: 100%;
             margin: 0 auto;
             background: #fff;
           }
@@ -713,90 +727,11 @@ export const buildBillPrintHTML = async (
         <strong style="font-weight: 900; font-size: 14px;">${t('billPrint.footer')}</strong>
       </div>
 
-      <div class="no-print" style="margin-top: 20px; text-align: center; padding: 10px;">
-        <button onclick="window.print()" style="
-          background: #4CAF50;
-          color: white;
-          border: none;
-          padding: 10px 20px;
-          text-align: center;
-          text-decoration: none;
-          display: inline-block;
-          font-size: 14px;
-          font-weight: 700;
-          cursor: pointer;
-          border-radius: 4px;
-        ">
-          ${t('billPrint.printButton')}
-        </button>
-      </div>
     </body>
     </html>
   `;
 
   return receiptHTML;
-};
-
-const fallbackToBrowserPrint = (content: string, language: string) => {
-  const printWindow = window.open('', '_blank', 'noopener,noreferrer');
-  if (printWindow) {
-    printWindow.document.open();
-    printWindow.document.write(content);
-    printWindow.document.close();
-    printWindow.onload = () => {
-      setTimeout(() => {
-        printWindow.print();
-        setTimeout(() => {
-          if (!printWindow.closed) {
-            printWindow.close();
-          }
-        }, 100);
-      }, 50);
-    };
-    return true;
-  }
-
-  const printFrame = document.createElement('iframe');
-  printFrame.style.position = 'absolute';
-  printFrame.style.top = '-1000px';
-  printFrame.style.left = '-1000px';
-  printFrame.style.width = '0';
-  printFrame.style.height = '0';
-  printFrame.style.border = 'none';
-  document.body.appendChild(printFrame);
-
-  const frameDoc = printFrame.contentDocument || printFrame.contentWindow?.document;
-  if (frameDoc) {
-    frameDoc.open();
-    frameDoc.write(content);
-    frameDoc.close();
-    setTimeout(() => {
-      try {
-        printFrame.contentWindow?.focus();
-        printFrame.contentWindow?.print();
-        setTimeout(() => {
-          if (document.body.contains(printFrame)) {
-            document.body.removeChild(printFrame);
-          }
-        }, 100);
-      } catch (error) {
-        console.error('Print error:', error);
-        if (document.body.contains(printFrame)) {
-          document.body.removeChild(printFrame);
-        }
-      }
-    }, 50);
-    return true;
-  }
-
-  document.body.removeChild(printFrame);
-  const alertMsg = language === 'ar'
-    ? 'الرجاء السماح بالنوافذ المنبثقة لطباعة الفاتورة'
-    : language === 'fr'
-    ? 'Veuillez autoriser les fenêtres contextuelles pour imprimer la facture'
-    : 'Please allow pop-ups to print the bill';
-  alert(alertMsg);
-  return false;
 };
 
 export const printBill = async (
@@ -807,95 +742,18 @@ export const printBill = async (
   tableSectionName?: string,
   drawerMode: 'bill' | 'payment' = 'bill'
 ) => {
-  const isElectron = typeof window !== 'undefined' && !!((window as any).bombaDesktop?.isDesktop || (window as any).electronAPI);
-  try {
-    if (isElectron && (window as any).bombaDesktop?.directPrint) {
-      const receiptHTML = await buildBillPrintHTML(bill, fallbackOrganizationName, language, t, tableSectionName);
-      const printResponse = await (window as any).bombaDesktop.directPrint(receiptHTML);
-      if (!printResponse?.success) {
-        throw new Error(printResponse?.message || 'Desktop print failed');
-      }
-
-      const organization = typeof bill.organization === 'object' ? bill.organization : undefined;
-      const settingName = drawerMode === 'payment' ? 'openCashDrawerOnPayment' : 'openCashDrawer';
-      const shouldOpenDrawer = organization?.printSettings?.[settingName] !== false;
-      const drawerResponse = shouldOpenDrawer
-        ? await api.autoDetectAndOpenCashDrawer(drawerMode, bill.organization)
-        : { success: true };
-      if (!drawerResponse?.success && !drawerResponse?.disabled) {
-        console.warn('Bill printed, but cash drawer could not be opened:', drawerResponse?.message);
-      }
-      const successMsg = language === 'ar' ? 'تمت طباعة الفاتورة بنجاح' : 'Bill printed successfully';
-      if ((window as any).showNotification) (window as any).showNotification(successMsg, 'success');
-      return;
-    }
-
-    // استخدام الاكتشاف التلقائي للطابعة الحرارية
-    // بدلاً من الاستدعاء المباشر للـ API
-    const directPrint = api.autoDetectAndPrintBill({ 
-      bill, 
-      organization: bill.organization, 
-      language, 
-      tableSectionName,
-      drawerMode
-    });
-    const timeout = new Promise<never>((_, reject) => setTimeout(() => reject(new Error('print-timeout')), 15000));
-    const response: any = await Promise.race([directPrint, timeout]);
-    if (response?.success) {
-      const successMsg = language === 'ar' 
-        ? 'تمت طباعة الفاتورة بنجاح' + (response.cashDrawerOpened ? ' وتم فتح درج الكاشير' : '')
-        : language === 'fr'
-        ? 'Facture imprimée avec succès' + (response.cashDrawerOpened ? ' et tiroir-caisse ouvert' : '')
-        : 'Bill printed successfully' + (response.cashDrawerOpened ? ' and cash drawer opened' : '');
-      if (typeof window !== 'undefined' && (window as any).showNotification) (window as any).showNotification(successMsg, 'success');
-      return;
-    }
-    
-    // إذا فشلت الطباعة لسبب ما (مثل عدم وجود طابعة)
-    if (response?.success === false) {
-      const errorMsg = response.message || (language === 'ar' 
-        ? 'فشل في طباعة الفاتورة'
-        : language === 'fr'
-        ? 'Impossible d\'imprimer la facture'
-        : 'Failed to print bill');
-      if (typeof window !== 'undefined' && (window as any).showNotification) (window as any).showNotification(errorMsg, 'error');
-      throw new Error(response.message || 'Print failed');
-    }
-  } catch (error: any) {
-    if (error?.message !== 'print-timeout') console.error('Direct print failed, falling back to browser print:', error);
-    else console.error('Direct print timed out');
-    if (isElectron) {
-      const msg = error?.message === 'print-timeout'
-        ? (language === 'ar' ? 'انتهت مهلة الطباعة المباشرة — سيتم استخدام الطباعة من المتصفح' : 'Direct print timed out — browser print will be used')
-        : (language === 'ar' ? 'فشلت الطباعة المباشرة — سيتم استخدام الطباعة من المتصفح' : 'Direct print failed — browser print will be used');
-      if ((window as any).showNotification) (window as any).showNotification(msg, 'warning');
-      else alert(msg);
-    }
-  }
-
-  // Fallback: استخدام الطريقة القديمة أو Electron direct print إذا فشلت الطباعة المباشرة
   const receiptHTML = await buildBillPrintHTML(bill, fallbackOrganizationName, language, t, tableSectionName);
-
-  // Check if running on Electron desktop app
-  const isDesktopApp = typeof window !== 'undefined' && (window as any).bombaDesktop?.isDesktop;
-  
-  if (isDesktopApp) {
-    try {
-      const printResponse = await (window as any).bombaDesktop.directPrint(receiptHTML);
-      if (printResponse?.success) {
-        const successMsg = language === 'ar' ? 'تمت طباعة الفاتورة بنجاح' : 'Bill printed successfully';
-        if ((window as any).showNotification) (window as any).showNotification(successMsg, 'success');
-        return;
-      }
-      console.warn('Electron direct print failed for bill:', printResponse?.message || 'unknown');
-    } catch (error) {
-      console.error('Electron direct print setup error:', error);
-    }
-  }
-
-  if (fallbackToBrowserPrint(receiptHTML, language)) {
-    return;
-  }
+  const savedPrinter = await api.getDevicePrinter().catch(() => null);
+  const printerName = savedPrinter?.data?.printerName || savedPrinter?.data?.name;
+  const organization = typeof bill.organization === 'object' ? bill.organization : undefined;
+  const settingName = drawerMode === 'payment' ? 'openCashDrawerOnPayment' : 'openCashDrawer';
+  const bridgePrinted = await printThroughLocalBridge(receiptHTML, printerName, {
+    openDrawer: organization?.printSettings?.[settingName] !== false,
+    drawerMode,
+    organization: bill.organization,
+  });
+  if (bridgePrinted) return;
+  return;
 };
 
 export default printBill;

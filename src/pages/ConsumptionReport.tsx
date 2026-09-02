@@ -50,6 +50,7 @@ import { useRTL } from '../hooks/useRTL';
 import { Order, Session } from '../services/api';
 import api from '../services/api';
 import { formatDecimal, formatCurrency as formatCurrencyUtil, replaceAMPM } from '../utils/formatters';
+import { printThroughLocalBridge } from '../utils/localPrintBridge';
 
 // Extend dayjs with plugins
 dayjs.extend(isSameOrAfter);
@@ -455,39 +456,6 @@ const ConsumptionReport = () => {
   };
 
   const printReport = async () => {
-    const isElectron = typeof window !== 'undefined' && !!(window as any).electronAPI;
-    try {
-      const reportData = {
-        consumptionData,
-        dateRange,
-        totalSales: Object.values(consumptionData).flat().reduce((sum, item) => sum + item.total, 0),
-        totalConsumption: Object.values(consumptionData).flat().reduce((sum, item) => sum + item.total, 0)
-      };
-      const response: any = await api.printConsumptionReport({
-        reportData,
-        organization: user?.organization,
-        language: i18n.language
-      });
-      if (response?.success) {
-        const successMsg = i18n.language === 'ar' ? 'تمت طباعة التقرير بنجاح' : i18n.language === 'fr' ? 'Rapport imprimé avec succès' : 'Report printed successfully';
-        toast.success(successMsg);
-        return;
-      }
-      console.error('Direct print returned non-success:', response);
-      if (isElectron) {
-        toast.error(response?.message || (i18n.language === 'ar' ? 'فشلت الطباعة المباشرة' : 'Direct print failed') + (response?.error ? `: ${response.error}` : ''));
-        return;
-      }
-    } catch (error: any) {
-      console.error('Direct print failed, falling back to window print:', error);
-      if (isElectron) {
-        const msg = error?.message === 'print-timeout' ? (i18n.language === 'ar' ? 'انتهت مهلة الطباعة — تأكد من توصيل الطابعة' : 'Direct print timeout') : (i18n.language === 'ar' ? 'فشلت الطباعة المباشرة' : 'Direct print failed');
-        toast.error(msg);
-        return;
-      }
-    }
-
-    // Fallback (ويب فقط): استخدام الطريقة القديمة إذا فشلت الطباعة المباشرة
     try {
       const isRTL = i18n.language === 'ar';
       const dir = isRTL ? 'rtl' : 'ltr';
@@ -593,17 +561,21 @@ const ConsumptionReport = () => {
             }
             body { 
               margin: 0; 
-              padding: ${isRTL ? '0 12px 0 4px' : '0 4px 0 12px'}; 
+              padding: 0;
               font-size: 11px; 
               color: #000; 
               font-weight: 600;
-              width: auto;
-              max-width: auto;
+              width: 100%;
+              max-width: 100%;
+              overflow-x: hidden;
               text-align: center;
               direction: ${dir};
             }
             .page {
-              padding: ${isRTL ? '8px 10px 8px 4px' : '8px 4px 8px 10px'};
+              width: 100%;
+              max-width: 100%;
+              padding: 8px 4px;
+              overflow: hidden;
             }
             .page-content {
               width: 100%;
@@ -744,10 +716,12 @@ const ConsumptionReport = () => {
               html, body { 
                 margin: 0; 
                 padding: 0;
-                width: auto;
+                width: 100%;
+                max-width: 100%;
+                overflow-x: hidden;
               }
               body { 
-                padding: ${isRTL ? '4px 8px 4px 2px' : '4px 2px 4px 8px'}; 
+                padding: 4px 2px;
                 font-weight: 600;
                 direction: ${dir};
               }
@@ -783,7 +757,7 @@ const ConsumptionReport = () => {
             
             @media screen {
               body {
-                max-width: auto;
+                max-width: 100%;
                 margin: 0 auto;
                 background: #fff;
               }
@@ -793,68 +767,18 @@ const ConsumptionReport = () => {
         <body>
           ${categoryPages}
           
-          <div class="no-print" style="margin-top: 20px; text-align: center; padding: 10px;">
-            <button onclick="window.print()" style="
-              background: #4CAF50;
-              color: white;
-              border: none;
-              padding: 10px 20px;
-              text-align: center;
-              text-decoration: none;
-              display: inline-block;
-              font-size: 14px;
-              font-weight: 700;
-              cursor: pointer;
-              border-radius: 4px;
-            ">
-              ${t('consumptionReport.print.printButton')}
-            </button>
-          </div>
         </body>
         </html>
       `;
 
-      // Create hidden iframe for printing
-      const iframe = document.createElement('iframe');
-      iframe.style.position = 'fixed';
-      iframe.style.right = '0';
-      iframe.style.bottom = '0';
-      iframe.style.width = '0';
-      iframe.style.height = '0';
-      iframe.style.border = 'none';
-      document.body.appendChild(iframe);
-      
-      const iframeDoc = iframe.contentWindow?.document;
-      if (iframeDoc) {
-        iframeDoc.open();
-        iframeDoc.write(printContent);
-        iframeDoc.close();
-        
-        
-        // Wait for content and fonts to load then print
-        iframe.contentWindow?.addEventListener('load', () => {
-          
-          setTimeout(() => {
-            // Give extra time for rendering
-            setTimeout(() => {
-              iframe.contentWindow?.focus();
-              iframe.contentWindow?.print();
-              
-              // Remove iframe after printing
-              setTimeout(() => {
-                if (document.body.contains(iframe)) {
-                  document.body.removeChild(iframe);
-                }
-              }, 1000);
-            }, 800);
-          }, 500);
-        });
-        
+      const savedPrinter = await api.getDevicePrinter().catch(() => null);
+      const printerName = savedPrinter?.data?.printerName || savedPrinter?.data?.name;
+      if (await printThroughLocalBridge(printContent, printerName)) {
         toast.success(t('consumptionReport.messages.printOpening'));
-      } else {
-        toast.error(t('consumptionReport.messages.printError'));
-        document.body.removeChild(iframe);
+        return;
       }
+      return;
+
     } catch (error) {
       toast.error(t('consumptionReport.messages.printFailed'));
       console.error('Print error:', error);
