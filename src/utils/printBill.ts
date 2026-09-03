@@ -758,6 +758,7 @@ export const printBill = async (
     openDrawer: organization?.printSettings?.[settingName] !== false,
     drawerMode,
     organization: bill.organization,
+    printKey: `bill:${String((bill as any)._id || (bill as any).id || bill.billNumber || '')}:${drawerMode}`,
   });
   if (bridgePrinted) return;
   return;
