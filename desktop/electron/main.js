@@ -159,7 +159,9 @@ async function printHtmlSilently(html, requestedPrinterName, paperWidthMm = 80) 
           padding: 0 2mm !important;
           overflow: visible !important;
           white-space: normal !important;
+          direction: ltr !important;
         }
+        body > * { direction: rtl !important; }
         body {
           box-sizing: border-box !important;
           width: 100% !important;
@@ -800,7 +802,9 @@ mainWindow.webContents.setWindowOpenHandler(({ url: targetUrl }) => {
             margin: 0 !important;
             padding: 0 2mm !important;
             overflow: visible !important;
+            direction: ltr !important;
           }
+          body > * { direction: rtl !important; }
           body {
             width: 100% !important;
             box-sizing: border-box !important;
@@ -840,7 +844,7 @@ mainWindow.webContents.setWindowOpenHandler(({ url: targetUrl }) => {
         skipTaskbar: true,
         autoHideMenuBar: true,
         useContentSize: true,
-        width: 480,
+        width: Math.round(paperWidthMm * 3.78),
         height: 2400,
         backgroundColor: '#ffffff',
         webPreferences: {
