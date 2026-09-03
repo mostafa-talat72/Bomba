@@ -133,11 +133,11 @@ async function printHtmlSilently(html, requestedPrinterName, paperWidthMm = 80) 
       <style id="bomba-agent-print-layout">
         @page { size: ${normalizedPaperWidthMm}mm auto; margin: 0 !important; }
         html, body {
-          width: ${normalizedPaperWidthMm}mm !important;
-          min-width: ${normalizedPaperWidthMm}mm !important;
-          max-width: ${normalizedPaperWidthMm}mm !important;
+          width: 100% !important;
+          min-width: 0 !important;
+          max-width: 100% !important;
           margin: 0 !important;
-          padding: 0 !important;
+          padding: 0 1.5mm !important;
           overflow: visible !important;
         }
         body { box-sizing: border-box !important; }
@@ -202,6 +202,7 @@ async function printHtmlSilently(html, requestedPrinterName, paperWidthMm = 80) 
         printBackground: true,
         deviceName: printerName,
         margins: { marginType: "none" },
+        scaleFactor: 90,
         pageSize: { width: widthMicrons, height: heightMicrons },
       }, (success, failureReason) => resolve({ success, failureReason }));
     });
@@ -763,11 +764,11 @@ mainWindow.webContents.setWindowOpenHandler(({ url: targetUrl }) => {
         <style id="bomba-fallback-print-layout">
           @page { size: ${paperWidthMm}mm auto; margin: 0 !important; }
           html, body {
-            width: ${paperWidthMm}mm !important;
-            min-width: ${paperWidthMm}mm !important;
-            max-width: ${paperWidthMm}mm !important;
+            width: 100% !important;
+            min-width: 0 !important;
+            max-width: 100% !important;
             margin: 0 !important;
-            padding: 0 !important;
+            padding: 0 1.5mm !important;
             overflow: visible !important;
           }
           table, thead, tbody, tr, th, td, div, img {
@@ -817,6 +818,7 @@ mainWindow.webContents.setWindowOpenHandler(({ url: targetUrl }) => {
           deviceName: printerName,
           preview: false,
           margins: { marginType: 'none' },
+          scaleFactor: 90,
           pageSize: { width: widthMicrons, height: heightMicrons },
           // Let the selected printer/driver provide its configured paper size.
         }, (success, failureReason) => resolve({ success, failureReason }));
