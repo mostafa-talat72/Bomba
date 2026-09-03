@@ -100,9 +100,20 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   };
 
   const logout = (): void => {
+    try {
+      sessionStorage.setItem('bombaLogoutInProgress', 'true');
+    } catch {
+      // Continue logout if session storage is unavailable.
+    }
+
     if (shouldBlockExit()) {
       const confirmed = window.confirm('توجد طاولات مشغولة، هل تريد تسجيل الخروج؟');
       if (!confirmed) {
+        try {
+          sessionStorage.removeItem('bombaLogoutInProgress');
+        } catch {
+          // Ignore unavailable session storage.
+        }
         setIsLoggingOut(false);
         return;
       }
@@ -118,6 +129,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     localStorage.removeItem('token');
     localStorage.removeItem('refreshToken');
     api.clearToken();
+    try {
+      sessionStorage.removeItem('bombaExitGuard');
+    } catch {
+      // Ignore unavailable session storage during logout.
+    }
 
     setUser(null);
     setIsAuthenticated(false);
@@ -162,7 +178,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       const isEmailActions = path.startsWith('/email-actions');
       const isLogin = path === '/login';
 
-      if (isLogin) return;
+      if (isLogin) {
+        try {
+          sessionStorage.removeItem('bombaLogoutInProgress');
+        } catch {
+          // Ignore unavailable session storage.
+        }
+        return;
+      }
 
       if (!token && !isVerifyEmail && !isBillView && !isResetPassword && !isRegister && !isEmailActions) {
         setUser(null);

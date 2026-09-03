@@ -253,7 +253,7 @@ const Layout = () => {
       const billStatus = String(bill?.status || '').toLowerCase();
       if (['paid', 'cancelled'].includes(billStatus)) return false;
 
-      return tableIdsWithStatus.has(String(tableId)) || tables.some((table: any) => String(table._id || table.id) === String(tableId));
+      return tableIdsWithStatus.has(String(tableId));
     });
 
     const hasActiveSession = Array.isArray(sessions) && sessions.some((session: any) => {
