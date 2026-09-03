@@ -1232,7 +1232,7 @@ const getSalesReportData = async (organization, startDate, endDate) => {
         cafe: cafeRevenue,
     };
 
-    // Top products from orders - group by name+variant (variant-aware)
+    // Top products from order snapshots - group by menu item id + variant.
     const productSales = {};
     orders.forEach((order) => {
         if (!order.items || !Array.isArray(order.items)) return;
@@ -1241,7 +1241,8 @@ const getSalesReportData = async (organization, startDate, endDate) => {
             if (!item.name) return;
             
             const variant = item.variant || '';
-            const key = `${item.name}|${variant}`;
+            const menuItemId = item.menuItem?._id || item.menuItemId || item.menuItem;
+            const key = `${menuItemId ? String(menuItemId) : item.name}|${variant}`;
             const variantText = variant && variant !== 'عادي' ? ` (${variant})` : '';
             const displayName = `${item.name}${variantText}`;
             if (!productSales[key]) {
@@ -1525,10 +1526,13 @@ const getTopProductsBySection = async (organization, startDate, endDate) => {
             }
         }).lean();
 
-        // Create a map of menu items by name for quick lookup
+        // Create maps for legacy section lookup. Order item identity remains
+        // based on the saved menu item id whenever it is available.
         const menuItemMap = {};
+        const menuItemIdMap = {};
         menuItems.forEach(item => {
             menuItemMap[item.name] = item;
+            menuItemIdMap[String(item._id)] = item;
         });
 
         const sectionData = {};
@@ -1540,8 +1544,8 @@ const getTopProductsBySection = async (organization, startDate, endDate) => {
             order.items.forEach(item => {
                 if (!item.name) return;
 
-                // Find the menu item
-                const menuItem = menuItemMap[item.name];
+                const menuItemId = item.menuItem?._id || item.menuItemId || item.menuItem;
+                const menuItem = (menuItemId && menuItemIdMap[String(menuItemId)]) || menuItemMap[item.name];
                 
                 // Get section info
                 let sectionId = 'other';
@@ -1554,6 +1558,8 @@ const getTopProductsBySection = async (organization, startDate, endDate) => {
                         sectionId = section._id ? section._id.toString() : 'other';
                         sectionName = section.name || 'أخرى';
                     }
+                } else if (item.section) {
+                    sectionId = String(item.section?._id || item.section);
                 }
 
                 // Initialize section if not exists
@@ -1569,12 +1575,12 @@ const getTopProductsBySection = async (organization, startDate, endDate) => {
 
                 // Calculate item total (variant-aware)
                 const variant = item.variant || '';
-                const key = `${item.name}|${variant}`;
+                const key = `${menuItemId ? String(menuItemId) : item.name}|${variant}`;
                 const variantText = variant && variant !== 'عادي' ? ` (${variant})` : '';
                 const displayName = `${item.name}${variantText}`;
                 const itemPrice = Number(item.price) || 0;
                 const itemQuantity = Number(item.quantity) || 0;
-                const itemTotal = item.itemTotal || (itemPrice * itemQuantity);
+                const itemTotal = Number(item.itemTotal) || (itemPrice * itemQuantity);
 
                 // Initialize product if not exists (variant-aware key)
                 if (!sectionData[sectionId].products[key]) {
