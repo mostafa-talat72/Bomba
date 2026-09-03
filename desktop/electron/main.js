@@ -47,8 +47,8 @@ async function waitForPrintResources(printWindow) {
       document.body.style.margin = "0";
       document.body.style.position = "relative";
       document.body.style.left = "-4mm";
-      document.body.style.paddingLeft = "2mm";
-      document.body.style.paddingRight = "2mm";
+      document.body.style.paddingLeft = "0";
+      document.body.style.paddingRight = "0";
       document.body.style.boxSizing = "border-box";
       document.body.style.overflow = "visible";
       document.documentElement.style.direction = "ltr";
@@ -171,7 +171,8 @@ async function printHtmlSilently(html, requestedPrinterName, paperWidthMm = 80) 
           min-width: 0 !important;
           max-width: 100% !important;
           margin: 0 !important;
-          padding: 0 2mm !important;
+          padding-left: 0 !important;
+          padding-right: 0 !important;
           overflow: visible !important;
           white-space: normal !important;
           direction: ltr !important;
@@ -830,7 +831,8 @@ mainWindow.webContents.setWindowOpenHandler(({ url: targetUrl }) => {
             min-width: 0 !important;
             max-width: 100% !important;
             margin: 0 !important;
-            padding: 0 2mm !important;
+            padding-left: 0 !important;
+            padding-right: 0 !important;
             overflow: visible !important;
             direction: ltr !important;
           }
