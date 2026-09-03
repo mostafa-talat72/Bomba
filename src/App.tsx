@@ -102,7 +102,7 @@ const ExitGuard = () => {
       const tableId = bill?.table?._id || bill?.table || bill?.tableId;
       if (!tableId) return false;
       const billStatus = String(bill?.status || '').toLowerCase();
-      return !['paid', 'cancelled'].includes(billStatus) && (!tableId || tableIdsWithActiveStatus.has(String(tableId)) || !Array.isArray(tables) || tables.some((table: any) => String(table._id || table.id) === String(tableId)) );
+      return !['paid', 'cancelled'].includes(billStatus) && tableIdsWithActiveStatus.has(String(tableId));
     });
 
     const hasActiveSession = Array.isArray(sessions) && sessions.some((session: any) => {
@@ -121,14 +121,26 @@ const ExitGuard = () => {
     } catch {}
 
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
-      if (!user || !hasOccupiedTables) return;
+      let logoutInProgress = false;
+      try {
+        logoutInProgress = sessionStorage.getItem('bombaLogoutInProgress') === 'true';
+      } catch {
+        // Continue with the in-memory guard when session storage is unavailable.
+      }
+      if (!user || !hasOccupiedTables || logoutInProgress) return;
       event.preventDefault();
       event.returnValue = 'توجد طاولات مشغولة، هل تريد الخروج؟';
       return 'توجد طاولات مشغولة، هل تريد الخروج؟';
     };
 
     const handlePageHide = (event: PageTransitionEvent) => {
-      if (!user || !hasOccupiedTables) return;
+      let logoutInProgress = false;
+      try {
+        logoutInProgress = sessionStorage.getItem('bombaLogoutInProgress') === 'true';
+      } catch {
+        // Continue with the in-memory guard when session storage is unavailable.
+      }
+      if (!user || !hasOccupiedTables || logoutInProgress) return;
       event.preventDefault();
       (event as any).returnValue = 'توجد طاولات مشغولة، هل تريد الخروج؟';
     };
