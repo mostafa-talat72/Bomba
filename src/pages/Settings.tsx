@@ -95,6 +95,9 @@ interface OrganizationData {
     promptOrderPrintSections?: boolean;
     defaultOrderPrintSections?: string[];
     autoPrintOrderSections?: boolean;
+    printers?: Array<{ id: string; name: string; printerName: string; printerPath?: string }>;
+    sectionPrinterMap?: Record<string, string>;
+    documentPrinterMap?: Record<string, string>;
     printerType?: string;
     printerDevice?: string;
     printerIP?: string;
@@ -235,7 +238,10 @@ const Settings: FC = () => {
     printSettings: {
       printQRCode: true,
         promptOrderPrintSections: false,
-      },
+      printers: [],
+      sectionPrinterMap: {},
+      documentPrinterMap: {},
+    },
   });
 
   const [organizationPermissions, setOrganizationPermissions] = useState<OrganizationPermissions>({
@@ -1724,6 +1730,52 @@ const Settings: FC = () => {
                               </div>
                             </div>
                           )}
+                          <div className="mt-4 rounded-xl border border-orange-200 dark:border-gray-600 bg-white/60 dark:bg-gray-800/40 p-4">
+                            <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">الطابعات المتعددة وتوجيه الطباعة</h4>
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">أضف الطابعات المكتشفة ثم اربط كل قسم أو نوع مستند بالطابعة المناسبة.</p>
+                            <div className="mt-3 space-y-2">
+                              {(organization.printSettings?.printers || []).map(printer => (
+                                <div key={printer.id} className="flex items-center justify-between rounded-lg bg-gray-50 dark:bg-gray-700 p-2">
+                                  <span className="text-sm text-gray-800 dark:text-gray-100">{printer.name}</span>
+                                  <button type="button" className="text-xs text-red-600" onClick={() => setOrganization(prev => ({ ...prev, printSettings: { ...prev.printSettings, printers: (prev.printSettings?.printers || []).filter(item => item.id !== printer.id) } }))}>إزالة</button>
+                                </div>
+                              ))}
+                              {availablePrinters.map(printer => {
+                                const id = String(printer.path || printer.name);
+                                const exists = organization.printSettings?.printers?.some(item => item.id === id);
+                                return exists ? null : (
+                                  <button key={id} type="button" className="w-full rounded-lg border border-dashed border-orange-300 p-2 text-sm text-orange-700 hover:bg-orange-50 text-right" onClick={() => setOrganization(prev => ({ ...prev, printSettings: { ...prev.printSettings, printers: [...(prev.printSettings?.printers || []), { id, name: printer.name, printerName: printer.name, printerPath: printer.path || '' }] } }))}>
+                                    + إضافة {printer.name}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                            <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                              {[
+                                ['bill', 'الفواتير'],
+                                ['consumptionReport', 'تقرير الاستهلاك'],
+                                ['dailyReport', 'التقرير اليومي'],
+                              ].map(([key, label]) => (
+                                <label key={key} className="text-xs text-gray-600 dark:text-gray-300">{label}
+                                  <select value={organization.printSettings?.documentPrinterMap?.[key] || ''} onChange={e => setOrganization(prev => ({ ...prev, printSettings: { ...prev.printSettings, documentPrinterMap: { ...(prev.printSettings?.documentPrinterMap || {}), [key]: e.target.value } } }))} className="mt-1 w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 p-2">
+                                    <option value="">الطابعة الافتراضية</option>
+                                    {(organization.printSettings?.printers || []).map(printer => <option key={printer.id} value={printer.id}>{printer.name}</option>)}
+                                  </select>
+                                </label>
+                              ))}
+                            </div>
+                            <div className="mt-3 space-y-2">
+                              {menuSections.map(section => {
+                                const sectionId = String(section._id || section.id);
+                                return <label key={sectionId} className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-300">{section.name}
+                                  <select value={organization.printSettings?.sectionPrinterMap?.[sectionId] || ''} onChange={e => setOrganization(prev => ({ ...prev, printSettings: { ...prev.printSettings, sectionPrinterMap: { ...(prev.printSettings?.sectionPrinterMap || {}), [sectionId]: e.target.value } } }))} className="ml-auto rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 p-1.5">
+                                    <option value="">الافتراضية</option>
+                                    {(organization.printSettings?.printers || []).map(printer => <option key={printer.id} value={printer.id}>{printer.name}</option>)}
+                                  </select>
+                                </label>;
+                              })}
+                            </div>
+                          </div>
                         </div>
                       )}
 

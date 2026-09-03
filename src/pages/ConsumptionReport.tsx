@@ -796,39 +796,12 @@ const ConsumptionReport = () => {
         </html>
       `;
 
-      // Create hidden iframe for printing
-      const iframe = document.createElement('iframe');
-      iframe.style.position = 'fixed';
-      iframe.style.right = '0';
-      iframe.style.bottom = '0';
-      iframe.style.width = '0';
-      iframe.style.height = '0';
-      iframe.style.border = 'none';
-      document.body.appendChild(iframe);
-      
-      const iframeDoc = iframe.contentWindow?.document;
-      if (iframeDoc) {
-        iframeDoc.open();
-        iframeDoc.write(printContent);
-        iframeDoc.close();
-        
-        
-        // Wait for content and fonts to load then print
-        let hasPrinted = false;
-        const printFrame = () => {
-          if (hasPrinted) return;
-          hasPrinted = true;
-          setTimeout(() => {
-            iframe.contentWindow?.focus();
-            iframe.contentWindow?.print();
-            setTimeout(() => {
-              if (document.body.contains(iframe)) document.body.removeChild(iframe);
-            }, 1500);
-          }, 300);
-        };
-        iframe.contentWindow?.addEventListener('load', printFrame, { once: true });
-        setTimeout(printFrame, 500);
-        
+      const savedPrinter = await api.getDevicePrinter().catch(() => null);
+      const organizationResponse = await api.getOrganization().catch(() => null);
+      const settings = organizationResponse?.success === true ? organizationResponse.data?.printSettings : undefined;
+      const profile = settings?.printers?.find((item: any) => item.id === settings?.documentPrinterMap?.consumptionReport);
+      const printerName = profile?.printerName || savedPrinter?.data?.printerName || savedPrinter?.data?.name;
+      if (await printThroughLocalBridge(printContent, printerName)) {
         toast.success(t('consumptionReport.messages.printOpening'));
         return;
       }

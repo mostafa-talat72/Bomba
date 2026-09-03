@@ -45,6 +45,14 @@ export interface User {
     _id: string;
     name: string;
     owner: string;
+    printSettings?: {
+      promptOrderPrintSections?: boolean;
+      defaultOrderPrintSections?: string[];
+      autoPrintOrderSections?: boolean;
+      printers?: Array<{ id: string; name: string; printerName: string; printerPath?: string }>;
+      sectionPrinterMap?: Record<string, string>;
+      documentPrinterMap?: Record<string, string>;
+    };
   };
   createdAt: Date;
 }
@@ -287,6 +295,9 @@ export interface Bill {
       printFooter?: boolean;
       autoCut?: boolean;
       printQRCode?: boolean;
+      printers?: Array<{ id: string; name: string; printerName: string; printerPath?: string }>;
+      sectionPrinterMap?: Record<string, string>;
+      documentPrinterMap?: Record<string, string>;
     };
   } | string; // يمكن أن يكون object مع populate أو string فقط
   createdBy: User;

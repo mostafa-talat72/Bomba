@@ -1586,7 +1586,10 @@ const loadInitialData = async () => {
       <div class="footer">طُبع في ${new Date().toLocaleTimeString('ar-EG')}</div>
       </body></html>`;
     const savedPrinter = await api.getDevicePrinter().catch(() => null);
-    const printerName = savedPrinter?.data?.printerName || savedPrinter?.data?.name;
+    const organizationResponse = await api.getOrganization().catch(() => null);
+    const settings = organizationResponse?.success === true ? organizationResponse.data?.printSettings : undefined;
+    const profile = settings?.printers?.find((item: any) => item.id === settings?.documentPrinterMap?.dailyReport);
+    const printerName = profile?.printerName || savedPrinter?.data?.printerName || savedPrinter?.data?.name;
     await printThroughLocalBridge(reportHtml, printerName);
     setIsPrintingReport(false);
   };
@@ -1816,6 +1819,22 @@ const loadInitialData = async () => {
     await executeUpdateOrder(shouldPrint, status);
   };
 
+  const printOrderRouted = async (order: Order, selectedIds: string[], map: Map<string, any>, tableForOrder?: Table | null) => {
+    const response = await api.getOrganization().catch(() => null);
+    const settings = response?.success === true ? response.data?.printSettings : user?.organization?.printSettings;
+    const profiles = settings?.printers || [];
+    const routes = settings?.sectionPrinterMap || {};
+    const groups = new Map<string, string[]>();
+    selectedIds.forEach(sectionId => {
+      const printerId = routes[sectionId] || '';
+      groups.set(printerId, [...(groups.get(printerId) || []), sectionId]);
+    });
+    await Promise.all(Array.from(groups.entries()).map(([printerId, sectionIds]) => {
+      const profile = profiles.find((item: any) => item.id === printerId);
+      return printOrder(order, menuSections, map, user?.organizationName || '', i18n.language, t, getTableSectionName(tableForOrder || order.table), sectionIds, profile?.printerName);
+    }));
+  };
+
   const promptAndPrintOrder = async (order: Order, tableForOrder?: Table | null) => {
     if (!order.items || !Array.isArray(order.items)) { showNotification(t('cafe.notifications.orderHasNoItems'), 'error'); return; }
     const map = new Map();
@@ -1844,7 +1863,7 @@ const loadInitialData = async () => {
     const selectedDefaults = defaultSections.length > 0 ? defaultSections : sections.map(section => section.id);
     const prompt = printSettings?.promptOrderPrintSections === true;
     if (printSettings?.autoPrintOrderSections === true) {
-      await printOrder(normalizedOrder, menuSections, map, user?.organizationName || '', i18n.language, t, getTableSectionName(order.table), selectedDefaults);
+      await printOrderRouted(normalizedOrder, selectedDefaults, map, tableForOrder);
       return;
     }
     if (prompt && sections.length > 1) {
@@ -1852,7 +1871,7 @@ const loadInitialData = async () => {
       setOrderPrintSelection({ order: normalizedOrder, sectionIds: sections.map(section => section.id), sections });
       return;
     }
-    await printOrder(normalizedOrder, menuSections, map, user?.organizationName || '', i18n.language, t, getTableSectionName(tableForOrder || order.table), sections.map(section => section.id));
+    await printOrderRouted(normalizedOrder, sections.map(section => section.id), map, tableForOrder);
   };
 
   const handlePrintOrder = async (order: Order) => {
@@ -1865,7 +1884,7 @@ const loadInitialData = async () => {
     menuItems.forEach(mi => { map.set(mi.id, mi); map.set(mi._id, mi); });
     const selection = orderPrintSelection;
     setOrderPrintSelection(null);
-    await printOrder(selection.order, menuSections, map, user?.organizationName || '', i18n.language, t, getTableSectionName(selection.order.table), selectedOrderPrintSections);
+    await printOrderRouted(selection.order, selectedOrderPrintSections, map);
   };
 
   const showConfirm = (title: string, message: string, onConfirm: () => void, confirmText = 'تأكيد', cancelText = 'إلغاء', confirmColor = 'bg-red-600 hover:bg-red-700') => {
