@@ -96,11 +96,10 @@ router.get("/sold-items", authorize("soldItems", "all"), async (req, res) => {
         .lean();
         
         
-        // Get all menu items with their categories and sections
+        // Resolve current section/category labels only for legacy items that do not
+        // contain a section reference. Product identity and price always come from
+        // the order snapshot.
         const MenuItem = (await import('../models/MenuItem.js')).default;
-        const MenuCategory = (await import('../models/MenuCategory.js')).default;
-        const MenuSection = (await import('../models/MenuSection.js')).default;
-        
         const menuItems = await MenuItem.find({ organization: req.user.organization })
             .populate({
                 path: 'category',
@@ -112,11 +111,11 @@ router.get("/sold-items", authorize("soldItems", "all"), async (req, res) => {
             })
             .lean();
         
-        // Create a map of item names to their menu structure
         const itemMenuMap = new Map();
+        const itemIdMenuMap = new Map();
         menuItems.forEach(item => {
             if (item.category && item.category.section) {
-                itemMenuMap.set(item.name, {
+                const menuInfo = {
                     sectionId: item.category.section._id.toString(),
                     sectionName: item.category.section.name,
                     sectionSortOrder: item.category.section.sortOrder || 0,
@@ -124,7 +123,9 @@ router.get("/sold-items", authorize("soldItems", "all"), async (req, res) => {
                     categoryName: item.category.name,
                     categorySortOrder: item.category.sortOrder || 0,
                     itemId: item._id.toString()
-                });
+                };
+                itemMenuMap.set(item.name, menuInfo);
+                itemIdMenuMap.set(item._id.toString(), menuInfo);
             }
         });
         
@@ -146,11 +147,13 @@ router.get("/sold-items", authorize("soldItems", "all"), async (req, res) => {
                 
                 const itemName = item.name;
                 const variant = item.variant || '';
-                const itemKey = `${itemName}|${variant}`;
-                const menuInfo = itemMenuMap.get(itemName);
+                const menuItemId = item.menuItem?._id || item.menuItemId || item.menuItem;
+                const itemKey = `${menuItemId ? String(menuItemId) : itemName}|${variant}`;
+                const orderSectionId = item.section?._id || item.section;
+                const menuInfo = (menuItemId && itemIdMenuMap.get(String(menuItemId))) || itemMenuMap.get(itemName);
                 
                 // If item not found in menu, skip it or put in "غير مصنف"
-                const sectionId = menuInfo?.sectionId || 'uncategorized';
+                const sectionId = menuInfo?.sectionId || (orderSectionId ? String(orderSectionId) : 'uncategorized');
                 const sectionName = menuInfo?.sectionName || 'غير مصنف';
                 const sectionSortOrder = menuInfo?.sectionSortOrder || 999;
                 const categoryId = menuInfo?.categoryId || 'uncategorized';
