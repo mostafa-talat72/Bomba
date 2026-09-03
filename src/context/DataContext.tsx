@@ -245,6 +245,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, []);
 
   const loadAndApplySettings = async (): Promise<void> => {
+    if (!user || !localStorage.getItem('token')) return;
     if (isApplyingSettingsRef.current) return;
 
     try {
@@ -305,7 +306,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   useEffect(() => {
     loadAndApplySettings();
-  }, []);
+  }, [user]);
 
   const clearData = () => {
     setSessions([]);
