@@ -58,10 +58,22 @@ async function printHtmlSilently(html, requestedPrinterName, paperWidthMm = 80) 
       width: Math.round(Math.max(58, Math.min(150, paperWidthMm)) * 3.78),
       height: 2400,
       backgroundColor: "#ffffff",
-      webPreferences: { contextIsolation: true, sandbox: true, javascript: false },
+      webPreferences: { contextIsolation: true, sandbox: true, javascript: true },
       parent: mainWindow || undefined,
     });
     await printWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
+    await printWindow.webContents.executeJavaScript(`
+      (async () => {
+        if (document.fonts && document.fonts.ready) await document.fonts.ready;
+        await Promise.all(Array.from(document.images)
+          .filter((image) => !image.complete)
+          .map((image) => new Promise((resolve) => {
+            image.addEventListener('load', resolve, { once: true });
+            image.addEventListener('error', resolve, { once: true });
+          })));
+        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      })();
+    `, true);
     const printed = await new Promise((resolve) => {
       printWindow.webContents.print({
         silent: true,
@@ -611,11 +623,23 @@ mainWindow.webContents.setWindowOpenHandler(({ url: targetUrl }) => {
           contextIsolation: true,
           sandbox: true,
           offscreen: false,
-          javascript: false
+          javascript: true
         },
         parent: mainWindow || undefined
       });
       await printWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(data.html)}`);
+      await printWindow.webContents.executeJavaScript(`
+        (async () => {
+          if (document.fonts && document.fonts.ready) await document.fonts.ready;
+          await Promise.all(Array.from(document.images)
+            .filter((image) => !image.complete)
+            .map((image) => new Promise((resolve) => {
+              image.addEventListener('load', resolve, { once: true });
+              image.addEventListener('error', resolve, { once: true });
+            })));
+          await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        })();
+      `, true);
 
       const printed = await new Promise((resolve) => {
         printWindow.webContents.print({
