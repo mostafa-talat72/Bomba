@@ -195,18 +195,32 @@ function startLocalPrintServer() {
       response.end(JSON.stringify({ success: false, message: "Not found" }));
       return;
     }
-    let body = "";
+    const bodyChunks = [];
+    let bodySize = 0;
     let oversized = false;
     request.on("data", (chunk) => {
-      body += chunk;
-      if (body.length > 5 * 1024 * 1024) oversized = true;
+      bodyChunks.push(chunk);
+      bodySize += chunk.length;
+      if (bodySize > 50 * 1024 * 1024) oversized = true;
     });
     request.on("end", async () => {
       try {
-        if (oversized) throw new Error("Printable content is too large");
-        const payload = JSON.parse(body);
+        if (oversized) {
+          response.writeHead(413, { "Content-Type": "application/json" });
+          response.end(JSON.stringify({ success: false, message: "Printable content is too large", maxBytes: 50 * 1024 * 1024 }));
+          return;
+        }
+        const body = Buffer.concat(bodyChunks).toString("utf8");
+        let payload;
+        try {
+          payload = JSON.parse(body);
+        } catch (error) {
+          throw new Error(`Invalid print request JSON: ${error.message}`);
+        }
         if (typeof payload.html !== "string" || payload.html.length === 0) {
-          throw new Error("Printable HTML is required");
+          response.writeHead(422, { "Content-Type": "application/json" });
+          response.end(JSON.stringify({ success: false, message: "Printable HTML is required" }));
+          return;
         }
         const result = await printHtmlSilently(payload.html, payload.printerName, payload.paperWidthMm);
         if (result.success) {
@@ -215,8 +229,9 @@ function startLocalPrintServer() {
         response.writeHead(result.success ? 200 : 503, { "Content-Type": "application/json" });
         response.end(JSON.stringify(result));
       } catch (error) {
+        console.error("Print request failed:", error);
         response.writeHead(400, { "Content-Type": "application/json" });
-        response.end(JSON.stringify({ success: false, message: error.message }));
+        response.end(JSON.stringify({ success: false, message: error.message || "Invalid print request" }));
       }
     });
   });

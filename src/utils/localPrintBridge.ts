@@ -47,8 +47,12 @@ const printThroughAgent = async (
     },
     body: JSON.stringify({ html, printerName, ...options }),
   });
-  if (!response.ok) throw new Error(`Print Agent returned ${response.status}`);
-  const result = await response.json();
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(result?.message
+      ? `Print Agent returned ${response.status}: ${result.message}`
+      : `Print Agent returned ${response.status}`);
+  }
   return result?.success === true;
 };
 
