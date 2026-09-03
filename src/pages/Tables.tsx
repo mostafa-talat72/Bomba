@@ -18,6 +18,7 @@ import { formatCurrency as formatCurrencyUtil, formatDecimal } from '../utils/fo
 import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
 import { printOrder } from '../utils/printOrder';
 import { printBill } from '../utils/printBill';
+import { printThroughLocalBridge } from '../utils/localPrintBridge';
 import { useBillAggregation } from '../hooks/useBillAggregation';
 import {
   canAddOrder, canEditOrder, canDeleteOrder,
@@ -885,13 +886,13 @@ const loadInitialData = async () => {
   useEffect(() => {
     const isTyping = () => {
       const el = document.activeElement as HTMLElement | null;
-      return !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable);
+      return !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable === true);
     };
     const handler = (e: KeyboardEvent) => {
       if (e.ctrlKey || e.altKey || e.metaKey) return;
 
       if (e.key === 'Escape') {
-        if (isTyping()) { (document.activeElement as HTMLElement).blur(); return; }
+        if (isTyping()) { (document.activeElement as HTMLElement | null)?.blur(); return; }
         // إلغاء الإدخال السريع
         if (quickDigits) { setQuickDigits(''); if (quickDigitTimer.current) clearTimeout(quickDigitTimer.current); }
         if (quickPickerTables) { setQuickPickerTables(null); return; }
@@ -1512,7 +1513,7 @@ const loadInitialData = async () => {
   }, [registerActions, unregisterActions, isFullscreen]);
 
   // #11 Print daily report
-  const handlePrintDailyReport = () => {
+  const handlePrintDailyReport = async () => {
     setIsPrintingReport(true);
     const today = new Date();
     const todayStr = today.toLocaleDateString('ar-EG', { weekday:'long', year:'numeric', month:'long', day:'numeric' });
@@ -1584,13 +1585,10 @@ const loadInitialData = async () => {
       </table>
       <div class="footer">طُبع في ${new Date().toLocaleTimeString('ar-EG')}</div>
       </body></html>`;
-    const w = window.open('', '_blank');
-    if (w) {
-      w.document.write(reportHtml);
-      w.document.close();
-      w.focus();
-      setTimeout(() => { w.print(); setIsPrintingReport(false); }, 500);
-    } else { setIsPrintingReport(false); }
+    const savedPrinter = await api.getDevicePrinter().catch(() => null);
+    const printerName = savedPrinter?.data?.printerName || savedPrinter?.data?.name;
+    await printThroughLocalBridge(reportHtml, printerName);
+    setIsPrintingReport(false);
   };
 
   const handlePaymentManagement = (table: Table) => {
@@ -1836,7 +1834,12 @@ const loadInitialData = async () => {
       }
     });
     const sections = Array.from(sectionMap, ([id, name]) => ({ id, name }));
-    const prompt = user?.organization?.printSettings?.promptOrderPrintSections === true;
+    let prompt = user?.organization?.printSettings?.promptOrderPrintSections === true;
+    if (!prompt) {
+      const organizationResponse = await api.getOrganization().catch(() => null);
+      prompt = organizationResponse?.success === true &&
+        organizationResponse.data?.printSettings?.promptOrderPrintSections === true;
+    }
     if (prompt && sections.length > 1) {
       setSelectedOrderPrintSections(sections.map(section => section.id));
       setOrderPrintSelection({ order: normalizedOrder, sectionIds: sections.map(section => section.id), sections });

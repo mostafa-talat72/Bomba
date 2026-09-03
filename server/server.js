@@ -628,6 +628,7 @@ app.use(
         contentSecurityPolicy: {
             directives: {
                 defaultSrc: ["'self'"],
+                connectSrc: ["'self'", "http://127.0.0.1:9100", "http://localhost:9100"],
                 styleSrc: [
                     "'self'",
                     "'unsafe-inline'",

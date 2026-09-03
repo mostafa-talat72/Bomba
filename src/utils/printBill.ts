@@ -5,6 +5,7 @@ import QRCode from 'qrcode';
 import { api } from '../services/api';
 import { getLocaleFromLanguage } from './localeMapper';
 import type { TFunction } from 'i18next';
+import { printThroughLocalBridge } from './localPrintBridge';
 
 // Function to determine the appropriate link for QR Code based on priority
 const getSocialLinkForQR = (socialLinks: any): { link: string; platform: string } | null => {
@@ -398,6 +399,7 @@ export const buildBillPrintHTML = async (
       <title>${getDisplayNumber(bill.billNumber) || ''}</title>
       <style>
         @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800;900&display=swap');
+        html { width: 100%; max-width: 100%; overflow-x: hidden; }
         * { 
           font-family: 'Tajawal', sans-serif; 
           -webkit-print-color-adjust: exact;
@@ -410,8 +412,8 @@ export const buildBillPrintHTML = async (
           font-size: 11px; 
           color: #000; 
           font-weight: 600;
-          width: 80mm;
-          max-width: 80mm;
+          width: 100%;
+          max-width: 100%;
           text-align: center;
           direction: ${dir};
         }
@@ -628,14 +630,26 @@ export const buildBillPrintHTML = async (
         
         @media print {
           @page { 
-            size:auto; 
+            size: auto;
             margin: 0; 
           }
           body { 
             margin: 0; 
             padding: 0; 
             font-weight: 600;
-            width: 80mm;
+            width: 100%;
+            max-width: 100%;
+            box-sizing: border-box;
+            overflow-x: hidden;
+              overflow-wrap: anywhere;
+              word-break: break-word;
+          }
+          table, img, div { max-width: 100%; box-sizing: border-box; }
+          .items-table { table-layout: fixed; width: 100%; }
+          html { width: 100%; max-width: 100%; overflow-x: hidden; }
+          .items-table th, .items-table td {
+            overflow-wrap: anywhere;
+            word-break: break-word;
           }
           .no-print { display: none !important; }
           .items-table {
@@ -655,7 +669,7 @@ export const buildBillPrintHTML = async (
         
         @media screen {
           body {
-            max-width: 80mm;
+            max-width: 100%;
             margin: 0 auto;
             background: #fff;
           }
@@ -713,23 +727,6 @@ export const buildBillPrintHTML = async (
         <strong style="font-weight: 900; font-size: 14px;">${t('billPrint.footer')}</strong>
       </div>
 
-      <div class="no-print" style="margin-top: 20px; text-align: center; padding: 10px;">
-        <button onclick="window.print()" style="
-          background: #4CAF50;
-          color: white;
-          border: none;
-          padding: 10px 20px;
-          text-align: center;
-          text-decoration: none;
-          display: inline-block;
-          font-size: 14px;
-          font-weight: 700;
-          cursor: pointer;
-          border-radius: 4px;
-        ">
-          ${t('billPrint.printButton')}
-        </button>
-      </div>
     </body>
     </html>
   `;
@@ -881,27 +878,17 @@ export const printBill = async (
 
   // Fallback: استخدام الطريقة القديمة أو Electron direct print إذا فشلت الطباعة المباشرة
   const receiptHTML = await buildBillPrintHTML(bill, fallbackOrganizationName, language, t, tableSectionName);
-
-  // Check if running on Electron desktop app
-  const isDesktopApp = typeof window !== 'undefined' && (window as any).bombaDesktop?.isDesktop;
-  
-  if (isDesktopApp) {
-    try {
-      const printResponse = await (window as any).bombaDesktop.directPrint(receiptHTML);
-      if (printResponse?.success) {
-        const successMsg = language === 'ar' ? 'تمت طباعة الفاتورة بنجاح' : 'Bill printed successfully';
-        if ((window as any).showNotification) (window as any).showNotification(successMsg, 'success');
-        return;
-      }
-      console.warn('Electron direct print failed for bill:', printResponse?.message || 'unknown');
-    } catch (error) {
-      console.error('Electron direct print setup error:', error);
-    }
-  }
-
-  if (fallbackToBrowserPrint(receiptHTML, language)) {
-    return;
-  }
+  const savedPrinter = await api.getDevicePrinter().catch(() => null);
+  const printerName = savedPrinter?.data?.printerName || savedPrinter?.data?.name;
+  const organization = typeof bill.organization === 'object' ? bill.organization : undefined;
+  const settingName = drawerMode === 'payment' ? 'openCashDrawerOnPayment' : 'openCashDrawer';
+  const bridgePrinted = await printThroughLocalBridge(receiptHTML, printerName, {
+    openDrawer: organization?.printSettings?.[settingName] !== false,
+    drawerMode,
+    organization: bill.organization,
+  });
+  if (bridgePrinted) return;
+  return;
 };
 
 export default printBill;

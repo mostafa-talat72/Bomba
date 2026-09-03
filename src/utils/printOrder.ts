@@ -1,6 +1,7 @@
 import api from '../services/api';
 import { formatDecimal, getCurrencySymbol, getDisplayNumber } from './formatters';
 import type { TFunction } from 'i18next';
+import { printThroughLocalBridge } from './localPrintBridge';
 
 interface OrderItem {
   _id?: string;
@@ -74,7 +75,7 @@ export const buildOrderPrintHTML = async (
     } else if (typeof org === 'string') {
       // If organization is just a string ID, try to fetch data
       try {
-        const response = await fetch(`/api/organizations/${org}`);
+        const response = await fetch(`/api/organization/${org}`);
         if (response.ok) {
           const orgData = await response.json();
           if (orgData.success && orgData.data?.name) {
@@ -337,6 +338,12 @@ const printAllSectionsInOnePage = (
 <title>${t('orderPrint.printButton')} #${getDisplayNumber(order.orderNumber)}</title>
 
 <style>
+html {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
 @page {
   size: auto;
   margin: 0;
@@ -346,8 +353,8 @@ const printAllSectionsInOnePage = (
 body {
   direction: ${dir};
   font-family: 'Arial', sans-serif;
-  width: 80mm;
-  max-width: 80mm;
+  width: 100%;
+  max-width: 100%;
   margin: 0 auto;
   padding: 0 3mm;
   background: white;
@@ -356,6 +363,9 @@ body {
   line-height: 1;
   box-sizing: border-box;
   word-wrap: break-word;
+  overflow-x: hidden;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 /* ===== HEADER ===== */
@@ -432,6 +442,8 @@ body {
   vertical-align: middle;
   direction: ${dir};
   unicode-bidi: plaintext;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 /* ===== TABLE CELLS ===== */
@@ -462,7 +474,7 @@ body {
   color: #666;
   margin: 2px auto 0;
   padding: 0 4px;
-  max-width: 60mm;
+  max-width: 100%;
   text-align: center;
   font-style: italic;
 }
@@ -498,7 +510,7 @@ body {
 
 /* ===== PRINT ===== */
 @media print {
-  body { padding: 0; }
+  html, body { width: 100%; max-width: 100%; padding: 0; margin: 0; overflow-x: hidden; }
   .no-print { display: none !important; }
 
   .section-block {
@@ -654,27 +666,10 @@ export const printOrder = async (
 
   // Fallback: استخدام الطريقة القديمة أو Electron direct print إذا فشلت الطباعة المباشرة
   const printContent = await buildOrderPrintHTML(order, menuSections, menuItemsMap, fallbackOrganizationName, language, t, tableSectionName, selectedSectionIds);
-
-  // Check if running on Electron desktop app
-  const isDesktopApp = typeof window !== 'undefined' && (window as any).bombaDesktop?.isDesktop;
-  
-  if (isDesktopApp) {
-    try {
-      const printResponse = await (window as any).bombaDesktop.directPrint(printContent);
-      if (printResponse?.success) {
-        const successMsg = language === 'ar' ? 'تمت طباعة الطلب بنجاح' : 'Order printed successfully';
-        if ((window as any).showNotification) (window as any).showNotification(successMsg, 'success');
-        return;
-      }
-      console.warn('Electron direct print failed for order:', printResponse?.message || 'unknown');
-    } catch (error) {
-      console.error('Electron direct print setup error:', error);
-    }
-  }
-
-  if (fallbackToBrowserPrint(printContent, language)) {
-    return;
-  }
+  const savedPrinter = await api.getDevicePrinter().catch(() => null);
+  const printerName = savedPrinter?.data?.printerName || savedPrinter?.data?.name;
+  if (await printThroughLocalBridge(printContent, printerName)) return;
+  return;
 };
 
 export default printOrder;

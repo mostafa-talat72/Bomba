@@ -50,6 +50,7 @@ import { useRTL } from '../hooks/useRTL';
 import { Order, Session } from '../services/api';
 import api from '../services/api';
 import { formatDecimal, formatCurrency as formatCurrencyUtil, replaceAMPM } from '../utils/formatters';
+import { printThroughLocalBridge } from '../utils/localPrintBridge';
 
 // Extend dayjs with plugins
 dayjs.extend(isSameOrAfter);
@@ -593,17 +594,21 @@ const ConsumptionReport = () => {
             }
             body { 
               margin: 0; 
-              padding: ${isRTL ? '0 12px 0 4px' : '0 4px 0 12px'}; 
+              padding: 0;
               font-size: 11px; 
               color: #000; 
               font-weight: 600;
-              width: auto;
-              max-width: auto;
+              width: 100%;
+              max-width: 100%;
+              overflow-x: hidden;
               text-align: center;
               direction: ${dir};
             }
             .page {
-              padding: ${isRTL ? '8px 10px 8px 4px' : '8px 4px 8px 10px'};
+              width: 100%;
+              max-width: 100%;
+              padding: 8px 4px;
+              overflow: hidden;
             }
             .page-content {
               width: 100%;
@@ -744,10 +749,12 @@ const ConsumptionReport = () => {
               html, body { 
                 margin: 0; 
                 padding: 0;
-                width: auto;
+                width: 100%;
+                max-width: 100%;
+                overflow-x: hidden;
               }
               body { 
-                padding: ${isRTL ? '4px 8px 4px 2px' : '4px 2px 4px 8px'}; 
+                padding: 4px 2px;
                 font-weight: 600;
                 direction: ${dir};
               }
@@ -783,7 +790,7 @@ const ConsumptionReport = () => {
             
             @media screen {
               body {
-                max-width: auto;
+                max-width: 100%;
                 margin: 0 auto;
                 background: #fff;
               }
@@ -793,23 +800,6 @@ const ConsumptionReport = () => {
         <body>
           ${categoryPages}
           
-          <div class="no-print" style="margin-top: 20px; text-align: center; padding: 10px;">
-            <button onclick="window.print()" style="
-              background: #4CAF50;
-              color: white;
-              border: none;
-              padding: 10px 20px;
-              text-align: center;
-              text-decoration: none;
-              display: inline-block;
-              font-size: 14px;
-              font-weight: 700;
-              cursor: pointer;
-              border-radius: 4px;
-            ">
-              ${t('consumptionReport.print.printButton')}
-            </button>
-          </div>
         </body>
         </html>
       `;
@@ -848,10 +838,10 @@ const ConsumptionReport = () => {
         setTimeout(printFrame, 500);
         
         toast.success(t('consumptionReport.messages.printOpening'));
-      } else {
-        toast.error(t('consumptionReport.messages.printError'));
-        document.body.removeChild(iframe);
+        return;
       }
+      return;
+
     } catch (error) {
       toast.error(t('consumptionReport.messages.printFailed'));
       console.error('Print error:', error);
