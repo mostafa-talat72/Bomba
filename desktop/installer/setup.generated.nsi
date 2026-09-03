@@ -10,7 +10,7 @@ Unicode true
 !define MUI_UNICON "H:/My Work/Naruto/New folder (2)/project/desktop/build/icon.ico"
 
 Name "MTE Systems"
-OutFile "H:\My Work\Naruto\New folder (2)\project\desktop\MTE-Systems-Setup-65.exe"
+OutFile "H:\My Work\Naruto\New folder (2)\project\desktop\MTE-Systems-Setup-66.exe"
 InstallDir "$LOCALAPPDATA\Programs\MTE Systems"
 InstallDirRegKey HKCU "Software\MTE Systems" "InstallDir"
 RequestExecutionLevel user
@@ -26,12 +26,12 @@ VIAddVersionKey "FileVersion" "1.0.0"
 ; ---- password table (obfuscated: one char per define, scattered order) ----
 !define PWD_LEN 7
 !define PWD4 "9"
-!define PWD2 "2"
-!define PWD3 "4"
 !define PWD6 "9"
-!define PWD1 "3"
-!define PWD5 "1"
+!define PWD2 "2"
 !define PWD0 "6"
+!define PWD5 "1"
+!define PWD3 "4"
+!define PWD1 "3"
 
 Var PwdEdit
 Var PwdIn
@@ -139,6 +139,9 @@ Section "Install"
   CreateShortcut "$DESKTOP\MTE Systems.lnk" "$INSTDIR\MTE Systems.exe"
   CreateDirectory "$SMPROGRAMS\MTE Systems"
   CreateShortcut "$SMPROGRAMS\MTE Systems\MTE Systems.lnk" "$INSTDIR\MTE Systems.exe"
+  CreateShortcut "$SMPROGRAMS\MTE Systems\Bomba Print Agent.lnk" "$INSTDIR\MTE Systems.exe" "--print-agent"
+  CreateDirectory "$APPDATA\Microsoft\Windows\Start Menu\Programs\Startup"
+  CreateShortcut "$APPDATA\Microsoft\Windows\Start Menu\Programs\Startup\Bomba Print Agent.lnk" "$INSTDIR\MTE Systems.exe" "--print-agent"
   CreateShortcut "$SMPROGRAMS\MTE Systems\Uninstall MTE Systems.lnk" "$INSTDIR\Uninstall.exe"
 SectionEnd
 
@@ -146,6 +149,8 @@ SectionEnd
 Section "Uninstall"
   Delete "$DESKTOP\MTE Systems.lnk"
   Delete "$SMPROGRAMS\MTE Systems\MTE Systems.lnk"
+  Delete "$SMPROGRAMS\MTE Systems\Bomba Print Agent.lnk"
+  Delete "$APPDATA\Microsoft\Windows\Start Menu\Programs\Startup\Bomba Print Agent.lnk"
   Delete "$SMPROGRAMS\MTE Systems\Uninstall MTE Systems.lnk"
   RMDir "$SMPROGRAMS\MTE Systems"
 
