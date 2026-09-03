@@ -1838,8 +1838,8 @@ const Settings: FC = () => {
                       </div>
 
                       <div className="mt-4 rounded-xl border border-orange-200 dark:border-gray-700 p-4">
-                        <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100">{t('settings.organization.printSettings.defaultOrderPrintSections')}</h4>
-                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{t('settings.organization.printSettings.defaultOrderPrintSectionsDesc')}</p>
+                        <h4 className="text-base font-semibold text-gray-900 dark:text-gray-100">{t('settings.organization.printSettings.defaultOrderPrintSections', 'الأقسام الافتراضية لطباعة الطلب')}</h4>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{t('settings.organization.printSettings.defaultOrderPrintSectionsDesc', 'اختر الأقسام التي تكون محددة تلقائيًا عند طباعة الطلب')}</p>
                         <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
                           {menuSections.map(section => {
                             const sectionId = String(section._id || section.id);
@@ -1858,7 +1858,7 @@ const Settings: FC = () => {
                         </div>
                         <label className="mt-4 flex items-center gap-2 text-sm text-gray-700 dark:text-gray-200 cursor-pointer">
                           <input type="checkbox" checked={organization.printSettings?.autoPrintOrderSections ?? false} onChange={e => setOrganization(prev => ({ ...prev, printSettings: { ...prev.printSettings, autoPrintOrderSections: e.target.checked } }))} />
-                          {t('settings.organization.printSettings.autoPrintOrderSections')}
+                          {t('settings.organization.printSettings.autoPrintOrderSections', 'الطباعة مباشرة بالأقسام الافتراضية بدون نافذة')}
                         </label>
                       </div>
 
