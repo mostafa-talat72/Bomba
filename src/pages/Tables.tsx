@@ -1675,7 +1675,7 @@ const loadInitialData = async () => {
           setTimeout(async () => {
             const map = new Map();
             menuItems.forEach(mi => { map.set(mi.id, mi); map.set(mi._id, mi); });
-            await printOrder({ ...order, items: order.items?.map((item: any, idx: number) => ({ ...item, _id: item._id || item.id || `temp-${idx}` })) || [], createdAt: order.createdAt instanceof Date ? order.createdAt.toISOString() : order.createdAt } as any, menuSections, map, user?.organizationName || '', i18n.language, t, getTableSectionName(selectedTable));
+            await promptAndPrintOrder(order, selectedTable);
           }, 0);
         }
         // تحديث متفائل — createOrder في DataContext حدث orders+bills، نحدث tableOrders فقط
@@ -1708,7 +1708,7 @@ const loadInitialData = async () => {
           setTimeout(async () => {
             const map = new Map();
             menuItems.forEach(mi => { map.set(mi.id, mi); map.set(mi._id, mi); });
-            await printOrder({ ...updated, items: updated.items?.map((item: any, idx: number) => ({ ...item, _id: item._id || item.id || `temp-${idx}` })) || [], createdAt: updated.createdAt instanceof Date ? updated.createdAt.toISOString() : updated.createdAt } as any, menuSections, map, user?.organizationName || '', i18n.language, t, getTableSectionName(selectedTable));
+            await promptAndPrintOrder(updated, selectedTable);
           }, 0);
         }
         if (selectedTable) setTableOrders(p => p.map(o => o.id === updated.id ? updated : o));
@@ -1723,7 +1723,7 @@ const loadInitialData = async () => {
     await executeUpdateOrder(shouldPrint, status);
   };
 
-  const handlePrintOrder = async (order: Order) => {
+  const promptAndPrintOrder = async (order: Order, tableForOrder?: Table | null) => {
     if (!order.items || !Array.isArray(order.items)) { showNotification(t('cafe.notifications.orderHasNoItems'), 'error'); return; }
     const map = new Map();
     menuItems.forEach(mi => { map.set(mi.id, mi); map.set(mi._id, mi); });
@@ -1759,7 +1759,11 @@ const loadInitialData = async () => {
       setOrderPrintSelection({ order: normalizedOrder, sectionIds: sections.map(section => section.id), sections });
       return;
     }
-    await printOrder(normalizedOrder, menuSections, map, user?.organizationName || '', i18n.language, t, getTableSectionName(order.table), sections.map(section => section.id));
+    await printOrder(normalizedOrder, menuSections, map, user?.organizationName || '', i18n.language, t, getTableSectionName(tableForOrder || order.table), sections.map(section => section.id));
+  };
+
+  const handlePrintOrder = async (order: Order) => {
+    await promptAndPrintOrder(order);
   };
 
   const confirmOrderPrintSections = async () => {
