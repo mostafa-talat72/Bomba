@@ -49,6 +49,19 @@ async function waitForPrintResources(printWindow) {
       document.body.style.paddingRight = "2mm";
       document.body.style.boxSizing = "border-box";
       document.body.style.overflow = "visible";
+      document.documentElement.style.direction = "ltr";
+      document.body.style.direction = "ltr";
+      document.body.style.display = "flex";
+      document.body.style.flexDirection = "column";
+      document.body.style.alignItems = "stretch";
+      document.body.querySelectorAll(":scope > *").forEach((element) => {
+        element.style.width = "100%";
+        element.style.maxWidth = "100%";
+        element.style.marginLeft = "0";
+        element.style.marginRight = "0";
+        element.style.direction = "rtl";
+        element.style.boxSizing = "border-box";
+      });
       document.body.querySelectorAll("table").forEach((table) => {
         table.style.width = "100%";
         table.style.maxWidth = "100%";
@@ -166,6 +179,17 @@ async function printHtmlSilently(html, requestedPrinterName, paperWidthMm = 80) 
           box-sizing: border-box !important;
           width: 100% !important;
           box-sizing: border-box !important;
+          display: flex !important;
+          flex-direction: column !important;
+          align-items: stretch !important;
+          direction: ltr !important;
+        }
+        body > * {
+          width: 100% !important;
+          max-width: 100% !important;
+          margin-left: 0 !important;
+          margin-right: 0 !important;
+          direction: rtl !important;
         }
         *, *::before, *::after {
           min-width: 0 !important;
@@ -808,6 +832,17 @@ mainWindow.webContents.setWindowOpenHandler(({ url: targetUrl }) => {
           body {
             width: 100% !important;
             box-sizing: border-box !important;
+            display: flex !important;
+            flex-direction: column !important;
+            align-items: stretch !important;
+            direction: ltr !important;
+          }
+          body > * {
+            width: 100% !important;
+            max-width: 100% !important;
+            margin-left: 0 !important;
+            margin-right: 0 !important;
+            direction: rtl !important;
           }
           *, *::before, *::after {
             min-width: 0 !important;
