@@ -228,7 +228,7 @@ export const getBills = async (req, res) => {
         const shouldPaginate = isAll;
 
         let billQuery = Bill.find(query)
-            .select('billNumber table status total remaining paid subtotal billType sessions orders createdAt')
+            .select('billNumber table status total remaining paid subtotal billType sessions orders itemPayments sessionPayments createdAt')
             .populate({
                 path: "table",
                 select: "number name",
@@ -239,7 +239,11 @@ export const getBills = async (req, res) => {
             })
             .populate({
                 path: "orders",
-                select: "totalAmount finalAmount status",
+                select: "items totalAmount finalAmount status createdAt",
+                populate: {
+                    path: "items.menuItem",
+                    select: "name arabicName preparationTime price",
+                },
             })
             .sort({ createdAt: -1 })
             .lean();
@@ -4013,19 +4017,6 @@ export const updateBillAggregatedItems = async (req, res) => {
                         paymentHistory,
                     });
                 });
-            });
-
-            paymentQueues.forEach((aggregate) => {
-                if (aggregate.paidQuantity > 0 && aggregate.sample) {
-                    const unitPrice = Number(aggregate.sample.pricePerUnit) || 0;
-                    unmatchedPaidAmounts.push(
-                        unitPrice > 0
-                            ? aggregate.paidQuantity * unitPrice
-                            : aggregate.paidAmount
-                    );
-                } else if (aggregate.paidAmount > 0) {
-                    unmatchedPaidAmounts.push(aggregate.paidAmount);
-                }
             });
 
             bill.itemPayments = rebuiltItemPayments;
