@@ -456,6 +456,39 @@ const ConsumptionReport = () => {
   };
 
   const printReport = async () => {
+    const isElectron = typeof window !== 'undefined' && !!(window as any).electronAPI;
+    try {
+      const reportData = {
+        consumptionData,
+        dateRange,
+        totalSales: Object.values(consumptionData).flat().reduce((sum, item) => sum + item.total, 0),
+        totalConsumption: Object.values(consumptionData).flat().reduce((sum, item) => sum + item.total, 0)
+      };
+      if (isElectron) {
+        const response: any = await api.printConsumptionReport({
+          reportData,
+          organization: user?.organization,
+          language: i18n.language
+        });
+        if (response?.success) {
+          const successMsg = i18n.language === 'ar' ? 'تمت طباعة التقرير بنجاح' : i18n.language === 'fr' ? 'Rapport imprimé avec succès' : 'Report printed successfully';
+          toast.success(successMsg);
+          return;
+        }
+        console.error('Direct print returned non-success:', response);
+        toast.error(response?.message || (i18n.language === 'ar' ? 'فشلت الطباعة المباشرة' : 'Direct print failed') + (response?.error ? `: ${response.error}` : ''));
+        return;
+      }
+    } catch (error: any) {
+      console.error('Direct print failed, falling back to window print:', error);
+      if (isElectron) {
+        const msg = error?.message === 'print-timeout' ? (i18n.language === 'ar' ? 'انتهت مهلة الطباعة — تأكد من توصيل الطابعة' : 'Direct print timeout') : (i18n.language === 'ar' ? 'فشلت الطباعة المباشرة' : 'Direct print failed');
+        toast.error(msg);
+        return;
+      }
+    }
+
+    // Fallback (ويب فقط): استخدام الطريقة القديمة إذا فشلت الطباعة المباشرة
     try {
       const isRTL = i18n.language === 'ar';
       const dir = isRTL ? 'rtl' : 'ltr';
@@ -771,9 +804,39 @@ const ConsumptionReport = () => {
         </html>
       `;
 
-      const savedPrinter = await api.getDevicePrinter().catch(() => null);
-      const printerName = savedPrinter?.data?.printerName || savedPrinter?.data?.name;
-      if (await printThroughLocalBridge(printContent, printerName)) {
+      // Create hidden iframe for printing
+      const iframe = document.createElement('iframe');
+      iframe.style.position = 'fixed';
+      iframe.style.right = '0';
+      iframe.style.bottom = '0';
+      iframe.style.width = '0';
+      iframe.style.height = '0';
+      iframe.style.border = 'none';
+      document.body.appendChild(iframe);
+      
+      const iframeDoc = iframe.contentWindow?.document;
+      if (iframeDoc) {
+        iframeDoc.open();
+        iframeDoc.write(printContent);
+        iframeDoc.close();
+        
+        
+        // Wait for content and fonts to load then print
+        let hasPrinted = false;
+        const printFrame = () => {
+          if (hasPrinted) return;
+          hasPrinted = true;
+          setTimeout(() => {
+            iframe.contentWindow?.focus();
+            iframe.contentWindow?.print();
+            setTimeout(() => {
+              if (document.body.contains(iframe)) document.body.removeChild(iframe);
+            }, 1500);
+          }, 300);
+        };
+        iframe.contentWindow?.addEventListener('load', printFrame, { once: true });
+        setTimeout(printFrame, 500);
+        
         toast.success(t('consumptionReport.messages.printOpening'));
         return;
       }
