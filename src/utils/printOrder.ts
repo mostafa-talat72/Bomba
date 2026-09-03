@@ -75,7 +75,7 @@ export const buildOrderPrintHTML = async (
     } else if (typeof org === 'string') {
       // If organization is just a string ID, try to fetch data
       try {
-        const response = await fetch(`/api/organizations/${org}`);
+        const response = await fetch(`/api/organization/${org}`);
         if (response.ok) {
           const orgData = await response.json();
           if (orgData.success && orgData.data?.name) {

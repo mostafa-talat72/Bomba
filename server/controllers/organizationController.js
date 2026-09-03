@@ -3,6 +3,7 @@ import User from "../models/User.js";
 import Logger from "../middleware/logger.js";
 import organizationWebsiteService from "../services/organizationWebsiteService.js";
 import { getUserLocale } from "../utils/localeHelper.js";
+import { getOrganizationId } from "../utils/organization.js";
 
 // @desc    Get organization details by ID
 // @route   GET /api/organization/:id
@@ -43,7 +44,7 @@ export const getOrganization = async (req, res) => {
        
 
         // Extract organization ID if it's an object
-        const organizationId = req.user.organization?._id || req.user.organization;
+        const organizationId = getOrganizationId(req.user);
 
         if (!organizationId) {
             return res.status(400).json({
