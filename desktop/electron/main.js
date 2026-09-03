@@ -40,13 +40,14 @@ async function waitForPrintResources(printWindow) {
     (async () => {
       if (document.fonts && document.fonts.ready) await document.fonts.ready;
       const viewportWidth = Math.max(1, document.documentElement.clientWidth);
-      const availableWidth = Math.max(1, viewportWidth - 16);
       document.documentElement.style.width = viewportWidth + "px";
       document.documentElement.style.margin = "0";
-      document.body.style.width = availableWidth + "px";
-      document.body.style.maxWidth = availableWidth + "px";
-      document.body.style.marginLeft = "auto";
-      document.body.style.marginRight = "auto";
+      document.body.style.width = "100%";
+      document.body.style.maxWidth = "100%";
+      document.body.style.margin = "0";
+      document.body.style.paddingLeft = "2mm";
+      document.body.style.paddingRight = "2mm";
+      document.body.style.boxSizing = "border-box";
       document.body.style.overflow = "visible";
       document.body.querySelectorAll("table").forEach((table) => {
         table.style.width = "100%";
@@ -155,16 +156,14 @@ async function printHtmlSilently(html, requestedPrinterName, paperWidthMm = 80) 
           min-width: 0 !important;
           max-width: 100% !important;
           margin: 0 !important;
-          padding: 0 !important;
+          padding: 0 2mm !important;
           overflow: visible !important;
-          white-space: normal !important;
           white-space: normal !important;
         }
         body {
           box-sizing: border-box !important;
-          width: calc(100% - 6mm) !important;
-          margin-left: auto !important;
-          margin-right: auto !important;
+          width: 100% !important;
+          box-sizing: border-box !important;
         }
         *, *::before, *::after {
           min-width: 0 !important;
@@ -222,14 +221,6 @@ async function printHtmlSilently(html, requestedPrinterName, paperWidthMm = 80) 
     let resources = await waitForPrintResources(printWindow);
     if (resources?.failedImages?.length) {
       return { success: false, message: "Print content contains images that failed to load", failedImages: resources.failedImages };
-    }
-    const measuredWidth = Math.max(resources?.contentWidth || 0, resources?.widestElement || 0);
-    if (measuredWidth > resources?.viewportWidth && resources.viewportWidth > 0) {
-      await printWindow.webContents.executeJavaScript(
-        `document.body.style.zoom = String(Math.max(0.65, Math.min(1, (${resources.viewportWidth} - 16) / ${measuredWidth})));`,
-        true
-      );
-      resources = await waitForPrintResources(printWindow);
     }
     const widthMicrons = Math.round(normalizedPaperWidthMm * 1000);
     const heightMicrons = Math.max(100000, Math.min(2000000, Math.round(
@@ -807,13 +798,12 @@ mainWindow.webContents.setWindowOpenHandler(({ url: targetUrl }) => {
             min-width: 0 !important;
             max-width: 100% !important;
             margin: 0 !important;
-            padding: 0 !important;
+            padding: 0 2mm !important;
             overflow: visible !important;
           }
           body {
-            width: calc(100% - 6mm) !important;
-            margin-left: auto !important;
-            margin-right: auto !important;
+            width: 100% !important;
+            box-sizing: border-box !important;
           }
           *, *::before, *::after {
             min-width: 0 !important;
