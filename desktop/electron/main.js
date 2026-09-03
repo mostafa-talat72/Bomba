@@ -39,6 +39,12 @@ async function waitForPrintResources(printWindow) {
   return printWindow.webContents.executeJavaScript(`
     (async () => {
       if (document.fonts && document.fonts.ready) await document.fonts.ready;
+      const availableWidth = Math.max(1, document.documentElement.clientWidth - 12);
+      document.documentElement.style.width = document.documentElement.clientWidth + "px";
+      document.body.style.width = availableWidth + "px";
+      document.body.style.maxWidth = availableWidth + "px";
+      document.body.style.marginLeft = "auto";
+      document.body.style.marginRight = "auto";
       const images = Array.from(document.images);
       await Promise.all(images.map((image) => image.complete
         ? Promise.resolve()
@@ -54,6 +60,10 @@ async function waitForPrintResources(printWindow) {
         contentHeight: Math.max(document.documentElement.scrollHeight, document.body.scrollHeight),
         contentWidth: Math.max(document.documentElement.scrollWidth, document.body.scrollWidth),
         viewportWidth: document.documentElement.clientWidth,
+        widestElement: Math.max(...Array.from(document.querySelectorAll("*")).map((element) => {
+          const rect = element.getBoundingClientRect();
+          return rect.right - Math.min(0, rect.left);
+        }), 0),
       };
     })();
   `, true);
@@ -133,18 +143,28 @@ async function printHtmlSilently(html, requestedPrinterName, paperWidthMm = 80) 
       <style id="bomba-agent-print-layout">
         @page { size: ${normalizedPaperWidthMm}mm auto; margin: 0 !important; }
         html, body {
-          width: ${normalizedPaperWidthMm}mm !important;
+          width: 100% !important;
           min-width: 0 !important;
-          max-width: ${normalizedPaperWidthMm}mm !important;
-          margin: 0 auto !important;
-          padding: 0 2mm !important;
+          max-width: 100% !important;
+          margin: 0 !important;
+          padding: 0 !important;
           overflow: visible !important;
+          white-space: normal !important;
+          white-space: normal !important;
         }
         body {
           box-sizing: border-box !important;
-          width: ${normalizedPaperWidthMm}mm !important;
+          width: calc(100% - 6mm) !important;
+          margin-left: auto !important;
+          margin-right: auto !important;
         }
-        *, *::before, *::after { min-width: 0 !important; max-width: 100% !important; }
+        *, *::before, *::after {
+          min-width: 0 !important;
+          max-width: 100% !important;
+          white-space: normal !important;
+          overflow-wrap: anywhere !important;
+          word-break: break-word !important;
+        }
         .stats { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
         .stat-card, .header, .footer { min-width: 0 !important; }
         table, thead, tbody, tr, th, td, div, img {
@@ -156,7 +176,7 @@ async function printHtmlSilently(html, requestedPrinterName, paperWidthMm = 80) 
           min-width: 0 !important;
           max-width: 100% !important;
           padding: 1mm 0.5mm !important;
-          overflow: hidden !important;
+          overflow: visible !important;
           overflow-wrap: anywhere !important;
           word-break: break-word !important;
           white-space: normal !important;
@@ -195,9 +215,10 @@ async function printHtmlSilently(html, requestedPrinterName, paperWidthMm = 80) 
     if (resources?.failedImages?.length) {
       return { success: false, message: "Print content contains images that failed to load", failedImages: resources.failedImages };
     }
-    if (resources?.contentWidth > resources?.viewportWidth && resources.viewportWidth > 0) {
+    const measuredWidth = Math.max(resources?.contentWidth || 0, resources?.widestElement || 0);
+    if (measuredWidth > resources?.viewportWidth && resources.viewportWidth > 0) {
       await printWindow.webContents.executeJavaScript(
-        `document.body.style.zoom = String(Math.min(1, ${resources.viewportWidth} / ${resources.contentWidth}));`,
+        `document.body.style.zoom = String(Math.min(1, (${resources.viewportWidth} - 16) / ${measuredWidth}));`,
         true
       );
       resources = await waitForPrintResources(printWindow);
@@ -774,15 +795,25 @@ mainWindow.webContents.setWindowOpenHandler(({ url: targetUrl }) => {
         <style id="bomba-fallback-print-layout">
           @page { size: ${paperWidthMm}mm auto; margin: 0 !important; }
           html, body {
-            width: ${paperWidthMm}mm !important;
+            width: 100% !important;
             min-width: 0 !important;
-            max-width: ${paperWidthMm}mm !important;
-            margin: 0 auto !important;
-            padding: 0 2mm !important;
+            max-width: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
             overflow: visible !important;
           }
           body {
-            width: ${paperWidthMm}mm !important;
+            width: calc(100% - 6mm) !important;
+            margin-left: auto !important;
+            margin-right: auto !important;
+          }
+          *, *::before, *::after {
+            min-width: 0 !important;
+            max-width: 100% !important;
+            box-sizing: border-box !important;
+            white-space: normal !important;
+            overflow-wrap: anywhere !important;
+            word-break: break-word !important;
           }
           table, thead, tbody, tr, th, td, div, img {
             max-width: 100% !important;
@@ -793,7 +824,7 @@ mainWindow.webContents.setWindowOpenHandler(({ url: targetUrl }) => {
             min-width: 0 !important;
             max-width: 100% !important;
             padding: 1mm 0.5mm !important;
-            overflow: hidden !important;
+            overflow: visible !important;
             overflow-wrap: anywhere !important;
             word-break: break-word !important;
             white-space: normal !important;
