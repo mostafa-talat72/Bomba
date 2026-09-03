@@ -635,7 +635,7 @@ mainWindow.webContents.setWindowOpenHandler(({ url: targetUrl }) => {
 
 // ---- App lifecycle ----
 
-const gotLock = isPrintAgent ? true : app.requestSingleInstanceLock();
+const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
   app.quit();
 } else {
