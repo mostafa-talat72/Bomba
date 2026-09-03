@@ -750,7 +750,7 @@ const fallbackToBrowserPrint = (content: string, language: string) => {
           if (!printWindow.closed) {
             printWindow.close();
           }
-        }, 100);
+        }, 1000);
       }, 50);
     };
     return true;
@@ -809,6 +809,12 @@ export const printBill = async (
 ) => {
   const isElectron = typeof window !== 'undefined' && !!((window as any).bombaDesktop?.isDesktop || (window as any).electronAPI);
   try {
+    if (!isElectron) {
+      const receiptHTML = await buildBillPrintHTML(bill, fallbackOrganizationName, language, t, tableSectionName);
+      fallbackToBrowserPrint(receiptHTML, language);
+      return;
+    }
+
     if (isElectron && (window as any).bombaDesktop?.directPrint) {
       const receiptHTML = await buildBillPrintHTML(bill, fallbackOrganizationName, language, t, tableSectionName);
       const printResponse = await (window as any).bombaDesktop.directPrint(receiptHTML);

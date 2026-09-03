@@ -463,18 +463,18 @@ const ConsumptionReport = () => {
         totalSales: Object.values(consumptionData).flat().reduce((sum, item) => sum + item.total, 0),
         totalConsumption: Object.values(consumptionData).flat().reduce((sum, item) => sum + item.total, 0)
       };
-      const response: any = await api.printConsumptionReport({
-        reportData,
-        organization: user?.organization,
-        language: i18n.language
-      });
-      if (response?.success) {
-        const successMsg = i18n.language === 'ar' ? 'تمت طباعة التقرير بنجاح' : i18n.language === 'fr' ? 'Rapport imprimé avec succès' : 'Report printed successfully';
-        toast.success(successMsg);
-        return;
-      }
-      console.error('Direct print returned non-success:', response);
       if (isElectron) {
+        const response: any = await api.printConsumptionReport({
+          reportData,
+          organization: user?.organization,
+          language: i18n.language
+        });
+        if (response?.success) {
+          const successMsg = i18n.language === 'ar' ? 'تمت طباعة التقرير بنجاح' : i18n.language === 'fr' ? 'Rapport imprimé avec succès' : 'Report printed successfully';
+          toast.success(successMsg);
+          return;
+        }
+        console.error('Direct print returned non-success:', response);
         toast.error(response?.message || (i18n.language === 'ar' ? 'فشلت الطباعة المباشرة' : 'Direct print failed') + (response?.error ? `: ${response.error}` : ''));
         return;
       }
@@ -832,23 +832,20 @@ const ConsumptionReport = () => {
         
         
         // Wait for content and fonts to load then print
-        iframe.contentWindow?.addEventListener('load', () => {
-          
+        let hasPrinted = false;
+        const printFrame = () => {
+          if (hasPrinted) return;
+          hasPrinted = true;
           setTimeout(() => {
-            // Give extra time for rendering
+            iframe.contentWindow?.focus();
+            iframe.contentWindow?.print();
             setTimeout(() => {
-              iframe.contentWindow?.focus();
-              iframe.contentWindow?.print();
-              
-              // Remove iframe after printing
-              setTimeout(() => {
-                if (document.body.contains(iframe)) {
-                  document.body.removeChild(iframe);
-                }
-              }, 1000);
-            }, 800);
-          }, 500);
-        });
+              if (document.body.contains(iframe)) document.body.removeChild(iframe);
+            }, 1500);
+          }, 300);
+        };
+        iframe.contentWindow?.addEventListener('load', printFrame, { once: true });
+        setTimeout(printFrame, 500);
         
         toast.success(t('consumptionReport.messages.printOpening'));
       } else {
