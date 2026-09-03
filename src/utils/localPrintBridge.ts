@@ -8,6 +8,7 @@ export const printThroughLocalBridge = async (
   const desktopApi = typeof window !== 'undefined'
     ? (window as Window & { bombaDesktop?: { directPrint?: (html: string, printerName?: string) => Promise<{ success?: boolean }> } }).bombaDesktop
     : undefined;
+  if (!desktopApi) return false;
   try {
     const token = typeof localStorage !== 'undefined' ? localStorage.getItem('token') : null;
     const response = await fetch(LOCAL_PRINT_URL, {
@@ -31,8 +32,6 @@ export const printThroughLocalBridge = async (
       } catch (fallbackError) {
         console.error('Local print bridge and Desktop print fallback failed:', fallbackError);
       }
-    } else {
-      console.error('Local print bridge unavailable:', error);
     }
     return false;
   }
