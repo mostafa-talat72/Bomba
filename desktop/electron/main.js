@@ -39,12 +39,20 @@ async function waitForPrintResources(printWindow) {
   return printWindow.webContents.executeJavaScript(`
     (async () => {
       if (document.fonts && document.fonts.ready) await document.fonts.ready;
-      const availableWidth = Math.max(1, document.documentElement.clientWidth - 12);
-      document.documentElement.style.width = document.documentElement.clientWidth + "px";
+      const viewportWidth = Math.max(1, document.documentElement.clientWidth);
+      const availableWidth = Math.max(1, viewportWidth - 16);
+      document.documentElement.style.width = viewportWidth + "px";
+      document.documentElement.style.margin = "0";
       document.body.style.width = availableWidth + "px";
       document.body.style.maxWidth = availableWidth + "px";
       document.body.style.marginLeft = "auto";
       document.body.style.marginRight = "auto";
+      document.body.style.overflow = "visible";
+      document.body.querySelectorAll("table").forEach((table) => {
+        table.style.width = "100%";
+        table.style.maxWidth = "100%";
+        table.style.tableLayout = "fixed";
+      });
       const images = Array.from(document.images);
       await Promise.all(images.map((image) => image.complete
         ? Promise.resolve()
@@ -59,10 +67,10 @@ async function waitForPrintResources(printWindow) {
           .map((image) => image.src || image.alt || "unknown image"),
         contentHeight: Math.max(document.documentElement.scrollHeight, document.body.scrollHeight),
         contentWidth: Math.max(document.documentElement.scrollWidth, document.body.scrollWidth),
-        viewportWidth: document.documentElement.clientWidth,
+        viewportWidth,
         widestElement: Math.max(...Array.from(document.querySelectorAll("*")).map((element) => {
           const rect = element.getBoundingClientRect();
-          return rect.right - Math.min(0, rect.left);
+          return Math.max(rect.width, element.scrollWidth || 0);
         }), 0),
       };
     })();
@@ -218,7 +226,7 @@ async function printHtmlSilently(html, requestedPrinterName, paperWidthMm = 80) 
     const measuredWidth = Math.max(resources?.contentWidth || 0, resources?.widestElement || 0);
     if (measuredWidth > resources?.viewportWidth && resources.viewportWidth > 0) {
       await printWindow.webContents.executeJavaScript(
-        `document.body.style.zoom = String(Math.min(1, (${resources.viewportWidth} - 16) / ${measuredWidth}));`,
+        `document.body.style.zoom = String(Math.max(0.65, Math.min(1, (${resources.viewportWidth} - 16) / ${measuredWidth})));`,
         true
       );
       resources = await waitForPrintResources(printWindow);
