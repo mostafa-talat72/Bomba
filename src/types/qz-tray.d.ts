@@ -8,7 +8,7 @@ declare module 'qz-tray' {
       find: (printer?: string) => Promise<string | string[]>;
     };
     configs: {
-      create: (printer: string) => unknown;
+      create: (printer: string, options?: unknown) => unknown;
     };
     print: (
       config: unknown,
