@@ -35,6 +35,93 @@ const dataDir = path.join(userDataDir, "data");
 const configPath = path.join(userDataDir, "config.json");
 const logPath = path.join(userDataDir, "server.log");
 
+async function waitForPrintResources(printWindow) {
+  return printWindow.webContents.executeJavaScript(`
+    (async () => {
+      if (document.fonts && document.fonts.ready) await document.fonts.ready;
+      const images = Array.from(document.images);
+      await Promise.all(images.map((image) => image.complete
+        ? Promise.resolve()
+        : new Promise((resolve) => {
+            image.addEventListener("load", resolve, { once: true });
+            image.addEventListener("error", resolve, { once: true });
+          })));
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      return {
+        failedImages: images
+          .filter((image) => !image.complete || image.naturalWidth === 0)
+          .map((image) => image.src || image.alt || "unknown image"),
+      };
+    })();
+  `, true);
+}
+
+async function sendWindowsRawCommand(printerName, bytes) {
+  if (process.platform !== "win32") {
+    return { success: false, message: "Raw printer commands are supported on Windows only" };
+  }
+  const tempPath = path.join(os.tmpdir(), `bomba-print-command-${Date.now()}-${crypto.randomUUID()}.bin`);
+  try {
+    fs.writeFileSync(tempPath, Buffer.from(bytes));
+    const escapedPath = tempPath.replace(/'/g, "''");
+    const escapedPrinter = String(printerName).replace(/'/g, "''");
+    const script = `
+$bytes = [System.IO.File]::ReadAllBytes('${escapedPath}')
+Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+public static class BombaRawPrint {
+  [StructLayout(LayoutKind.Sequential, CharSet=CharSet.Unicode)]
+  public class DocInfo { public string DocName; public string OutputFile; public string DataType; }
+  [DllImport("winspool.drv", CharSet=CharSet.Unicode, SetLastError=true)]
+  static extern bool OpenPrinter(string name, out IntPtr handle, IntPtr defaults);
+  [DllImport("winspool.drv", SetLastError=true)] static extern bool ClosePrinter(IntPtr handle);
+  [DllImport("winspool.drv", CharSet=CharSet.Unicode, SetLastError=true)]
+  static extern int StartDocPrinter(IntPtr handle, int level, DocInfo info);
+  [DllImport("winspool.drv", SetLastError=true)] static extern bool EndDocPrinter(IntPtr handle);
+  [DllImport("winspool.drv", SetLastError=true)] static extern bool StartPagePrinter(IntPtr handle);
+  [DllImport("winspool.drv", SetLastError=true)] static extern bool EndPagePrinter(IntPtr handle);
+  [DllImport("winspool.drv", SetLastError=true)]
+  static extern bool WritePrinter(IntPtr handle, byte[] bytes, int count, out int written);
+  public static bool Send(string name, byte[] bytes) {
+    IntPtr handle;
+    if (!OpenPrinter(name, out handle, IntPtr.Zero)) return false;
+    try {
+      var info = new DocInfo { DocName = "Bomba printer command", DataType = "RAW" };
+      if (StartDocPrinter(handle, 1, info) == 0 || !StartPagePrinter(handle)) return false;
+      int written;
+      var ok = WritePrinter(handle, bytes, bytes.Length, out written);
+      EndPagePrinter(handle); EndDocPrinter(handle);
+      return ok && written == bytes.Length;
+    } finally { ClosePrinter(handle); }
+  }
+}
+"@
+if (-not [BombaRawPrint]::Send('${escapedPrinter}', $bytes)) { throw 'Raw printer command failed' }
+`;
+    const encodedScript = Buffer.from(script, "utf16le").toString("base64");
+    await execPromise(`powershell -NoProfile -EncodedCommand ${encodedScript}`, { timeout: 10000 });
+    return { success: true };
+  } catch (error) {
+    return { success: false, message: error.message || "Raw printer command failed" };
+  } finally {
+    try { fs.unlinkSync(tempPath); } catch {}
+  }
+}
+
+async function sendPrinterPostCommands(printerName, { openDrawer = false, cutPaper = false } = {}) {
+  const warnings = [];
+  if (openDrawer) {
+    const drawer = await sendWindowsRawCommand(printerName, [0x1b, 0x70, 0x00, 0x19, 0xfa]);
+    if (!drawer.success) warnings.push(`Cash drawer: ${drawer.message}`);
+  }
+  if (cutPaper) {
+    const cut = await sendWindowsRawCommand(printerName, [0x1d, 0x56, 0x00]);
+    if (!cut.success) warnings.push(`Paper cut: ${cut.message}`);
+  }
+  return warnings;
+}
+
 async function printHtmlSilently(html, requestedPrinterName, paperWidthMm = 80) {
   let printWindow = null;
   try {
@@ -62,18 +149,10 @@ async function printHtmlSilently(html, requestedPrinterName, paperWidthMm = 80) 
       parent: mainWindow || undefined,
     });
     await printWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
-    await printWindow.webContents.executeJavaScript(`
-      (async () => {
-        if (document.fonts && document.fonts.ready) await document.fonts.ready;
-        await Promise.all(Array.from(document.images)
-          .filter((image) => !image.complete)
-          .map((image) => new Promise((resolve) => {
-            image.addEventListener('load', resolve, { once: true });
-            image.addEventListener('error', resolve, { once: true });
-          })));
-        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-      })();
-    `, true);
+    const resources = await waitForPrintResources(printWindow);
+    if (resources?.failedImages?.length) {
+      return { success: false, message: "Print content contains images that failed to load", failedImages: resources.failedImages };
+    }
     const printed = await new Promise((resolve) => {
       printWindow.webContents.print({
         silent: true,
@@ -130,38 +209,8 @@ function startLocalPrintServer() {
           throw new Error("Printable HTML is required");
         }
         const result = await printHtmlSilently(payload.html, payload.printerName, payload.paperWidthMm);
-        if (result.success && payload.openDrawer) {
-          const drawerResponse = await fetch(`http://127.0.0.1:${localBackendPort}/api/print/cash-drawer/auto-detect`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              ...(request.headers.authorization ? { Authorization: request.headers.authorization } : {}),
-            },
-            body: JSON.stringify({
-              mode: payload.drawerMode || "payment",
-              organization: payload.organization,
-            }),
-          });
-          if (!drawerResponse.ok) {
-            response.writeHead(503, { "Content-Type": "application/json" });
-            response.end(JSON.stringify({ success: false, message: "Cash drawer command failed" }));
-            return;
-          }
-        }
-        if (result.success && payload.cutPaper) {
-          const cutResponse = await fetch(`http://127.0.0.1:${localBackendPort}/api/print/cut-paper`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              ...(request.headers.authorization ? { Authorization: request.headers.authorization } : {}),
-            },
-            body: JSON.stringify({ organization: payload.organization }),
-          });
-          if (!cutResponse.ok) {
-            response.writeHead(503, { "Content-Type": "application/json" });
-            response.end(JSON.stringify({ success: false, message: "Paper cut command failed", printed: true }));
-            return;
-          }
+        if (result.success) {
+          result.warnings = await sendPrinterPostCommands(result.printerName, payload);
         }
         response.writeHead(result.success ? 200 : 503, { "Content-Type": "application/json" });
         response.end(JSON.stringify(result));
@@ -661,18 +710,10 @@ mainWindow.webContents.setWindowOpenHandler(({ url: targetUrl }) => {
         parent: mainWindow || undefined
       });
       await printWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(data.html)}`);
-      await printWindow.webContents.executeJavaScript(`
-        (async () => {
-          if (document.fonts && document.fonts.ready) await document.fonts.ready;
-          await Promise.all(Array.from(document.images)
-            .filter((image) => !image.complete)
-            .map((image) => new Promise((resolve) => {
-              image.addEventListener('load', resolve, { once: true });
-              image.addEventListener('error', resolve, { once: true });
-            })));
-          await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-        })();
-      `, true);
+      const resources = await waitForPrintResources(printWindow);
+      if (resources?.failedImages?.length) {
+        return { success: false, message: "Print content contains images that failed to load", failedImages: resources.failedImages };
+      }
 
       const printed = await new Promise((resolve) => {
         printWindow.webContents.print({
