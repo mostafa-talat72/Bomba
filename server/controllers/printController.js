@@ -26,6 +26,7 @@ class PrintController {
     this.getDevicePrinter = this.getDevicePrinter.bind(this);
     this.autoDetectPrinter = this.autoDetectPrinter.bind(this);
     this.openCashDrawerOnly = this.openCashDrawerOnly.bind(this);
+    this.cutPaperOnly = this.cutPaperOnly.bind(this);
     this.autoDetectAndPrintBill = this.autoDetectAndPrintBill.bind(this);
     this.autoDetectAndPrintOrder = this.autoDetectAndPrintOrder.bind(this);
     this.autoDetectAndOpenCashDrawer = this.autoDetectAndOpenCashDrawer.bind(this);
@@ -820,6 +821,29 @@ class PrintController {
       await printerService.disconnect();
       return res.status(500).json({ success: false, message: 'Internal server error opening cash drawer', error: error.message });
     }
+  }
+
+  async cutPaperOnly(req, res) {
+      try {
+        const { organization } = req.body || {};
+        const printSettings = await loadPrintSettings(organization);
+        if (!printSettings || printSettings.printerType === 'none') {
+          return res.status(400).json({ success: false, message: 'Printer not configured' });
+        }
+        if (!await printerService.initializePrinter(printSettings)) {
+          return res.status(500).json({ success: false, message: 'Failed to connect to printer' });
+        }
+        const queued = await printerService.cutPaper();
+        if (queued && printerService.printer) await printerService.printer.execute();
+        await printerService.disconnect();
+        return queued
+          ? res.json({ success: true })
+          : res.status(500).json({ success: false, message: 'Failed to cut paper' });
+      } catch (error) {
+        console.error('Error cutting paper:', error);
+        await printerService.disconnect();
+        return res.status(500).json({ success: false, message: 'Internal server error cutting paper', error: error.message });
+      }
   }
 }
 
