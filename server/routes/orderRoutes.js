@@ -41,7 +41,11 @@ router.get(
 router.get("/:id", authorize("cafe", "tables", "menu", "all"), getOrder);
 
 // إضافة مسار حذف الطلب
-router.delete("/:id", authorize("cafe", "tables", "menu", "all"), deleteOrder);
+router.delete(
+    "/:id",
+    authorize("canDeleteOrder", "cafe", "tables", "menu", "all"),
+    deleteOrder
+);
 
 // إضافة مسار تحديث الطلبات
 router.patch(

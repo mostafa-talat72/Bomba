@@ -333,6 +333,11 @@ const BillView = () => {
 		// Listen for bill updates (from other tabs/users)
 		socket.on('bill-update', (data: any) => {
 			if (data.bill && (data.bill._id === billId || data.bill.id === billId)) {
+				if (data.type === 'deleted') {
+					setBill(null);
+					setError(t('billView.notFound'));
+					return;
+				}
 				setBill(normalizeBillDates(data.bill as unknown as Record<string, unknown>));
 			}
 		});

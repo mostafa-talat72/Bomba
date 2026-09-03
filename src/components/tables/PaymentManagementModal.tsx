@@ -552,11 +552,16 @@ const PaymentManagementModal: React.FC<PaymentManagementModalProps> = ({
                       const durM     = Math.floor((durMs % 3600000) / 60000);
                       const durStr   = durH > 0 ? `${durH}س ${durM}د` : `${durM}د`;
                       const startStr = session.startTime ? new Date(session.startTime).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }) : '—';
-                      const sp = (selectedBill as any)?.sessionPayments?.find((p: any) => p.sessionId === (session._id || session.id));
+                      const sp = (selectedBill as any)?.sessionPayments?.find((p: any) =>
+                        String(p.sessionId?._id || p.sessionId?.id || p.sessionId) === String(session._id || session.id)
+                      );
                       const cost      = getSessionCost(session);
-                      const spPaid    = Number(sp?.paidAmount) || 0;
+                      const recordedPaid = Array.isArray(sp?.payments)
+                        ? sp.payments.reduce((sum: number, payment: any) => sum + (Number(payment?.amount) || 0), 0)
+                        : 0;
+                      const spPaid    = Math.min(cost, Math.max(Number(sp?.paidAmount) || 0, recordedPaid));
                       // للجلسة النشطة: المتبقي حي = التكلفة الحية - المدفوع (نتجاهل remainingAmount المخزن القديم)
-                      const spRemain  = isActive ? Math.max(0, cost - spPaid) : Math.max(0, sp ? (sp.remainingAmount !== undefined && sp.remainingAmount !== null ? Number(sp.remainingAmount) : (cost - spPaid)) : cost - spPaid);
+                      const spRemain  = Math.max(0, cost - spPaid);
                       const icon      = session.deviceType === 'playstation' ? '🎮' : '💻';
                       return (
                         <div key={i} className={`bg-white dark:bg-gray-800 rounded-xl border overflow-hidden ${isActive ? 'border-emerald-200 dark:border-emerald-800/60' : 'border-gray-200 dark:border-gray-700 opacity-75'}`}>

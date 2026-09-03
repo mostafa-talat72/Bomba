@@ -1456,6 +1456,19 @@ class ApiClient {
     return response;
   }
 
+  async recalculateBillTotals(id: string): Promise<ApiResponse<{
+    billId: string;
+    subtotal: number;
+    total: number;
+    paid: number;
+    remaining: number;
+    status: string;
+  }>> {
+    return this.request(`/billing/${id}/recalculate`, {
+      method: 'POST',
+    });
+  }
+
   async addPayment(id: string, paymentData: {
     amount: number;
     method: 'cash' | 'card' | 'transfer';
@@ -2556,6 +2569,10 @@ class ApiClient {
       };
     }
     return response;
+  }
+
+  async syncTableStatus(id: string): Promise<ApiResponse<{ tableId: string; status: string }>> {
+    return this.request(`/tables/tables/${id}/status/sync`, { method: 'POST' });
   }
 
   async createTable(tableData: {

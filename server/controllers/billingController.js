@@ -36,26 +36,24 @@ const FAWRY_SECURE_KEY = process.env.FAWRY_SECURE_KEY || "YOUR_SECURE_KEY";
 const VALID_SUBSCRIPTION_AMOUNTS = { monthly: 299, yearly: 2999 };
 
 // ── Helper: instant <100ms emit for bills + table status, keeps DB writes immediate ──
-function emitBillUpdated(req, bill) {
+function emitBillUpdated(req, bill, type = "updated") {
     if (!req.io || !bill) return;
     try {
         const orgId = getOrganizationId(req.user);
         if (!orgId) return;
         const orgStr = String(orgId);
         // colon + dash rooms, both event names for compatibility
-        req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('bill:updated', bill);
-        req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('bill-update', { type: 'updated', bill });
-        try { req.io.notifyBillUpdate("updated", bill, getOrganizationId(req.user)); } catch {}
-        // table status if bill has table
-        if (bill.table) {
-            const tid = bill.table?._id || bill.table?.id || bill.table;
-            if (tid) {
-                const payload = { tableId: tid, status: (bill.status === 'paid' || bill.status === 'cancelled') ? 'empty' : 'occupied' };
-                req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('table:statusChanged', payload);
-                req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('table-status-update', payload);
-                try { req.io.notifyTableStatusUpdate(payload, getOrganizationId(req.user)); } catch {}
+        req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('bill-update', { type, bill });
+        try {
+            if (typeof req.io.notifyBillUpdate === "function") {
+                req.io.notifyBillUpdate(type, bill, req.user.organization);
+            } else {
+                req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit(
+                    type === "created" ? "bill:created" : type === "deleted" ? "bill:deleted" : "bill:updated",
+                    bill
+                );
             }
-        }
+        } catch {}
     } catch (e) { Logger.warn('emitBillUpdated failed', e.message); }
 }
 function emitBillDeleted(req, billId, tableId) {
@@ -65,15 +63,16 @@ function emitBillDeleted(req, billId, tableId) {
         if (!orgId) return;
         const orgStr = String(orgId);
         const payload = { _id: billId };
-        req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('bill:updated', payload);
         req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('bill-update', { type: 'deleted', bill: payload });
-        try { req.io.notifyBillUpdate("deleted", payload, getOrganizationId(req.user)); } catch {}
-        if (tableId) {
-            const tid = tableId?._id || tableId?.id || tableId;
-            const tp = { tableId: tid, status: 'empty' };
-            req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('table:statusChanged', tp);
-            req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('table-status-update', tp);
-        }
+        try {
+            if (typeof req.io.notifyBillUpdate === "function") {
+                req.io.notifyBillUpdate("deleted", payload, req.user.organization);
+            } else {
+                req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('bill:deleted', payload);
+            }
+        } catch {}
+        // The caller recalculates table status from all remaining unpaid
+        // bills.  Do not optimistically emit "empty" here.
     } catch {}
 }
 
@@ -229,7 +228,7 @@ export const getBills = async (req, res) => {
         const shouldPaginate = isAll;
 
         let billQuery = Bill.find(query)
-            .select('billNumber table status total remaining paid subtotal billType sessions orders createdAt')
+            .select('billNumber table status total remaining paid subtotal billType sessions orders itemPayments sessionPayments createdAt')
             .populate({
                 path: "table",
                 select: "number name",
@@ -240,7 +239,11 @@ export const getBills = async (req, res) => {
             })
             .populate({
                 path: "orders",
-                select: "totalAmount finalAmount status",
+                select: "items totalAmount finalAmount status createdAt",
+                populate: {
+                    path: "items.menuItem",
+                    select: "name arabicName preparationTime price",
+                },
             })
             .sort({ createdAt: -1 })
             .lean();
@@ -557,6 +560,7 @@ export const getBill = async (req, res) => {
                             }
                             return 0;
                         };
+
                         let total = 0;
                         if (!s.controllersHistory || s.controllersHistory.length === 0) {
                             const startMs = s.startTime ? new Date(s.startTime).getTime() : 0;
@@ -616,6 +620,59 @@ export const getBill = async (req, res) => {
         res.status(500).json({
             success: false,
             message: "خطأ في جلب الفاتورة",
+            error: error.message,
+        });
+    }
+};
+
+// Rebuild totals from the bill's linked orders and sessions.
+// This is deliberately admin-only because it changes accounting data.
+export const recalculateBillTotals = async (req, res) => {
+    try {
+        if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+            return res.status(400).json({
+                success: false,
+                message: "معرف الفاتورة غير صحيح",
+            });
+        }
+
+        const bill = await Bill.findOne({
+            _id: req.params.id,
+            ...organizationFilter(req.user),
+        });
+
+        if (!bill) {
+            return res.status(404).json({
+                success: false,
+                message: "الفاتورة غير موجودة",
+            });
+        }
+
+        await bill.calculateSubtotal();
+        bill.updatedBy = req.user._id;
+        await bill.save();
+        emitBillUpdated(req, bill);
+        if (bill.table) {
+            await updateTableStatusIfNeeded(bill.table, getOrganizationId(req.user), req.io);
+        }
+
+        return res.json({
+            success: true,
+            message: "تم تصحيح إجماليات الفاتورة بنجاح",
+            data: {
+                billId: bill._id,
+                subtotal: bill.subtotal,
+                total: bill.total,
+                paid: bill.paid,
+                remaining: bill.remaining,
+                status: bill.status,
+            },
+        });
+    } catch (error) {
+        Logger.error("❌ recalculateBillTotals error:", error);
+        return res.status(500).json({
+            success: false,
+            message: "خطأ في تصحيح إجماليات الفاتورة",
             error: error.message,
         });
     }
@@ -811,7 +868,7 @@ export const createBill = async (req, res) => {
         };
 
         // ── Real-time emit (<100ms) — keep DB writes immediate ──
-        emitBillUpdated(req, bill);
+        emitBillUpdated(req, bill, "created");
 
         // Return response IMMEDIATELY after local save (table status already updated)
         res.status(201).json({
@@ -903,10 +960,12 @@ export const updateBill = async (req, res) => {
         if (notes !== undefined) bill.notes = notes;
         if (dueDate !== undefined) bill.dueDate = dueDate;
         
+        let movedFromTableId = null;
         // إذا تم تغيير الطاولة (باستخدام ID)
         if (table !== undefined) {
             const oldTableId = bill.table ? bill.table.toString() : null;
             const newTableId = table ? table.toString() : null;
+            movedFromTableId = oldTableId !== newTableId ? oldTableId : null;
             
             if (oldTableId !== newTableId && newTableId) {
                 Logger.info(`🔄 تغيير الطاولة من ${oldTableId} إلى ${newTableId} للفاتورة ${bill.billNumber}`);
@@ -1151,11 +1210,6 @@ export const updateBill = async (req, res) => {
                         }
                     }
                     
-                    // تحديث حالة الطاولة القديمة
-                    if (oldTableId) {
-                        await updateTableStatusIfNeeded(oldTableId, getOrganizationId(req.user), req.io);
-                    }
-                    
                     Logger.info(`✅ تم تغيير طاولة الفاتورة ${bill.billNumber} إلى الطاولة ${newTableId}`);
                 }
             }
@@ -1196,6 +1250,10 @@ export const updateBill = async (req, res) => {
         const updatedBill = await bill.save();
         emitBillUpdated(req, bill);
 
+        // Recalculate the source only after the bill no longer references it.
+        if (movedFromTableId) {
+            await updateTableStatusIfNeeded(movedFromTableId, req.user.organization, req.io);
+        }
         // Update table status SYNCHRONOUSLY before response (fix stale status)
         // Handle both old and new table cases: updatedBill.table is the new/current table
         if (updatedBill.table) {
@@ -1530,11 +1588,10 @@ export const addPayment = async (req, res) => {
             data: bill,
         });
 
-        // Notify via Socket.IO (non-blocking)
+        // Notify before returning so every connected client sees the same
+        // persisted payment immediately.
         if (req.io) {
-            setImmediate(() => {
-                req.io.notifyBillUpdate("payment-received", bill, getOrganizationId(req.user));
-            });
+            req.io.notifyBillUpdate("payment-received", bill, req.user.organization);
         }
 
         // Create notification in background (non-blocking)
@@ -2354,17 +2411,9 @@ export const addPartialPayment = async (req, res) => {
             }
         });
 
-        // إرسال تحديث Socket.IO in background (non-blocking)
+        // إرسال تحديث Socket.IO before response
         if (req.io) {
-            setImmediate(() => {
-                req.io.emit('partial-payment-received', {
-                    type: 'partial-payment',
-                    bill: bill,
-                    amount: totalPaymentAmount,
-                    items: processedItems,
-                    message: 'تم إضافة الدفع الجزئي بنجاح'
-                });
-            });
+            req.io.notifyBillUpdate("partial-payment", bill, req.user.organization);
         }
 
     } catch (error) {
@@ -3616,17 +3665,9 @@ export const addPartialPaymentAggregated = async (req, res) => {
             }
         });
 
-        // إرسال تحديث Socket.IO in background (non-blocking)
+        // إرسال تحديث Socket.IO before response
         if (req.io) {
-            setImmediate(() => {
-                req.io.emit('partial-payment-received', {
-                    type: 'partial-payment',
-                    bill: bill,
-                    amount: totalPaymentAmount,
-                    items: processedItems,
-                    message: 'تم إضافة الدفع الجزئي بنجاح'
-                });
-            });
+            req.io.notifyBillUpdate("partial-payment", bill, req.user.organization);
         }
 
     } catch (error) {
@@ -3899,131 +3940,86 @@ export const updateBillAggregatedItems = async (req, res) => {
         // Refresh bill with populated orders for calculations
         await bill.populate("orders");
 
-        // Recalculate bill subtotal/total and clean itemPayments
-        // Use same logic as orderController after updateOrder
+        // Preserve item payments while the edit replaces the order item array.
+        // Item ids contain the order index, so they are not stable across edits.
         if (bill.itemPayments && bill.itemPayments.length > 0) {
-            const validItemIds = new Set();
-            const currentOrderItems = new Map();
-            const itemsByType = new Map();
+            const oldItemPayments = bill.itemPayments.map((payment) =>
+                typeof payment.toObject === "function" ? payment.toObject() : { ...payment }
+            );
+            const paymentQueues = new Map();
+            const itemKey = (item) => {
+                const menuItemId = item.menuItemId || item.menuItem?._id || item.menuItem;
+                if (menuItemId) return `menu:${menuItemId.toString()}`;
+                return `name:${item.itemName || item.name}|price:${Number(item.pricePerUnit ?? item.price ?? 0)}|variant:${JSON.stringify(item.variant || null)}`;
+            };
+
+            oldItemPayments.forEach((payment) => {
+                const key = itemKey(payment);
+                if (!paymentQueues.has(key)) {
+                    paymentQueues.set(key, {
+                        paidQuantity: 0,
+                        paidAmount: 0,
+                        paymentHistory: [],
+                        sample: payment,
+                    });
+                }
+                const aggregate = paymentQueues.get(key);
+                aggregate.paidQuantity += Math.max(0, Number(payment.paidQuantity) || 0);
+                aggregate.paidAmount += Math.max(0, Number(payment.paidAmount) || 0);
+                aggregate.paymentHistory = aggregate.paymentHistory.concat(payment.paymentHistory || []);
+            });
+
+            const rebuiltItemPayments = [];
             (bill.orders || []).forEach((ord) => {
                 (ord.items || []).forEach((it, idx) => {
                     const itemId = `${ord._id}-${idx}`;
-                    validItemIds.add(itemId);
-                    currentOrderItems.set(itemId, { name: it.name, price: it.price, quantity: it.quantity, orderId: ord._id });
-                    const key = `${it.name}|${it.price}`;
-                    if (!itemsByType.has(key)) itemsByType.set(key, []);
-                    itemsByType.get(key).push(itemId);
-                });
-            });
+                    const key = itemKey(it);
+                    const aggregate = paymentQueues.get(key);
+                    let remainingQuantity = Number(it.quantity) || 0;
+                    const paidQuantity = aggregate
+                        ? Math.min(remainingQuantity, aggregate.paidQuantity)
+                        : 0;
+                    const paidAmount = paidQuantity * (Number(it.price) || 0);
+                    let historyQuantity = paidQuantity;
+                    const paymentHistory = aggregate
+                        ? aggregate.paymentHistory.reduce((history, entry) => {
+                            if (historyQuantity <= 0) return history;
+                            const quantity = Math.min(historyQuantity, Number(entry.quantity) || 0);
+                            if (quantity <= 0) return history;
+                            historyQuantity -= quantity;
+                            history.push({
+                                ...entry,
+                                quantity,
+                                amount: quantity * (Number(it.price) || 0),
+                            });
+                            return history;
+                        }, [])
+                        : [];
 
-            const existingIds = new Set(bill.itemPayments.map((ip) => ip.itemId));
-            const paymentsToRedistribute = new Map();
-            bill.itemPayments = bill.itemPayments.filter((payment) => {
-                if (!validItemIds.has(payment.itemId)) {
-                    const key = payment.menuItemId ? payment.menuItemId.toString() : `${payment.itemName}|${payment.pricePerUnit}`;
-                    const amt = payment.paidAmount || 0;
-                    if (amt > 0) {
-                        if (!paymentsToRedistribute.has(key)) paymentsToRedistribute.set(key, 0);
-                        paymentsToRedistribute.set(key, paymentsToRedistribute.get(key) + amt);
+                    if (aggregate) {
+                        aggregate.paidQuantity -= paidQuantity;
+                        aggregate.paidAmount = Math.max(0, aggregate.paidAmount - paidAmount);
+                        aggregate.paymentHistory = [];
                     }
-                    return false;
-                }
-                const cur = currentOrderItems.get(payment.itemId);
-                if (cur) {
-                    if (cur.name !== payment.itemName || cur.price !== payment.pricePerUnit || cur.quantity !== payment.quantity) {
-                        payment.itemName = cur.name;
-                        payment.pricePerUnit = cur.price;
-                        payment.quantity = cur.quantity;
-                        payment.totalPrice = cur.price * cur.quantity;
-                        if (payment.paidQuantity > cur.quantity) {
-                            payment.paidQuantity = cur.quantity;
-                            payment.paidAmount = cur.quantity * cur.price;
-                        }
-                    }
-                    if (payment.paidQuantity > payment.quantity) {
-                        payment.paidQuantity = payment.quantity;
-                        payment.paidAmount = payment.quantity * payment.pricePerUnit;
-                    }
-                    payment.isPaid = (payment.paidQuantity || 0) >= (payment.quantity || 0);
-                }
-                return true;
-            });
 
-            // Create itemPayments for new items
-            for (const [itemId, details] of currentOrderItems) {
-                if (!existingIds.has(itemId)) {
-                    let menuItemId = null;
-                    const mi = await MenuItem.findOne({ name: details.name, ...organizationFilter(req.user) }).select("_id");
-                    if (mi) menuItemId = mi._id;
-                    bill.itemPayments.push({
-                        orderId: details.orderId,
+                    rebuiltItemPayments.push({
+                        ...(aggregate?.sample || {}),
+                        orderId: ord._id,
                         itemId,
-                        menuItemId,
-                        itemName: details.name,
-                        quantity: details.quantity,
-                        paidQuantity: 0,
-                        pricePerUnit: details.price,
-                        totalPrice: details.price * details.quantity,
-                        paidAmount: 0,
-                        isPaid: false,
-                        addons: [],
-                        paymentHistory: [],
+                        menuItemId: it.menuItem?._id || it.menuItem || aggregate?.sample?.menuItemId || null,
+                        itemName: it.name,
+                        quantity: it.quantity,
+                        paidQuantity,
+                        pricePerUnit: it.price,
+                        totalPrice: (Number(it.price) || 0) * (Number(it.quantity) || 0),
+                        paidAmount,
+                        isPaid: paidQuantity >= (Number(it.quantity) || 0),
+                        paymentHistory,
                     });
-                }
-            }
-
-            // Redistribute payments from deleted items
-            let totalUnredistributed = 0;
-            const unredistributedList = [];
-            for (const [key, totalAmt] of paymentsToRedistribute) {
-                if (totalAmt <= 0) continue;
-                const remainingIds = itemsByType.get(key) || [];
-                // Try name|price fallback if menuItemId key has no match
-                let targetIds = remainingIds;
-                if (targetIds.length === 0 && key.includes("|")) {
-                    targetIds = itemsByType.get(key) || [];
-                }
-                if (targetIds.length === 0) {
-                    totalUnredistributed += totalAmt;
-                    unredistributedList.push(key);
-                    continue;
-                }
-                const unitPrice = parseFloat(key.split("|").pop()) || 0;
-                // If key is menuItemId, find price from first matching item
-                let price = unitPrice;
-                if (!key.includes("|")) {
-                    const first = currentOrderItems.get(targetIds[0]);
-                    price = first ? first.price : 0;
-                }
-                const totalQtyPaid = price > 0 ? Math.round(totalAmt / price) : 0;
-                let remainingQty = totalQtyPaid;
-                for (const tid of targetIds) {
-                    if (remainingQty <= 0) break;
-                    const ip = bill.itemPayments.find((p) => p.itemId === tid);
-                    if (!ip) continue;
-                    const avail = ip.quantity - (ip.paidQuantity || 0);
-                    if (avail <= 0) continue;
-                    const q = Math.min(remainingQty, avail);
-                    ip.paidQuantity = (ip.paidQuantity || 0) + q;
-                    ip.paidAmount = ip.paidQuantity * ip.pricePerUnit;
-                    ip.isPaid = ip.paidQuantity >= ip.quantity;
-                    remainingQty -= q;
-                }
-                if (remainingQty > 0 && price > 0) {
-                    totalUnredistributed += remainingQty * price;
-                }
-            }
-            if (totalUnredistributed > 0) {
-                bill.payments.push({
-                    amount: totalUnredistributed,
-                    method: "cash",
-                    reference: `رصيد من أصناف محذوفة - فاتورة ${bill.billNumber}`,
-                    user: req.user._id,
-                    timestamp: new Date(),
-                    type: "credit-from-deleted-items",
                 });
-                Logger.info(`💳 [updateBillAggregatedItems] Added ${totalUnredistributed} EGP as credit for bill ${bill.billNumber}`);
-            }
+            });
+
+            bill.itemPayments = rebuiltItemPayments;
         }
 
         // Recalculate bill totals
@@ -4046,8 +4042,7 @@ export const updateBillAggregatedItems = async (req, res) => {
         // Socket notify
         if (req.io) {
             try {
-                req.io.emit("bill-update", { type: "updated", bill });
-                req.io.notifyBillUpdate?.("updated", bill, getOrganizationId(req.user));
+                req.io.notifyBillUpdate?.("updated", bill, req.user.organization);
             } catch {}
         }
 

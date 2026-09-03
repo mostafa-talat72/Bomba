@@ -51,6 +51,37 @@ const PageLoader = () => (
   </div>
 );
 
+// Restore focus after parent click handlers trigger a render.
+const EditableFocusGuard = () => {
+  React.useEffect(() => {
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof HTMLElement)) return;
+
+      const editable = target.closest<HTMLElement>('input, textarea, select, [contenteditable="true"]');
+      if (!editable || !(editable instanceof HTMLInputElement || editable instanceof HTMLTextAreaElement ||
+        editable instanceof HTMLSelectElement || editable.isContentEditable)) {
+        return;
+      }
+      if (editable instanceof HTMLInputElement || editable instanceof HTMLTextAreaElement) {
+        if (editable.disabled || editable.readOnly) return;
+      }
+      if (editable instanceof HTMLSelectElement && editable.disabled) return;
+
+      requestAnimationFrame(() => {
+        if (document.activeElement !== editable && document.contains(editable)) {
+          editable.focus({ preventScroll: true });
+        }
+      });
+    };
+
+    document.addEventListener('pointerdown', handlePointerDown, true);
+    return () => document.removeEventListener('pointerdown', handlePointerDown, true);
+  }, []);
+
+  return null;
+};
+
 // مكون للتحقق من الصلاحيات وحماية المسارات
 const ExitGuard = () => {
   const { user, tables, bills, sessions } = useApp();
@@ -350,6 +381,7 @@ const App = () => {
         <LanguageProvider>
           <ThemeProvider>
             <AppProvider>
+                <EditableFocusGuard />
               <OrganizationProvider>
                 <TablesHeaderProvider>
                 <ToastManager>

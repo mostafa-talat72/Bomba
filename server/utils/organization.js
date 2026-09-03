@@ -35,13 +35,31 @@ export function organizationFilter(value, field = "organization") {
         $and: [{
             $or: [
                 { [field]: id },
-                { $expr: { $eq: [{ $toString: `$${field}` }, stringId] } },
+                { $expr: { $eq: [safeStringExpression(field), stringId] } },
             ],
         }],
     };
 }
 
 export const organizationQuery = organizationFilter;
+
+function safeStringExpression(field) {
+    const fieldReference = `$${field}`;
+    return {
+        $convert: {
+            input: {
+                $cond: [
+                    { $eq: [{ $type: fieldReference }, "object"] },
+                    `${fieldReference}._id`,
+                    fieldReference,
+                ],
+            },
+            to: "string",
+            onError: "",
+            onNull: "",
+        },
+    };
+}
 
 export function sameObjectId(left, right) {
     const leftId = getOrganizationId(left);
@@ -92,7 +110,7 @@ function mixedIdentifierCondition(field, value) {
     return {
         $or: [
             { [field]: { $in: objectIds } },
-            { $expr: { $in: [{ $toString: `$${field}` }, strings] } },
+            { $expr: { $in: [safeStringExpression(field), strings] } },
         ],
     };
 }

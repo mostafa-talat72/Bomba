@@ -26,17 +26,26 @@ export async function updateTableStatusIfNeeded(tableId, organizationId, io = nu
 
         const newStatus = hasUnpaid ? "occupied" : "empty";
 
-        await Table.findByIdAndUpdate(actualTableId, { status: newStatus });
+        await Table.findOneAndUpdate(
+            { _id: actualTableId, organization: organizationId },
+            { $set: { status: newStatus } }
+        );
 
         Logger.info(
             `✓ Table status updated to '${newStatus}' for table: ${actualTableId} (${hasUnpaid ? 'has' : 'no'} unpaid bills)`
         );
 
         if (io) {
-            io.emit("table-status-update", {
-                tableId: actualTableId,
-                status: newStatus,
-            });
+            const org = String(organizationId?._id || organizationId);
+            const payload = { tableId: actualTableId, status: newStatus };
+            if (typeof io.notifyTableStatusUpdate === "function") {
+                io.notifyTableStatusUpdate(payload, organizationId);
+            } else if (typeof io.to === "function" && organizationId) {
+                io.to(`org:${org}`).to(`org-${org}`).emit("table-status-update", payload);
+                io.to(`org:${org}`).to(`org-${org}`).emit("table:statusChanged", payload);
+            } else {
+                io.emit("table-status-update", payload);
+            }
         }
 
         return newStatus;

@@ -10,6 +10,7 @@ import {
     getAllTables,
     getTableById,
     getTableStatus,
+    syncTableStatus,
     createTable,
     updateTable,
     deleteTable,
@@ -80,6 +81,7 @@ router.post("/fix-statuses", adminOnly, fixTableStatuses);
 router.get("/tables", authorize("cafe", "tables", "orders", "staff", "all"), getAllTables);
 router.get("/tables/:id", authorize("cafe", "tables", "orders", "staff", "all"), getTableById);
 router.get("/tables/:id/status", authorize("cafe", "tables", "orders", "staff", "all"), getTableStatus);
+router.post("/tables/:id/status/sync", authorize("cafe", "tables", "orders", "staff", "all"), syncTableStatus);
 router.post(
     "/tables",
     authorize("cafe", "tables", "orders", "staff", "all"),
@@ -97,7 +99,6 @@ router.put(
 router.delete("/tables/:id", authorize("cafe", "tables", "orders", "staff", "all"), deleteTable);
 
 export default router;
-
 
 
 

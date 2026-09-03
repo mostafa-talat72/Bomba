@@ -38,7 +38,10 @@ router
     .route("/:id")
     .get(authorize("billing", "tables", "staff", "all"), getBill)
     .put(authorize("billing", "tables", "staff", "all"), updateBill)
-    .delete(authorize("billing", "tables", "staff", "all"), deleteBill);
+    .delete(
+        authorize("canDeleteBill", "billing", "tables", "staff", "all"),
+        deleteBill
+    );
 
 router.post("/:id/payment", authorize("billing", "tables", "staff", "all"), addPayment);
 router.put("/:id/payment", authorize("billing", "tables", "staff", "all"), addPayment);

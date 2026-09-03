@@ -577,10 +577,28 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         const session = data.session;
         const bill = data.bill;
 
-        setSessions(prev => [...prev, session]);
+        setSessions(prev => {
+          const sid = String(session._id || session.id);
+          const exists = prev.some((s: any) => String(s._id || s.id) === sid);
+          return exists
+            ? prev.map((s: any) => String(s._id || s.id) === sid ? { ...s, ...session } : s)
+            : [session, ...prev];
+        });
 
         if (bill) {
-          setBills(prev => [...prev, bill]);
+          setBills(prev => {
+            const bid = String(bill._id || bill.id);
+            const exists = prev.some((b: any) => String(b._id || b.id) === bid);
+            return exists
+              ? prev.map((b: any) => String(b._id || b.id) === bid ? { ...b, ...bill } : b)
+              : [bill, ...prev];
+          });
+          if (session.table) {
+            const tid = String((session.table as any)?._id || (session.table as any)?.id || session.table);
+            setTables(prev => prev.map((table: any) =>
+              String(table._id || table.id) === tid ? { ...table, status: 'occupied' } : table
+            ));
+          }
           showNotification(t('toast.session.startedWithBill', { deviceName: session.deviceName, billNumber: bill.billNumber }), 'success');
         } else {
           showNotification(t('toast.session.started', { deviceName: session.deviceName }), 'success');
@@ -1774,11 +1792,15 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (!oid) return;
       setOrders(prev => prev.filter((o: any) => normalizeId(o._id) !== normalizeId(oid) && normalizeId(o.id) !== normalizeId(oid)));
     };
-    const onBillUpdated = (bill: any) => {
+    const onBillUpdated = (bill: any, eventType?: string) => {
       if (!bill) return;
       const bid = bill._id || bill.id;
       if (!bid) {
         if (bill._id) setBills(prev => prev.filter((b: any) => normalizeId(b._id) !== normalizeId(bill._id) && normalizeId(b.id) !== normalizeId(bill._id)));
+        return;
+      }
+      if (eventType === 'deleted') {
+        setBills(prev => prev.filter((b: any) => normalizeId(b._id) !== normalizeId(bid) && normalizeId(b.id) !== normalizeId(bid)));
         return;
       }
       setBills(prev => {
@@ -1788,13 +1810,6 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         if (bill.status && ['paid','cancelled'].includes(bill.status)) return prev.filter((b: any) => normalizeId(b._id) !== normalizeId(bid));
         return [...prev, normalized];
       });
-      if (bill.table) {
-        const tid = (bill.table as any)?._id || (bill.table as any)?.id || bill.table;
-        if (tid) {
-          const status = (bill.status === 'paid' || bill.status === 'cancelled') ? 'empty' : 'occupied';
-          setTables(prev => prev.map((t: any) => (normalizeId(t._id) === normalizeId(tid) || normalizeId(t.id) === normalizeId(tid)) ? { ...t, status } : t));
-        }
-      }
     };
     const onTableStatusChanged = (payload: any) => {
       const tid = payload?.tableId || payload?._id || payload?.id;
@@ -1827,6 +1842,31 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         if (session.status === 'active') return [...prev, normalized];
         return prev;
       });
+      // Bills carry their sessions and are the source used by the tables
+      // screen to calculate occupancy. Keep that nested data in sync too.
+      const sessionBillId = session.bill?._id || session.bill?.id || session.bill;
+      setBills(prev => prev.map((bill: any) => {
+        const bid = bill._id || bill.id;
+        const belongsToBill = sessionBillId && normalizeId(sessionBillId) === normalizeId(bid);
+        const sessions = Array.isArray(bill.sessions) ? bill.sessions : [];
+        const hasSession = sessions.some((s: any) =>
+          normalizeId(s?._id || s?.id || s) === normalizeId(sid)
+        );
+        if (!belongsToBill && !hasSession) return bill;
+        const nextSessions = hasSession
+          ? sessions.map((s: any) =>
+              normalizeId(s?._id || s?.id || s) === normalizeId(sid) ? session : s)
+          : [...sessions, session];
+        return { ...bill, sessions: nextSessions };
+      }));
+      if (session.table) {
+        const tid = session.table?._id || session.table?.id || session.table;
+        setTables(prev => prev.map((table: any) =>
+          normalizeId(table._id || table.id) === normalizeId(tid)
+            ? { ...table, status: session.status === 'active' ? 'occupied' : table.status }
+            : table
+        ));
+      }
     };
 
     // Register colon events (instant)
@@ -1835,6 +1875,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     socket.on('order:deleted', onOrderDeleted);
     socket.on('bill:updated', onBillUpdated);
     socket.on('bill:created', onBillUpdated);
+    socket.on('bill:deleted', (bill: any) => onBillUpdated(bill, 'deleted'));
     socket.on('table:statusChanged', onTableStatusChanged);
     socket.on('table:created', onTableCreatedOrUpdated);
     socket.on('table:updated', onTableCreatedOrUpdated);
@@ -1852,7 +1893,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       else if (data._id) onOrderUpdated(data);
     });
     socket.on('bill-update', (data: any) => {
-      if (data?.bill) onBillUpdated(data.bill);
+      if (data?.bill) onBillUpdated(data.bill, data.type);
       else if (data?._id) onBillUpdated(data);
     });
     socket.on('table-status-update', onTableStatusChanged);
@@ -1897,6 +1938,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       socket.off('table-update'); socket.off('table-section-update'); socket.off('settings-update');
       socket.off('order:created', onOrderCreated); socket.off('order:updated', onOrderUpdated); socket.off('order:deleted', onOrderDeleted);
       socket.off('bill:updated', onBillUpdated); socket.off('bill:created', onBillUpdated);
+      socket.off('bill:deleted');
       socket.off('table:statusChanged', onTableStatusChanged);
       socket.off('table:created', onTableCreatedOrUpdated); socket.off('table:updated', onTableCreatedOrUpdated); socket.off('table:deleted', onTableDeleted);
       socket.off('session:updated', onSessionUpdated); socket.off('session:created', onSessionUpdated); socket.off('session:ended', onSessionUpdated);

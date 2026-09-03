@@ -23,6 +23,7 @@ import {
     getBillAggregatedItems,
     addPartialPaymentAggregated,
     updateBillAggregatedItems,
+    recalculateBillTotals,
 } from "../controllers/billingController.js";
 import { protect, authorize, adminOnly } from "../middleware/auth.js";
 
@@ -49,7 +50,17 @@ router
     .route("/:id")
     .get(authorize("billing", "tables", "all"), getBill)
     .put(authorize("billing", "tables", "all"), updateBill)
-    .delete(authorize("billing", "tables", "all"), deleteBill);
+    .delete(
+        authorize("canDeleteBill", "billing", "tables", "all"),
+        deleteBill
+    );
+
+// Accounting repair is restricted to administrators.
+router.post(
+    "/:id/recalculate",
+    authorize("billing", "tables", "all"),
+    recalculateBillTotals
+);
 
 router.post("/:id/payment", authorize("billing", "tables", "all"), addPayment);
 router.put("/:id/payment", authorize("billing", "tables", "all"), addPayment);

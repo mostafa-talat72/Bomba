@@ -78,6 +78,8 @@ const Tables: React.FC = () => {
   const tablesRef = useRef<Table[]>(tables);
   const hasLoadedDataRef = useRef(false);
   const paymentActionLockRef = useRef(false);
+  const backgroundSyncRef = useRef(false);
+  const billRepairRef = useRef(new Map<string, number>());
 
   // ── Unified modal state ──────────────────────────────────────────────────
   const [showUnifiedTableModal, setShowUnifiedTableModal] = useState(false);
@@ -332,6 +334,36 @@ const loadInitialData = async () => {
       loadInitialData();
     }
     return () => { hasLoadedDataRef.current = false; };
+  }, []);
+
+  // Socket.IO handles normal updates; this low-frequency sync covers direct
+  // database changes or missed events without competing with user actions.
+  useEffect(() => {
+    const syncActiveData = async () => {
+      if (backgroundSyncRef.current || document.visibilityState !== 'visible' || !navigator.onLine) return;
+      backgroundSyncRef.current = true;
+      try {
+        await Promise.all([fetchBills(), fetchOrders(), fetchTables()]);
+      } catch (error) {
+        console.warn('Background tables sync failed:', error);
+      } finally {
+        backgroundSyncRef.current = false;
+      }
+    };
+
+    const interval = window.setInterval(syncActiveData, 45000);
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') void syncActiveData();
+    };
+    const handleOnline = () => void syncActiveData();
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('online', handleOnline);
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('online', handleOnline);
+    };
   }, []);
 
 
@@ -600,6 +632,11 @@ const loadInitialData = async () => {
 
       // إذا كان في data.bill — حدّث الـ state مباشرة بدون انتظار API
       if (data.bill) {
+        if (data.type === 'deleted') {
+          const deletedId = String(data.bill._id || data.bill.id || '');
+          setBills((prev: Bill[]) => prev.filter((b: any) => String(b._id || b.id) !== deletedId));
+          return;
+        }
         // تحديث selectedBill إذا كانت مفتوحة
         const cur = selectedBillRef.current;
         if (cur && (data.bill._id === cur._id || data.bill.id === cur.id)) {
@@ -732,13 +769,13 @@ const loadInitialData = async () => {
           setOriginalAmount(bill.remaining.toString());
         }
       }
-      // also update table status optimistically
-      if (bill.table) {
-        const tid = (bill.table as any)?._id || (bill.table as any)?.id || bill.table;
-        if (tid) {
-          const status = (bill.status === 'paid' || bill.status === 'cancelled') ? 'empty' : 'occupied';
-          setTables((prev: any[]) => prev.map((t: any) => String(t._id || (t as any).id) === String(tid) ? { ...t, status } : t));
-        }
+    };
+    const onBillDeletedColon = (bill: any) => {
+      const bid = bill?._id || bill?.id || bill;
+      if (!bid) return;
+      setBills((prev: any[]) => prev.filter((b: any) => String(b._id || b.id) !== String(bid)));
+      if (selectedBillRef.current && String(selectedBillRef.current._id || selectedBillRef.current.id) === String(bid)) {
+        setSelectedBill(null);
       }
     };
     const onTableStatusChangedColon = (payload: any) => {
@@ -778,6 +815,7 @@ const loadInitialData = async () => {
     socket.on('order:deleted', onOrderDeletedColon);
     socket.on('bill:updated', onBillUpdatedColon);
     socket.on('bill:created', onBillUpdatedColon);
+    socket.on('bill:deleted', onBillDeletedColon);
     socket.on('table:statusChanged', onTableStatusChangedColon);
     socket.on('table:created', onTableCreatedColon);
     socket.on('table:updated', onTableUpdatedColon);
@@ -803,7 +841,7 @@ const loadInitialData = async () => {
       if (import.meta.env.DEV) {
         ['reconnect', 'order-update', 'bill-update', 'payment-received', 'partial-payment-received',
          'table-status-update', 'session-update', 'inventory-update',
-         'order:created','order:updated','order:deleted','bill:updated','bill:created','table:statusChanged','table:created','table:updated','table:deleted','session:updated','session:created','session:ended'].forEach(e => socket.off(e));
+         'order:created','order:updated','order:deleted','bill:updated','bill:created','bill:deleted','table:statusChanged','table:created','table:updated','table:deleted','session:updated','session:created','session:ended'].forEach(e => socket.off(e));
       } else {
         socket.disconnect();
       }
@@ -1001,6 +1039,15 @@ const loadInitialData = async () => {
     return map;
   }, [activeTables, tableSections]);
 
+  const filteredTablesBySection = useMemo(() => {
+    const map: Record<string, Table[]> = {};
+    Object.entries(getTablesBySection).forEach(([sectionKey, sectionTables]) => {
+      const visible = sectionTables.filter(matchesTableFilter);
+      if (visible.length > 0) map[sectionKey] = visible;
+    });
+    return map;
+  }, [getTablesBySection, matchesTableFilter]);
+
   const filteredTableOrders = useMemo(() =>
     tableOrders.filter((o: Order) => {
       if (!o.bill) return true;
@@ -1049,15 +1096,6 @@ const loadInitialData = async () => {
       liveExtra: number;
     }>();
 
-    // index: tableId -> bills (مرة واحدة)
-    const tidToBills = new Map<string, Bill[]>();
-    bills.forEach((b: Bill) => {
-      if (!b.table) return;
-      const tid = ((b.table as any)._id || (b.table as any).id || b.table).toString();
-      if (!tidToBills.has(tid)) tidToBills.set(tid, []);
-      tidToBills.get(tid)!.push(b);
-    });
-
     // index: tableId -> active orders count (مرة واحدة)
     const tidToOrderCount = new Map<string, number>();
     orders.forEach((o: any) => {
@@ -1069,7 +1107,7 @@ const loadInitialData = async () => {
 
     activeTables.forEach((table: Table) => {
       const tid = (table._id || (table as any).id).toString();
-      const tBills = tidToBills.get(tid) ?? EMPTY_BILLS;
+      const tBills = tableBillsMap[tid]?.bills ?? EMPTY_BILLS;
       const tOrdersCount = tidToOrderCount.get(tid) ?? EMPTY_ORDERS_COUNT;
 
       // active sessions
@@ -1135,6 +1173,60 @@ const loadInitialData = async () => {
     return bill.customerName;
   };
 
+  const repairBill = useCallback(async (bill: Bill, tableId?: string) => {
+    const billId = String(bill._id || bill.id || '');
+    const lastRepair = billRepairRef.current.get(billId) || 0;
+    if (!billId || Date.now() - lastRepair < 300000) return;
+    billRepairRef.current.set(billId, Date.now());
+    try {
+      const result = await api.recalculateBillTotals(billId);
+      if (result.success && result.data) {
+        setBills(prev => prev.map(current =>
+          String(current._id || current.id) === billId
+            ? { ...current, ...result.data }
+            : current
+        ));
+        if (result.data.status === 'paid' && tableId) {
+          setTables(prev => prev.map(current =>
+            String(current._id || current.id) === tableId ? { ...current, status: 'empty' } : current
+          ));
+        }
+      }
+    } catch (error) {
+      billRepairRef.current.delete(billId);
+      console.warn('Failed to repair bill totals:', error);
+    }
+  }, [setBills, setTables]);
+
+  const repairTableBills = useCallback(async (table: Table) => {
+    const tableId = String(table._id || (table as any).id || '');
+    if (!tableId) return;
+    const tableBills = bills.filter((bill: any) => {
+      const billTableId = String(bill.table?._id || bill.table?.id || bill.table || '');
+      return billTableId === tableId && bill.status !== 'cancelled';
+    });
+    const activeBills = tableBills.filter((bill: any) =>
+      ['draft', 'partial', 'overdue'].includes(bill.status)
+    );
+
+    if (activeBills.length === 0) {
+      if ((table as any).status === 'occupied' || (table as any).status === 'reserved') {
+        try {
+          const result = await api.syncTableStatus(tableId);
+          const status = result.data?.status || 'empty';
+          setTables(prev => prev.map(current =>
+            String(current._id || current.id) === tableId ? { ...current, status } : current
+          ));
+        } catch (error) {
+          console.warn('Failed to sync table status:', error);
+        }
+      }
+      return;
+    }
+
+    await Promise.all(activeBills.map((bill: any) => repairBill(bill, tableId)));
+  }, [bills, repairBill, setBills]);
+
   // ── Order functions ───────────────────────────────────────────────────────
   const handleTableClick = (table: Table) => {
     setSelectedTable(table);
@@ -1147,6 +1239,7 @@ const loadInitialData = async () => {
     // بناء السجل عند الفتح — الـ useEffect سيحدثه تلقائياً بعد كده
     const tableId = table._id || (table as any).id;
     buildActivityLog(tableId);
+    void repairTableBills(table);
   };
 
   // دالة البحث والفتح بعد بناء الرقم (تعتمد على activeTables + handleTableClick)
@@ -1826,6 +1919,7 @@ const loadInitialData = async () => {
 
   // ── Billing functions ─────────────────────────────────────────────────────
   const handlePaymentClick = async (bill: Bill) => {
+    void repairBill(bill, String((bill.table as any)?._id || (bill.table as any)?.id || bill.table || ''));
     // افتح المودال فوراً بالبيانات الموجودة
     setSelectedBill(bill);
     setOriginalAmount(bill.remaining?.toString() || '0');
@@ -2341,7 +2435,10 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
   const stableTableClick = useCallback((tb: Table) => { lastFocusedTableRef.current = tb; handleTableClick(tb); }, []);
   const stableQuickOrder = useCallback((tb: Table, e: React.MouseEvent) => { lastFocusedTableRef.current = tb; handleQuickOrder(tb, e); }, []);
   const stableQuickBilling = useCallback((tb: Table, e: React.MouseEvent) => { lastFocusedTableRef.current = tb; handleQuickBilling(tb, e); }, [handleQuickBilling]);
-  const stableHoverChange = useCallback((tb: Table | null) => { lastFocusedTableRef.current = tb; }, []);
+  const stableHoverChange = useCallback((tb: Table | null) => {
+    lastFocusedTableRef.current = tb;
+    if (tb) void repairTableBills(tb);
+  }, [repairTableBills]);
 
   const handleQuickPrint = useCallback(async (tb: Table, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -2382,6 +2479,8 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
     try {
       const targetTable = tables.find((t: any) => t._id === newTableNumber);
       if (!targetTable) { showNotification(t('billing.notifications.tableNotFound'), 'error'); return; }
+      const oldTableId = String((selectedBill.table as any)?._id || (selectedBill.table as any)?.id || selectedBill.table || '');
+      const targetTableId = String(targetTable._id || targetTable.id);
       const result = await api.updateBill(selectedBill.id || selectedBill._id, { table: targetTable._id });
       if (result?.success && result.data) {
         showNotification(t('billing.notifications.tableChangeSuccess', { tableNumber: targetTable?.number || newTableNumber }), 'success');
@@ -2389,10 +2488,31 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
         const returnedId = ((result.data as any).id || (result.data as any)._id) as string;
         // تحديث متفائل — لو حدث دمج نحذف القديم ونحدث بالجديد
         const oldId = String(selectedBill._id || (selectedBill as any).id);
-        if (String(returnedId) !== oldId) {
-          setBills(prev => prev.filter(b => String(b._id || (b as any).id) !== oldId).map(b => String(b._id || (b as any).id) === String(returnedId) ? result.data : b));
-        } else {
-          setBills(prev => prev.map(b => String(b._id || (b as any).id) === oldId ? result.data : b));
+        setBills(prev => {
+          const nextBills = String(returnedId) !== oldId
+            ? prev.filter(b => String(b._id || (b as any).id) !== oldId)
+              .map(b => String(b._id || (b as any).id) === String(returnedId) ? result.data : b)
+            : prev.map(b => String(b._id || (b as any).id) === oldId ? result.data : b);
+          const hasUnpaidBill = (tableId: string) => nextBills.some((bill: any) => {
+            const billTableId = String(bill.table?._id || bill.table?.id || bill.table || '');
+            return billTableId === tableId && ['draft', 'partial', 'overdue'].includes(bill.status);
+          });
+          setTables(prevTables => prevTables.map((table: any) => {
+            const tableId = String(table._id || table.id);
+            if (tableId === oldTableId || tableId === targetTableId) {
+              return { ...table, status: hasUnpaidBill(tableId) ? 'occupied' : 'empty' };
+            }
+            return table;
+          }));
+          return nextBills;
+        });
+        if (Array.isArray(selectedBill.orders) && oldTableId !== targetTableId) {
+          const movedOrderIds = new Set(selectedBill.orders.map((order: any) => String(order?._id || order?.id || order)));
+          setOrders(prev => prev.map((order: any) =>
+            movedOrderIds.has(String(order._id || order.id))
+              ? { ...order, table: targetTableId }
+              : order
+          ));
         }
         setSelectedBill(result.data);
         scheduleBackgroundRefetch(true);
@@ -2681,7 +2801,7 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
             <div className="space-y-2 sm:space-y-3">
               {filteredSectionsForDisplay.map(section => {
                 const sectionKey = getSectionKey(section);
-                const shownTables = (getTablesBySection[sectionKey] || []).filter(matchesTableFilter);
+                const shownTables = filteredTablesBySection[sectionKey] || [];
                 if (shownTables.length === 0) return null;
                 return (
                   <div key={sectionKey} className="border-2 border-gray-200 dark:border-gray-700 rounded-xl p-2.5 sm:p-3 bg-gradient-to-br from-gray-50 to-white dark:from-gray-800 dark:to-gray-900 shadow-md">
@@ -3334,9 +3454,7 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
                               (p: any) => p.sessionId === sessId || p.session === sessId
                             );
                             const spPaid      = Number(sp?.paidAmount) || 0;
-                            const spRemaining = isActive
-                              ? Math.max(0, cost - spPaid)
-                              : sp ? Math.max(0, sp.remainingAmount !== undefined && sp.remainingAmount !== null ? Number(sp.remainingAmount) : (cost - spPaid)) : Math.max(0, cost - spPaid);
+                            const spRemaining = Math.max(0, cost - spPaid);
 
                             return (
                               <div key={sessId || idx}
@@ -3722,11 +3840,16 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
             <div className="p-3 sm:p-6 space-y-3 sm:space-y-4">
               {selectedBill.sessions?.map((session: any) => {
                 const sid = session._id || session.id;
-                const sp = selectedBill.sessionPayments?.find(p => p.sessionId === sid);
+                const sp = selectedBill.sessionPayments?.find((p: any) =>
+                  String(p.sessionId?._id || p.sessionId?.id || p.sessionId) === String(sid)
+                );
                 const isActive = session.status === 'active';
                 const totalCost = sp?.sessionCost || getSessionCost(session);
-                const paidAmt = sp?.paidAmount || 0;
-                const remainingAmt = isActive ? totalCost - paidAmt : (sp?.remainingAmount !== undefined ? sp.remainingAmount : totalCost - paidAmt);
+                const recordedPaid = Array.isArray((sp as any)?.payments)
+                  ? (sp as any).payments.reduce((sum: number, payment: any) => sum + (Number(payment?.amount) || 0), 0)
+                  : 0;
+                const paidAmt = Math.min(totalCost, Math.max(Number(sp?.paidAmount) || 0, recordedPaid));
+                const remainingAmt = Math.max(0, totalCost - paidAmt);
                 const isFullyPaid = !isActive && remainingAmt <= 0;
                 return (
                   <div key={sid} className={`border-2 rounded-xl p-3 sm:p-4 ${isFullyPaid ? 'border-green-300 dark:border-green-700 bg-green-50 dark:bg-green-900/20' : isActive ? 'border-blue-300 dark:border-blue-700 bg-blue-50 dark:bg-blue-900/20' : 'border-orange-300 dark:border-orange-700 bg-orange-50 dark:bg-orange-900/20'}`}>
