@@ -52,6 +52,8 @@ async function waitForPrintResources(printWindow) {
           .filter((image) => !image.complete || image.naturalWidth === 0)
           .map((image) => image.src || image.alt || "unknown image"),
         contentHeight: Math.max(document.documentElement.scrollHeight, document.body.scrollHeight),
+        contentWidth: Math.max(document.documentElement.scrollWidth, document.body.scrollWidth),
+        viewportWidth: document.documentElement.clientWidth,
       };
     })();
   `, true);
@@ -139,6 +141,9 @@ async function printHtmlSilently(html, requestedPrinterName, paperWidthMm = 80) 
           overflow: visible !important;
         }
         body { box-sizing: border-box !important; }
+        *, *::before, *::after { min-width: 0 !important; max-width: 100% !important; }
+        .stats { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+        .stat-card, .header, .footer { min-width: 0 !important; }
         table, thead, tbody, tr, th, td, div, img {
           max-width: 100% !important;
           box-sizing: border-box !important;
@@ -175,9 +180,16 @@ async function printHtmlSilently(html, requestedPrinterName, paperWidthMm = 80) 
       parent: mainWindow || undefined,
     });
     await printWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(printableHtml)}`);
-    const resources = await waitForPrintResources(printWindow);
+    let resources = await waitForPrintResources(printWindow);
     if (resources?.failedImages?.length) {
       return { success: false, message: "Print content contains images that failed to load", failedImages: resources.failedImages };
+    }
+    if (resources?.contentWidth > resources?.viewportWidth && resources.viewportWidth > 0) {
+      await printWindow.webContents.executeJavaScript(
+        `document.body.style.zoom = String(Math.min(1, ${resources.viewportWidth} / ${resources.contentWidth}));`,
+        true
+      );
+      resources = await waitForPrintResources(printWindow);
     }
     const widthMicrons = Math.round(normalizedPaperWidthMm * 1000);
     const heightMicrons = Math.max(100000, Math.min(2000000, Math.round(
@@ -202,6 +214,7 @@ async function printHtmlSilently(html, requestedPrinterName, paperWidthMm = 80) 
 }
 
 function startLocalPrintServer() {
+  const completedPrints = new Map();
   localPrintServer = http.createServer(async (request, response) => {
     const requestOrigin = request.headers.origin;
     const allowedOrigins = new Set([
@@ -253,8 +266,16 @@ function startLocalPrintServer() {
           response.end(JSON.stringify({ success: false, message: "Printable HTML is required" }));
           return;
         }
+        const printKey = typeof payload.printKey === "string" ? payload.printKey : "";
+        const previousPrint = printKey && completedPrints.get(printKey);
+        if (previousPrint && Date.now() - previousPrint < 10000) {
+          response.writeHead(200, { "Content-Type": "application/json" });
+          response.end(JSON.stringify({ success: true, duplicate: true }));
+          return;
+        }
         const result = await printHtmlSilently(payload.html, payload.printerName, payload.paperWidthMm);
         if (result.success) {
+          if (printKey) completedPrints.set(printKey, Date.now());
           result.warnings = await sendPrinterPostCommands(result.printerName, payload);
         }
         response.writeHead(result.success ? 200 : 503, { "Content-Type": "application/json" });

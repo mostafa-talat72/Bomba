@@ -36,7 +36,7 @@ const printInBrowser = (html: string): boolean => {
 const printThroughAgent = async (
   html: string,
   printerName?: string,
-  options: { openDrawer?: boolean; cutPaper?: boolean; paperWidthMm?: number; drawerMode?: 'bill' | 'payment'; organization?: unknown } = {}
+  options: { openDrawer?: boolean; cutPaper?: boolean; paperWidthMm?: number; drawerMode?: 'bill' | 'payment'; organization?: unknown; printKey?: string } = {}
 ): Promise<boolean> => {
   const token = typeof localStorage !== 'undefined' ? localStorage.getItem('token') : null;
   const response = await fetch(LOCAL_PRINT_URL, {
@@ -60,6 +60,7 @@ const printThroughDesktopFallback = async (html: string, printerName?: string, o
   const desktopApi = typeof window !== 'undefined'
     ? (window as Window & {
         bombaDesktop?: {
+          isDesktop?: boolean;
           directPrint?: (content: string, targetPrinter?: string, options?: { paperWidthMm?: number }) => Promise<{ success?: boolean }>;
         };
       }).bombaDesktop
@@ -89,6 +90,12 @@ const runPrintJob = async (
   try {
     if (await printThroughAgent(html, printerName, options)) return true;
   } catch (agentError) {
+    const isDesktop = typeof window !== 'undefined'
+      && Boolean((window as Window & { bombaDesktop?: { isDesktop?: boolean } }).bombaDesktop?.isDesktop);
+    if (isDesktop && agentError instanceof Error && agentError.message.startsWith('Print Agent returned')) {
+      console.error('Print Agent rejected the print request:', agentError);
+      return false;
+    }
     try {
       if (await printThroughDesktopFallback(html, printerName, options)) return true;
     } catch (desktopError) {
@@ -96,15 +103,17 @@ const runPrintJob = async (
     }
     console.warn('Silent print agent unavailable; using browser print:', agentError);
   }
-  return printInBrowser(html);
+  const isDesktop = typeof window !== 'undefined'
+    && Boolean((window as Window & { bombaDesktop?: { isDesktop?: boolean } }).bombaDesktop?.isDesktop);
+  return isDesktop ? false : printInBrowser(html);
 };
 
 export const printThroughLocalBridge = (
   html: string,
   printerName?: string,
-  options: { openDrawer?: boolean; cutPaper?: boolean; paperWidthMm?: number; drawerMode?: 'bill' | 'payment'; organization?: unknown } = {}
+  options: { openDrawer?: boolean; cutPaper?: boolean; paperWidthMm?: number; drawerMode?: 'bill' | 'payment'; organization?: unknown; printKey?: string } = {}
 ): Promise<boolean> => {
-  const printKey = getPrintKey(html, printerName);
+  const printKey = options.printKey || getPrintKey(html, printerName);
   const now = Date.now();
   const previousPrint = recentPrints.get(printKey);
   if (previousPrint && now - previousPrint < 3000) return true;
