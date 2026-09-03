@@ -37,6 +37,7 @@
     "init:replica": "node server/scripts/initializeReplicaSet.js",
     "sync:initial": "node server/scripts/initialSync.js",
     "desktop:dev": "npm --prefix desktop run dev",
+    "desktop:dev:all": "concurrently \"npm run server:dev\" \"npm run client:dev\" \"npm run desktop:dev\"",
     "desktop:start": "npm --prefix desktop run start",
     "desktop:pack": "npm --prefix desktop run pack",
     "desktop:dist": "npm --prefix desktop run dist"
