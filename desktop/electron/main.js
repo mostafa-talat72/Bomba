@@ -17,6 +17,7 @@ const crypto = require("crypto");
 const HARDCODED_ATLAS_URI = "mongodb+srv://Bomba:t1fp995Bde03vPQY@cluster0.yl9w7jv.mongodb.net/bomba?retryWrites=true&w=majority&appName=Cluster0&serverSelectionTimeoutMS=60000&socketTimeoutMS=120000&connectTimeoutMS=60000&maxPoolSize=10&minPoolSize=2&maxIdleTimeMS=60000&heartbeatFrequencyMS=10000";
 
 const isDev = process.argv.includes("--dev");
+const isPrintAgent = process.argv.includes("--print-agent");
 
 // Keep userData at a stable location across branding changes so all
 // existing data (config, secrets, uploads, backups) is preserved.
@@ -94,7 +95,7 @@ function startLocalPrintServer() {
       try {
         const payload = JSON.parse(body);
         const result = await printHtmlSilently(payload.html, payload.printerName);
-        if (result.success && payload.openDrawer) {
+        if (result.success && payload.openDrawer && !isPrintAgent) {
           const drawerResponse = await fetch(`http://127.0.0.1:${localBackendPort}/api/print/cash-drawer/auto-detect`, {
             method: "POST",
             headers: {
@@ -528,6 +529,19 @@ mainWindow.webContents.setWindowOpenHandler(({ url: targetUrl }) => {
         },
       };
     }
+
+    async function createPrintAgentWindow() {
+      mainWindow = new BrowserWindow({
+        show: false,
+        skipTaskbar: true,
+        webPreferences: {
+          contextIsolation: true,
+          sandbox: true,
+          javascript: false,
+        },
+      });
+      await mainWindow.loadURL("about:blank");
+    }
     require("electron").shell.openExternal(targetUrl);
     return { action: "deny" };
   });
@@ -621,7 +635,7 @@ mainWindow.webContents.setWindowOpenHandler(({ url: targetUrl }) => {
 
 // ---- App lifecycle ----
 
-const gotLock = app.requestSingleInstanceLock();
+const gotLock = isPrintAgent ? true : app.requestSingleInstanceLock();
 if (!gotLock) {
   app.quit();
 } else {
@@ -634,6 +648,12 @@ if (!gotLock) {
 
   app.whenReady().then(async () => {
     ensureDirs();
+    if (isPrintAgent) {
+      await createPrintAgentWindow();
+      startLocalPrintServer();
+      console.log("Bomba Print Agent listening on http://127.0.0.1:9100");
+      return;
+    }
     const { config, secrets } = loadOrCreateConfig();
     const port = config.port || 5000;
     localBackendPort = port;
