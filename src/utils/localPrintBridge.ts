@@ -56,20 +56,30 @@ const printThroughAgent = async (
   return result?.success === true;
 };
 
-const printThroughDesktopFallback = async (html: string, printerName?: string): Promise<boolean> => {
+const printThroughDesktopFallback = async (html: string, printerName?: string, options: { paperWidthMm?: number } = {}): Promise<boolean> => {
   const desktopApi = typeof window !== 'undefined'
     ? (window as Window & {
         bombaDesktop?: {
-          directPrint?: (content: string, targetPrinter?: string) => Promise<{ success?: boolean }>;
+          directPrint?: (content: string, targetPrinter?: string, options?: { paperWidthMm?: number }) => Promise<{ success?: boolean }>;
         };
       }).bombaDesktop
     : undefined;
   if (!desktopApi?.directPrint) return false;
-  const result = await desktopApi.directPrint(html, printerName);
+  const result = await desktopApi.directPrint(html, printerName, options);
   return result?.success === true;
 };
 
 let printQueue: Promise<boolean> = Promise.resolve(true);
+const recentPrints = new Map<string, number>();
+
+const getPrintKey = (html: string, printerName?: string): string => {
+  let hash = 0;
+  const value = `${printerName || ''}|${html}`;
+  for (let index = 0; index < value.length; index += 1) {
+    hash = ((hash << 5) - hash + value.charCodeAt(index)) | 0;
+  }
+  return String(hash);
+};
 
 const runPrintJob = async (
   html: string,
@@ -80,7 +90,7 @@ const runPrintJob = async (
     if (await printThroughAgent(html, printerName, options)) return true;
   } catch (agentError) {
     try {
-      if (await printThroughDesktopFallback(html, printerName)) return true;
+      if (await printThroughDesktopFallback(html, printerName, options)) return true;
     } catch (desktopError) {
       console.warn('Silent print agent and desktop print fallback failed:', desktopError);
     }
@@ -94,6 +104,14 @@ export const printThroughLocalBridge = (
   printerName?: string,
   options: { openDrawer?: boolean; cutPaper?: boolean; paperWidthMm?: number; drawerMode?: 'bill' | 'payment'; organization?: unknown } = {}
 ): Promise<boolean> => {
+  const printKey = getPrintKey(html, printerName);
+  const now = Date.now();
+  const previousPrint = recentPrints.get(printKey);
+  if (previousPrint && now - previousPrint < 3000) return true;
+  recentPrints.set(printKey, now);
+  for (const [key, timestamp] of recentPrints) {
+    if (now - timestamp >= 3000) recentPrints.delete(key);
+  }
   const job = printQueue.then(
     () => runPrintJob(html, printerName, options),
     () => runPrintJob(html, printerName, options)

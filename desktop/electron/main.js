@@ -51,6 +51,7 @@ async function waitForPrintResources(printWindow) {
         failedImages: images
           .filter((image) => !image.complete || image.naturalWidth === 0)
           .map((image) => image.src || image.alt || "unknown image"),
+        contentHeight: Math.max(document.documentElement.scrollHeight, document.body.scrollHeight),
       };
     })();
   `, true);
@@ -125,6 +126,31 @@ async function sendPrinterPostCommands(printerName, { openDrawer = false, cutPap
 async function printHtmlSilently(html, requestedPrinterName, paperWidthMm = 80) {
   let printWindow = null;
   try {
+    const normalizedPaperWidthMm = Math.max(58, Math.min(150, Number(paperWidthMm) || 80));
+    const printCss = `
+      <style id="bomba-agent-print-layout">
+        @page { size: ${normalizedPaperWidthMm}mm auto; margin: 0 !important; }
+        html, body {
+          width: ${normalizedPaperWidthMm}mm !important;
+          min-width: ${normalizedPaperWidthMm}mm !important;
+          max-width: ${normalizedPaperWidthMm}mm !important;
+          margin: 0 !important;
+          padding: 0 !important;
+          overflow: visible !important;
+        }
+        body { box-sizing: border-box !important; }
+        table, thead, tbody, tr, th, td, div, img {
+          max-width: 100% !important;
+          box-sizing: border-box !important;
+        }
+        table { width: 100% !important; table-layout: fixed !important; }
+        th, td { overflow-wrap: anywhere !important; word-break: break-word !important; }
+        .footer, .thank-you, .qr-section { break-inside: avoid !important; page-break-inside: avoid !important; }
+      </style>
+    `;
+    const printableHtml = /<\/head>/i.test(html)
+      ? html.replace(/<\/head>/i, `${printCss}</head>`)
+      : `${printCss}${html}`;
     const printers = await mainWindow?.webContents?.getPrintersAsync();
     const virtualPrinterNames = ["Microsoft Print to PDF", "Microsoft XPS", "OneNote", "Fax", "PDF24", "Adobe PDF", "Send To OneNote 2016"];
     const physicalPrinters = (printers || []).filter((printer) =>
@@ -142,17 +168,21 @@ async function printHtmlSilently(html, requestedPrinterName, paperWidthMm = 80) 
       useContentSize: true,
       // Keep the render viewport wide enough for common 58/76/80/90mm
       // profiles; the Windows printer profile controls the final paper width.
-      width: Math.round(Math.max(58, Math.min(150, paperWidthMm)) * 3.78),
+      width: Math.round(normalizedPaperWidthMm * 3.78),
       height: 2400,
       backgroundColor: "#ffffff",
       webPreferences: { contextIsolation: true, sandbox: true, javascript: true },
       parent: mainWindow || undefined,
     });
-    await printWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
+    await printWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(printableHtml)}`);
     const resources = await waitForPrintResources(printWindow);
     if (resources?.failedImages?.length) {
       return { success: false, message: "Print content contains images that failed to load", failedImages: resources.failedImages };
     }
+    const widthMicrons = Math.round(normalizedPaperWidthMm * 1000);
+    const heightMicrons = Math.max(100000, Math.min(2000000, Math.round(
+      (resources?.contentHeight || 2400) * 25400 / 96
+    )));
     const printed = await new Promise((resolve) => {
       printWindow.webContents.print({
         silent: true,
@@ -160,6 +190,7 @@ async function printHtmlSilently(html, requestedPrinterName, paperWidthMm = 80) 
         printBackground: true,
         deviceName: printerName,
         margins: { marginType: "none" },
+        pageSize: { width: widthMicrons, height: heightMicrons },
       }, (success, failureReason) => resolve({ success, failureReason }));
     });
     return printed.success
@@ -706,6 +737,30 @@ mainWindow.webContents.setWindowOpenHandler(({ url: targetUrl }) => {
         return { success: false, message: 'No physical printer detected' };
       }
 
+      const paperWidthMm = Math.max(58, Math.min(150, Number(data.paperWidthMm) || 80));
+      const printCss = `
+        <style id="bomba-fallback-print-layout">
+          @page { size: ${paperWidthMm}mm auto; margin: 0 !important; }
+          html, body {
+            width: ${paperWidthMm}mm !important;
+            min-width: ${paperWidthMm}mm !important;
+            max-width: ${paperWidthMm}mm !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            overflow: visible !important;
+          }
+          table, thead, tbody, tr, th, td, div, img {
+            max-width: 100% !important;
+            box-sizing: border-box !important;
+          }
+          table { width: 100% !important; table-layout: fixed !important; }
+          th, td { overflow-wrap: anywhere !important; word-break: break-word !important; }
+        </style>
+      `;
+      const printableHtml = /<\/head>/i.test(data.html)
+        ? data.html.replace(/<\/head>/i, `${printCss}</head>`)
+        : `${printCss}${data.html}`;
+
       // Use the exact same HTML/CSS as browser print, but hidden and silent:
       // this keeps the same receipt layout while avoiding the preview popup.
       printWindow = new BrowserWindow({
@@ -724,11 +779,15 @@ mainWindow.webContents.setWindowOpenHandler(({ url: targetUrl }) => {
         },
         parent: mainWindow || undefined
       });
-      await printWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(data.html)}`);
+      await printWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(printableHtml)}`);
       const resources = await waitForPrintResources(printWindow);
       if (resources?.failedImages?.length) {
         return { success: false, message: "Print content contains images that failed to load", failedImages: resources.failedImages };
       }
+      const widthMicrons = Math.round(paperWidthMm * 1000);
+      const heightMicrons = Math.max(100000, Math.min(2000000, Math.round(
+        (resources?.contentHeight || 2400) * 25400 / 96
+      )));
 
       const printed = await new Promise((resolve) => {
         printWindow.webContents.print({
@@ -737,6 +796,7 @@ mainWindow.webContents.setWindowOpenHandler(({ url: targetUrl }) => {
           deviceName: printerName,
           preview: false,
           margins: { marginType: 'none' },
+          pageSize: { width: widthMicrons, height: heightMicrons },
           // Let the selected printer/driver provide its configured paper size.
         }, (success, failureReason) => resolve({ success, failureReason }));
       });
