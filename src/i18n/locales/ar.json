@@ -2139,6 +2139,12 @@
   },
   "orderPrint": {
     "chooseSections": "اختيار أقسام الطلب للطباعة",
+    "chooseSectionsHint": "حدد الأقسام التي تريد طباعتها",
+    "selectAll": "تحديد كل الأقسام",
+    "clearAll": "إلغاء تحديد الكل",
+    "defaultOrderPrintSections": "الأقسام الافتراضية للطباعة",
+    "defaultOrderPrintSectionsDesc": "اختر الأقسام التي تكون محددة تلقائيًا عند طباعة الطلب",
+    "autoPrintOrderSections": "الطباعة مباشرة بالأقسام الافتراضية بدون نافذة",
     "printSelected": "طباعة الأقسام المحددة",
     "title": "طلب رقم",
     "table": "الطاولة",

@@ -1834,14 +1834,21 @@ const loadInitialData = async () => {
       }
     });
     const sections = Array.from(sectionMap, ([id, name]) => ({ id, name }));
-    let prompt = user?.organization?.printSettings?.promptOrderPrintSections === true;
-    if (!prompt) {
-      const organizationResponse = await api.getOrganization().catch(() => null);
-      prompt = organizationResponse?.success === true &&
-        organizationResponse.data?.printSettings?.promptOrderPrintSections === true;
+    const organizationResponse = await api.getOrganization().catch(() => null);
+    const printSettings = organizationResponse?.success === true
+      ? organizationResponse.data?.printSettings
+      : user?.organization?.printSettings;
+    const defaultSections = (printSettings?.defaultOrderPrintSections || [])
+      .map((id: string) => String(id))
+      .filter((id: string) => sections.some(section => section.id === id));
+    const selectedDefaults = defaultSections.length > 0 ? defaultSections : sections.map(section => section.id);
+    const prompt = printSettings?.promptOrderPrintSections === true;
+    if (printSettings?.autoPrintOrderSections === true) {
+      await printOrder(normalizedOrder, menuSections, map, user?.organizationName || '', i18n.language, t, getTableSectionName(order.table), selectedDefaults);
+      return;
     }
     if (prompt && sections.length > 1) {
-      setSelectedOrderPrintSections(sections.map(section => section.id));
+      setSelectedOrderPrintSections(selectedDefaults);
       setOrderPrintSelection({ order: normalizedOrder, sectionIds: sections.map(section => section.id), sections });
       return;
     }
@@ -4141,14 +4148,27 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
 
       {orderPrintSelection && (
         <ModalPortal>
-          <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[300] p-4">
-            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md">
-              <div className="p-5 border-b border-gray-200 dark:border-gray-700">
-                <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100">{t('orderPrint.chooseSections')}</h3>
+          <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center z-[300] p-4">
+            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden border border-slate-200 dark:border-gray-700">
+              <div className="p-5 border-b border-gray-200 dark:border-gray-700 bg-gradient-to-r from-orange-50 to-white dark:from-gray-800 dark:to-gray-800">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100">{t('orderPrint.chooseSections')}</h3>
+                    <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{t('orderPrint.chooseSectionsHint')}</p>
+                  </div>
+                  <button onClick={() => setOrderPrintSelection(null)} className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 text-2xl leading-none" aria-label={t('common.cancel')}>×</button>
+                </div>
               </div>
-              <div className="p-5 space-y-3">
+              <div className="p-5">
+                <button
+                  onClick={() => setSelectedOrderPrintSections(current => current.length === orderPrintSelection.sections.length ? [] : orderPrintSelection.sections.map(section => section.id))}
+                  className="mb-3 w-full rounded-xl border border-orange-200 dark:border-orange-900/60 px-4 py-2.5 text-sm font-semibold text-orange-700 dark:text-orange-300 hover:bg-orange-50 dark:hover:bg-orange-900/20 transition-colors"
+                >
+                  {selectedOrderPrintSections.length === orderPrintSelection.sections.length ? t('orderPrint.clearAll') : t('orderPrint.selectAll')}
+                </button>
+                <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
                 {orderPrintSelection.sections.map(section => (
-                  <label key={section.id} className="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer">
+                  <label key={section.id} className="flex items-center gap-3 p-3.5 rounded-xl border border-gray-200 dark:border-gray-700 hover:border-orange-300 hover:bg-orange-50/60 dark:hover:bg-gray-700 cursor-pointer transition-colors">
                     <input
                       type="checkbox"
                       checked={selectedOrderPrintSections.includes(section.id)}
@@ -4160,10 +4180,11 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
                     <span className="text-lg text-gray-800 dark:text-gray-100">{section.name}</span>
                   </label>
                 ))}
+                </div>
               </div>
               <div className="p-5 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-3">
-                <button onClick={() => setOrderPrintSelection(null)} className="px-4 py-2 rounded-lg bg-gray-200 dark:bg-gray-700">{t('common.cancel')}</button>
-                <button onClick={confirmOrderPrintSections} disabled={selectedOrderPrintSections.length === 0} className="px-4 py-2 rounded-lg bg-orange-600 text-white disabled:opacity-50">{t('orderPrint.printSelected')}</button>
+                <button onClick={() => setOrderPrintSelection(null)} className="px-5 py-2.5 rounded-xl bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 font-medium">{t('common.cancel')}</button>
+                <button onClick={confirmOrderPrintSections} disabled={selectedOrderPrintSections.length === 0} className="px-5 py-2.5 rounded-xl bg-orange-600 hover:bg-orange-700 text-white font-semibold disabled:opacity-50 disabled:cursor-not-allowed">{t('orderPrint.printSelected')}</button>
               </div>
             </div>
           </div>

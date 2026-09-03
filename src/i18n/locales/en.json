@@ -2147,6 +2147,12 @@
   },
   "orderPrint": {
     "chooseSections": "Choose order sections to print",
+    "chooseSectionsHint": "Select the sections you want to print",
+    "selectAll": "Select all sections",
+    "clearAll": "Clear selection",
+    "defaultOrderPrintSections": "Default order print sections",
+    "defaultOrderPrintSectionsDesc": "Choose the sections selected automatically when printing an order",
+    "autoPrintOrderSections": "Print default sections directly without showing the dialog",
     "printSelected": "Print selected sections",
     "title": "Dial number",
     "table": "The table",

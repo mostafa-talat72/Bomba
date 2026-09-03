@@ -93,6 +93,8 @@ interface OrganizationData {
   printSettings: {
     printQRCode: boolean;
     promptOrderPrintSections?: boolean;
+    defaultOrderPrintSections?: string[];
+    autoPrintOrderSections?: boolean;
     printerType?: string;
     printerDevice?: string;
     printerIP?: string;
@@ -247,6 +249,7 @@ const Settings: FC = () => {
   const [availableManagers, setAvailableManagers] = useState<Manager[]>([]);
   const [selectedManagers, setSelectedManagers] = useState<string[]>([]);
   const [organizationLoading, setOrganizationLoading] = useState(true);
+  const [menuSections, setMenuSections] = useState<Array<{ _id?: string; id?: string; name: string }>>([]);
 
   // Payroll settings state
   const [payrollSettings, setPayrollSettings] = useState({
@@ -387,6 +390,8 @@ const Settings: FC = () => {
               ...orgData.printSettings,
             },
           }));
+          const sectionsResponse = await api.getMenuSections();
+          if (sectionsResponse.success && sectionsResponse.data) setMenuSections(sectionsResponse.data);
         }
 
         // Load permissions
@@ -1829,6 +1834,31 @@ const Settings: FC = () => {
                             className="sr-only peer"
                           />
                           <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-orange-300 dark:peer-focus:ring-orange-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-orange-600"></div>
+                        </label>
+                      </div>
+
+                      <div className="mt-4 rounded-xl border border-orange-200 dark:border-gray-700 p-4">
+                        <h4 className="text-base font-semibold text-gray-900 dark:text-gray-100">{t('settings.organization.printSettings.defaultOrderPrintSections', 'الأقسام الافتراضية لطباعة الطلب')}</h4>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{t('settings.organization.printSettings.defaultOrderPrintSectionsDesc', 'اختر الأقسام التي تكون محددة تلقائيًا عند طباعة الطلب')}</p>
+                        <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          {menuSections.map(section => {
+                            const sectionId = String(section._id || section.id);
+                            const selected = organization.printSettings?.defaultOrderPrintSections?.includes(sectionId) === true;
+                            return (
+                              <label key={sectionId} className="flex items-center gap-2 rounded-lg border border-gray-200 dark:border-gray-700 p-2 cursor-pointer">
+                                <input type="checkbox" checked={selected} onChange={() => setOrganization(prev => {
+                                  const current = prev.printSettings?.defaultOrderPrintSections || [];
+                                  const next = selected ? current.filter(id => id !== sectionId) : [...current, sectionId];
+                                  return { ...prev, printSettings: { ...prev.printSettings, defaultOrderPrintSections: next } };
+                                })} />
+                                <span className="text-sm text-gray-800 dark:text-gray-200">{section.name}</span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                        <label className="mt-4 flex items-center gap-2 text-sm text-gray-700 dark:text-gray-200 cursor-pointer">
+                          <input type="checkbox" checked={organization.printSettings?.autoPrintOrderSections ?? false} onChange={e => setOrganization(prev => ({ ...prev, printSettings: { ...prev.printSettings, autoPrintOrderSections: e.target.checked } }))} />
+                          {t('settings.organization.printSettings.autoPrintOrderSections', 'الطباعة مباشرة بالأقسام الافتراضية بدون نافذة')}
                         </label>
                       </div>
 
