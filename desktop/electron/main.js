@@ -45,6 +45,8 @@ async function waitForPrintResources(printWindow) {
       document.body.style.width = "100%";
       document.body.style.maxWidth = "100%";
       document.body.style.margin = "0";
+      document.body.style.position = "relative";
+      document.body.style.left = "-4mm";
       document.body.style.paddingLeft = "2mm";
       document.body.style.paddingRight = "2mm";
       document.body.style.boxSizing = "border-box";
@@ -173,6 +175,8 @@ async function printHtmlSilently(html, requestedPrinterName, paperWidthMm = 80) 
           overflow: visible !important;
           white-space: normal !important;
           direction: ltr !important;
+          position: relative !important;
+          left: -4mm !important;
         }
         body > * { direction: rtl !important; }
         body {
@@ -183,6 +187,8 @@ async function printHtmlSilently(html, requestedPrinterName, paperWidthMm = 80) 
           flex-direction: column !important;
           align-items: stretch !important;
           direction: ltr !important;
+          position: relative !important;
+          left: -4mm !important;
         }
         body > * {
           width: 100% !important;
