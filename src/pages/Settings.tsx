@@ -95,7 +95,7 @@ interface OrganizationData {
     promptOrderPrintSections?: boolean;
     defaultOrderPrintSections?: string[];
     autoPrintOrderSections?: boolean;
-    printers?: Array<{ id: string; name: string; printerName: string; printerPath?: string }>;
+    printers?: Array<{ id: string; name: string; printerName: string; printerPath?: string; paperWidthMm?: number }>;
     sectionPrinterMap?: Record<string, string>;
     documentPrinterMap?: Record<string, string>;
     printerType?: string;
@@ -1736,7 +1736,11 @@ const Settings: FC = () => {
                             <div className="mt-3 space-y-2">
                               {(organization.printSettings?.printers || []).map(printer => (
                                 <div key={printer.id} className="flex items-center justify-between rounded-lg bg-gray-50 dark:bg-gray-700 p-2">
-                                  <span className="text-sm text-gray-800 dark:text-gray-100">{printer.name}</span>
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-sm text-gray-800 dark:text-gray-100">{printer.name}</span>
+                                    <input type="number" min={30} max={150} step={1} value={printer.paperWidthMm || 80} aria-label={`عرض ورق ${printer.name} بالملليمتر`} onChange={e => setOrganization(prev => ({ ...prev, printSettings: { ...prev.printSettings, printers: (prev.printSettings?.printers || []).map(item => item.id === printer.id ? { ...item, paperWidthMm: Number(e.target.value) || 80 } : item) } }))} className="w-20 rounded border border-gray-300 p-1 text-xs" />
+                                    <span className="text-xs text-gray-500">مم</span>
+                                  </div>
                                   <button type="button" className="text-xs text-red-600" onClick={() => setOrganization(prev => ({ ...prev, printSettings: { ...prev.printSettings, printers: (prev.printSettings?.printers || []).filter(item => item.id !== printer.id) } }))}>إزالة</button>
                                 </div>
                               ))}
@@ -1744,7 +1748,7 @@ const Settings: FC = () => {
                                 const id = String(printer.path || printer.name);
                                 const exists = organization.printSettings?.printers?.some(item => item.id === id);
                                 return exists ? null : (
-                                  <button key={id} type="button" className="w-full rounded-lg border border-dashed border-orange-300 p-2 text-sm text-orange-700 hover:bg-orange-50 text-right" onClick={() => setOrganization(prev => ({ ...prev, printSettings: { ...prev.printSettings, printers: [...(prev.printSettings?.printers || []), { id, name: printer.name, printerName: printer.name, printerPath: printer.path || '' }] } }))}>
+                                  <button key={id} type="button" className="w-full rounded-lg border border-dashed border-orange-300 p-2 text-sm text-orange-700 hover:bg-orange-50 text-right" onClick={() => setOrganization(prev => ({ ...prev, printSettings: { ...prev.printSettings, printers: [...(prev.printSettings?.printers || []), { id, name: printer.name, printerName: printer.name, printerPath: printer.path || '', paperWidthMm: 80 }] } }))}>
                                     + إضافة {printer.name}
                                   </button>
                                 );

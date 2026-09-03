@@ -750,9 +750,11 @@ export const printBill = async (
   const billPrinterId = printSettings?.documentPrinterMap?.bill;
   const billProfile = printSettings?.printers?.find((item: any) => item.id === billPrinterId);
   const selectedPrinterName = printerName || billProfile?.printerName || savedPrinter?.data?.printerName || savedPrinter?.data?.name;
+  const paperWidthMm = billProfile?.paperWidthMm || 80;
   const organization = typeof bill.organization === 'object' ? bill.organization : undefined;
   const settingName = drawerMode === 'payment' ? 'openCashDrawerOnPayment' : 'openCashDrawer';
   const bridgePrinted = await printThroughLocalBridge(receiptHTML, selectedPrinterName, {
+    paperWidthMm,
     openDrawer: organization?.printSettings?.[settingName] !== false,
     drawerMode,
     organization: bill.organization,

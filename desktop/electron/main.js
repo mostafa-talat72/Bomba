@@ -35,7 +35,7 @@ const dataDir = path.join(userDataDir, "data");
 const configPath = path.join(userDataDir, "config.json");
 const logPath = path.join(userDataDir, "server.log");
 
-async function printHtmlSilently(html, requestedPrinterName) {
+async function printHtmlSilently(html, requestedPrinterName, paperWidthMm = 80) {
   let printWindow = null;
   try {
     const printers = await mainWindow?.webContents?.getPrintersAsync();
@@ -52,6 +52,11 @@ async function printHtmlSilently(html, requestedPrinterName) {
     printWindow = new BrowserWindow({
       show: false,
       skipTaskbar: true,
+      useContentSize: true,
+      // Keep the render viewport wide enough for common 58/76/80/90mm
+      // profiles; the Windows printer profile controls the final paper width.
+      width: Math.round(Math.max(58, Math.min(150, paperWidthMm)) * 3.78),
+      height: 2400,
       backgroundColor: "#ffffff",
       webPreferences: { contextIsolation: true, sandbox: true, javascript: false },
       parent: mainWindow || undefined,
@@ -94,7 +99,7 @@ function startLocalPrintServer() {
     request.on("end", async () => {
       try {
         const payload = JSON.parse(body);
-        const result = await printHtmlSilently(payload.html, payload.printerName);
+        const result = await printHtmlSilently(payload.html, payload.printerName, payload.paperWidthMm);
         if (result.success && payload.openDrawer && !isPrintAgent) {
           const drawerResponse = await fetch(`http://127.0.0.1:${localBackendPort}/api/print/cash-drawer/auto-detect`, {
             method: "POST",
@@ -598,6 +603,9 @@ mainWindow.webContents.setWindowOpenHandler(({ url: targetUrl }) => {
         show: false,
         skipTaskbar: true,
         autoHideMenuBar: true,
+        useContentSize: true,
+        width: 480,
+        height: 2400,
         backgroundColor: '#ffffff',
         webPreferences: {
           contextIsolation: true,

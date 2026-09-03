@@ -135,6 +135,7 @@ const OrganizationSchema = new mongoose.Schema({
             name: { type: String, required: true },
             printerName: { type: String, required: true },
             printerPath: { type: String, default: '' },
+            paperWidthMm: { type: Number, default: 80, min: 30, max: 150 },
         }],
         sectionPrinterMap: { type: Map, of: String, default: {} },
         documentPrinterMap: { type: Map, of: String, default: {} },

@@ -1832,7 +1832,7 @@ const loadInitialData = async () => {
     for (const [printerId, sectionIds] of groups.entries()) {
       const profile = profiles.find((item: any) => item.id === printerId);
       for (const sectionId of sectionIds) {
-        await printOrder(order, menuSections, map, user?.organizationName || '', i18n.language, t, getTableSectionName(tableForOrder || order.table), [sectionId], profile?.printerName);
+        await printOrder(order, menuSections, map, user?.organizationName || '', i18n.language, t, getTableSectionName(tableForOrder || order.table), [sectionId], profile?.printerName, profile?.paperWidthMm);
       }
     }
   };

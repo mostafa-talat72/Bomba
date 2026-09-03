@@ -49,7 +49,7 @@ export interface User {
       promptOrderPrintSections?: boolean;
       defaultOrderPrintSections?: string[];
       autoPrintOrderSections?: boolean;
-      printers?: Array<{ id: string; name: string; printerName: string; printerPath?: string }>;
+      printers?: Array<{ id: string; name: string; printerName: string; printerPath?: string; paperWidthMm?: number }>;
       sectionPrinterMap?: Record<string, string>;
       documentPrinterMap?: Record<string, string>;
     };
@@ -295,7 +295,7 @@ export interface Bill {
       printFooter?: boolean;
       autoCut?: boolean;
       printQRCode?: boolean;
-      printers?: Array<{ id: string; name: string; printerName: string; printerPath?: string }>;
+      printers?: Array<{ id: string; name: string; printerName: string; printerPath?: string; paperWidthMm?: number }>;
       sectionPrinterMap?: Record<string, string>;
       documentPrinterMap?: Record<string, string>;
     };
