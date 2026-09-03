@@ -2496,7 +2496,8 @@ const sessionController = {
             }
 
             // Get session's bill
-            const sessionBill = await Bill.findById(session.bill);
+            const sessionBillId = session.bill?._id || session.bill;
+            const sessionBill = await Bill.findById(sessionBillId);
             
             if (!sessionBill) {
                 return res.status(404).json({
@@ -2929,7 +2930,8 @@ const sessionController = {
             }
 
             // Get session's current bill
-            const currentBill = await Bill.findById(session.bill);
+            const currentBillId = session.bill?._id || session.bill;
+            const currentBill = await Bill.findById(currentBillId);
             
             if (!currentBill) {
                 return res.status(404).json({
