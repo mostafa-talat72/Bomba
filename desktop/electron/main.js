@@ -93,7 +93,17 @@ async function printHtmlSilently(html, requestedPrinterName, paperWidthMm = 80) 
 
 function startLocalPrintServer() {
   localPrintServer = http.createServer(async (request, response) => {
-    response.setHeader("Access-Control-Allow-Origin", "*");
+    const requestOrigin = request.headers.origin;
+    const allowedOrigins = new Set([
+      "http://127.0.0.1:3000",
+      "http://localhost:3000",
+      `http://127.0.0.1:${localBackendPort}`,
+      `http://localhost:${localBackendPort}`,
+    ]);
+    if (requestOrigin && allowedOrigins.has(requestOrigin)) {
+      response.setHeader("Access-Control-Allow-Origin", requestOrigin);
+      response.setHeader("Vary", "Origin");
+    }
     response.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
     response.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
     if (request.method === "OPTIONS") {
@@ -107,12 +117,20 @@ function startLocalPrintServer() {
       return;
     }
     let body = "";
-    request.on("data", (chunk) => { body += chunk; });
+    let oversized = false;
+    request.on("data", (chunk) => {
+      body += chunk;
+      if (body.length > 5 * 1024 * 1024) oversized = true;
+    });
     request.on("end", async () => {
       try {
+        if (oversized) throw new Error("Printable content is too large");
         const payload = JSON.parse(body);
+        if (typeof payload.html !== "string" || payload.html.length === 0) {
+          throw new Error("Printable HTML is required");
+        }
         const result = await printHtmlSilently(payload.html, payload.printerName, payload.paperWidthMm);
-        if (result.success && payload.openDrawer && !isPrintAgent) {
+        if (result.success && payload.openDrawer) {
           const drawerResponse = await fetch(`http://127.0.0.1:${localBackendPort}/api/print/cash-drawer/auto-detect`, {
             method: "POST",
             headers: {
@@ -127,6 +145,21 @@ function startLocalPrintServer() {
           if (!drawerResponse.ok) {
             response.writeHead(503, { "Content-Type": "application/json" });
             response.end(JSON.stringify({ success: false, message: "Cash drawer command failed" }));
+            return;
+          }
+        }
+        if (result.success && payload.cutPaper) {
+          const cutResponse = await fetch(`http://127.0.0.1:${localBackendPort}/api/print/cut-paper`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              ...(request.headers.authorization ? { Authorization: request.headers.authorization } : {}),
+            },
+            body: JSON.stringify({ organization: payload.organization }),
+          });
+          if (!cutResponse.ok) {
+            response.writeHead(503, { "Content-Type": "application/json" });
+            response.end(JSON.stringify({ success: false, message: "Paper cut command failed", printed: true }));
             return;
           }
         }

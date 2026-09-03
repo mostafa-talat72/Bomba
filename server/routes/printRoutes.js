@@ -21,6 +21,7 @@ router.post('/device', (req,res)=>printController.saveDevicePrinter(req,res));
 router.get('/device', (req,res)=>printController.getDevicePrinter(req,res));
 router.post('/auto-detect', (req,res)=>printController.autoDetectPrinter(req,res));
 router.post('/open-cash-drawer', (req,res)=>printController.openCashDrawerOnly(req,res));
+router.post('/cut-paper', (req,res)=>printController.cutPaperOnly(req,res));
 router.post('/bill/auto-detect', (req,res)=>printController.autoDetectAndPrintBill(req,res));
 router.post('/order/auto-detect', (req,res)=>printController.autoDetectAndPrintOrder(req,res));
 router.post('/cash-drawer/auto-detect', (req,res)=>printController.autoDetectAndOpenCashDrawer(req,res));
