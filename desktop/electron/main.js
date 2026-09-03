@@ -76,7 +76,7 @@ async function printHtmlSilently(html, requestedPrinterName) {
 function startLocalPrintServer() {
   localPrintServer = http.createServer(async (request, response) => {
     response.setHeader("Access-Control-Allow-Origin", "*");
-    response.setHeader("Access-Control-Allow-Headers", "Content-Type");
+    response.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
     response.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
     if (request.method === "OPTIONS") {
       response.writeHead(204);
