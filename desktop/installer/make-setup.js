@@ -178,6 +178,7 @@ Section "Install"
   CreateShortcut "$DESKTOP\\${APP_NAME}.lnk" "$INSTDIR\\${APP_NAME}.exe"
   CreateDirectory "$SMPROGRAMS\\${APP_NAME}"
   CreateShortcut "$SMPROGRAMS\\${APP_NAME}\\${APP_NAME}.lnk" "$INSTDIR\\${APP_NAME}.exe"
+  CreateShortcut "$SMPROGRAMS\\${APP_NAME}\\Bomba Print Agent.lnk" "$INSTDIR\\${APP_NAME}.exe" "--print-agent"
   CreateShortcut "$SMPROGRAMS\\${APP_NAME}\\Uninstall ${APP_NAME}.lnk" "$INSTDIR\\Uninstall.exe"
 SectionEnd
 
@@ -185,6 +186,7 @@ SectionEnd
 Section "Uninstall"
   Delete "$DESKTOP\\${APP_NAME}.lnk"
   Delete "$SMPROGRAMS\\${APP_NAME}\\${APP_NAME}.lnk"
+  Delete "$SMPROGRAMS\\${APP_NAME}\\Bomba Print Agent.lnk"
   Delete "$SMPROGRAMS\\${APP_NAME}\\Uninstall ${APP_NAME}.lnk"
   RMDir "$SMPROGRAMS\\${APP_NAME}"
 
