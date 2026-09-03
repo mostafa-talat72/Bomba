@@ -240,61 +240,53 @@ const ConsumptionReport = () => {
     ordersToProcess.forEach((order) => {
       if (!order.items || !Array.isArray(order.items)) return;
 
-      order.items.forEach((item) => {
-        if (!item.name) return;
+      order.items.forEach((item: any) => {
+        if (!item?.name) return;
 
-        // البحث عن MenuItem - أولاً بـ ID إذا كان متوفراً، ثم بالاسم كـ fallback
-        let menuItem: any = null;
-        
-        // إذا كان العنصر يحتوي على menuItemId، استخدمه
-        if ((item as any).menuItemId) {
-          menuItem = menuItems.find((m) => m._id === (item as any).menuItemId || m.id === (item as any).menuItemId);
-        }
-        
-        // Fallback: البحث بالاسم (للتوافق مع البيانات القديمة)
-        if (!menuItem && item.name) {
-          menuItem = menuItems.find((m) => m.name === item.name);
-        }
-        
-        if (!menuItem) return;
+        const itemPrice = Number(item.price ?? ((Number(item.itemTotal) || 0) / (Number(item.quantity) || 1))) || 0;
+        const itemQuantity = Number(item.quantity) || 0;
+        if (itemQuantity <= 0 || itemPrice < 0) return;
 
-        // Get the section name from the menu item's category
+        const menuId = item.menuItemId || item.menuItem || null;
+        const variant = item.variant || 'default';
+        const normalizedVariant = typeof variant === 'string' && variant.trim() ? variant : 'default';
+        const keyBase = menuId ? String(menuId) : String(item.name || 'unknown');
+        const key = `${keyBase}|${normalizedVariant}`;
+
         let sectionName = 'أخرى';
-        if (menuItem.category) {
-          const categoryObj = typeof menuItem.category === 'string' 
-            ? null 
-            : menuItem.category;
-          
-          if (categoryObj && categoryObj.section) {
-            const sectionObj = typeof categoryObj.section === 'string'
-              ? menuSections.find(s => s._id === categoryObj.section || s.id === categoryObj.section)
-              : categoryObj.section;
-            
-            if (sectionObj) {
-              sectionName = sectionObj.name;
+        if (menuId) {
+          const menuItem = menuItems.find((m) => String(m._id) === String(menuId) || String((m as any).id) === String(menuId));
+          if (menuItem) {
+            if (menuItem.category) {
+              const categoryObj = typeof menuItem.category === 'string' ? null : menuItem.category;
+
+              if (categoryObj && categoryObj.section) {
+                const sectionObj = typeof categoryObj.section === 'string'
+                  ? menuSections.find(s => String(s._id) === String(categoryObj.section) || String((s as any).id) === String(categoryObj.section))
+                  : categoryObj.section;
+
+                if (sectionObj) {
+                  sectionName = sectionObj.name;
+                }
+              }
             }
           }
         }
-
-        const itemPrice = Number(item.price) || 0;
-        const itemQuantity = Number(item.quantity) || 0;
-        const variant = (item as any).variant || null;
-        const variantText = variant && variant !== 'عادي' ? ` (${variant})` : '';
-        const displayName = `${item.name}${variantText}`;
-        const key = `${item.name}|${variant || ''}`;
 
         if (!itemsBySection[sectionName]) {
           itemsBySection[sectionName] = [];
         }
 
-        const existingItem = itemsBySection[sectionName].find(i => (i as any).key === key);
+        const existingItem = itemsBySection[sectionName].find((i: any) => i.key === key);
         if (existingItem) {
           existingItem.quantity += itemQuantity;
-          existingItem.total = existingItem.quantity * existingItem.price;
+          existingItem.total += itemPrice * itemQuantity;
+          existingItem.price = existingItem.total / existingItem.quantity;
         } else {
+          const variantText = normalizedVariant && normalizedVariant !== 'default' ? ` (${normalizedVariant})` : '';
           itemsBySection[sectionName].push({
-            id: (item as any)._id || Math.random().toString(),
-            name: displayName,
+            id: item._id || item.id || `${key}-${Math.random().toString(16).slice(2)}`,
+            name: `${item.name}${variantText}`,
             price: itemPrice,
             quantity: itemQuantity,
             total: itemPrice * itemQuantity,
