@@ -31,7 +31,7 @@ const printInBrowser = (html: string): boolean => {
   return true;
 };
 
-export const printThroughLocalBridge = async (
+const printThroughLocalBridgeNow = async (
   html: string,
   printerName?: string,
   options: { openDrawer?: boolean; drawerMode?: 'bill' | 'payment'; organization?: unknown } = {}
@@ -66,4 +66,19 @@ export const printThroughLocalBridge = async (
     }
     return false;
   }
+};
+
+let printQueue: Promise<boolean> = Promise.resolve(true);
+
+export const printThroughLocalBridge = (
+  html: string,
+  printerName?: string,
+  options: { openDrawer?: boolean; drawerMode?: 'bill' | 'payment'; organization?: unknown } = {}
+): Promise<boolean> => {
+  const job = printQueue.then(
+    () => printThroughLocalBridgeNow(html, printerName, options),
+    () => printThroughLocalBridgeNow(html, printerName, options)
+  );
+  printQueue = job.catch(() => false);
+  return job;
 };

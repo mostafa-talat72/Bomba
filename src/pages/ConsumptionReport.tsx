@@ -772,7 +772,10 @@ const ConsumptionReport = () => {
       `;
 
       const savedPrinter = await api.getDevicePrinter().catch(() => null);
-      const printerName = savedPrinter?.data?.printerName || savedPrinter?.data?.name;
+      const organizationResponse = await api.getOrganization().catch(() => null);
+      const settings = organizationResponse?.success === true ? organizationResponse.data?.printSettings : undefined;
+      const profile = settings?.printers?.find((item: any) => item.id === settings?.documentPrinterMap?.consumptionReport);
+      const printerName = profile?.printerName || savedPrinter?.data?.printerName || savedPrinter?.data?.name;
       if (await printThroughLocalBridge(printContent, printerName)) {
         toast.success(t('consumptionReport.messages.printOpening'));
         return;

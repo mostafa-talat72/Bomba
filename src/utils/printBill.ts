@@ -740,14 +740,19 @@ export const printBill = async (
   language: string = 'ar',
   t: TFunction = ((key: string) => key) as TFunction,
   tableSectionName?: string,
-  drawerMode: 'bill' | 'payment' = 'bill'
+  drawerMode: 'bill' | 'payment' = 'bill',
+  printerName?: string
 ) => {
   const receiptHTML = await buildBillPrintHTML(bill, fallbackOrganizationName, language, t, tableSectionName);
   const savedPrinter = await api.getDevicePrinter().catch(() => null);
-  const printerName = savedPrinter?.data?.printerName || savedPrinter?.data?.name;
+  const settingsResponse = await api.getOrganization().catch(() => null);
+  const printSettings = settingsResponse?.success === true ? settingsResponse.data?.printSettings : undefined;
+  const billPrinterId = printSettings?.documentPrinterMap?.bill;
+  const billProfile = printSettings?.printers?.find((item: any) => item.id === billPrinterId);
+  const selectedPrinterName = printerName || billProfile?.printerName || savedPrinter?.data?.printerName || savedPrinter?.data?.name;
   const organization = typeof bill.organization === 'object' ? bill.organization : undefined;
   const settingName = drawerMode === 'payment' ? 'openCashDrawerOnPayment' : 'openCashDrawer';
-  const bridgePrinted = await printThroughLocalBridge(receiptHTML, printerName, {
+  const bridgePrinted = await printThroughLocalBridge(receiptHTML, selectedPrinterName, {
     openDrawer: organization?.printSettings?.[settingName] !== false,
     drawerMode,
     organization: bill.organization,

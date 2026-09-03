@@ -130,6 +130,14 @@ const OrganizationSchema = new mongoose.Schema({
         promptOrderPrintSections: { type: Boolean, default: false }, // اختيار أقسام الطلب قبل الطباعة
         defaultOrderPrintSections: { type: [String], default: [] }, // الأقسام الافتراضية للطباعة
         autoPrintOrderSections: { type: Boolean, default: false }, // الطباعة المباشرة بالأقسام الافتراضية
+        printers: [{
+            id: { type: String, required: true },
+            name: { type: String, required: true },
+            printerName: { type: String, required: true },
+            printerPath: { type: String, default: '' },
+        }],
+        sectionPrinterMap: { type: Map, of: String, default: {} },
+        documentPrinterMap: { type: Map, of: String, default: {} },
         charactersPerLine: { type: Number, default: 48 }, // عدد الأحرف في السطر
         printHeader: { type: Boolean, default: true }, // طباعة الرأس
         printFooter: { type: Boolean, default: true }, // طباعة التذييل
