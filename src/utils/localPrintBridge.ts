@@ -9,7 +9,7 @@ type QzTray = {
     find: (printer?: string) => Promise<string | string[]>;
   };
   configs: {
-    create: (printer: string) => unknown;
+    create: (printer: string, options?: unknown) => unknown;
   };
   print: (config: unknown, data: Array<{ type: string; format: string; flavor: string; data: string }>) => Promise<void>;
 };
@@ -37,9 +37,48 @@ const printThroughQzTray = async (html: string, printerName?: string): Promise<b
     : await qz.printers.find();
   const selectedPrinter = Array.isArray(resolvedPrinter) ? resolvedPrinter[0] : resolvedPrinter;
   if (!selectedPrinter) throw new Error('QZ Tray could not find a printer');
-  const config = qz.configs.create(selectedPrinter);
+  const config = qz.configs.create(selectedPrinter, {
+    size: { width: 80, height: 0 },
+    units: 'mm',
+    margins: 0,
+    // Let the HTML/CSS determine the layout; only the paper width comes from
+    // the printer profile.
+    scaleContent: false,
+  });
   await qz.print(config, [{ type: 'pixel', format: 'html', flavor: 'plain', data: html }]);
   return true;
+};
+
+const openCashDrawerThroughQzTray = async (printerName?: string): Promise<void> => {
+  const qz = await getQzTray();
+  if (!qz.websocket.isActive()) await qz.websocket.connect();
+  const resolvedPrinter = printerName
+    ? await qz.printers.find(printerName)
+    : await qz.printers.find();
+  const selectedPrinter = Array.isArray(resolvedPrinter) ? resolvedPrinter[0] : resolvedPrinter;
+  if (!selectedPrinter) throw new Error('QZ Tray could not find a printer for the cash drawer');
+  const config = qz.configs.create(selectedPrinter);
+  await qz.print(config, [{
+    type: 'raw',
+    format: 'command',
+    flavor: 'plain',
+    data: '\x1B\x70\x00\x19\xFA',
+  }]);
+};
+
+const cutPaperThroughQzTray = async (printerName?: string): Promise<void> => {
+  const qz = await getQzTray();
+  const resolvedPrinter = printerName
+    ? await qz.printers.find(printerName)
+    : await qz.printers.find();
+  const selectedPrinter = Array.isArray(resolvedPrinter) ? resolvedPrinter[0] : resolvedPrinter;
+  if (!selectedPrinter) throw new Error('QZ Tray could not find a printer for paper cutting');
+  await qz.print(qz.configs.create(selectedPrinter), [{
+    type: 'raw',
+    format: 'command',
+    flavor: 'plain',
+    data: '\x1D\x56\x00',
+  }]);
 };
 
 const printInBrowser = (html: string): boolean => {
@@ -76,15 +115,29 @@ const printInBrowser = (html: string): boolean => {
 const printThroughLocalBridgeNow = async (
   html: string,
   printerName?: string,
-  options: { openDrawer?: boolean; drawerMode?: 'bill' | 'payment'; organization?: unknown } = {}
+  options: { openDrawer?: boolean; cutPaper?: boolean; drawerMode?: 'bill' | 'payment'; organization?: unknown } = {}
 ): Promise<boolean> => {
   const desktopApi = typeof window !== 'undefined'
     ? (window as Window & { bombaDesktop?: { directPrint?: (html: string, printerName?: string) => Promise<{ success?: boolean }> } }).bombaDesktop
     : undefined;
   try {
-    // Keep drawer jobs on the existing bridge, which forwards the authenticated
-    // drawer command to the backend after the print has succeeded.
-    if (!options.openDrawer && await printThroughQzTray(html, printerName)) return true;
+    if (await printThroughQzTray(html, printerName)) {
+      if (options.cutPaper) {
+        try {
+          await cutPaperThroughQzTray(printerName);
+        } catch (cutError) {
+          console.error('Order printed, but QZ Tray could not cut the paper:', cutError);
+        }
+      }
+      if (options.openDrawer) {
+        try {
+          await openCashDrawerThroughQzTray(printerName);
+        } catch (drawerError) {
+          console.error('Receipt printed, but QZ Tray could not open the cash drawer:', drawerError);
+        }
+      }
+      return true;
+    }
   } catch (qzError) {
     console.warn('QZ Tray unavailable; using the local print bridge:', qzError);
   }
@@ -122,7 +175,7 @@ let printQueue: Promise<boolean> = Promise.resolve(true);
 export const printThroughLocalBridge = (
   html: string,
   printerName?: string,
-  options: { openDrawer?: boolean; drawerMode?: 'bill' | 'payment'; organization?: unknown } = {}
+  options: { openDrawer?: boolean; cutPaper?: boolean; drawerMode?: 'bill' | 'payment'; organization?: unknown } = {}
 ): Promise<boolean> => {
   const job = printQueue.then(
     () => printThroughLocalBridgeNow(html, printerName, options),

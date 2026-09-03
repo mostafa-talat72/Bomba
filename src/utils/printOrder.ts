@@ -282,7 +282,6 @@ const printAllSectionsInOnePage = (
             <tr>
               <th class="item-name">${t('orderPrint.item')}</th>
               <th class="item-qty">${t('orderPrint.quantity')}</th>
-              <th class="item-price">${t('orderPrint.total')}</th>
             </tr>
           </thead>
           <tbody>
@@ -293,14 +292,12 @@ const printAllSectionsInOnePage = (
               <tr>
                 <td class="item-name">${item.name}${variantText}${item.notes ? `<br><small>(${item.notes})</small>` : ''}</td>
                 <td class="item-qty"><strong>${formatDecimal(item.quantity, language)}</strong></td>
-                <td class="item-price"><strong>${formatDecimal(item.price * item.quantity, language)}</strong></td>
               </tr>
               ${item.addons && item.addons.length > 0 ?
                 item.addons.map(addon => `
                   <tr>
                     <td class="item-name" style="padding-${align}: 15px;">+ ${addon.name}</td>
                     <td class="item-qty"><strong>${formatDecimal(addon.quantity, language)}</strong></td>
-                    <td class="item-price"><strong>${formatDecimal(addon.price * addon.quantity, language)}</strong></td>
                   </tr>
                 `).join('') : ''
               }
@@ -342,6 +339,7 @@ html {
   width: 100%;
   max-width: 100%;
   overflow-x: hidden;
+  box-sizing: border-box;
 }
 
 @page {
@@ -463,11 +461,6 @@ body {
   font-size: 1.15em;
 }
 
-/* ===== HIDE PRICE COLUMN ONLY ===== */
-.item-price {
-  display: none !important;
-}
-
 /* ===== ITEM NOTES ===== */
 .item-notes {
   font-size: 0.85em;
@@ -551,7 +544,7 @@ export const printOrder = async (
   const printContent = await buildOrderPrintHTML(order, menuSections, menuItemsMap, fallbackOrganizationName, language, t, tableSectionName, selectedSectionIds);
   const savedPrinter = await api.getDevicePrinter().catch(() => null);
   const selectedPrinterName = printerName || savedPrinter?.data?.printerName || savedPrinter?.data?.name;
-  if (await printThroughLocalBridge(printContent, selectedPrinterName)) return;
+  if (await printThroughLocalBridge(printContent, selectedPrinterName, { cutPaper: true })) return;
   return;
 };
 
