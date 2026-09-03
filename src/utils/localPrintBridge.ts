@@ -1,5 +1,47 @@
 const LOCAL_PRINT_URL = 'http://127.0.0.1:9100/print';
 
+type QzTray = {
+  websocket: {
+    isActive: () => boolean;
+    connect: () => Promise<void>;
+  };
+  printers: {
+    find: (printer?: string) => Promise<string | string[]>;
+  };
+  configs: {
+    create: (printer: string) => unknown;
+  };
+  print: (config: unknown, data: Array<{ type: string; format: string; flavor: string; data: string }>) => Promise<void>;
+};
+
+let qzTrayPromise: Promise<QzTray> | null = null;
+
+const getQzTray = async (): Promise<QzTray> => {
+  if (!qzTrayPromise) {
+    qzTrayPromise = import('qz-tray').then((module) => {
+      const qz = (module.default || module) as QzTray;
+      if (!qz.websocket || !qz.configs || !qz.print) {
+        throw new Error('QZ Tray client is unavailable');
+      }
+      return qz;
+    });
+  }
+  return qzTrayPromise;
+};
+
+const printThroughQzTray = async (html: string, printerName?: string): Promise<boolean> => {
+  const qz = await getQzTray();
+  if (!qz.websocket.isActive()) await qz.websocket.connect();
+  const resolvedPrinter = printerName
+    ? await qz.printers.find(printerName)
+    : await qz.printers.find();
+  const selectedPrinter = Array.isArray(resolvedPrinter) ? resolvedPrinter[0] : resolvedPrinter;
+  if (!selectedPrinter) throw new Error('QZ Tray could not find a printer');
+  const config = qz.configs.create(selectedPrinter);
+  await qz.print(config, [{ type: 'pixel', format: 'html', flavor: 'plain', data: html }]);
+  return true;
+};
+
 const printInBrowser = (html: string): boolean => {
   if (typeof window === 'undefined' || typeof document === 'undefined') return false;
 
@@ -39,6 +81,13 @@ const printThroughLocalBridgeNow = async (
   const desktopApi = typeof window !== 'undefined'
     ? (window as Window & { bombaDesktop?: { directPrint?: (html: string, printerName?: string) => Promise<{ success?: boolean }> } }).bombaDesktop
     : undefined;
+  try {
+    // Keep drawer jobs on the existing bridge, which forwards the authenticated
+    // drawer command to the backend after the print has succeeded.
+    if (!options.openDrawer && await printThroughQzTray(html, printerName)) return true;
+  } catch (qzError) {
+    console.warn('QZ Tray unavailable; using the local print bridge:', qzError);
+  }
   if (!desktopApi) return printInBrowser(html);
   try {
     const token = typeof localStorage !== 'undefined' ? localStorage.getItem('token') : null;
