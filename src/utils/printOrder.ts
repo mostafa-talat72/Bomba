@@ -539,12 +539,13 @@ export const printOrder = async (
   t: TFunction = ((key: string) => key) as TFunction,
   tableSectionName?: string,
   selectedSectionIds?: string[],
-  printerName?: string
+  printerName?: string,
+  paperWidthMm?: number
 ) => {
   const printContent = await buildOrderPrintHTML(order, menuSections, menuItemsMap, fallbackOrganizationName, language, t, tableSectionName, selectedSectionIds);
   const savedPrinter = await api.getDevicePrinter().catch(() => null);
   const selectedPrinterName = printerName || savedPrinter?.data?.printerName || savedPrinter?.data?.name;
-  if (await printThroughLocalBridge(printContent, selectedPrinterName, { cutPaper: true })) return;
+  if (await printThroughLocalBridge(printContent, selectedPrinterName, { cutPaper: true, paperWidthMm })) return;
   return;
 };
 
