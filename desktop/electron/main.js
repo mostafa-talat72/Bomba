@@ -133,18 +133,16 @@ async function printHtmlSilently(html, requestedPrinterName, paperWidthMm = 80) 
       <style id="bomba-agent-print-layout">
         @page { size: ${normalizedPaperWidthMm}mm auto; margin: 0 !important; }
         html, body {
-          width: 100% !important;
+          width: ${normalizedPaperWidthMm}mm !important;
           min-width: 0 !important;
-          max-width: 100% !important;
+          max-width: ${normalizedPaperWidthMm}mm !important;
           margin: 0 auto !important;
-          padding: 0 !important;
+          padding: 0 2mm !important;
           overflow: visible !important;
         }
         body {
           box-sizing: border-box !important;
-          width: calc(100% - 8mm) !important;
-          margin-left: auto !important;
-          margin-right: auto !important;
+          width: ${normalizedPaperWidthMm}mm !important;
         }
         *, *::before, *::after { min-width: 0 !important; max-width: 100% !important; }
         .stats { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
@@ -153,8 +151,16 @@ async function printHtmlSilently(html, requestedPrinterName, paperWidthMm = 80) 
           max-width: 100% !important;
           box-sizing: border-box !important;
         }
-        table { width: 100% !important; table-layout: fixed !important; }
-        th, td { overflow-wrap: anywhere !important; word-break: break-word !important; }
+        table { width: 100% !important; max-width: 100% !important; table-layout: fixed !important; }
+        th, td {
+          min-width: 0 !important;
+          max-width: 100% !important;
+          padding: 1mm 0.5mm !important;
+          overflow: hidden !important;
+          overflow-wrap: anywhere !important;
+          word-break: break-word !important;
+          white-space: normal !important;
+        }
         .footer, .thank-you, .qr-section { break-inside: avoid !important; page-break-inside: avoid !important; }
       </style>
     `;
@@ -207,7 +213,6 @@ async function printHtmlSilently(html, requestedPrinterName, paperWidthMm = 80) 
         printBackground: true,
         deviceName: printerName,
         margins: { marginType: "none" },
-        scaleFactor: 90,
         pageSize: { width: widthMicrons, height: heightMicrons },
       }, (success, failureReason) => resolve({ success, failureReason }));
     });
@@ -769,24 +774,30 @@ mainWindow.webContents.setWindowOpenHandler(({ url: targetUrl }) => {
         <style id="bomba-fallback-print-layout">
           @page { size: ${paperWidthMm}mm auto; margin: 0 !important; }
           html, body {
-            width: 100% !important;
+            width: ${paperWidthMm}mm !important;
             min-width: 0 !important;
-            max-width: 100% !important;
+            max-width: ${paperWidthMm}mm !important;
             margin: 0 auto !important;
-            padding: 0 !important;
+            padding: 0 2mm !important;
             overflow: visible !important;
           }
           body {
-            width: calc(100% - 8mm) !important;
-            margin-left: auto !important;
-            margin-right: auto !important;
+            width: ${paperWidthMm}mm !important;
           }
           table, thead, tbody, tr, th, td, div, img {
             max-width: 100% !important;
             box-sizing: border-box !important;
           }
-          table { width: 100% !important; table-layout: fixed !important; }
-          th, td { overflow-wrap: anywhere !important; word-break: break-word !important; }
+          table { width: 100% !important; max-width: 100% !important; table-layout: fixed !important; }
+          th, td {
+            min-width: 0 !important;
+            max-width: 100% !important;
+            padding: 1mm 0.5mm !important;
+            overflow: hidden !important;
+            overflow-wrap: anywhere !important;
+            word-break: break-word !important;
+            white-space: normal !important;
+          }
         </style>
       `;
       const printableHtml = /<\/head>/i.test(data.html)
@@ -828,7 +839,6 @@ mainWindow.webContents.setWindowOpenHandler(({ url: targetUrl }) => {
           deviceName: printerName,
           preview: false,
           margins: { marginType: 'none' },
-          scaleFactor: 90,
           pageSize: { width: widthMicrons, height: heightMicrons },
           // Let the selected printer/driver provide its configured paper size.
         }, (success, failureReason) => resolve({ success, failureReason }));
