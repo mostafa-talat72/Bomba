@@ -136,11 +136,16 @@ async function printHtmlSilently(html, requestedPrinterName, paperWidthMm = 80) 
           width: 100% !important;
           min-width: 0 !important;
           max-width: 100% !important;
-          margin: 0 !important;
-          padding: 0 1.5mm !important;
+          margin: 0 auto !important;
+          padding: 0 !important;
           overflow: visible !important;
         }
-        body { box-sizing: border-box !important; }
+        body {
+          box-sizing: border-box !important;
+          width: calc(100% - 8mm) !important;
+          margin-left: auto !important;
+          margin-right: auto !important;
+        }
         *, *::before, *::after { min-width: 0 !important; max-width: 100% !important; }
         .stats { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
         .stat-card, .header, .footer { min-width: 0 !important; }
@@ -767,9 +772,14 @@ mainWindow.webContents.setWindowOpenHandler(({ url: targetUrl }) => {
             width: 100% !important;
             min-width: 0 !important;
             max-width: 100% !important;
-            margin: 0 !important;
-            padding: 0 1.5mm !important;
+            margin: 0 auto !important;
+            padding: 0 !important;
             overflow: visible !important;
+          }
+          body {
+            width: calc(100% - 8mm) !important;
+            margin-left: auto !important;
+            margin-right: auto !important;
           }
           table, thead, tbody, tr, th, td, div, img {
             max-width: 100% !important;
