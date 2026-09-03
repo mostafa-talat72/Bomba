@@ -1,5 +1,31 @@
 const LOCAL_PRINT_URL = 'http://127.0.0.1:9100/print';
 
+const printInBrowser = (html: string): boolean => {
+  if (typeof window === 'undefined' || typeof document === 'undefined') return false;
+
+  const frame = document.createElement('iframe');
+  frame.style.position = 'fixed';
+  frame.style.width = '0';
+  frame.style.height = '0';
+  frame.style.border = '0';
+  frame.style.visibility = 'hidden';
+  document.body.appendChild(frame);
+  const frameDocument = frame.contentDocument;
+  if (!frameDocument) {
+    frame.remove();
+    return false;
+  }
+  frameDocument.open();
+  frameDocument.write(html);
+  frameDocument.close();
+  frame.addEventListener('load', () => {
+    frame.contentWindow?.focus();
+    frame.contentWindow?.print();
+    window.setTimeout(() => frame.remove(), 1000);
+  }, { once: true });
+  return true;
+};
+
 export const printThroughLocalBridge = async (
   html: string,
   printerName?: string,
@@ -8,7 +34,7 @@ export const printThroughLocalBridge = async (
   const desktopApi = typeof window !== 'undefined'
     ? (window as Window & { bombaDesktop?: { directPrint?: (html: string, printerName?: string) => Promise<{ success?: boolean }> } }).bombaDesktop
     : undefined;
-  if (!desktopApi) return false;
+  if (!desktopApi) return printInBrowser(html);
   try {
     const token = typeof localStorage !== 'undefined' ? localStorage.getItem('token') : null;
     const response = await fetch(LOCAL_PRINT_URL, {

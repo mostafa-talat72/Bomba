@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import {
   ShoppingCart, Plus, Edit, Trash2, X, Printer,
   Settings, AlertTriangle, Search, CheckCircle, DollarSign,
@@ -1741,7 +1741,12 @@ const loadInitialData = async () => {
       }
     });
     const sections = Array.from(sectionMap, ([id, name]) => ({ id, name }));
-    const prompt = user?.organization?.printSettings?.promptOrderPrintSections === true;
+    let prompt = user?.organization?.printSettings?.promptOrderPrintSections === true;
+    if (!prompt) {
+      const organizationResponse = await api.getOrganization().catch(() => null);
+      prompt = organizationResponse?.success === true &&
+        organizationResponse.data?.printSettings?.promptOrderPrintSections === true;
+    }
     if (prompt && sections.length > 1) {
       setSelectedOrderPrintSections(sections.map(section => section.id));
       setOrderPrintSelection({ order: normalizedOrder, sectionIds: sections.map(section => section.id), sections });
