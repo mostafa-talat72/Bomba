@@ -46,7 +46,7 @@ async function waitForPrintResources(printWindow) {
       document.body.style.maxWidth = "100%";
       document.body.style.margin = "0";
       document.body.style.position = "relative";
-      document.body.style.left = "-1mm";
+      document.body.style.left = "-3mm";
       document.body.style.transform = "scale(0.85)";
       document.body.style.transformOrigin = "top center";
       document.body.style.paddingLeft = "0";
@@ -179,7 +179,7 @@ async function printHtmlSilently(html, requestedPrinterName, paperWidthMm = 80) 
           white-space: normal !important;
           direction: ltr !important;
           position: relative !important;
-          left: -1mm !important;
+          left: -3mm !important;
           transform: scale(0.85) !important;
           transform-origin: top center !important;
         }
@@ -193,7 +193,7 @@ async function printHtmlSilently(html, requestedPrinterName, paperWidthMm = 80) 
           align-items: stretch !important;
           direction: ltr !important;
           position: relative !important;
-          left: -1mm !important;
+          left: -3mm !important;
           transform: scale(0.85) !important;
           transform-origin: top center !important;
         }
