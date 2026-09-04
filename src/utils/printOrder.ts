@@ -247,7 +247,7 @@ const printAllSectionsInOnePage = (
     const currencySymbol = getCurrencySymbol(organizationCurrency, language);
 
     return `
-      <div class="section-block" style="page-break-after: always; margin-bottom: 2px;">
+      <div class="section-block">
         <!-- Header for each section -->
         <div class="header">
           <h1>${establishmentName}</h1>
@@ -319,9 +319,9 @@ const printAllSectionsInOnePage = (
         ` : ''}
 
         <!-- Footer for each section -->
-        <div class="footer" style="font-size: 1.1em; font-weight: 900;">
+        <div class="footer">
           ${t('orderPrint.thankYou')}<br>
-          <strong style="font-weight: 900; font-size: 1.15em;">${t('orderPrint.footer')}</strong>
+          <strong>${t('orderPrint.footer')}</strong>
         </div>
       </div>
     `;
@@ -381,7 +381,7 @@ body {
 
 /* ===== SECTIONS ===== */
 .section-block {
-  margin-bottom: 2px;
+  margin: 0;
   padding-bottom: 2px;
   border-bottom: 2px dashed #000;
 }
@@ -494,12 +494,19 @@ body {
 
 /* ===== FOOTER ===== */
 .footer {
-  margin-top: 6px;
-  padding-top: 6px;
-  font-size: 12px;
+  margin-top: 3px;
+  padding-top: 3px;
+  font-size: 9px;
+  line-height: 1.1;
   text-align: center;
   font-weight: bold;
   border-top: 1px dashed #000;
+}
+
+.footer strong {
+  font-size: 0.9em;
+  font-weight: 900;
+  white-space: nowrap;
 }
 
 /* ===== PRINT ===== */
@@ -508,8 +515,8 @@ body {
   .no-print { display: none !important; }
 
   .section-block {
-    page-break-after: always;
-    break-after: page;
+    page-break-after: auto;
+    break-after: auto;
     page-break-inside: avoid;
     break-inside: avoid;
   }
