@@ -5,7 +5,7 @@ import QRCode from 'qrcode';
 import { api } from '../services/api';
 import { getLocaleFromLanguage } from './localeMapper';
 import type { TFunction } from 'i18next';
-import { printThroughLocalBridge } from './localPrintBridge';
+import { openCashDrawerThroughAgent, printThroughLocalBridge } from './localPrintBridge';
 
 // Function to determine the appropriate link for QR Code based on priority
 const getSocialLinkForQR = (socialLinks: any): { link: string; platform: string } | null => {
@@ -754,9 +754,10 @@ export const printBill = async (
     }
   }
 
-  const receiptHTML = await buildBillPrintHTML(billForPrint, fallbackOrganizationName, language, t, tableSectionName);
-  const savedPrinter = await api.getDevicePrinter().catch(() => null);
-  const settingsResponse = await api.getOrganization().catch(() => null);
+  const [savedPrinter, settingsResponse] = await Promise.all([
+    api.getDevicePrinter().catch(() => null),
+    api.getOrganization().catch(() => null),
+  ]);
   const printSettings = settingsResponse?.success === true ? settingsResponse.data?.printSettings : undefined;
   const billPrinterId = printSettings?.documentPrinterMap?.bill;
   const billProfile = printSettings?.printers?.find((item: any) => item.id === billPrinterId);
@@ -764,9 +765,15 @@ export const printBill = async (
   const paperWidthMm = billProfile?.paperWidthMm || 80;
   const settingName = drawerMode === 'payment' ? 'openCashDrawerOnPayment' : 'openCashDrawer';
   const openDrawer = printSettings?.[settingName] !== false;
+  if (openDrawer) {
+    void openCashDrawerThroughAgent(selectedPrinterName).catch((error) => {
+      console.warn('Cash drawer request failed while preparing the receipt:', error);
+    });
+  }
+  const receiptHTML = await buildBillPrintHTML(billForPrint, fallbackOrganizationName, language, t, tableSectionName);
   const bridgePrinted = await printThroughLocalBridge(receiptHTML, selectedPrinterName, {
     paperWidthMm,
-    openDrawer,
+    openDrawer: false,
     drawerMode,
     organization: settingsResponse?.data,
     printKey: `bill:${billId || bill.billNumber || ''}:${drawerMode}`,

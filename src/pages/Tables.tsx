@@ -2109,8 +2109,6 @@ const loadInitialData = async () => {
         setShowPayFullBillConfirmModal(false); setBillToPayFull(null);
         setShowPaymentSuccessAnim(true);
         setTimeout(() => setShowPaymentSuccessAnim(false), 2500);
-        await fetchTables();
-        fetchBills().catch(()=>{});
         showNotification(t('billing.notifications.payFullBillSuccess'), 'success');
 
         if (user?.organization?.printSettings?.openCashDrawerOnPayment !== false &&
@@ -2120,6 +2118,8 @@ const loadInitialData = async () => {
         if (user?.organization?.printSettings?.autoPrintOnPayment ?? true) {
           try { await printBill(finalPaidBill, user?.organizationName, i18n.language, t, getTableSectionName(finalPaidBill.table), 'payment'); } catch {}
         }
+        await fetchTables();
+        fetchBills().catch(()=>{});
       }
     } catch {
       showNotification(t('billing.notifications.payFullBillError'), 'error');
@@ -2173,9 +2173,6 @@ const loadInitialData = async () => {
         setIsProcessingPayment(false);
         setShowPaymentSuccessAnim(true);
         setTimeout(() => setShowPaymentSuccessAnim(false), 2500);
-        await fetchTables();
-        // fetch فوري بدون throttle عشان حالة الطاولة تتأكد
-        fetchBills().catch(()=>{});
         showNotification(t('billing.notifications.payFullBillSuccess'), 'success');
 
         if (user?.organization?.printSettings?.openCashDrawerOnPayment !== false &&
@@ -2185,6 +2182,9 @@ const loadInitialData = async () => {
         if (user?.organization?.printSettings?.autoPrintOnPayment ?? true) {
           await printBill(finalPaidBill, user?.organizationName, i18n.language, t, getTableSectionName(finalPaidBill.table), 'payment');
         }
+        await fetchTables();
+        // fetch فوري بدون throttle عشان حالة الطاولة تتأكد
+        fetchBills().catch(()=>{});
       } else {
         setIsProcessingPayment(false);
       }
