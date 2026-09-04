@@ -8,6 +8,7 @@ import type { TFunction } from 'i18next';
 import { openCashDrawerThroughAgent, printThroughLocalBridge } from './localPrintBridge';
 
 let cachedOrganizationResponse: { data: any; expiresAt: number } | null = null;
+const qrCodeCache = new Map<string, string>();
 
 // Function to determine the appropriate link for QR Code based on priority
 const getSocialLinkForQR = (socialLinks: any): { link: string; platform: string } | null => {
@@ -56,6 +57,8 @@ const getSocialLinkForQR = (socialLinks: any): { link: string; platform: string 
 
 // Function to generate QR Code
 const generateQRCode = async (text: string): Promise<string> => {
+  const cached = qrCodeCache.get(text);
+  if (cached) return cached;
   try {
     const qrCodeDataURL = await QRCode.toDataURL(text, {
       width: 150,
@@ -67,6 +70,7 @@ const generateQRCode = async (text: string): Promise<string> => {
       errorCorrectionLevel: 'M',
       type: 'image/png'
     });
+    qrCodeCache.set(text, qrCodeDataURL);
     return qrCodeDataURL;
   } catch (error) {
     console.error('Error generating QR code:', error);
