@@ -50,7 +50,7 @@ async function waitForPrintResources(printWindow) {
       if (document.fonts && document.fonts.ready) {
         await Promise.race([
           document.fonts.ready,
-          new Promise((resolve) => setTimeout(resolve, 700)),
+          new Promise((resolve) => setTimeout(resolve, 300)),
         ]);
       }
       const viewportWidth = Math.max(1, document.documentElement.clientWidth);
@@ -91,7 +91,7 @@ async function waitForPrintResources(printWindow) {
         : new Promise((resolve) => {
             image.addEventListener("load", resolve, { once: true });
             image.addEventListener("error", resolve, { once: true });
-          }))), new Promise((resolve) => setTimeout(resolve, 700))]);
+          }))), new Promise((resolve) => setTimeout(resolve, 300))]);
       await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
       return {
         failedImages: images
@@ -170,9 +170,11 @@ async function sendPrinterPostCommands(printerName, { openDrawer = false, cutPap
     for (const pulse of CASH_DRAWER_PULSES) {
       const drawer = await sendWindowsRawCommand(printerName, pulse);
       console.log(`[cash-drawer] ${printerName}: ${drawer.success ? "command accepted" : drawer.message}`);
-      if (drawer.success) drawerOpened = true;
-      else lastDrawerError = drawer.message;
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      if (drawer.success) {
+        drawerOpened = true;
+        break;
+      }
+      lastDrawerError = drawer.message;
     }
     if (!drawerOpened) warnings.push(`Cash drawer: ${lastDrawerError || "Cash drawer command failed"}`);
   }
@@ -370,7 +372,7 @@ function startLocalPrintServer() {
             const result = await sendWindowsRawCommand(printer.name, pulse);
             console.log(`[cash-drawer] ${printer.name}: ${result.success ? "command accepted" : result.message}`);
             results.push(result);
-            await new Promise((resolve) => setTimeout(resolve, 100));
+            if (result.success) break;
           }
           const result = results.find((item) => item.success) || results[results.length - 1];
           response.writeHead(result.success ? 200 : 503, { "Content-Type": "application/json" });
@@ -389,10 +391,27 @@ function startLocalPrintServer() {
           response.end(JSON.stringify({ success: true, duplicate: true }));
           return;
         }
+        let drawerWarnings = [];
+        if (payload.openDrawer) {
+          const printers = await mainWindow?.webContents?.getPrintersAsync();
+          const requestedPrinterName = typeof payload.printerName === "string" ? payload.printerName.trim() : "";
+          const printer = requestedPrinterName
+            ? (printers || []).find((item) => item.name === requestedPrinterName)
+              || (printers || []).find((item) => item.name.toLowerCase() === requestedPrinterName.toLowerCase())
+            : (printers || []).find((item) => !["Microsoft Print to PDF", "Microsoft XPS", "OneNote", "Fax"].some((name) => item.name.toLowerCase().includes(name.toLowerCase())));
+          if (printer?.name) {
+            drawerWarnings = await sendPrinterPostCommands(printer.name, { openDrawer: true });
+          }
+        }
         const result = await printHtmlSilently(payload.html, payload.printerName, payload.paperWidthMm);
         if (result.success) {
           if (printKey) completedPrints.set(printKey, Date.now());
-          result.warnings = await sendPrinterPostCommands(result.printerName, payload);
+          result.warnings = [
+            ...drawerWarnings,
+            ...(await sendPrinterPostCommands(result.printerName, { cutPaper: payload.cutPaper })),
+          ];
+        } else if (drawerWarnings.length) {
+          result.warnings = drawerWarnings;
         }
         response.writeHead(result.success ? 200 : 503, { "Content-Type": "application/json" });
         response.end(JSON.stringify(result));
