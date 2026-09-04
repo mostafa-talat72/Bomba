@@ -57,7 +57,18 @@ const printThroughAgent = async (
   return result?.success === true;
 };
 
-export const openCashDrawerThroughAgent = async (printerName?: string): Promise<boolean> => {
+const recentDrawerOpens = new Map<string, number>();
+
+export const openCashDrawerThroughAgent = async (printerName?: string, requestKey?: string): Promise<boolean> => {
+  if (requestKey) {
+    const now = Date.now();
+    const previousOpen = recentDrawerOpens.get(requestKey);
+    if (previousOpen && now - previousOpen < 3000) return true;
+    recentDrawerOpens.set(requestKey, now);
+    for (const [key, timestamp] of recentDrawerOpens) {
+      if (now - timestamp >= 3000) recentDrawerOpens.delete(key);
+    }
+  }
   const response = await fetch(LOCAL_DRAWER_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

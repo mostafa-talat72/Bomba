@@ -1,13 +1,11 @@
 const { app, BrowserWindow, dialog, ipcMain, safeStorage } = require("electron");
-const { spawn, exec } = require("child_process");
-const { promisify } = require("util");
+const { spawn } = require("child_process");
 const path = require("path");
 const fs = require("fs");
 const os = require("os");
 const http = require("http");
 const net = require("net");
 const crypto = require("crypto");
-const execPromise = promisify(exec);
 
 // ============================================================
 // MTE Systems Desktop - Electron wrapper
@@ -37,6 +35,8 @@ let mainWindow = null;
 let isQuitting = false;
 let localPrintServer = null;
 let localBackendPort = 5000;
+let cachedPrinters = null;
+let cachedPrintersAt = 0;
 
 // ---- Paths (userData pinned to bomba-desktop for data compatibility) ----
 const userDataDir = app.getPath("userData");
@@ -47,12 +47,6 @@ const logPath = path.join(userDataDir, "server.log");
 async function waitForPrintResources(printWindow) {
   return printWindow.webContents.executeJavaScript(`
     (async () => {
-      if (document.fonts && document.fonts.ready) {
-        await Promise.race([
-          document.fonts.ready,
-          new Promise((resolve) => setTimeout(resolve, 100)),
-        ]);
-      }
       const viewportWidth = Math.max(1, document.documentElement.clientWidth);
       document.documentElement.style.width = viewportWidth + "px";
       document.documentElement.style.margin = "0";
@@ -91,7 +85,7 @@ async function waitForPrintResources(printWindow) {
         : new Promise((resolve) => {
             image.addEventListener("load", resolve, { once: true });
             image.addEventListener("error", resolve, { once: true });
-          }))), new Promise((resolve) => setTimeout(resolve, 300))]);
+          }))), new Promise((resolve) => setTimeout(resolve, 100))]);
       await new Promise((resolve) => requestAnimationFrame(resolve));
       return {
         failedImages: images
@@ -107,6 +101,14 @@ async function waitForPrintResources(printWindow) {
       };
     })();
   `, true);
+}
+
+async function getAvailablePrinters() {
+  const now = Date.now();
+  if (cachedPrinters?.length && now - cachedPrintersAt < 30000) return cachedPrinters;
+  cachedPrinters = await mainWindow?.webContents?.getPrintersAsync() || [];
+  cachedPrintersAt = now;
+  return cachedPrinters;
 }
 
 async function sendWindowsRawCommand(printerName, bytes) {
@@ -153,7 +155,30 @@ public static class BombaRawPrint {
 if (-not [BombaRawPrint]::Send('${escapedPrinter}', $bytes)) { throw 'Raw printer command failed' }
 `;
     const encodedScript = Buffer.from(script, "utf16le").toString("base64");
-    await execPromise(`powershell -NoLogo -NoProfile -NonInteractive -EncodedCommand ${encodedScript}`, { timeout: 5000 });
+    await new Promise((resolve, reject) => {
+      const child = spawn("powershell.exe", [
+        "-NoLogo",
+        "-NoProfile",
+        "-NonInteractive",
+        "-EncodedCommand",
+        encodedScript,
+      ], { windowsHide: true });
+      let stderr = "";
+      const timeout = setTimeout(() => {
+        child.kill();
+        reject(new Error("Raw printer command timed out"));
+      }, 5000);
+      child.stderr.on("data", (chunk) => { stderr += chunk.toString(); });
+      child.once("error", (error) => {
+        clearTimeout(timeout);
+        reject(error);
+      });
+      child.once("close", (code) => {
+        clearTimeout(timeout);
+        if (code === 0) resolve();
+        else reject(new Error(stderr.trim() || `PowerShell exited with code ${code}`));
+      });
+    });
     return { success: true };
   } catch (error) {
     return { success: false, message: error.message || "Raw printer command failed" };
@@ -257,7 +282,7 @@ async function printHtmlSilently(html, requestedPrinterName, paperWidthMm = 80) 
     const printableHtml = /<\/head>/i.test(html)
       ? html.replace(/<\/head>/i, `${printCss}</head>`)
       : `${printCss}${html}`;
-    const printers = await mainWindow?.webContents?.getPrintersAsync();
+    const printers = await getAvailablePrinters();
     const virtualPrinterNames = ["Microsoft Print to PDF", "Microsoft XPS", "OneNote", "Fax", "PDF24", "Adobe PDF", "Send To OneNote 2016"];
     const physicalPrinters = (printers || []).filter((printer) =>
       !virtualPrinterNames.some((name) => printer.name.toLowerCase().includes(name.toLowerCase()))
@@ -356,7 +381,7 @@ function startLocalPrintServer() {
           throw new Error(`Invalid print request JSON: ${error.message}`);
         }
         if (request.url === "/cash-drawer") {
-          const printers = await mainWindow?.webContents?.getPrintersAsync();
+          const printers = await getAvailablePrinters();
           const requestedPrinterName = typeof payload.printerName === "string" ? payload.printerName.trim() : "";
           const printer = requestedPrinterName
             ? (printers || []).find((item) => item.name === requestedPrinterName)
@@ -393,7 +418,7 @@ function startLocalPrintServer() {
         }
         const drawerPromise = payload.openDrawer
           ? (async () => {
-              const printers = await mainWindow?.webContents?.getPrintersAsync();
+              const printers = await getAvailablePrinters();
               const requestedPrinterName = typeof payload.printerName === "string" ? payload.printerName.trim() : "";
               const printer = requestedPrinterName
                 ? (printers || []).find((item) => item.name === requestedPrinterName)
@@ -884,7 +909,7 @@ mainWindow.webContents.setWindowOpenHandler(({ url: targetUrl }) => {
         return { success: false, message: 'Printable HTML is required' };
       }
 
-      const printers = await mainWindow?.webContents?.getPrintersAsync();
+      const printers = await getAvailablePrinters();
       const virtualPrinterNames = ['Microsoft Print to PDF', 'Microsoft XPS', 'OneNote', 'Fax', 'PDF24', 'Adobe PDF', 'Send To OneNote 2016', 'Microsoft Print to PDF'];
       const filteredPrinters = (printers || []).filter(printer =>
         !virtualPrinterNames.some(name => printer.name.toLowerCase().includes(name.toLowerCase()))
