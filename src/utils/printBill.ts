@@ -461,32 +461,56 @@ export const buildBillPrintHTML = async (
           padding: 4px;
           border-radius: 4px;
         }
-        .items-table { 
+        .items-table, .totals-table {
           width: 100%;
           border-collapse: collapse;
           margin-bottom: 10px;
-          font-size: 0.85em;
+          font-size: 0.98em;
           border: 2px solid #000;
           table-layout: fixed;
         }
-        .items-table thead {
+        .items-table thead, .totals-table thead {
           background: #e0e0e0;
           font-weight: 800;
         }
-        .items-table th {
+        .items-table th, .totals-table th {
           padding: 3px 3px;
           text-align: center;
           border: 1.5px solid #000;
           font-size: 0.9em;
           word-wrap: break-word;
         }
-        .items-table td {
+        .items-table td, .totals-table td {
           padding: 3px 3px;
           text-align: center;
           border: 1px solid #000;
           font-weight: 600;
           word-wrap: break-word;
           overflow-wrap: break-word;
+        }
+        .totals-table {
+          margin-top: 12px;
+          margin-bottom: 12px;
+        }
+        .totals-table th {
+          width: 52%;
+          font-size: 1.05em;
+        }
+        .totals-table td {
+          width: 48%;
+          font-size: 1.15em;
+          font-weight: 900;
+        }
+        .totals-table .grand-total td {
+          background: #000;
+          color: #fff;
+          font-size: 1.3em;
+        }
+        .totals-table .paid td {
+          color: #2e7d32;
+        }
+        .totals-table .remaining td {
+          color: #e65100;
         }
         .items-table .item-name {
           text-align: center;
@@ -658,11 +682,13 @@ export const buildBillPrintHTML = async (
             word-break: break-word;
           }
           .no-print { display: none !important; }
-          .items-table {
+          .items-table, .totals-table {
             border: 2px solid #000 !important;
           }
           .items-table th,
-          .items-table td {
+          .items-table td,
+          .totals-table th,
+          .totals-table td {
             border: 1px solid #000 !important;
           }
           * {
@@ -697,27 +723,19 @@ export const buildBillPrintHTML = async (
 
       <div class="divider"></div>
 
-      <div class="total-section">
+      <table class="totals-table">
+        <tbody>
         ${bill.discount && bill.discount > 0 ? `
-          <div class="total-row">
-            ${t('billPrint.discount')}: ${formatNumber(bill.discount)}
-          </div>
+          <tr class="discount"><th>${t('billPrint.discount')}</th><td>${formatNumber(bill.discount)} ${currencySymbol}</td></tr>
         ` : ''}
         ${bill.tax && bill.tax > 0 ? `
-          <div class="total-row">
-            ${t('billPrint.tax')}: ${formatNumber(bill.tax)}
-          </div>
+          <tr class="tax"><th>${t('billPrint.tax')}</th><td>${formatNumber(bill.tax)} ${currencySymbol}</td></tr>
         ` : ''}
-        <div class="total-row grand-total">
-          ${t('billPrint.total')}: ${formatNumber(bill.total || 0)} ${currencySymbol}
-        </div>
-        <div class="total-row paid">
-          ${t('billPrint.paid')}: ${formatNumber(bill.paid || 0)} ${currencySymbol}
-        </div>
-        <div class="total-row remaining">
-          ${t('billPrint.remaining')}: ${formatNumber(bill.remaining || 0)} ${currencySymbol}
-        </div>
-      </div>
+        <tr class="grand-total"><th>${t('billPrint.total')}</th><td>${formatNumber(bill.total || 0)} ${currencySymbol}</td></tr>
+        <tr class="paid"><th>${t('billPrint.paid')}</th><td>${formatNumber(bill.paid || 0)} ${currencySymbol}</td></tr>
+        <tr class="remaining"><th>${t('billPrint.remaining')}</th><td>${formatNumber(bill.remaining || 0)} ${currencySymbol}</td></tr>
+        </tbody>
+      </table>
 
       <div class="thank-you">${t('billPrint.thankYou')}</div>
       

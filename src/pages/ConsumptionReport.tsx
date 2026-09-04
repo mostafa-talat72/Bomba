@@ -648,7 +648,7 @@ const ConsumptionReport = () => {
               width: 100%;
               border-collapse: collapse;
               margin-bottom: 10px;
-              font-size: 0.95em;
+              font-size: 1.05em;
               border: 2px solid #000;
               table-layout: fixed;
               direction: ${dir};
@@ -661,7 +661,7 @@ const ConsumptionReport = () => {
               padding: 5px 4px;
               text-align: center;
               border: 1.5px solid #000;
-              font-size: 1em;
+              font-size: 1.1em;
               word-wrap: break-word;
             }
             .items-table td {
