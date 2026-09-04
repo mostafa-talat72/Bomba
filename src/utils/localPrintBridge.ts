@@ -95,7 +95,7 @@ const printThroughDesktopFallback = async (html: string, printerName?: string, o
   return result?.success === true;
 };
 
-let printQueue: Promise<boolean> = Promise.resolve(true);
+const printQueues = new Map<string, Promise<boolean>>();
 const recentPrints = new Map<string, number>();
 
 const getPrintKey = (html: string, printerName?: string): string => {
@@ -146,10 +146,12 @@ export const printThroughLocalBridge = (
   for (const [key, timestamp] of recentPrints) {
     if (now - timestamp >= 3000) recentPrints.delete(key);
   }
-  const job = printQueue.then(
+  const queueKey = printerName?.trim() || '__default__';
+  const previousJob = printQueues.get(queueKey) || Promise.resolve(true);
+  const job = previousJob.then(
     () => runPrintJob(html, printerName, options),
     () => runPrintJob(html, printerName, options)
   );
-  printQueue = job.catch(() => false);
+  printQueues.set(queueKey, job.catch(() => false));
   return job;
 };

@@ -1829,10 +1829,10 @@ const loadInitialData = async () => {
       const printerId = routes[sectionId] || '';
       groups.set(printerId, [...(groups.get(printerId) || []), sectionId]);
     });
-    for (const [printerId, sectionIds] of groups.entries()) {
+    await Promise.all(Array.from(groups.entries()).map(async ([printerId, sectionIds]) => {
       const profile = profiles.find((item: any) => item.id === printerId);
-      await printOrder(order, menuSections, map, user?.organizationName || '', i18n.language, t, getTableSectionName(tableForOrder || order.table), sectionIds, profile?.printerName, profile?.paperWidthMm);
-    }
+      return printOrder(order, menuSections, map, user?.organizationName || '', i18n.language, t, getTableSectionName(tableForOrder || order.table), sectionIds, profile?.printerName, profile?.paperWidthMm);
+    }));
   };
 
   const promptAndPrintOrder = async (order: Order, tableForOrder?: Table | null) => {

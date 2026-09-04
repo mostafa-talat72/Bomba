@@ -455,7 +455,7 @@ function startLocalPrintServer() {
           if (printKey) completedPrints.set(printKey, Date.now());
           result.warnings = drawerWarnings;
           if (payload.cutPaper) {
-            void sendPrinterPostCommands(result.printerName, { cutPaper: true }).catch((error) => {
+            await sendPrinterPostCommands(result.printerName, { cutPaper: true }).catch((error) => {
               console.warn(`[paper-cut] ${result.printerName}: ${error.message}`);
             });
           }

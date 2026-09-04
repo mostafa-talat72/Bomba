@@ -554,7 +554,7 @@ export const printOrder = async (
   const sectionsToPrint = selectedSectionIds && selectedSectionIds.length > 1
     ? selectedSectionIds
     : [undefined];
-  for (const sectionIds of sectionsToPrint) {
+  await Promise.all(sectionsToPrint.map(async (sectionId) => {
     const printContent = await buildOrderPrintHTML(
       order,
       menuSections,
@@ -563,10 +563,10 @@ export const printOrder = async (
       language,
       t,
       tableSectionName,
-      sectionIds ? [sectionIds] : selectedSectionIds,
+      sectionId ? [sectionId] : selectedSectionIds,
     );
-    await printThroughLocalBridge(printContent, selectedPrinterName, { cutPaper: true, paperWidthMm });
-  }
+    return printThroughLocalBridge(printContent, selectedPrinterName, { cutPaper: true, paperWidthMm });
+  }));
 };
 
 export default printOrder;
