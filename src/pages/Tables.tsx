@@ -411,7 +411,7 @@ const loadInitialData = async () => {
     const timer = setTimeout(async () => {
       try {
         const tableId = selectedTable?._id || (selectedTable as any)?.id;
-        const response = await api.getBills({ q: query, table: tableId });
+        const response = await api.getBills({ q: query, table: tableId, all: true, limit: 10000 });
         setSearchResults(response.success ? (response.data || []) : null);
       } catch { setSearchResults(null); }
     }, 400);

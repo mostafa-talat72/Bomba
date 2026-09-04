@@ -1382,7 +1382,7 @@ class ApiClient {
   }
 
   // Bills endpoints
-  async getBills(params?: { status?: string; table?: string; page?: number; limit?: number; customerName?: string; q?: string; fresh?: boolean }): Promise<ApiResponse<Bill[]>> {
+  async getBills(params?: { status?: string; table?: string; page?: number; limit?: number; customerName?: string; q?: string; all?: boolean; fresh?: boolean }): Promise<ApiResponse<Bill[]>> {
     const searchParams = new URLSearchParams();
     if (params) {
       Object.entries(params).forEach(([key, value]) => {
