@@ -1,4 +1,4 @@
-﻿const { app, BrowserWindow, dialog, ipcMain, safeStorage } = require("electron");
+const { app, BrowserWindow, dialog, ipcMain, safeStorage } = require("electron");
 const { spawn } = require("child_process");
 const path = require("path");
 const fs = require("fs");
@@ -18,6 +18,10 @@ const HARDCODED_ATLAS_URI = "mongodb+srv://Bomba:t1fp995Bde03vPQY@cluster0.yl9w7
 
 const isDev = process.argv.includes("--dev");
 const isPrintAgent = process.argv.includes("--print-agent");
+const CASH_DRAWER_PULSE = [
+  0x1b, 0x70, 0x00, 0x19, 0xfa,
+  0x1b, 0x70, 0x01, 0x19, 0xfa,
+];
 
 // Keep userData at a stable location across branding changes so all
 // existing data (config, secrets, uploads, backups) is preserved.
@@ -151,7 +155,7 @@ if (-not [BombaRawPrint]::Send('${escapedPrinter}', $bytes)) { throw 'Raw printe
 async function sendPrinterPostCommands(printerName, { openDrawer = false, cutPaper = false } = {}) {
   const warnings = [];
   if (openDrawer) {
-    const drawer = await sendWindowsRawCommand(printerName, [0x1b, 0x70, 0x00, 0x19, 0xfa]);
+    const drawer = await sendWindowsRawCommand(printerName, CASH_DRAWER_PULSE);
     if (!drawer.success) warnings.push(`Cash drawer: ${drawer.message}`);
   }
   if (cutPaper) {

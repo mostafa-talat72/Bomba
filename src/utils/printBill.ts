@@ -743,7 +743,18 @@ export const printBill = async (
   drawerMode: 'bill' | 'payment' = 'bill',
   printerName?: string
 ) => {
-  const receiptHTML = await buildBillPrintHTML(bill, fallbackOrganizationName, language, t, tableSectionName);
+  let billForPrint = bill;
+  const billId = String((bill as any)._id || (bill as any).id || '');
+  const hasOrderDetails = Array.isArray((bill as any).orders)
+    && (bill as any).orders.every((order: any) => order && Array.isArray(order.items));
+  if (billId && !hasOrderDetails) {
+    const fullBillResponse = await api.getBill(billId);
+    if (fullBillResponse.success && fullBillResponse.data) {
+      billForPrint = fullBillResponse.data;
+    }
+  }
+
+  const receiptHTML = await buildBillPrintHTML(billForPrint, fallbackOrganizationName, language, t, tableSectionName);
   const savedPrinter = await api.getDevicePrinter().catch(() => null);
   const settingsResponse = await api.getOrganization().catch(() => null);
   const printSettings = settingsResponse?.success === true ? settingsResponse.data?.printSettings : undefined;
@@ -751,14 +762,14 @@ export const printBill = async (
   const billProfile = printSettings?.printers?.find((item: any) => item.id === billPrinterId);
   const selectedPrinterName = printerName || billProfile?.printerName || savedPrinter?.data?.printerName || savedPrinter?.data?.name;
   const paperWidthMm = billProfile?.paperWidthMm || 80;
-  const organization = typeof bill.organization === 'object' ? bill.organization : undefined;
+  const organization = typeof billForPrint.organization === 'object' ? billForPrint.organization : undefined;
   const settingName = drawerMode === 'payment' ? 'openCashDrawerOnPayment' : 'openCashDrawer';
   const bridgePrinted = await printThroughLocalBridge(receiptHTML, selectedPrinterName, {
     paperWidthMm,
     openDrawer: organization?.printSettings?.[settingName] !== false,
     drawerMode,
-    organization: bill.organization,
-    printKey: `bill:${String((bill as any)._id || (bill as any).id || bill.billNumber || '')}:${drawerMode}`,
+    organization: billForPrint.organization,
+    printKey: `bill:${billId || bill.billNumber || ''}:${drawerMode}`,
   });
   if (bridgePrinted) return;
   return;
