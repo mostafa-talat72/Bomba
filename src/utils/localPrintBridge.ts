@@ -1,4 +1,5 @@
 const LOCAL_PRINT_URL = 'http://127.0.0.1:9100/print';
+const LOCAL_DRAWER_URL = 'http://127.0.0.1:9100/cash-drawer';
 
 const printInBrowser = (html: string): boolean => {
   if (typeof window === 'undefined' || typeof document === 'undefined' || !document.body) return false;
@@ -52,6 +53,19 @@ const printThroughAgent = async (
     throw new Error(result?.message
       ? `Print Agent returned ${response.status}: ${result.message}`
       : `Print Agent returned ${response.status}`);
+  }
+  return result?.success === true;
+};
+
+export const openCashDrawerThroughAgent = async (printerName?: string): Promise<boolean> => {
+  const response = await fetch(LOCAL_DRAWER_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ printerName }),
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(result?.message || `Print Agent returned ${response.status}`);
   }
   return result?.success === true;
 };
