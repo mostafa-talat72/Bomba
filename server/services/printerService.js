@@ -254,7 +254,10 @@ class PrinterService {
       return false;
     }
     try {
-      this.printer.raw(Buffer.from([0x1B, 0x70, 0x00, 0x19, 0xFA]));
+      this.printer.raw(Buffer.from([
+        0x1B, 0x70, 0x00, 0x19, 0xFA,
+        0x1B, 0x70, 0x01, 0x19, 0xFA,
+      ]));
       if (executeNow) {
         await this.printer.execute();
         console.log('Cash drawer opened successfully');
