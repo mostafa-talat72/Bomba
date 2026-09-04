@@ -309,9 +309,13 @@ const Layout = () => {
       totalSales: (ordersResponse.data || []).reduce((sum: number, order: any) => sum + (Number(order.finalAmount ?? order.totalAmount) || 0), 0),
       totalConsumption: Array.from(items.values()).reduce((sum, item) => sum + item.consumedQuantity, 0),
     };
+    const organizationResponse = await api.getOrganization();
+    const organization = organizationResponse.success && organizationResponse.data
+      ? organizationResponse.data
+      : user?.organization;
     const response = await api.printConsumptionReport({
       reportData,
-      organization: user?.organization,
+      organization,
       language: i18n.language,
     });
     if (!response.success) throw new Error(response.message || 'Failed to print consumption report');
