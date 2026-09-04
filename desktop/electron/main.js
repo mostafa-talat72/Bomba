@@ -19,9 +19,9 @@ const HARDCODED_ATLAS_URI = "mongodb+srv://Bomba:t1fp995Bde03vPQY@cluster0.yl9w7
 
 const isDev = process.argv.includes("--dev");
 const isPrintAgent = process.argv.includes("--print-agent");
-const CASH_DRAWER_PULSE = [
-  0x1b, 0x70, 0x00, 0x19, 0xfa,
-  0x1b, 0x70, 0x01, 0x19, 0xfa,
+const CASH_DRAWER_PULSES = [
+  [0x1b, 0x70, 0x00, 0x19, 0xfa],
+  [0x1b, 0x70, 0x01, 0x19, 0xfa],
 ];
 
 // Keep userData at a stable location across branding changes so all
@@ -43,7 +43,12 @@ const logPath = path.join(userDataDir, "server.log");
 async function waitForPrintResources(printWindow) {
   return printWindow.webContents.executeJavaScript(`
     (async () => {
-      if (document.fonts && document.fonts.ready) await document.fonts.ready;
+      if (document.fonts && document.fonts.ready) {
+        await Promise.race([
+          document.fonts.ready,
+          new Promise((resolve) => setTimeout(resolve, 1500)),
+        ]);
+      }
       const viewportWidth = Math.max(1, document.documentElement.clientWidth);
       document.documentElement.style.width = viewportWidth + "px";
       document.documentElement.style.margin = "0";
@@ -77,12 +82,12 @@ async function waitForPrintResources(printWindow) {
         table.style.tableLayout = "fixed";
       });
       const images = Array.from(document.images);
-      await Promise.all(images.map((image) => image.complete
+      await Promise.race([Promise.all(images.map((image) => image.complete
         ? Promise.resolve()
         : new Promise((resolve) => {
             image.addEventListener("load", resolve, { once: true });
             image.addEventListener("error", resolve, { once: true });
-          })));
+          }))), new Promise((resolve) => setTimeout(resolve, 1500))]);
       await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
       return {
         failedImages: images
@@ -156,8 +161,15 @@ if (-not [BombaRawPrint]::Send('${escapedPrinter}', $bytes)) { throw 'Raw printe
 async function sendPrinterPostCommands(printerName, { openDrawer = false, cutPaper = false } = {}) {
   const warnings = [];
   if (openDrawer) {
-    const drawer = await sendWindowsRawCommand(printerName, CASH_DRAWER_PULSE);
-    if (!drawer.success) warnings.push(`Cash drawer: ${drawer.message}`);
+    let drawerOpened = false;
+    let lastDrawerError = "";
+    for (const pulse of CASH_DRAWER_PULSES) {
+      const drawer = await sendWindowsRawCommand(printerName, pulse);
+      if (drawer.success) drawerOpened = true;
+      else lastDrawerError = drawer.message;
+      await new Promise((resolve) => setTimeout(resolve, 120));
+    }
+    if (!drawerOpened) warnings.push(`Cash drawer: ${lastDrawerError || "Cash drawer command failed"}`);
   }
   if (cutPaper) {
     const cut = await sendWindowsRawCommand(printerName, [0x1d, 0x56, 0x00]);
@@ -346,7 +358,12 @@ function startLocalPrintServer() {
             response.end(JSON.stringify({ success: false, message: "No configured printer found" }));
             return;
           }
-          const result = await sendWindowsRawCommand(printer.name, CASH_DRAWER_PULSE);
+          const results = [];
+          for (const pulse of CASH_DRAWER_PULSES) {
+            results.push(await sendWindowsRawCommand(printer.name, pulse));
+            await new Promise((resolve) => setTimeout(resolve, 120));
+          }
+          const result = results.find((item) => item.success) || results[results.length - 1];
           response.writeHead(result.success ? 200 : 503, { "Content-Type": "application/json" });
           response.end(JSON.stringify({ ...result, printerName: printer.name }));
           return;
