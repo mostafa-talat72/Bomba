@@ -631,8 +631,13 @@ const Menu: React.FC = () => {
 		? menuItems
 		: menuItems.filter(item => item.isAvailable);
 
-	const getCategoryId = (item: MenuItem) => typeof item.category === 'string' ? item.category : item.category?.id || item.category?._id;
-	const getSectionId = (cat: MenuCategory) => typeof cat.section === 'string' ? cat.section : cat.section?.id || cat.section?._id;
+	const getEntityId = (value: any): string | undefined => {
+		if (!value) return undefined;
+		if (typeof value === 'string') return value;
+		return value._id || value.id;
+	};
+	const getCategoryId = (item: MenuItem) => getEntityId(item.category);
+	const getSectionId = (cat: MenuCategory) => getEntityId(cat.section);
 
 	const sortedSections = useMemo(() =>
 		[...menuSections].sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name)),
@@ -642,10 +647,13 @@ const Menu: React.FC = () => {
 	const sectionGroups = useMemo(() =>
 		sortedSections.map(section => {
 			const categories = menuCategories
-				.filter(cat => getSectionId(cat) === section.id)
+				.filter(cat => String(getSectionId(cat)) === String(getEntityId(section)))
 				.sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
-			const categoryIds = new Set(categories.map(c => c.id));
-			const items = filteredMenuItems.filter(item => categoryIds.has(getCategoryId(item)));
+			const categoryIds = new Set(categories.map(c => String(getEntityId(c))));
+			const items = filteredMenuItems.filter(item => {
+				const categoryId = getCategoryId(item);
+				return categoryId && categoryIds.has(String(categoryId));
+			});
 			return { section, categories, items };
 		}),
 		[sortedSections, menuCategories, filteredMenuItems]
@@ -654,15 +662,15 @@ const Menu: React.FC = () => {
 	const filteredGroups = useMemo(() => {
 		let groups = sectionGroups;
 		if (activeSection) {
-			groups = groups.filter(g => g.section.id === activeSection);
+			groups = groups.filter(g => String(getEntityId(g.section)) === String(activeSection));
 		}
 		if (activeCategory) {
 			groups = groups.map(g => ({
 				...g,
-				categories: g.categories.filter(c => c.id === activeCategory),
+				categories: g.categories.filter(c => String(getEntityId(c)) === String(activeCategory)),
 				items: g.items.filter(item => {
-					const catId = typeof item.category === 'string' ? item.category : item.category?.id || item.category?._id;
-					return catId === activeCategory;
+					const catId = getCategoryId(item);
+					return String(catId) === String(activeCategory);
 				})
 			})).filter(g => g.items.length > 0);
 		}
@@ -856,8 +864,11 @@ const Menu: React.FC = () => {
 						<span className="ms-1.5 text-xs opacity-80">({formatDecimal(filteredMenuItemsByAvailability.length, i18n.language)})</span>
 					</button>
 					{sortedSections.map(section => {
-						const sectionCatIds = menuCategories.filter(c => getSectionId(c) === section.id).map(c => c.id);
-						const count = filteredMenuItemsByAvailability.filter(item => sectionCatIds.includes(getCategoryId(item))).length;
+						const sectionCatIds = menuCategories.filter(c => String(getSectionId(c)) === String(getEntityId(section))).map(c => String(getEntityId(c)));
+						const count = filteredMenuItemsByAvailability.filter(item => {
+							const categoryId = getCategoryId(item);
+							return categoryId !== undefined && sectionCatIds.includes(String(categoryId));
+						}).length;
 						return (
 							<button
 								key={section.id}
@@ -880,7 +891,7 @@ const Menu: React.FC = () => {
 
 			{/* Category Tabs (shown when a section is selected) */}
 			{activeSection && (() => {
-				const sectionCategories = menuCategories.filter(c => getSectionId(c) === activeSection).sort((a, b) => a.sortOrder - b.sortOrder);
+				const sectionCategories = menuCategories.filter(c => String(getSectionId(c)) === String(activeSection)).sort((a, b) => a.sortOrder - b.sortOrder);
 				if (sectionCategories.length <= 1) return null;
 				return (
 					<div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-hide">
@@ -895,7 +906,7 @@ const Menu: React.FC = () => {
 							{t('menu.all')}
 						</button>
 						{sectionCategories.map(cat => {
-							const count = filteredMenuItems.filter(item => getCategoryId(item) === cat.id).length;
+							const count = filteredMenuItems.filter(item => String(getCategoryId(item)) === String(getEntityId(cat))).length;
 							return (
 								<button
 									key={cat.id}
@@ -1004,7 +1015,7 @@ const Menu: React.FC = () => {
 									</div>
 								) : (
 									categories.map(category => {
-										const categoryItems = items.filter(item => getCategoryId(item) === category.id);
+										const categoryItems = items.filter(item => String(getCategoryId(item)) === String(getEntityId(category)));
 										return (
 											<div key={category.id}>
 												{/* Category Header */}

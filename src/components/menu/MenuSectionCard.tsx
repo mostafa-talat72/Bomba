@@ -57,8 +57,9 @@ const MenuSectionCard: React.FC<MenuSectionCardProps> = ({
 
 	const totalItems = categories.reduce((acc, cat) => {
 		return acc + items.filter(item => {
-			const categoryId = typeof item.category === 'string' ? item.category : item.category?.id || item.category?._id;
-			return categoryId === cat.id;
+			const categoryId = typeof item.category === 'string' ? item.category : item.category?._id || item.category?.id;
+			const categoryIdValue = cat._id || cat.id;
+			return String(categoryId) === String(categoryIdValue);
 		}).length;
 	}, 0);
 
