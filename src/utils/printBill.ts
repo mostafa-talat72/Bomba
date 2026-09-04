@@ -747,17 +747,14 @@ export const printBill = async (
   const billId = String((bill as any)._id || (bill as any).id || '');
   const hasOrderDetails = Array.isArray((bill as any).orders)
     && (bill as any).orders.every((order: any) => order && Array.isArray(order.items));
-  if (billId && !hasOrderDetails) {
-    const fullBillResponse = await api.getBill(billId);
-    if (fullBillResponse.success && fullBillResponse.data) {
-      billForPrint = fullBillResponse.data;
-    }
-  }
-
-  const [savedPrinter, settingsResponse] = await Promise.all([
+  const [fullBillResponse, savedPrinter, settingsResponse] = await Promise.all([
+    billId && !hasOrderDetails ? api.getBill(billId) : Promise.resolve(null),
     api.getDevicePrinter().catch(() => null),
     api.getOrganization().catch(() => null),
   ]);
+  if (fullBillResponse?.success && fullBillResponse.data) {
+    billForPrint = fullBillResponse.data;
+  }
   const printSettings = settingsResponse?.success === true ? settingsResponse.data?.printSettings : undefined;
   const billPrinterId = printSettings?.documentPrinterMap?.bill;
   const billProfile = printSettings?.printers?.find((item: any) => item.id === billPrinterId);
@@ -766,9 +763,15 @@ export const printBill = async (
   const settingName = drawerMode === 'payment' ? 'openCashDrawerOnPayment' : 'openCashDrawer';
   const openDrawer = printSettings?.[settingName] !== false;
   if (openDrawer) {
-    void openCashDrawerThroughAgent(selectedPrinterName).catch((error) => {
+    void openCashDrawerThroughAgent(
+      selectedPrinterName,
+      `bill:${billId || bill.billNumber || ''}:${drawerMode}`,
+    ).catch((error) => {
       console.warn('Cash drawer request failed while preparing the receipt:', error);
     });
+  }
+  if (settingsResponse?.success && settingsResponse.data) {
+    billForPrint = { ...billForPrint, organization: settingsResponse.data };
   }
   const receiptHTML = await buildBillPrintHTML(billForPrint, fallbackOrganizationName, language, t, tableSectionName);
   const bridgePrinted = await printThroughLocalBridge(receiptHTML, selectedPrinterName, {
