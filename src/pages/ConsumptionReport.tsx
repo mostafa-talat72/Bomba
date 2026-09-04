@@ -647,8 +647,8 @@ const ConsumptionReport = () => {
             .items-table { 
               width: 100%;
               border-collapse: collapse;
-              margin-bottom: 10px;
-              font-size: 1.05em;
+              margin: 2px 0;
+              font-size: 1.1em;
               border: 2px solid #000;
               table-layout: fixed;
               direction: ${dir};
@@ -658,17 +658,17 @@ const ConsumptionReport = () => {
               font-weight: 900;
             }
             .items-table th {
-              padding: 5px 4px;
+              padding: 1px 0;
               text-align: center;
               border: 1.5px solid #000;
               font-size: 1.1em;
               word-wrap: break-word;
             }
             .items-table td {
-              padding: 4px 4px;
+              padding: 1px 0;
               text-align: center;
               border: 1px solid #000;
-              font-weight: 800;
+              font-weight: 900;
               word-wrap: break-word;
               overflow-wrap: break-word;
             }
@@ -677,7 +677,7 @@ const ConsumptionReport = () => {
             }
             .items-table th:first-child {
               text-align: center;
-              padding-${isRTL ? 'left' : 'right'}: 5px;
+              padding-${isRTL ? 'left' : 'right'}: 0;
               width: 50% !important;
             }
             .items-table td {
@@ -687,20 +687,20 @@ const ConsumptionReport = () => {
               text-align: center;
               font-weight: 900;
               font-size: 1.05em;
-              padding-${isRTL ? 'left' : 'right'}: 5px;
+              padding-${isRTL ? 'left' : 'right'}: 0;
               width: 50% !important;
             }
             .items-table .item-quantity {
               font-weight: 900;
-              font-size: 1.15em;
+              font-size: 1.3em;
             }
             .items-table .item-price {
               font-weight: 900;
-              font-size: 1.15em;
+              font-size: 1.3em;
             }
             .items-table .item-total {
               font-weight: 900;
-              font-size: 1.15em;
+              font-size: 1.3em;
               color: #000;
             }
             .category-total {
@@ -747,15 +747,15 @@ const ConsumptionReport = () => {
                 overflow-x: hidden;
               }
               body { 
-                padding: 4px 2px;
-                font-weight: 600;
+                padding: 0;
+                font-weight: 900;
                 direction: ${dir};
               }
               .no-print { 
                 display: none !important; 
               }
               .page {
-                padding: 4px 6px !important;
+                padding: 0 !important;
                 page-break-after: always !important;
                 -webkit-page-break-after: always !important;
                 break-after: page !important;
