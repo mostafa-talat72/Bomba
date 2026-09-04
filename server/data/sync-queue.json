@@ -1,0 +1,420 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-09-03T23:58:48.012Z",
+  "queueSize": 4,
+  "operations": [
+    {
+      "id": "46beae97-79f7-47b7-8695-4022827f6942",
+      "type": "insert",
+      "collection": "users",
+      "data": {
+        "preferences": {
+          "theme": "light",
+          "language": "ar"
+        },
+        "_id": "6a9653b022eb845b9d695083",
+        "name": "talat",
+        "email": "m.talat7274@gmail.com",
+        "username": "talat",
+        "password": "$2a$12$buKXU7ibd8RT9qXipzonXOjP08KA9lOBQWvJ7jJSXOO/NcRznUvLu",
+        "role": "admin",
+        "permissions": [
+          "all"
+        ],
+        "status": "active",
+        "lastLogin": "2026-09-03T23:58:09.571Z",
+        "avatar": null,
+        "phone": "01062133505",
+        "address": null,
+        "verificationToken": "6c58f1c43f9238b5e8220d27073e0c654eadd872a75a530bf25ca634cbc23478",
+        "resetPasswordToken": null,
+        "resetPasswordExpire": null,
+        "department": null,
+        "position": null,
+        "hireDate": null,
+        "salary": null,
+        "notes": null,
+        "isActive": true,
+        "profileImage": null,
+        "isDeleted": false,
+        "deletedAt": null,
+        "deletedBy": null,
+        "createdAt": "2026-09-01T04:25:20.087Z",
+        "updatedAt": "2026-09-03T23:58:09.612Z",
+        "__v": 0,
+        "organization": "6a9653b022eb845b9d695085",
+        "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjZhOTY1M2IwMjJlYjg0NWI5ZDY5NTA4MyIsImlhdCI6MTc4ODQ3OTg4OSwiZXhwIjoxNzkxMDcxODg5fQ.68PHnLIye-L62AfUtgxvtcucG0XFo5nT3kZB5mWaf3c"
+      },
+      "timestamp": "2026-09-03T23:58:09.600Z",
+      "retryCount": 0,
+      "maxRetries": 10
+    },
+    {
+      "id": "e17abeae-3b95-4589-9727-bcbc99093cfc",
+      "type": "update",
+      "collection": "bills",
+      "data": {
+        "subtotal": 220,
+        "total": 220,
+        "discount": 0,
+        "paid": 0,
+        "remaining": 220,
+        "status": "draft",
+        "sessionPayments": [],
+        "updatedAt": "2026-09-03T23:58:17.830Z"
+      },
+      "filter": {
+        "$or": [
+          {
+            "_id": {
+              "$in": [
+                "6a99fb6593ca981ef3465ad9"
+              ]
+            }
+          },
+          {
+            "$expr": {
+              "$in": [
+                {
+                  "$convert": {
+                    "input": {
+                      "$cond": [
+                        {
+                          "$eq": [
+                            {
+                              "$type": "$_id"
+                            },
+                            "object"
+                          ]
+                        },
+                        "$_id._id",
+                        "$_id"
+                      ]
+                    },
+                    "to": "string",
+                    "onError": "",
+                    "onNull": ""
+                  }
+                },
+                [
+                  "6a99fb6593ca981ef3465ad9"
+                ]
+              ]
+            }
+          }
+        ]
+      },
+      "timestamp": "2026-09-03T23:58:17.950Z",
+      "retryCount": 0,
+      "maxRetries": 10
+    },
+    {
+      "id": "ff56e26b-b619-4616-931c-1d05cb3f226e",
+      "type": "update",
+      "collection": "tables",
+      "data": {
+        "_id": "6a99c0babb70bbd9fc9cbeb2",
+        "number": "2",
+        "section": "6a96541d22eb845b9d695120",
+        "organization": "6a9653b022eb845b9d695085",
+        "isActive": true,
+        "status": "occupied",
+        "createdBy": "6a9653b022eb845b9d695083",
+        "updatedBy": null,
+        "isDeleted": false,
+        "deletedAt": null,
+        "deletedBy": null,
+        "createdAt": "2026-09-03T18:47:22.229Z",
+        "updatedAt": "2026-09-03T23:58:17.976Z",
+        "__v": 0
+      },
+      "filter": {
+        "$or": [
+          {
+            "_id": {
+              "$in": [
+                "6a99c0babb70bbd9fc9cbeb2"
+              ]
+            }
+          },
+          {
+            "$expr": {
+              "$in": [
+                {
+                  "$convert": {
+                    "input": {
+                      "$cond": [
+                        {
+                          "$eq": [
+                            {
+                              "$type": "$_id"
+                            },
+                            "object"
+                          ]
+                        },
+                        "$_id._id",
+                        "$_id"
+                      ]
+                    },
+                    "to": "string",
+                    "onError": "",
+                    "onNull": ""
+                  }
+                },
+                [
+                  "6a99c0babb70bbd9fc9cbeb2"
+                ]
+              ]
+            }
+          }
+        ]
+      },
+      "timestamp": "2026-09-03T23:58:17.989Z",
+      "retryCount": 0,
+      "maxRetries": 10
+    },
+    {
+      "id": "79c74096-9b35-43f9-ae41-3ede34c6c2c2",
+      "type": "insert",
+      "collection": "bills",
+      "data": {
+        "_id": "6a99fb6593ca981ef3465ad9",
+        "customerName": "2",
+        "customerPhone": null,
+        "table": "6a99c0babb70bbd9fc9cbeb2",
+        "orders": [
+          {
+            "_id": "6a99fb6593ca981ef3465ae0",
+            "table": "6a99c0babb70bbd9fc9cbeb2",
+            "customerName": "2",
+            "customerPhone": null,
+            "items": [
+              {
+                "menuItem": "6a96541322eb845b9d6950e5",
+                "name": "شاى",
+                "arabicName": "شاى",
+                "price": 20,
+                "variant": "كبير",
+                "quantity": 1,
+                "preparedCount": 0,
+                "itemTotal": 20,
+                "notes": "",
+                "preparationTime": 5,
+                "section": "6a9653ec22eb845b9d6950b7",
+                "deliveredCount": 0,
+                "isReady": false,
+                "wasEverReady": false,
+                "readyTime": null,
+                "_id": "6a99fb6593ca981ef3465ae1"
+              },
+              {
+                "menuItem": "6a96541322eb845b9d6950e5",
+                "name": "شاى",
+                "arabicName": "شاى",
+                "price": 10,
+                "variant": "وسط",
+                "quantity": 1,
+                "preparedCount": 0,
+                "itemTotal": 10,
+                "notes": "",
+                "preparationTime": 5,
+                "section": "6a9653ec22eb845b9d6950b7",
+                "deliveredCount": 0,
+                "isReady": false,
+                "wasEverReady": false,
+                "readyTime": null,
+                "_id": "6a99fb6593ca981ef3465ae2"
+              },
+              {
+                "menuItem": "6a9736b9a78bdac4b95db8ca",
+                "name": "مكرونة شاورما",
+                "arabicName": "مكرونة شاورما",
+                "price": 50,
+                "variant": "صغير",
+                "quantity": 1,
+                "preparedCount": 0,
+                "itemTotal": 50,
+                "notes": "",
+                "preparationTime": 5,
+                "section": "6a973696a78bdac4b95db809",
+                "deliveredCount": 0,
+                "isReady": false,
+                "wasEverReady": false,
+                "readyTime": null,
+                "_id": "6a99fb6593ca981ef3465ae3"
+              },
+              {
+                "menuItem": "6a9736b9a78bdac4b95db8ca",
+                "name": "مكرونة شاورما",
+                "arabicName": "مكرونة شاورما",
+                "price": 60,
+                "variant": "وسط",
+                "quantity": 1,
+                "preparedCount": 0,
+                "itemTotal": 60,
+                "notes": "",
+                "preparationTime": 5,
+                "section": "6a973696a78bdac4b95db809",
+                "deliveredCount": 0,
+                "isReady": false,
+                "wasEverReady": false,
+                "readyTime": null,
+                "_id": "6a99fb6593ca981ef3465ae4"
+              },
+              {
+                "menuItem": "6a9736b9a78bdac4b95db8ca",
+                "name": "مكرونة شاورما",
+                "arabicName": "مكرونة شاورما",
+                "price": 80,
+                "variant": "عائلي",
+                "quantity": 1,
+                "preparedCount": 0,
+                "itemTotal": 80,
+                "notes": "",
+                "preparationTime": 5,
+                "section": "6a973696a78bdac4b95db809",
+                "deliveredCount": 0,
+                "isReady": false,
+                "wasEverReady": false,
+                "readyTime": null,
+                "_id": "6a99fb6593ca981ef3465ae5"
+              }
+            ],
+            "status": "pending",
+            "subtotal": 220,
+            "discount": 0,
+            "finalAmount": 220,
+            "totalCost": 0,
+            "notes": "",
+            "estimatedReadyTime": null,
+            "actualReadyTime": null,
+            "deliveredTime": null,
+            "bill": "6a99fb6593ca981ef3465ad9",
+            "organization": "6a9653b022eb845b9d695085",
+            "createdBy": "6a9653b022eb845b9d695083",
+            "preparedBy": null,
+            "deliveredBy": null,
+            "isDeleted": false,
+            "deletedAt": null,
+            "deletedBy": null,
+            "orderNumber": "ORD-426D13-260904-001",
+            "createdAt": "2026-09-03T22:57:41.922Z",
+            "updatedAt": "2026-09-03T22:57:41.922Z",
+            "__v": 0
+          }
+        ],
+        "sessions": [],
+        "subtotal": 220,
+        "discount": 0,
+        "discountPercentage": 0,
+        "tax": 0,
+        "total": 220,
+        "paid": 0,
+        "remaining": 220,
+        "status": "draft",
+        "paymentMethod": "cash",
+        "qrCode": "data:image/png;base64,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",
+        "qrCodeUrl": "http://localhost:3000/bill/6a99fb6593ca981ef3465ad9",
+        "notes": null,
+        "billType": "cafe",
+        "dueDate": null,
+        "createdBy": "6a9653b022eb845b9d695083",
+        "updatedBy": "6a9653b022eb845b9d695083",
+        "organization": "6a9653b022eb845b9d695085",
+        "isDeleted": false,
+        "deletedAt": null,
+        "deletedBy": null,
+        "payments": [],
+        "partialPayments": [],
+        "itemPayments": [
+          {
+            "orderId": "6a99fb6593ca981ef3465ae0",
+            "itemId": "6a99fb6593ca981ef3465ae0-0",
+            "menuItemId": "6a96541322eb845b9d6950e5",
+            "itemName": "شاى",
+            "quantity": 1,
+            "paidQuantity": 0,
+            "pricePerUnit": 20,
+            "totalPrice": 20,
+            "paidAmount": 0,
+            "isPaid": false,
+            "paymentHistory": [],
+            "_id": "6a99fb6693ca981ef3465af0",
+            "id": "6a99fb6693ca981ef3465af0"
+          },
+          {
+            "orderId": "6a99fb6593ca981ef3465ae0",
+            "itemId": "6a99fb6593ca981ef3465ae0-1",
+            "menuItemId": "6a96541322eb845b9d6950e5",
+            "itemName": "شاى",
+            "quantity": 1,
+            "paidQuantity": 0,
+            "pricePerUnit": 10,
+            "totalPrice": 10,
+            "paidAmount": 0,
+            "isPaid": false,
+            "paymentHistory": [],
+            "_id": "6a99fb6693ca981ef3465af1",
+            "id": "6a99fb6693ca981ef3465af1"
+          },
+          {
+            "orderId": "6a99fb6593ca981ef3465ae0",
+            "itemId": "6a99fb6593ca981ef3465ae0-2",
+            "menuItemId": "6a9736b9a78bdac4b95db8ca",
+            "itemName": "مكرونة شاورما",
+            "quantity": 1,
+            "paidQuantity": 0,
+            "pricePerUnit": 50,
+            "totalPrice": 50,
+            "paidAmount": 0,
+            "isPaid": false,
+            "paymentHistory": [],
+            "_id": "6a99fb6693ca981ef3465af2",
+            "id": "6a99fb6693ca981ef3465af2"
+          },
+          {
+            "orderId": "6a99fb6593ca981ef3465ae0",
+            "itemId": "6a99fb6593ca981ef3465ae0-3",
+            "menuItemId": "6a9736b9a78bdac4b95db8ca",
+            "itemName": "مكرونة شاورما",
+            "quantity": 1,
+            "paidQuantity": 0,
+            "pricePerUnit": 60,
+            "totalPrice": 60,
+            "paidAmount": 0,
+            "isPaid": false,
+            "paymentHistory": [],
+            "_id": "6a99fb6693ca981ef3465af3",
+            "id": "6a99fb6693ca981ef3465af3"
+          },
+          {
+            "orderId": "6a99fb6593ca981ef3465ae0",
+            "itemId": "6a99fb6593ca981ef3465ae0-4",
+            "menuItemId": "6a9736b9a78bdac4b95db8ca",
+            "itemName": "مكرونة شاورما",
+            "quantity": 1,
+            "paidQuantity": 0,
+            "pricePerUnit": 80,
+            "totalPrice": 80,
+            "paidAmount": 0,
+            "isPaid": false,
+            "paymentHistory": [],
+            "_id": "6a99fb6693ca981ef3465af4",
+            "id": "6a99fb6693ca981ef3465af4"
+          }
+        ],
+        "sessionPayments": [],
+        "paymentHistory": [],
+        "upgradeHistory": [],
+        "createdAt": "2026-09-03T22:57:41.647Z",
+        "updatedAt": "2026-09-03T23:54:53.111Z",
+        "billNumber": "BILL-426D13-260904-001",
+        "__v": 1,
+        "id": "6a99fb6593ca981ef3465ad9"
+      },
+      "timestamp": "2026-09-03T23:58:17.992Z",
+      "retryCount": 0,
+      "maxRetries": 10
+    }
+  ]
+}
