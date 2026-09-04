@@ -368,8 +368,8 @@ body {
 /* ===== HEADER ===== */
 .header {
   text-align: center;
-  margin: 3px auto;
-  padding: 3px 0;
+  margin: 1px auto;
+  padding: 1px 0;
 }
 
 .header h1 {
@@ -403,7 +403,7 @@ body {
 
 .update-banner small {
   font-size: 12px;
-  margin-top: 1px;
+  margin-top: 1px;عح
 }
 
 /* ===== ORDER INFO ===== */
