@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useLocation } from 'react-router-dom';
 import { ConfigProvider, Table, DatePicker, Tabs, Spin, Empty } from 'antd';
 import LocalizedTimePicker from '../components/common/LocalizedTimePicker';
 import {
@@ -78,7 +79,9 @@ interface ConsumptionItem {
 const ConsumptionReport = () => {
   const { t, i18n } = useTranslation();
   const rtl = useRTL();
-  const { menuItems, fetchMenuItems, menuSections, fetchMenuSections, user } = useApp();
+  const { menuItems, fetchMenuItems, menuSections, fetchMenuSections, user, logout } = useApp();
+  const location = useLocation();
+  const logoutPrintHandled = useRef(false);
   
   // Helper function to format currency with organization settings
   const formatCurrency = useCallback((amount: number) => {
@@ -133,6 +136,8 @@ const ConsumptionReport = () => {
   const [activeTab, setActiveTab] = useState<string>('all');
   const [pageSize, setPageSize] = useState<number>(10);
   const [loading, setLoading] = useState(false);
+  const [dataReady, setDataReady] = useState(false);
+  const [logoutPrintLoading, setLogoutPrintLoading] = useState(() => Boolean(location.state?.printOnLogout));
   const [consumptionData, setConsumptionData] = useState<Record<string, ConsumptionItem[]>>({});
   const [error, setError] = useState<string | null>(null);
   const [showTotalSales, setShowTotalSales] = useState(false);
@@ -376,6 +381,7 @@ const ConsumptionReport = () => {
 
     try {
       setLoading(true);
+      setDataReady(false);
       setError(null);
 
       // Fetch basic data (menu items, sections)
@@ -425,12 +431,15 @@ const ConsumptionReport = () => {
       
         const processedData = processOrdersAndSessions(filteredOrders, filteredSessions);
         setConsumptionData(processedData);
+        setDataReady(true);
       } else {
         console.error('❌ Failed to fetch data:', {
           orders: ordersResponse.message,
           sessions: sessionsResponse.message
         });
         toast.error(t('consumptionReport.messages.loadError'));
+        setDataReady(false);
+        setLogoutPrintLoading(false);
       }
 
     } catch (error) {
@@ -438,6 +447,8 @@ const ConsumptionReport = () => {
       setError(errorMessage);
       toast.error(t('consumptionReport.messages.loadErrorDetail', { error: errorMessage }));
       console.error('❌ Error fetching data:', error);
+      setDataReady(false);
+      setLogoutPrintLoading(false);
     } finally {
       setLoading(false);
     }
@@ -448,8 +459,7 @@ const ConsumptionReport = () => {
     return items.reduce((sum, item) => sum + item.total, 0);
   };
 
-  const printReport = async () => {
-    const isElectron = typeof window !== 'undefined' && !!(window as any).electronAPI;
+  const printReport = async (): Promise<boolean> => {
     try {
       const reportData = {
         consumptionData,
@@ -458,28 +468,8 @@ const ConsumptionReport = () => {
         totalConsumption: Object.values(consumptionData).flat().reduce((sum, item) => sum + item.total, 0)
       };
 
-      if (isElectron) {
-        const response: any = await api.printConsumptionReport({
-          reportData,
-          organization: user?.organization,
-          language: i18n.language
-        });
-        if (response?.success) {
-          const successMsg = i18n.language === 'ar' ? 'تمت طباعة التقرير بنجاح' : i18n.language === 'fr' ? 'Rapport imprimé avec succès' : 'Report printed successfully';
-          toast.success(successMsg);
-          return;
-        }
-        console.error('Direct print returned non-success:', response);
-        toast.error(response?.message || (i18n.language === 'ar' ? 'فشلت الطباعة المباشرة' : 'Direct print failed') + (response?.error ? `: ${response.error}` : ''));
-        return;
-      }
     } catch (error: any) {
-      console.error('Direct print failed, falling back to window print:', error);
-      if (isElectron) {
-        const msg = error?.message === 'print-timeout' ? (i18n.language === 'ar' ? 'انتهت مهلة الطباعة — تأكد من توصيل الطابعة' : 'Direct print timeout') : (i18n.language === 'ar' ? 'فشلت الطباعة المباشرة' : 'Direct print failed');
-        toast.error(msg);
-        return;
-      }
+      console.error('Print preparation failed:', error);
     }
 
     // Fallback (ويب فقط): استخدام الطريقة القديمة إذا فشلت الطباعة المباشرة
@@ -805,15 +795,32 @@ const ConsumptionReport = () => {
       const printerName = profile?.printerName || savedPrinter?.data?.printerName || savedPrinter?.data?.name;
       if (await printThroughLocalBridge(printContent, printerName)) {
         toast.success(t('consumptionReport.messages.printOpening'));
-        return;
+        return true;
       }
-      return;
+      throw new Error('Print Agent rejected the report');
 
     } catch (error) {
       toast.error(t('consumptionReport.messages.printFailed'));
       console.error('Print error:', error);
+      return false;
     }
   };
+
+  useEffect(() => {
+    if (!location.state?.printOnLogout || loading || !dataReady || logoutPrintHandled.current) return;
+    logoutPrintHandled.current = true;
+    setLogoutPrintLoading(true);
+    void (async () => {
+      const printed = await printReport();
+      if (printed) {
+        try { sessionStorage.removeItem('bombaExitGuard'); } catch {}
+        await logout();
+      } else {
+        logoutPrintHandled.current = false;
+        setLogoutPrintLoading(false);
+      }
+    })();
+  }, [location.state, loading, dataReady, printReport, logout]);
 
   const exportToPDF = () => {
     setLoading(true);
@@ -1321,7 +1328,23 @@ const ConsumptionReport = () => {
 
 
   return (
-    <ConfigProvider
+    <>
+      {location.state?.printOnLogout && logoutPrintLoading && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4">
+          <div className="flex w-full max-w-sm flex-col items-center rounded-2xl bg-white p-7 text-center shadow-2xl dark:bg-gray-900">
+            <Spin size="large" />
+            <h2 className="mt-5 text-lg font-bold text-gray-900 dark:text-white">
+              {loading
+                ? t('consumptionReport.logoutLoadingData', 'جاري جلب بيانات تقرير الاستهلاك...')
+                : t('consumptionReport.logoutPrinting', 'جاري طباعة تقرير الاستهلاك...')}
+            </h2>
+            <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
+              {t('consumptionReport.logoutPleaseWait', 'برجاء الانتظار حتى انتهاء الطباعة')}
+            </p>
+          </div>
+        </div>
+      )}
+      <ConfigProvider
       direction={rtl.dir as 'ltr' | 'rtl'}
       locale={getAntdLocale(i18n.language)}
       theme={{
@@ -1329,7 +1352,7 @@ const ConsumptionReport = () => {
           fontFamily: 'Tajawal, sans-serif',
         },
       }}
-    >
+      >
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-4 md:p-6 transition-colors duration-300" dir={rtl.dir}>
       {/* Header Section */}
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-6 mb-6 border border-gray-200 dark:border-gray-700 transition-all duration-300">
@@ -1570,7 +1593,8 @@ const ConsumptionReport = () => {
         </Spin>
       </div>
     </div>
-    </ConfigProvider>
+      </ConfigProvider>
+    </>
   );
 };
 
