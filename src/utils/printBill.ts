@@ -757,7 +757,7 @@ export const buildBillPrintHTML = async (
       ` : ''}
       
       <div class="footer">
-        <strong style="font-weight: 900; font-size: 14px;">${t('billPrint.footer')}</strong>
+        <strong>${t('billPrint.footer')}</strong>
       </div>
 
     </body>
