@@ -50,7 +50,7 @@ async function waitForPrintResources(printWindow) {
       if (document.fonts && document.fonts.ready) {
         await Promise.race([
           document.fonts.ready,
-          new Promise((resolve) => setTimeout(resolve, 300)),
+          new Promise((resolve) => setTimeout(resolve, 100)),
         ]);
       }
       const viewportWidth = Math.max(1, document.documentElement.clientWidth);
@@ -92,7 +92,7 @@ async function waitForPrintResources(printWindow) {
             image.addEventListener("load", resolve, { once: true });
             image.addEventListener("error", resolve, { once: true });
           }))), new Promise((resolve) => setTimeout(resolve, 300))]);
-      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      await new Promise((resolve) => requestAnimationFrame(resolve));
       return {
         failedImages: images
           .filter((image) => !image.complete || image.naturalWidth === 0)
@@ -153,7 +153,7 @@ public static class BombaRawPrint {
 if (-not [BombaRawPrint]::Send('${escapedPrinter}', $bytes)) { throw 'Raw printer command failed' }
 `;
     const encodedScript = Buffer.from(script, "utf16le").toString("base64");
-    await execPromise(`powershell -NoProfile -EncodedCommand ${encodedScript}`, { timeout: 10000 });
+    await execPromise(`powershell -NoLogo -NoProfile -NonInteractive -EncodedCommand ${encodedScript}`, { timeout: 5000 });
     return { success: true };
   } catch (error) {
     return { success: false, message: error.message || "Raw printer command failed" };
@@ -391,19 +391,21 @@ function startLocalPrintServer() {
           response.end(JSON.stringify({ success: true, duplicate: true }));
           return;
         }
-        let drawerWarnings = [];
-        if (payload.openDrawer) {
-          const printers = await mainWindow?.webContents?.getPrintersAsync();
-          const requestedPrinterName = typeof payload.printerName === "string" ? payload.printerName.trim() : "";
-          const printer = requestedPrinterName
-            ? (printers || []).find((item) => item.name === requestedPrinterName)
-              || (printers || []).find((item) => item.name.toLowerCase() === requestedPrinterName.toLowerCase())
-            : (printers || []).find((item) => !["Microsoft Print to PDF", "Microsoft XPS", "OneNote", "Fax"].some((name) => item.name.toLowerCase().includes(name.toLowerCase())));
-          if (printer?.name) {
-            drawerWarnings = await sendPrinterPostCommands(printer.name, { openDrawer: true });
-          }
-        }
-        const result = await printHtmlSilently(payload.html, payload.printerName, payload.paperWidthMm);
+        const drawerPromise = payload.openDrawer
+          ? (async () => {
+              const printers = await mainWindow?.webContents?.getPrintersAsync();
+              const requestedPrinterName = typeof payload.printerName === "string" ? payload.printerName.trim() : "";
+              const printer = requestedPrinterName
+                ? (printers || []).find((item) => item.name === requestedPrinterName)
+                  || (printers || []).find((item) => item.name.toLowerCase() === requestedPrinterName.toLowerCase())
+                : (printers || []).find((item) => !["Microsoft Print to PDF", "Microsoft XPS", "OneNote", "Fax"].some((name) => item.name.toLowerCase().includes(name.toLowerCase())));
+              return printer?.name
+                ? sendPrinterPostCommands(printer.name, { openDrawer: true })
+                : [];
+            })()
+          : Promise.resolve([]);
+        const printPromise = printHtmlSilently(payload.html, payload.printerName, payload.paperWidthMm);
+        const [drawerWarnings, result] = await Promise.all([drawerPromise, printPromise]);
         if (result.success) {
           if (printKey) completedPrints.set(printKey, Date.now());
           result.warnings = [
