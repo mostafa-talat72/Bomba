@@ -437,6 +437,12 @@ export const buildBillPrintHTML = async (
           margin-bottom: 2px; 
           color: #000;
         }
+        .org-phone {
+          font-size: 1.05em;
+          font-weight: 900;
+          margin-bottom: 3px;
+          color: #000;
+        }
         .title { 
           font-size: 1.1em; 
           font-weight: 900;
@@ -711,6 +717,7 @@ export const buildBillPrintHTML = async (
     <body>
       <div class="header">
         ${organizationName ? `<div class="org-name">${organizationName}</div>` : `<div class="org-name">${t('billPrint.defaultEstablishment')}</div>`}
+        ${organizationData?.phone ? `<div class="org-phone">${t('billPrint.phone')}: ${organizationData.phone}</div>` : ''}
         <div class="title" style="font-weight: 900; font-size: 22px;">${getDisplayNumber(bill.billNumber) || ''}</div>
         <div class="info" style="font-weight: 900; font-size: 1.15em;">${formatDate(bill.createdAt || new Date())}</div>
         ${bill.table?.number ? `<div class="info" style="font-weight: 900; font-size: 1.25em; color: #000; margin: 8px 0;"><span style="background: #000; color: #fff; padding: 2px 8px; border-radius: 3px;">${t('billPrint.table')}</span> <strong style="font-size: 1.5em;">${bill.table.number}${tableSectionName ? ` — (${tableSectionName})` : ''}</strong></div>` : (bill.customerName ? `<div class="info" style="font-weight: 900; font-size: 1.15em;">${t('billPrint.customer')}: ${bill.customerName}</div>` : '')}
