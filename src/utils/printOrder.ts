@@ -434,7 +434,7 @@ body {
 .items th,
 .items td {
   padding: 5px 3px;
-  font-size: 1.05em;
+  font-size: 1.15em;
   border: 1px solid #000;
   text-align: center;
   vertical-align: middle;
