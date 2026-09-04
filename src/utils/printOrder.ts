@@ -265,7 +265,7 @@ const printAllSectionsInOnePage = (
             <div style="font-size: 1.15em; font-weight: 900; color: #333; margin: 2px 0;">${dateTimeString}</div>
             ${order.table?.number ? `
               <div style="font-size: 1.15em; font-weight: 900; margin: 2px 0; text-align: center;">
-                ${t('orderPrint.table')}: <strong style="font-size: 1.3em;">${order.table.number}</strong>${tableSectionName ? ` — (${tableSectionName})` : ''}
+                ${t('orderPrint.table')}: <strong style="font-size: 1.3em;">${order.table.number}</strong>${tableSectionName ? `—(${tableSectionName})` : ''}
               </div>
             ` : ''}
           </div>
@@ -320,7 +320,6 @@ const printAllSectionsInOnePage = (
 
         <!-- Footer for each section -->
         <div class="footer">
-          ${t('orderPrint.thankYou')}<br>
           <strong>${t('orderPrint.footer')}</strong>
         </div>
       </div>
@@ -409,8 +408,8 @@ body {
 
 /* ===== ORDER INFO ===== */
 .order-info {
-  margin-bottom: 6px;
-  padding-bottom: 6px;
+  margin-bottom: 2px;
+  padding-bottom: 2px;
   font-size: 16px;
   text-align: center;
   font-weight: bold;
@@ -496,7 +495,7 @@ body {
 .footer {
   margin-top: 3px;
   padding-top: 3px;
-  font-size: 9px;
+  font-size: 1.15em;
   line-height: 1.1;
   text-align: center;
   font-weight: bold;
@@ -504,7 +503,7 @@ body {
 }
 
 .footer strong {
-  font-size: 0.9em;
+  font-size: 1em;
   font-weight: 900;
   white-space: nowrap;
 }
@@ -550,11 +549,24 @@ export const printOrder = async (
   printerName?: string,
   paperWidthMm?: number
 ) => {
-  const printContent = await buildOrderPrintHTML(order, menuSections, menuItemsMap, fallbackOrganizationName, language, t, tableSectionName, selectedSectionIds);
   const savedPrinter = printerName ? null : await api.getDevicePrinter().catch(() => null);
   const selectedPrinterName = printerName || savedPrinter?.data?.printerName || savedPrinter?.data?.name;
-  if (await printThroughLocalBridge(printContent, selectedPrinterName, { cutPaper: true, paperWidthMm })) return;
-  return;
+  const sectionsToPrint = selectedSectionIds && selectedSectionIds.length > 1
+    ? selectedSectionIds
+    : [undefined];
+  for (const sectionIds of sectionsToPrint) {
+    const printContent = await buildOrderPrintHTML(
+      order,
+      menuSections,
+      menuItemsMap,
+      fallbackOrganizationName,
+      language,
+      t,
+      tableSectionName,
+      sectionIds ? [sectionIds] : selectedSectionIds,
+    );
+    await printThroughLocalBridge(printContent, selectedPrinterName, { cutPaper: true, paperWidthMm });
+  }
 };
 
 export default printOrder;
