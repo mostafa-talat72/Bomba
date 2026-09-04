@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Outlet, Link, useLocation } from 'react-router-dom';
+import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
   Home,
@@ -64,11 +64,17 @@ const Layout = () => {
     try { localStorage.setItem('sidebarCollapsed', String(sidebarCollapsed)); } catch {}
   }, [sidebarCollapsed]);
   const location = useLocation();
+  const navigate = useNavigate();
   const { user, logout, sessions, orders, notifications, subscriptionStatus, tables, bills } = useApp();
   const { isDarkMode, toggleDarkMode } = useTheme();
   const tablesHeader = useTablesHeader();
   const mainContentRef = useRef<HTMLElement>(null);
   const [subscriptionInfo, setSubscriptionInfo] = useState<any>(null);
+  const currentUserId = user?._id || user?.id;
+  const organizationOwnerId = user?.organization?.owner;
+  const canPrintConsumptionOnLogout = user?.role === 'admin'
+    || String(user?.role) === 'owner'
+    || Boolean(currentUserId && organizationOwnerId && String(currentUserId) === String(organizationOwnerId));
 
   // حساب عدد الجلسات النشطة لكل نوع
   const activePlaystationSessions = sessions.filter(s => s.status === 'active' && s.deviceType === 'playstation').length;
@@ -271,7 +277,11 @@ const Layout = () => {
     setShowOccupiedWarning(false);
 
     try {
-      await logout();
+      if (canPrintConsumptionOnLogout && window.confirm(t('consumptionReport.logoutPrintPrompt', 'هل تريد طباعة تقرير الاستهلاك قبل تسجيل الخروج؟'))) {
+        navigate('/consumption-report', { replace: true, state: { printOnLogout: true } });
+      } else {
+        await logout();
+      }
     } finally {
       setIsConfirmingLogout(false);
     }
@@ -283,6 +293,10 @@ const Layout = () => {
       return;
     }
 
+    if (canPrintConsumptionOnLogout && window.confirm(t('consumptionReport.logoutPrintPrompt', 'هل تريد طباعة تقرير الاستهلاك قبل تسجيل الخروج؟'))) {
+      navigate('/consumption-report', { replace: true, state: { printOnLogout: true } });
+      return;
+    }
     await logout();
   };
 
