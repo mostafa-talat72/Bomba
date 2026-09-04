@@ -749,7 +749,7 @@ export const printBill = async (
     && (bill as any).orders.every((order: any) => order && Array.isArray(order.items));
   const [fullBillResponse, savedPrinter, settingsResponse] = await Promise.all([
     billId && !hasOrderDetails ? api.getBill(billId) : Promise.resolve(null),
-    api.getDevicePrinter().catch(() => null),
+    printerName ? Promise.resolve(null) : api.getDevicePrinter().catch(() => null),
     api.getOrganization().catch(() => null),
   ]);
   if (fullBillResponse?.success && fullBillResponse.data) {
