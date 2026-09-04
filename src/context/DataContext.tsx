@@ -389,7 +389,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     if (!user) return;
 
     try {
-      const response = await api.getBills({ fresh: true });
+      const response = await api.getBills({ all: true, limit: 10000, fresh: true });
       if (response.success && response.data) {
         setBills(response.data);
       } else {
