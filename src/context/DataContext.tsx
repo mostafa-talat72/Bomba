@@ -1460,8 +1460,19 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     try {
       const response = await api.getTables(sectionId ? { section: sectionId } : undefined);
       if (response.success && response.data) {
-        setTables(response.data);
-        return response.data;
+        const uniqueTables = Array.from(
+          new Map(
+            response.data
+              .map((table: any) => ({
+                ...table,
+                id: table._id || table.id,
+              }))
+              .filter((table: any) => table.id)
+              .map((table: any) => [String(table.id), table])
+          ).values()
+        );
+        setTables(uniqueTables);
+        return uniqueTables;
       }
       throw new Error(response.message || 'Failed to load tables');
     } catch (error) {
@@ -1821,10 +1832,9 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (!table || !(table._id || table.id)) return;
       const tid = table._id || table.id;
       setTables(prev => {
-        const exists = prev.some((t: any) => normalizeId(t._id) === normalizeId(tid) || normalizeId(t.id) === normalizeId(tid));
         const normalized = { ...table, id: tid, _id: tid };
-        if (exists) return prev.map((t: any) => (normalizeId(t._id) === normalizeId(tid) || normalizeId(t.id) === normalizeId(tid)) ? { ...t, ...normalized } : t);
-        return [...prev, normalized];
+        const next = prev.filter((t: any) => normalizeId(t._id || t.id) !== normalizeId(tid));
+        return [...next, normalized];
       });
     };
     const onTableDeleted = (payload: any) => {
