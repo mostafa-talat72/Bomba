@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Outlet, Link, useLocation } from 'react-router-dom';
+import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { toast } from 'react-toastify';
 import {
   Home,
   Gamepad2,
@@ -47,8 +46,6 @@ import LanguageSwitcher from './LanguageSwitcher';
 import ScrollButtons from './ScrollButtons';
 import OccupiedTablesWarningModal from './OccupiedTablesWarningModal';
 import { getOccupiedTablesCount, getOccupiedTablesNames } from '../utils/occupiedTablesHelper';
-import api from '../services/api';
-import { printThroughLocalBridge } from '../utils/localPrintBridge';
 
 // عرف نوع read بشكل صحيح
 interface NotificationRead {
@@ -57,7 +54,7 @@ interface NotificationRead {
 }
 
 const Layout = () => {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const { isRTL } = useLanguage();
   const { formatDate: formatOrgDate } = useOrganization();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -68,13 +65,13 @@ const Layout = () => {
     try { localStorage.setItem('sidebarCollapsed', String(sidebarCollapsed)); } catch {}
   }, [sidebarCollapsed]);
   const location = useLocation();
+  const navigate = useNavigate();
   const { user, logout, sessions, orders, notifications, subscriptionStatus, tables, bills } = useApp();
   const { isDarkMode, toggleDarkMode } = useTheme();
   const tablesHeader = useTablesHeader();
   const mainContentRef = useRef<HTMLElement>(null);
   const [subscriptionInfo, setSubscriptionInfo] = useState<any>(null);
   const [showLogoutPrintPrompt, setShowLogoutPrintPrompt] = useState(false);
-  const [isPrintingLogoutReport, setIsPrintingLogoutReport] = useState(false);
   const currentUserId = user?._id || user?.id;
   const organizationOwnerId = user?.organization?.owner;
   const canPrintConsumptionOnLogout = user?.role === 'admin'
@@ -282,67 +279,10 @@ const Layout = () => {
     await logout();
   };
 
-  const printConsumptionBeforeLogout = async () => {
-    const now = new Date();
-    const end = new Date(now);
-    end.setHours(7, 0, 0, 0);
-    const start = new Date(end);
-    if (now < end) start.setDate(start.getDate() - 1);
-    end.setDate(start.getDate() + 1);
-    const [ordersResponse, sessionsResponse] = await Promise.all([
-      api.getOrders({ limit: 10000, startDate: start.toISOString(), endDate: end.toISOString(), reportEligible: true }),
-      api.getSessions({ status: 'completed', limit: 10000, startDate: start.toISOString(), endDate: end.toISOString() }),
-    ]);
-    if (!ordersResponse.success || !sessionsResponse.success) {
-      throw new Error('Failed to load consumption report data');
-    }
-    const items = new Map<string, { name: string; soldQuantity: number; consumedQuantity: number }>();
-    (ordersResponse.data || []).forEach((order: any) => (order.items || []).forEach((item: any) => {
-      const key = String(item.menuItem || item.menuItemId || item.name);
-      const current = items.get(key) || { name: item.name, soldQuantity: 0, consumedQuantity: 0 };
-      current.soldQuantity += Number(item.quantity) || 0;
-      current.consumedQuantity += Number(item.quantity) || 0;
-      items.set(key, current);
-    }));
-    const reportData = {
-      items: Array.from(items.values()),
-      consumptionData: { all: Array.from(items.values()) },
-      totalSales: (ordersResponse.data || []).reduce((sum: number, order: any) => sum + (Number(order.finalAmount ?? order.totalAmount) || 0), 0),
-      totalConsumption: Array.from(items.values()).reduce((sum, item) => sum + item.consumedQuantity, 0),
-    };
-    const organizationResponse = await api.getOrganization();
-    const organization = organizationResponse.success && organizationResponse.data ? organizationResponse.data : user?.organization;
-    const settings = organization?.printSettings;
-    const profile = settings?.printers?.find((item: any) => item.id === settings?.documentPrinterMap?.consumptionReport);
-    const printerName = profile?.printerName || settings?.printerName;
-    const rows = reportData.items.map((item) => `<tr><td>${item.name}</td><td>${item.consumedQuantity}</td></tr>`).join('');
-    const printContent = `<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8"><style>
-      @page{size:auto;margin:0}body{font-family:Arial,sans-serif;margin:0;padding:8px;text-align:center;font-weight:700}
-      h1{font-size:20px;margin:0 0 6px}h2{font-size:16px;margin:0 0 8px}
-      table{width:100%;border-collapse:collapse;font-size:15px}th,td{border:1px solid #000;padding:3px}
-    </style></head><body><h1>${organization?.name || user?.organizationName || ''}</h1>
-      <h2>${i18n.language === 'ar' ? 'تقرير الاستهلاك' : 'Consumption Report'}</h2>
-      <table><thead><tr><th>${i18n.language === 'ar' ? 'الصنف' : 'Item'}</th><th>${i18n.language === 'ar' ? 'الكمية' : 'Quantity'}</th></tr></thead><tbody>${rows}</tbody></table>
-      <p>${i18n.language === 'ar' ? 'إجمالي المبيعات' : 'Total Sales'}: ${reportData.totalSales}</p>
-    </body></html>`;
-    const printed = await printThroughLocalBridge(printContent, printerName);
-    if (!printed) throw new Error('Failed to print consumption report');
-  };
-
   const requestLogout = () => {
-    void (async () => {
-      setIsPrintingLogoutReport(true);
-      try {
-        await printConsumptionBeforeLogout();
-        setShowLogoutPrintPrompt(false);
-        await finishLogout();
-      } catch (error) {
-        console.error('Failed to print consumption report before logout:', error);
-        toast.error(t('consumptionReport.messages.loadError', 'تعذر طباعة تقرير الاستهلاك، لم يتم تسجيل الخروج.'));
-      } finally {
-        setIsPrintingLogoutReport(false);
-      }
-    })();
+    try { sessionStorage.removeItem('bombaExitGuard'); } catch {}
+    setShowLogoutPrintPrompt(false);
+    navigate('/consumption-report', { replace: true, state: { printOnLogout: true } });
   };
 
   const handleConfirmLogoutWithOccupied = async () => {
@@ -724,11 +664,11 @@ const Layout = () => {
               {t('consumptionReport.logoutPrintPrompt', 'هل تريد طباعة تقرير الاستهلاك قبل تسجيل الخروج؟')}
             </p>
             <div className="grid grid-cols-2 gap-3">
-              <button onClick={finishLogout} disabled={isPrintingLogoutReport} className="rounded-lg bg-gray-100 px-4 py-2.5 font-semibold text-gray-900 dark:bg-gray-800 dark:text-white">
+              <button onClick={finishLogout} className="rounded-lg bg-gray-100 px-4 py-2.5 font-semibold text-gray-900 dark:bg-gray-800 dark:text-white">
                 {t('common.no', 'لا')}
               </button>
-              <button onClick={requestLogout} disabled={isPrintingLogoutReport} className="rounded-lg bg-blue-600 px-4 py-2.5 font-semibold text-white disabled:opacity-50">
-                {isPrintingLogoutReport ? t('common.loading', 'جاري الطباعة...') : t('common.yes', 'نعم، اطبع')}
+              <button onClick={requestLogout} className="rounded-lg bg-blue-600 px-4 py-2.5 font-semibold text-white">
+                {t('common.yes', 'نعم، اطبع')}
               </button>
             </div>
           </div>
