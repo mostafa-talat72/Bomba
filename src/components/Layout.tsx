@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Outlet, Link, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { toast } from 'react-toastify';
 import {
   Home,
   Gamepad2,
@@ -304,6 +305,7 @@ const Layout = () => {
     }));
     const reportData = {
       items: Array.from(items.values()),
+      consumptionData: { all: Array.from(items.values()) },
       totalSales: (ordersResponse.data || []).reduce((sum: number, order: any) => sum + (Number(order.finalAmount ?? order.totalAmount) || 0), 0),
       totalConsumption: Array.from(items.values()).reduce((sum, item) => sum + item.consumedQuantity, 0),
     };
@@ -316,16 +318,17 @@ const Layout = () => {
   };
 
   const requestLogout = () => {
-    setShowLogoutPrintPrompt(false);
     void (async () => {
       setIsPrintingLogoutReport(true);
       try {
         await printConsumptionBeforeLogout();
+        setShowLogoutPrintPrompt(false);
+        await finishLogout();
       } catch (error) {
         console.error('Failed to print consumption report before logout:', error);
+        toast.error(t('consumptionReport.messages.loadError', 'تعذر طباعة تقرير الاستهلاك، لم يتم تسجيل الخروج.'));
       } finally {
         setIsPrintingLogoutReport(false);
-        await finishLogout();
       }
     })();
   };
