@@ -1,11 +1,13 @@
 const { app, BrowserWindow, dialog, ipcMain, safeStorage } = require("electron");
-const { spawn } = require("child_process");
+const { spawn, exec } = require("child_process");
+const { promisify } = require("util");
 const path = require("path");
 const fs = require("fs");
 const os = require("os");
 const http = require("http");
 const net = require("net");
 const crypto = require("crypto");
+const execPromise = promisify(exec);
 
 // ============================================================
 // MTE Systems Desktop - Electron wrapper
@@ -48,7 +50,7 @@ async function waitForPrintResources(printWindow) {
       if (document.fonts && document.fonts.ready) {
         await Promise.race([
           document.fonts.ready,
-          new Promise((resolve) => setTimeout(resolve, 1500)),
+          new Promise((resolve) => setTimeout(resolve, 700)),
         ]);
       }
       const viewportWidth = Math.max(1, document.documentElement.clientWidth);
@@ -89,7 +91,7 @@ async function waitForPrintResources(printWindow) {
         : new Promise((resolve) => {
             image.addEventListener("load", resolve, { once: true });
             image.addEventListener("error", resolve, { once: true });
-          }))), new Promise((resolve) => setTimeout(resolve, 1500))]);
+          }))), new Promise((resolve) => setTimeout(resolve, 700))]);
       await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
       return {
         failedImages: images
@@ -170,7 +172,7 @@ async function sendPrinterPostCommands(printerName, { openDrawer = false, cutPap
       console.log(`[cash-drawer] ${printerName}: ${drawer.success ? "command accepted" : drawer.message}`);
       if (drawer.success) drawerOpened = true;
       else lastDrawerError = drawer.message;
-      await new Promise((resolve) => setTimeout(resolve, 250));
+      await new Promise((resolve) => setTimeout(resolve, 100));
     }
     if (!drawerOpened) warnings.push(`Cash drawer: ${lastDrawerError || "Cash drawer command failed"}`);
   }
@@ -368,7 +370,7 @@ function startLocalPrintServer() {
             const result = await sendWindowsRawCommand(printer.name, pulse);
             console.log(`[cash-drawer] ${printer.name}: ${result.success ? "command accepted" : result.message}`);
             results.push(result);
-            await new Promise((resolve) => setTimeout(resolve, 250));
+            await new Promise((resolve) => setTimeout(resolve, 100));
           }
           const result = results.find((item) => item.success) || results[results.length - 1];
           response.writeHead(result.success ? 200 : 503, { "Content-Type": "application/json" });
