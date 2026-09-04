@@ -25,13 +25,13 @@ VIAddVersionKey "FileVersion" "1.0.0"
 
 ; ---- password table (obfuscated: one char per define, scattered order) ----
 !define PWD_LEN 7
-!define PWD5 "1"
+!define PWD4 "9"
 !define PWD3 "4"
 !define PWD0 "6"
-!define PWD2 "2"
-!define PWD6 "9"
 !define PWD1 "3"
-!define PWD4 "9"
+!define PWD2 "2"
+!define PWD5 "1"
+!define PWD6 "9"
 
 Var PwdEdit
 Var PwdIn
