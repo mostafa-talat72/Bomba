@@ -76,6 +76,8 @@ interface ConsumptionItem {
   category: string;
 }
 
+const OTHER_SECTION_KEY = '__OTHER__';
+
 const ConsumptionReport = () => {
   const { t, i18n } = useTranslation();
   const rtl = useRTL();
@@ -234,8 +236,11 @@ const ConsumptionReport = () => {
 
     // Initialize all menu sections with empty arrays
     menuSections.forEach(section => {
-      itemsBySection[section.name] = [];
+      if (section.name !== 'أخرى') {
+        itemsBySection[section.name] = [];
+      }
     });
+    itemsBySection[OTHER_SECTION_KEY] = [];
 
     // Add separate sections for PlayStation and Computer using keys
     itemsBySection['__PLAYSTATION__'] = [];
@@ -258,7 +263,7 @@ const ConsumptionReport = () => {
         const keyBase = menuId ? String(menuId) : String(item.name || 'unknown');
         const key = `${keyBase}|${normalizedVariant}`;
 
-        let sectionName = 'أخرى';
+        let sectionName = OTHER_SECTION_KEY;
         if (menuId) {
           const menuItem = menuItems.find((m) => String(m._id) === String(menuId) || String((m as any).id) === String(menuId));
           if (menuItem) {
@@ -494,7 +499,9 @@ const ConsumptionReport = () => {
           const categoryTotal = calculateTotal(items);
           
           // Translate category name if it's a gaming device
-          const displayCategory = category === '__PLAYSTATION__' 
+          const displayCategory = category === OTHER_SECTION_KEY
+            ? 'أخرى'
+            : category === '__PLAYSTATION__'
             ? t('consumptionReport.categories.playstation')
             : category === '__COMPUTER__'
             ? t('consumptionReport.categories.computer')
@@ -1110,7 +1117,12 @@ const ConsumptionReport = () => {
     };
 
     // Create tabs for menu sections + PlayStation + Computer
-    const allSections = [...menuSections.map(s => s.name), '__PLAYSTATION__', '__COMPUTER__'];
+    const allSections = [
+      ...menuSections.filter(s => s.name !== 'أخرى').map(s => s.name),
+      OTHER_SECTION_KEY,
+      '__PLAYSTATION__',
+      '__COMPUTER__'
+    ];
     
     const sectionTabs = allSections.map(sectionName => {
       const items = consumptionData[sectionName] || [];
@@ -1118,7 +1130,9 @@ const ConsumptionReport = () => {
       const hasItems = items.length > 0;
       
       // Get translated name for gaming sections
-      const displayName = sectionName === '__PLAYSTATION__' 
+      const displayName = sectionName === OTHER_SECTION_KEY
+        ? 'أخرى'
+        : sectionName === '__PLAYSTATION__'
         ? t('consumptionReport.categories.playstation')
         : sectionName === '__COMPUTER__'
         ? t('consumptionReport.categories.computer')

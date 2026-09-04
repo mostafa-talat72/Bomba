@@ -352,7 +352,10 @@ const BillItemsEditModal: React.FC<Props> = ({ isOpen, onClose, bill, menuItems,
                 <ShoppingCart className="h-4 w-4 text-white" />
               </div>
               <div className="px-3 py-2 border-b border-gray-200 dark:border-gray-700 flex justify-end">
-                <button onClick={() => setShowServiceDialog(true)} className="px-3 py-1.5 rounded-lg bg-indigo-600 text-white font-bold text-sm flex items-center gap-1.5"><Plus className="h-4 w-4" />إضافة خدمة</button>
+                <button onClick={() => setShowServiceDialog(true)} className="group px-4 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white font-bold text-sm flex items-center gap-2 shadow-md shadow-indigo-500/20 transition-all duration-200 hover:-translate-y-0.5 active:translate-y-0">
+                  <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-white/20 transition-transform group-hover:rotate-90"><Plus className="h-4 w-4" /></span>
+                  <span>إضافة خدمة</span>
+                </button>
               </div>
               <div className="min-w-0">
                 <h2 className="text-xl sm:text-2xl font-bold text-white truncate">تعديل أصناف الفاتورة #{billNumber}</h2>
@@ -565,13 +568,21 @@ const BillItemsEditModal: React.FC<Props> = ({ isOpen, onClose, bill, menuItems,
           formatCurrency={fmt}
         />
         {showServiceDialog && (
-          <div className="fixed inset-0 z-[320] bg-black/50 flex items-center justify-center p-4" onClick={() => setShowServiceDialog(false)}>
-            <div className="bg-white dark:bg-gray-900 rounded-xl p-5 w-full max-w-sm space-y-3" onClick={e => e.stopPropagation()}>
-              <h3 className="text-lg font-bold">إضافة خدمة للفاتورة</h3>
-              <input value={serviceName} onChange={e => setServiceName(e.target.value)} className="w-full border rounded-lg p-2" placeholder="اسم الخدمة" />
-              <input value={serviceAmount} onChange={e => setServiceAmount(e.target.value)} type="number" min="0" className="w-full border rounded-lg p-2" placeholder="المبلغ" />
-              <label className="flex items-center gap-2"><input type="checkbox" checked={serviceShowInPrint} onChange={e => setServiceShowInPrint(e.target.checked)} />إظهار الخدمة في الطباعة</label>
-              <div className="flex gap-2 justify-end"><button onClick={() => setShowServiceDialog(false)} className="px-3 py-2 border rounded-lg">إلغاء</button><button onClick={addService} className="px-3 py-2 bg-indigo-600 text-white rounded-lg">إضافة</button></div>
+          <div className="fixed inset-0 z-[320] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm" onClick={() => setShowServiceDialog(false)}>
+            <div className="w-full max-w-md overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900" onClick={e => e.stopPropagation()}>
+              <div className="flex items-start justify-between bg-gradient-to-r from-indigo-600 to-violet-600 px-5 py-4 text-white">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white/15 ring-1 ring-white/25"><Plus className="h-5 w-5" /></div>
+                  <div><h3 className="text-lg font-black">إضافة خدمة للفاتورة</h3><p className="mt-0.5 text-xs text-indigo-100">أضف قيمة إضافية مع التحكم في ظهورها بالطباعة</p></div>
+                </div>
+                <button onClick={() => setShowServiceDialog(false)} className="rounded-lg p-1.5 text-white/80 transition hover:bg-white/15 hover:text-white"><X className="h-5 w-5" /></button>
+              </div>
+              <div className="space-y-4 p-5">
+                <label className="block"><span className="mb-1.5 block text-sm font-bold text-slate-700 dark:text-slate-200">اسم الخدمة</span><input autoFocus value={serviceName} onChange={e => setServiceName(e.target.value)} className="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2.5 text-slate-900 outline-none transition focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/15 dark:border-slate-600 dark:bg-slate-800 dark:text-white" placeholder="مثال: خدمة توصيل" /></label>
+                <label className="block"><span className="mb-1.5 block text-sm font-bold text-slate-700 dark:text-slate-200">المبلغ</span><div className="relative"><input value={serviceAmount} onChange={e => setServiceAmount(e.target.value)} type="number" min="0" step="0.01" className="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2.5 pl-14 text-slate-900 outline-none transition focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/15 dark:border-slate-600 dark:bg-slate-800 dark:text-white" placeholder="0.00" /><span className="absolute inset-y-0 left-3 flex items-center text-xs font-bold text-slate-500">EGP</span></div></label>
+                <label className="flex cursor-pointer items-center justify-between rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800/70"><span><span className="block text-sm font-bold text-slate-800 dark:text-slate-100">إظهار الخدمة في الطباعة</span><span className="mt-0.5 block text-xs text-slate-500 dark:text-slate-400">مخفية تلقائيًا من الفاتورة المطبوعة</span></span><input type="checkbox" checked={serviceShowInPrint} onChange={e => setServiceShowInPrint(e.target.checked)} className="h-5 w-5 accent-indigo-600" /></label>
+                <div className="flex gap-3 border-t border-slate-200 pt-4 dark:border-slate-700"><button onClick={() => setShowServiceDialog(false)} className="flex-1 rounded-xl border border-slate-300 px-4 py-2.5 font-bold text-slate-700 transition hover:bg-slate-100 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800">إلغاء</button><button onClick={addService} disabled={!serviceName.trim() || !serviceAmount || Number(serviceAmount) < 0} className="flex-1 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 px-4 py-2.5 font-bold text-white shadow-md transition hover:from-indigo-700 hover:to-violet-700 disabled:cursor-not-allowed disabled:opacity-50">إضافة الخدمة</button></div>
+              </div>
             </div>
           </div>
         )}
