@@ -354,7 +354,7 @@ body {
   width: 100%;
   max-width: 100%;
   margin: 0 auto;
-  padding: 0 3mm;
+  padding: 0;
   background: white;
   color: #000;
   font-size: 15px;
@@ -424,7 +424,7 @@ body {
 .items {
   width: 100%;
   border-collapse: collapse;
-  margin: 6px 0;
+  margin: 2px 0;
   table-layout: fixed;
   text-align: center;
   direction: ${dir};
@@ -433,8 +433,9 @@ body {
 
 .items th,
 .items td {
-  padding: 5px 3px;
-  font-size: 1.15em;
+  padding: 1px 0;
+  font-size: 1.2em;
+  font-weight: 900;
   border: 1px solid #000;
   text-align: center;
   vertical-align: middle;
@@ -448,17 +449,17 @@ body {
 .item-name {
   width: 70%;
   text-align: center;
-  padding: 4px;
-  font-weight: 800;
+  padding: 1px 0;
+  font-weight: 900;
   font-size: 1.05em;
 }
 
 .item-qty {
   width: 30%;
   text-align: center;
-  padding: 4px;
+  padding: 1px 0;
   font-weight: 900;
-  font-size: 1.15em;
+  font-size: 1.3em;
 }
 
 /* ===== ITEM NOTES ===== */

@@ -414,7 +414,7 @@ export const buildBillPrintHTML = async (
         }
         body { 
           margin: 0; 
-          padding: 8px 8px; 
+          padding: 0;
           font-size: 11px; 
           color: #000; 
           font-weight: 600;
@@ -439,7 +439,7 @@ export const buildBillPrintHTML = async (
         }
         .title { 
           font-size: 1.1em; 
-          font-weight: 800; 
+          font-weight: 900;
           margin-bottom: 6px; 
           color: #000;
         }
@@ -464,8 +464,8 @@ export const buildBillPrintHTML = async (
         .items-table, .totals-table {
           width: 100%;
           border-collapse: collapse;
-          margin-bottom: 10px;
-          font-size: 0.98em;
+          margin: 2px 0;
+          font-size: 1.05em;
           border: 2px solid #000;
           table-layout: fixed;
         }
@@ -474,23 +474,23 @@ export const buildBillPrintHTML = async (
           font-weight: 800;
         }
         .items-table th, .totals-table th {
-          padding: 3px 3px;
+          padding: 1px 0;
           text-align: center;
           border: 1.5px solid #000;
-          font-size: 0.9em;
+          font-size: 1.05em;
+          font-weight: 900;
           word-wrap: break-word;
         }
         .items-table td, .totals-table td {
-          padding: 3px 3px;
+          padding: 1px 0;
           text-align: center;
           border: 1px solid #000;
-          font-weight: 600;
+          font-weight: 900;
           word-wrap: break-word;
           overflow-wrap: break-word;
         }
         .totals-table {
-          margin-top: 12px;
-          margin-bottom: 12px;
+          margin: 2px 0;
         }
         .totals-table th {
           width: 52%;
@@ -498,13 +498,13 @@ export const buildBillPrintHTML = async (
         }
         .totals-table td {
           width: 48%;
-          font-size: 1.15em;
+          font-size: 1.3em;
           font-weight: 900;
         }
         .totals-table .grand-total td {
           background: #000;
           color: #fff;
-          font-size: 1.3em;
+          font-size: 1.45em;
         }
         .totals-table .paid td {
           color: #2e7d32;
@@ -514,9 +514,9 @@ export const buildBillPrintHTML = async (
         }
         .items-table .item-name {
           text-align: center;
-          font-weight: 800;
+          font-weight: 900;
           font-size: 1.1em;
-          padding-${dir === 'rtl' ? 'right' : 'left'}: 5px;
+          padding-${dir === 'rtl' ? 'right' : 'left'}: 0;
           width: 50% !important;
           white-space: pre-wrap;
           word-break: break-word;
@@ -524,38 +524,38 @@ export const buildBillPrintHTML = async (
         .items-table .item-quantity {
           width: 16.67% !important;
           font-weight: 900;
-          font-size: 1.15em;
+          font-size: 1.3em;
         }
         .items-table .item-paid-qty {
           width: 16.67% !important;
           color: #2e7d32;
           font-weight: 900;
-          font-size: 1.15em;
+          font-size: 1.3em;
         }
         .items-table .item-total {
           width: 16.66% !important;
           font-weight: 900;
-          font-size: 1.15em;
+          font-size: 1.3em;
         }
         .items-table.sessions-table .item-quantity {
           width: 20% !important;
           font-weight: 900;
-          font-size: 1.15em;
+          font-size: 1.3em;
         }
         .items-table.sessions-table .item-paid {
           width: 20% !important;
           color: #2e7d32;
           font-weight: 900;
-          font-size: 1.15em;
+          font-size: 1.3em;
         }
         .items-table.sessions-table .item-total {
           width: 20% !important;
           font-weight: 900;
-          font-size: 1.15em;
+          font-size: 1.3em;
         }
         .items-table th:first-child {
           text-align: center;
-          padding-${dir === 'rtl' ? 'right' : 'left'}: 5px;
+          padding-${dir === 'rtl' ? 'right' : 'left'}: 0;
         }
         .total-section { 
           margin-top: 12px;

@@ -293,7 +293,7 @@ async function printHtmlSilently(html, requestedPrinterName, paperWidthMm = 80) 
         th, td {
           min-width: 0 !important;
           max-width: 100% !important;
-          padding: 1mm 0.5mm !important;
+          padding: 0.5mm 0 !important;
           overflow: visible !important;
           overflow-wrap: anywhere !important;
           word-break: break-word !important;
