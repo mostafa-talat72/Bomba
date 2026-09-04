@@ -14,6 +14,8 @@ interface OrderItem {
   }[];
   addonsTotal?: number;
   additionalPrice?: number;
+  isService?: boolean;
+  showInPrint?: boolean;
 }
 
 interface Order {
@@ -197,7 +199,7 @@ export function aggregateItemsWithPayments(
 
     order.items.forEach((item: OrderItem, itemIndex) => {
       const itemId = `${order._id}-${itemIndex}`; // Backend expected format
-      const key = createItemKey(item.name, item.price, item.addons, (item as any).variant);
+      const key = `${item.isService ? 'service' : 'item'}|${createItemKey(item.name, item.price, item.addons, (item as any).variant)}|${item.showInPrint !== false}`;
 
       if (!itemMap.has(key)) {
         // Create new aggregated item
@@ -213,6 +215,8 @@ export function aggregateItemsWithPayments(
           hasAddons: !!(item.addons && item.addons.length > 0),
           orderId: order._id,
           itemIds: [itemId], // Track all itemIds for this aggregated item
+          isService: item.isService === true,
+          showInPrint: item.showInPrint !== false,
         };
         itemMap.set(key, newItem);
       } else {
