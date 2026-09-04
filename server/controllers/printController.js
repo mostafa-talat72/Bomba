@@ -247,7 +247,7 @@ class PrintController {
         bill.status,
         bill.paid,
         bill.total
-      );
+      ).filter(item => !item.isService || item.showInPrint !== false);
 
       aggregatedItems.forEach(item => {
         const variant = item.variant;

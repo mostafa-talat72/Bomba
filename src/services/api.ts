@@ -145,6 +145,8 @@ export interface OrderItem {
   notes?: string;
   additionalPrice?: number;
   inventoryItem?: string;
+  isService?: boolean;
+  showInPrint?: boolean;
 }
 
 export interface InventoryItem {

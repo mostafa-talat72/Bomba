@@ -41,6 +41,14 @@ const orderItemSchema = new mongoose.Schema({
         required: true,
         min: 0,
     },
+    isService: {
+        type: Boolean,
+        default: false,
+    },
+    showInPrint: {
+        type: Boolean,
+        default: true,
+    },
     notes: {
         type: String,
         default: null,

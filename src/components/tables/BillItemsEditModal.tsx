@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { X, Search, Save, ShoppingCart, Table as TableIcon, AlertTriangle, CheckCircle, Printer } from 'lucide-react';
+import { X, Search, Save, ShoppingCart, Table as TableIcon, AlertTriangle, CheckCircle, Printer, Plus, Trash2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Bill, MenuItem, MenuSection, MenuCategory } from '../../services/api';
 import { api } from '../../services/api';
@@ -48,6 +48,10 @@ const BillItemsEditModal: React.FC<Props> = ({ isOpen, onClose, bill, menuItems,
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const itemRefsMap = useRef<Record<string, HTMLDivElement | null>>({});
   const [flashId, setFlashId] = useState<string | null>(null);
+  const [showServiceDialog, setShowServiceDialog] = useState(false);
+  const [serviceName, setServiceName] = useState('خدمة');
+  const [serviceAmount, setServiceAmount] = useState('');
+  const [serviceShowInPrint, setServiceShowInPrint] = useState(false);
   const flashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const prevLengthRef = useRef(items.length);
 
@@ -85,13 +89,17 @@ const BillItemsEditModal: React.FC<Props> = ({ isOpen, onClose, bill, menuItems,
         const menuItemId = it.menuItem?._id || it.menuItem || (typeof it.menuItem === 'string' ? it.menuItem : undefined);
         const mid = menuItemId ? String(menuItemId) : undefined;
         const variant = (it as any).variant || null;
-        const key = createItemKey(it.name, it.price, mid, variant);
+        const isService = (it as any).isService === true;
+        const showInPrint = (it as any).showInPrint !== false;
+        const key = isService ? `service:${it.name}|${it.price}|${showInPrint}` : createItemKey(it.name, it.price, mid, variant);
         const existing = map.get(key);
         if (existing) existing.quantity += it.quantity;
-        else map.set(key, { menuItem: mid || it.name, name: it.name, price: it.price, quantity: it.quantity, notes: it.notes || undefined, variant } as any);
+        else map.set(key, { menuItem: mid || it.name, name: it.name, price: it.price, quantity: it.quantity, notes: it.notes || undefined, variant, isService, showInPrint } as any);
         const stored = map.get(key)!;
         if (mid) stored.menuItem = mid;
         (stored as any).variant = variant;
+        (stored as any).isService = isService;
+        (stored as any).showInPrint = showInPrint;
       }
     }
     // Normalize to LocalOrderItem: menuItem must be string id
@@ -102,6 +110,8 @@ const BillItemsEditModal: React.FC<Props> = ({ isOpen, onClose, bill, menuItems,
       quantity: it.quantity,
       notes: (it as any).notes,
       variant: (it as any).variant || null,
+      isService: (it as any).isService === true,
+      showInPrint: (it as any).showInPrint !== false,
     } as any as LocalOrderItem));
     setItems(normalized);
     setError(null);
@@ -253,12 +263,15 @@ const BillItemsEditModal: React.FC<Props> = ({ isOpen, onClose, bill, menuItems,
     try {
       const billId = (targetBill as any)._id || (targetBill as any).id;
       const payloadItems = items.map(it => {
-        const isObjectId = /^[a-f\d]{24}$/i.test(it.menuItem);
+        const isObjectId = /^[a-f\d]{24}$/i.test(it.menuItem) && !(it as any).isService;
         if (isObjectId) {
           const payload: any = { menuItem: it.menuItem, quantity: it.quantity, notes: it.notes || undefined };
           if (it.price !== undefined) payload.price = it.price;
           if ((it as any).variant) payload.variant = (it as any).variant;
           return payload;
+        }
+        if ((it as any).isService) {
+          return { name: it.name, price: it.price, quantity: it.quantity, isService: true, showInPrint: (it as any).showInPrint === true };
         }
         const payload: any = { name: it.name, price: it.price, quantity: it.quantity, notes: it.notes || undefined };
         if ((it as any).variant) payload.variant = (it as any).variant;
@@ -314,6 +327,12 @@ const BillItemsEditModal: React.FC<Props> = ({ isOpen, onClose, bill, menuItems,
   const handleSave = () => doSave({ shouldPrint: false, shouldPayFull: false });
   const handleSaveAndPrint = () => doSave({ shouldPrint: true, shouldPayFull: false });
   const handleSaveAndPayFull = () => doSave({ shouldPrint: false, shouldPayFull: true });
+  const addService = () => {
+    const amount = Number(serviceAmount);
+    if (!serviceName.trim() || !Number.isFinite(amount) || amount < 0) return;
+    setItems(prev => [...prev, { menuItem: `service-${Date.now()}`, name: serviceName.trim(), price: amount, quantity: 1, isService: true, showInPrint: serviceShowInPrint } as any]);
+    setServiceName('خدمة'); setServiceAmount(''); setServiceShowInPrint(false); setShowServiceDialog(false);
+  };
 
   if (!isOpen || !bill) return null;
   const displayBill = fullBill || bill;
@@ -331,6 +350,9 @@ const BillItemsEditModal: React.FC<Props> = ({ isOpen, onClose, bill, menuItems,
             <div className="flex items-center gap-3 min-w-0">
               <div className="w-9 h-9 bg-white/15 rounded-xl flex items-center justify-center ring-1 ring-white/25 flex-shrink-0">
                 <ShoppingCart className="h-4 w-4 text-white" />
+              </div>
+              <div className="px-3 py-2 border-b border-gray-200 dark:border-gray-700 flex justify-end">
+                <button onClick={() => setShowServiceDialog(true)} className="px-3 py-1.5 rounded-lg bg-indigo-600 text-white font-bold text-sm flex items-center gap-1.5"><Plus className="h-4 w-4" />إضافة خدمة</button>
               </div>
               <div className="min-w-0">
                 <h2 className="text-xl sm:text-2xl font-bold text-white truncate">تعديل أصناف الفاتورة #{billNumber}</h2>
@@ -491,6 +513,7 @@ const BillItemsEditModal: React.FC<Props> = ({ isOpen, onClose, bill, menuItems,
                   const itemVariant = (item as any).variant || null;
                   return (
                   <div key={compositeKey + idx} ref={el => { itemRefsMap.current[compositeKey] = el as HTMLDivElement | null; itemRefsMap.current[item.menuItem] = el as HTMLDivElement | null; }}>
+                    {(item as any).isService && <div className="flex items-center gap-2 text-indigo-600 text-xs font-bold">خدمة <button onClick={() => setItems(prev => prev.filter((_, i) => i !== idx))} className="mr-auto text-red-500"><Trash2 className="h-4 w-4" /></button></div>}
                     <OrderItemRow
                       item={item}
                       isFlash={flashId === compositeKey || flashId === item.menuItem}
@@ -541,6 +564,17 @@ const BillItemsEditModal: React.FC<Props> = ({ isOpen, onClose, bill, menuItems,
           onSave={handlePriceEditSaveBill}
           formatCurrency={fmt}
         />
+        {showServiceDialog && (
+          <div className="fixed inset-0 z-[320] bg-black/50 flex items-center justify-center p-4" onClick={() => setShowServiceDialog(false)}>
+            <div className="bg-white dark:bg-gray-900 rounded-xl p-5 w-full max-w-sm space-y-3" onClick={e => e.stopPropagation()}>
+              <h3 className="text-lg font-bold">إضافة خدمة للفاتورة</h3>
+              <input value={serviceName} onChange={e => setServiceName(e.target.value)} className="w-full border rounded-lg p-2" placeholder="اسم الخدمة" />
+              <input value={serviceAmount} onChange={e => setServiceAmount(e.target.value)} type="number" min="0" className="w-full border rounded-lg p-2" placeholder="المبلغ" />
+              <label className="flex items-center gap-2"><input type="checkbox" checked={serviceShowInPrint} onChange={e => setServiceShowInPrint(e.target.checked)} />إظهار الخدمة في الطباعة</label>
+              <div className="flex gap-2 justify-end"><button onClick={() => setShowServiceDialog(false)} className="px-3 py-2 border rounded-lg">إلغاء</button><button onClick={addService} className="px-3 py-2 bg-indigo-600 text-white rounded-lg">إضافة</button></div>
+            </div>
+          </div>
+        )}
       </ModalPortal>
   );
 };
