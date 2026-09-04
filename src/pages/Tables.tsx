@@ -2816,7 +2816,7 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
                         const cardData = tableCardData.get(tableIdStr);
                         const sessInfo = sessionUrgencyByTable.get(tableIdStr);
                         return (
-                          <div key={table.id} className="[content-visibility:auto] [contain-intrinsic-size:auto_140px]">
+                          <div key={tableIdStr} className="[content-visibility:auto] [contain-intrinsic-size:auto_140px]">
                             <TableButton
                               table={table}
                               isSelected={selectedTable?.id === table.id && showUnifiedTableModal}
@@ -5125,7 +5125,7 @@ const ManagementModal: React.FC<{
                           const isDragOver = dragOverId === tid;
                           return (
                             <div
-                              key={table.id}
+                              key={String(tid)}
                               draggable
                               onDragStart={e => handleDragStart(e, tid)}
                               onDragOver={e => handleDragOver(e, tid)}
