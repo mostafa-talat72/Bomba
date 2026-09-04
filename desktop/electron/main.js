@@ -2,6 +2,7 @@ const { app, BrowserWindow, dialog, ipcMain, safeStorage } = require("electron")
 const { spawn } = require("child_process");
 const path = require("path");
 const fs = require("fs");
+const os = require("os");
 const http = require("http");
 const net = require("net");
 const crypto = require("crypto");
