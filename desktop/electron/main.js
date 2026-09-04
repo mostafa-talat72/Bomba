@@ -454,11 +454,7 @@ function startLocalPrintServer() {
         if (result.success) {
           if (printKey) completedPrints.set(printKey, Date.now());
           result.warnings = drawerWarnings;
-          if (payload.cutPaper) {
-            await sendPrinterPostCommands(result.printerName, { cutPaper: true }).catch((error) => {
-              console.warn(`[paper-cut] ${result.printerName}: ${error.message}`);
-            });
-          }
+          // The printer driver cuts once when each print job finishes.
         } else if (drawerWarnings.length) {
           result.warnings = drawerWarnings;
         }
