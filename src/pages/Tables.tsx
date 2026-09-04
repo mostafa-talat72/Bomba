@@ -2111,10 +2111,6 @@ const loadInitialData = async () => {
         setTimeout(() => setShowPaymentSuccessAnim(false), 2500);
         showNotification(t('billing.notifications.payFullBillSuccess'), 'success');
 
-        if (user?.organization?.printSettings?.openCashDrawerOnPayment !== false &&
-            user?.organization?.printSettings?.autoPrintOnPayment !== true) {
-          await handleOpenCashDrawer();
-        }
         if (user?.organization?.printSettings?.autoPrintOnPayment === true) {
           try { await printBill(finalPaidBill, user?.organizationName, i18n.language, t, getTableSectionName(finalPaidBill.table), 'payment'); } catch {}
         }
@@ -2175,10 +2171,6 @@ const loadInitialData = async () => {
         setTimeout(() => setShowPaymentSuccessAnim(false), 2500);
         showNotification(t('billing.notifications.payFullBillSuccess'), 'success');
 
-        if (user?.organization?.printSettings?.openCashDrawerOnPayment !== false &&
-            user?.organization?.printSettings?.autoPrintOnPayment !== true) {
-          await handleOpenCashDrawer();
-        }
         if (user?.organization?.printSettings?.autoPrintOnPayment === true) {
           await printBill(finalPaidBill, user?.organizationName, i18n.language, t, getTableSectionName(finalPaidBill.table), 'payment');
         }
@@ -4300,10 +4292,6 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
               }
               return next;
             });
-            if (user?.organization?.printSettings?.openCashDrawerOnPayment !== false &&
-                user?.organization?.printSettings?.autoPrintOnPayment !== true) {
-              await handleOpenCashDrawer();
-            }
             if (user?.organization?.printSettings?.autoPrintOnPayment === true) {
               try { await printBill(updatedBill, user?.organizationName, i18n.language, t, getTableSectionName((updatedBill as any).table), 'payment'); } catch {}
             }

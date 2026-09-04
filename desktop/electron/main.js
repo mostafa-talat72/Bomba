@@ -126,6 +126,7 @@ Add-Type -TypeDefinition @"
 using System;
 using System.Runtime.InteropServices;
 public static class BombaRawPrint {
+  public static string LastError = "";
   [StructLayout(LayoutKind.Sequential, CharSet=CharSet.Unicode)]
   public class DocInfo { public string DocName; public string OutputFile; public string DataType; }
   [DllImport("winspool.drv", CharSet=CharSet.Unicode, SetLastError=true)]
@@ -140,19 +141,36 @@ public static class BombaRawPrint {
   static extern bool WritePrinter(IntPtr handle, byte[] bytes, int count, out int written);
   public static bool Send(string name, byte[] bytes) {
     IntPtr handle;
-    if (!OpenPrinter(name, out handle, IntPtr.Zero)) return false;
+    if (!OpenPrinter(name, out handle, IntPtr.Zero)) {
+      LastError = "OpenPrinter failed: " + Marshal.GetLastWin32Error();
+      return false;
+    }
     try {
       var info = new DocInfo { DocName = "Bomba printer command", DataType = "RAW" };
-      if (StartDocPrinter(handle, 1, info) == 0 || !StartPagePrinter(handle)) return false;
+      if (StartDocPrinter(handle, 1, info) == 0) {
+        LastError = "StartDocPrinter failed: " + Marshal.GetLastWin32Error();
+        return false;
+      }
+      if (!StartPagePrinter(handle)) {
+        LastError = "StartPagePrinter failed: " + Marshal.GetLastWin32Error();
+        return false;
+      }
       int written;
       var ok = WritePrinter(handle, bytes, bytes.Length, out written);
+      var writeError = ok ? "" : "WritePrinter failed: " + Marshal.GetLastWin32Error();
       EndPagePrinter(handle); EndDocPrinter(handle);
-      return ok && written == bytes.Length;
+      if (!ok || written != bytes.Length) {
+        LastError = writeError.Length > 0 ? writeError : "WritePrinter wrote " + written + " of " + bytes.Length + " bytes";
+        return false;
+      }
+      return true;
     } finally { ClosePrinter(handle); }
   }
 }
 "@
-if (-not [BombaRawPrint]::Send('${escapedPrinter}', $bytes)) { throw 'Raw printer command failed' }
+if (-not [BombaRawPrint]::Send('${escapedPrinter}', $bytes)) {
+  throw [BombaRawPrint]::LastError
+}
 `;
     const encodedScript = Buffer.from(script, "utf16le").toString("base64");
     await new Promise((resolve, reject) => {
@@ -176,7 +194,14 @@ if (-not [BombaRawPrint]::Send('${escapedPrinter}', $bytes)) { throw 'Raw printe
       child.once("close", (code) => {
         clearTimeout(timeout);
         if (code === 0) resolve();
-        else reject(new Error(stderr.trim() || `PowerShell exited with code ${code}`));
+        else {
+          const details = stderr
+            .replace(/#< CLIXML[\s\S]*?<S S="Error">/g, "")
+            .replace(/_x000D__x000A_/g, "\n")
+            .replace(/<\/S>[\s\S]*?<\/Objs>/g, "")
+            .trim();
+          reject(new Error(details || `PowerShell exited with code ${code}`));
+        }
       });
     });
     return { success: true };
@@ -282,15 +307,14 @@ async function printHtmlSilently(html, requestedPrinterName, paperWidthMm = 80) 
     const printableHtml = /<\/head>/i.test(html)
       ? html.replace(/<\/head>/i, `${printCss}</head>`)
       : `${printCss}${html}`;
-    const printers = await getAvailablePrinters();
     const virtualPrinterNames = ["Microsoft Print to PDF", "Microsoft XPS", "OneNote", "Fax", "PDF24", "Adobe PDF", "Send To OneNote 2016"];
-    const physicalPrinters = (printers || []).filter((printer) =>
-      !virtualPrinterNames.some((name) => printer.name.toLowerCase().includes(name.toLowerCase()))
-    );
-    const selectedPrinter = requestedPrinterName
-      ? (printers || []).find((printer) => printer.name === requestedPrinterName)
-      : physicalPrinters[0];
-    const printerName = selectedPrinter?.name;
+    let printerName = typeof requestedPrinterName === "string" ? requestedPrinterName.trim() : "";
+    if (!printerName) {
+      const printers = await getAvailablePrinters();
+      printerName = (printers || []).find((printer) =>
+        !virtualPrinterNames.some((name) => printer.name.toLowerCase().includes(name.toLowerCase()))
+      )?.name || "";
+    }
     if (!printerName) return { success: false, message: "No configured printer found" };
 
     printWindow = new BrowserWindow({
@@ -381,27 +405,26 @@ function startLocalPrintServer() {
           throw new Error(`Invalid print request JSON: ${error.message}`);
         }
         if (request.url === "/cash-drawer") {
-          const printers = await getAvailablePrinters();
           const requestedPrinterName = typeof payload.printerName === "string" ? payload.printerName.trim() : "";
-          const printer = requestedPrinterName
-            ? (printers || []).find((item) => item.name === requestedPrinterName)
-              || (printers || []).find((item) => item.name.toLowerCase() === requestedPrinterName.toLowerCase())
-            : (printers || []).find((item) => !["Microsoft Print to PDF", "Microsoft XPS", "OneNote", "Fax"].some((name) => item.name.toLowerCase().includes(name.toLowerCase())));
-          if (!printer?.name) {
+          const printerName = requestedPrinterName || (await getAvailablePrinters()).find((item) =>
+            !["Microsoft Print to PDF", "Microsoft XPS", "OneNote", "Fax"].some((name) => item.name.toLowerCase().includes(name.toLowerCase()))
+          )?.name;
+          if (!printerName) {
             response.writeHead(422, { "Content-Type": "application/json" });
             response.end(JSON.stringify({ success: false, message: "No configured printer found" }));
             return;
           }
           const results = [];
           for (const pulse of CASH_DRAWER_PULSES) {
-            const result = await sendWindowsRawCommand(printer.name, pulse);
-            console.log(`[cash-drawer] ${printer.name}: ${result.success ? "command accepted" : result.message}`);
+            const result = await sendWindowsRawCommand(printerName, pulse);
+            console.log(`[cash-drawer] ${printerName}: ${result.success ? "command accepted" : result.message}`);
             results.push(result);
             if (result.success) break;
+            if (/OpenPrinter failed|StartDocPrinter failed|StartPagePrinter failed/.test(result.message || "")) break;
           }
           const result = results.find((item) => item.success) || results[results.length - 1];
           response.writeHead(result.success ? 200 : 503, { "Content-Type": "application/json" });
-          response.end(JSON.stringify({ ...result, printerName: printer.name }));
+          response.end(JSON.stringify({ ...result, printerName }));
           return;
         }
         if (typeof payload.html !== "string" || payload.html.length === 0) {
@@ -418,14 +441,12 @@ function startLocalPrintServer() {
         }
         const drawerPromise = payload.openDrawer
           ? (async () => {
-              const printers = await getAvailablePrinters();
               const requestedPrinterName = typeof payload.printerName === "string" ? payload.printerName.trim() : "";
-              const printer = requestedPrinterName
-                ? (printers || []).find((item) => item.name === requestedPrinterName)
-                  || (printers || []).find((item) => item.name.toLowerCase() === requestedPrinterName.toLowerCase())
-                : (printers || []).find((item) => !["Microsoft Print to PDF", "Microsoft XPS", "OneNote", "Fax"].some((name) => item.name.toLowerCase().includes(name.toLowerCase())));
-              return printer?.name
-                ? sendPrinterPostCommands(printer.name, { openDrawer: true })
+              const printerName = requestedPrinterName || (await getAvailablePrinters()).find((item) =>
+                !["Microsoft Print to PDF", "Microsoft XPS", "OneNote", "Fax"].some((name) => item.name.toLowerCase().includes(name.toLowerCase()))
+              )?.name;
+              return printerName
+                ? sendPrinterPostCommands(printerName, { openDrawer: true })
                 : [];
             })()
           : Promise.resolve([]);
@@ -838,6 +859,9 @@ function createWindow(url) {
   });
 
   mainWindow.loadURL(url);
+  void getAvailablePrinters().catch((error) => {
+    console.warn("Printer list prewarm failed:", error.message);
+  });
 
 mainWindow.webContents.setWindowOpenHandler(({ url: targetUrl }) => {
     if (targetUrl.startsWith(url) || targetUrl === "about:blank" || targetUrl === "") {

@@ -543,7 +543,7 @@ export const printOrder = async (
   paperWidthMm?: number
 ) => {
   const printContent = await buildOrderPrintHTML(order, menuSections, menuItemsMap, fallbackOrganizationName, language, t, tableSectionName, selectedSectionIds);
-  const savedPrinter = await api.getDevicePrinter().catch(() => null);
+  const savedPrinter = printerName ? null : await api.getDevicePrinter().catch(() => null);
   const selectedPrinterName = printerName || savedPrinter?.data?.printerName || savedPrinter?.data?.name;
   if (await printThroughLocalBridge(printContent, selectedPrinterName, { cutPaper: true, paperWidthMm })) return;
   return;
