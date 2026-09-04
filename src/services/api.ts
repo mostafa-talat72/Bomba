@@ -1020,7 +1020,7 @@ class ApiClient {
   }
 
   // Orders endpoints
-  async getOrders(params?: { status?: string; customerName?: string; page?: number; limit?: number; startDate?: string; endDate?: string }): Promise<ApiResponse<Order[]>> {
+  async getOrders(params?: { status?: string; customerName?: string; page?: number; limit?: number; startDate?: string; endDate?: string; reportEligible?: boolean }): Promise<ApiResponse<Order[]>> {
     const searchParams = new URLSearchParams();
     if (params) {
       Object.entries(params).forEach(([key, value]) => {

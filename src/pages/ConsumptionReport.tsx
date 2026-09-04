@@ -400,7 +400,8 @@ const ConsumptionReport = () => {
         api.getOrders({ 
           limit: 10000,
           startDate: startDateISO,
-          endDate: endDateISO
+          endDate: endDateISO,
+          reportEligible: true
         }), // Fetch orders in date range
         api.getSessions({ 
           status: 'completed', 

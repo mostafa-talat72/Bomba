@@ -9,7 +9,6 @@ import {
 import InventoryItem from "../models/InventoryItem.js";
 import User from "../models/User.js";
 import Bill from "../models/Bill.js";
-import Order from "../models/Order.js";
 import Session from "../models/Session.js";
 import Cost from "../models/Cost.js";
 import NotificationService from "../services/notificationService.js";
@@ -17,6 +16,7 @@ import Subscription from "../models/Subscription.js";
 import { sendSubscriptionNotification } from "../controllers/notificationController.js";
 import Organization from "../models/Organization.js";
 import { runCleanup } from "./notificationCleanup.js";
+import { findReportEligibleOrders } from "./reportOrderFilter.js";
 
 /**
  * إعداد الجدولة التلقائية لحذف الإشعارات القديمة
@@ -370,10 +370,9 @@ const generateMonthlyReportForOrganization = async (organization) => {
         // ✅ جلب البيانات بنفس طريقة صفحة تقرير الاستهلاك
         const [orders, sessions, costs] = await Promise.all([
             // الطلبات: نستخدم createdAt (صحيح)
-            Order.find({
+            findReportEligibleOrders(organization._id, {
                 createdAt: { $gte: startOfReport, $lte: endOfReport },
-                organization: organization._id,
-            }).lean(),
+            }),
             // ✅ الجلسات: يجب استخدام endTime وليس createdAt (هذا هو الإصلاح!)
             Session.find({
                 endTime: { $gte: startOfReport, $lte: endOfReport },
