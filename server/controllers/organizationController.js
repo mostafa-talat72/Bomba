@@ -808,6 +808,7 @@ export const generateAndSendDailyReport = async (organizationId, userLocale = 'a
     // نفس منطق جلب البيانات من sendReportNow
     const orders = await Order.find({
         createdAt: { $gte: startOfReport, $lte: endOfReport },
+        isDeleted: false,
         organization: organizationId,
     }).lean();
 
@@ -1223,6 +1224,7 @@ export const sendReportNow = async (req, res) => {
         // Get ALL orders (not just specific statuses)
         const orders = await Order.find({
             createdAt: { $gte: startOfReport, $lte: endOfReport },
+            isDeleted: false,
             organization: organizationId,
         }).lean();
 
@@ -1579,6 +1581,7 @@ export const sendReportNow = async (req, res) => {
                 const [monthlyOrders, monthlySessions, monthlyCosts] = await Promise.all([
                     Order.find({
                         createdAt: { $gte: lastMonthStart, $lt: lastMonthEnd },
+                        isDeleted: false,
                         organization: organizationId,
                     }).lean(),
                     Session.find({

@@ -470,6 +470,7 @@ export const getOrders = async (req, res) => {
         }
         if (table) query.table = table;
         Object.assign(query, organizationFilter(req.user));
+        query.isDeleted = false;
 
         // NEW: Date range filtering
         if (startDate || endDate) {

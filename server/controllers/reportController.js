@@ -46,6 +46,7 @@ export const getDashboardStats = async (req, res) => {
                 {
                     $match: {
                         createdAt: { $gte: startDate, $lte: endDate },
+                        isDeleted: false,
                         organization: req.user.organization,
                     },
                 },
@@ -216,6 +217,7 @@ export const getSalesReport = async (req, res) => {
             {
                 $match: {
                     createdAt: { $gte: startDate, $lte: endDate },
+                    isDeleted: false,
                     status: "delivered",
                     organization: req.user.organization,
                 },
@@ -762,6 +764,7 @@ export const getRecentActivity = async (req, res) => {
         // Get recent orders
         const recentOrders = await Order.find({
             organization: req.user.organization,
+            isDeleted: false,
         })
             .sort({ createdAt: -1 })
             .limit(parseInt(limit) / 2)
@@ -1198,6 +1201,7 @@ const getSalesReportData = async (organization, startDate, endDate) => {
     // Get ALL orders using the same logic as ConsumptionReport
     const orders = await Order.find({
         createdAt: { $gte: startDate, $lte: endDate },
+        isDeleted: false,
         organization: organizationId,
     }).lean();
 
@@ -1514,6 +1518,7 @@ const getTopProductsBySection = async (organization, startDate, endDate) => {
         // Get ALL orders in the date range (not just delivered)
         const orders = await Order.find({
             createdAt: { $gte: startDate, $lte: endDate },
+            isDeleted: false,
             organization: organizationId
         }).lean();
 
@@ -1738,6 +1743,7 @@ const getPeakHoursData = async (organization, startDate, endDate) => {
         // Get ALL orders (not just specific statuses)
         const orders = await Order.find({
             createdAt: { $gte: startDate, $lte: endDate },
+            isDeleted: false,
             organization: organizationId
         }).lean();
 
@@ -1803,6 +1809,7 @@ const getStaffPerformanceData = async (organization, startDate, endDate) => {
         // Get ALL orders (not just delivered)
         const orders = await Order.find({
             createdAt: { $gte: startDate, $lte: endDate },
+            isDeleted: false,
             organization: organizationId
         }).populate('createdBy', 'name').lean();
 
