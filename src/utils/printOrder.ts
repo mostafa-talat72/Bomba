@@ -496,7 +496,7 @@ body {
 .footer {
   margin-top: 6px;
   padding-top: 6px;
-  font-size: 12px;
+  font-size: 1em;
   text-align: center;
   font-weight: bold;
   border-top: 1px dashed #000;
