@@ -291,6 +291,7 @@ export interface Bill {
     printSettings?: {
       openCashDrawer?: boolean;
       openCashDrawerOnPayment?: boolean;
+      openCashDrawerShortcut?: boolean;
       autoPrintOnPayment?: boolean;
       charactersPerLine?: number;
       printHeader?: boolean;

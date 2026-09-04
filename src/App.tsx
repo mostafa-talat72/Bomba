@@ -10,6 +10,7 @@ import { ThemeProvider } from './context/ThemeContext';
 import { LanguageProvider, useLanguage } from './context/LanguageContext';
 import { OrganizationProvider } from './context/OrganizationContext';
 import { TablesHeaderProvider } from './context/TablesHeaderContext';
+import api from './services/api';
 import Layout from './components/Layout';
 import ToastManager from './components/ToastManager';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -73,6 +74,30 @@ const EditableFocusGuard = () => {
           editable.focus({ preventScroll: true });
         }
       });
+    };
+
+    const CashDrawerShortcut = () => {
+      React.useEffect(() => {
+        const handleKeyDown = async (event: KeyboardEvent) => {
+          if (event.key !== 'F12') return;
+          event.preventDefault();
+          event.stopPropagation();
+
+          try {
+            const organizationResponse = await api.getOrganization();
+            const organization = organizationResponse.success ? organizationResponse.data : null;
+            if (!organization || organization.printSettings?.openCashDrawerShortcut === false) return;
+            await api.openCashDrawerOnly(organization);
+          } catch (error) {
+            console.error('Failed to open cash drawer with F12:', error);
+          }
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+      }, []);
+
+      return null;
     };
 
     document.addEventListener('pointerdown', handlePointerDown, true);
@@ -397,6 +422,7 @@ const App = () => {
               <OrganizationProvider>
                 <TablesHeaderProvider>
                 <ToastManager>
+                  <CashDrawerShortcut />
                   <ExitGuard />
                   <div className="min-h-screen bg-gray-50 dark:bg-gray-900 font-cairo container-responsive">
                     <RouteHandler />

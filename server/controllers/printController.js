@@ -540,7 +540,7 @@ class PrintController {
         });
       }
 
-      if (printSettings.openCashDrawerOnPayment === false) {
+      if (printSettings.openCashDrawerShortcut === false) {
         return res.status(400).json({ 
           success: false, 
           disabled: true,
