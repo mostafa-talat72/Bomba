@@ -48,6 +48,7 @@ import ScrollButtons from './ScrollButtons';
 import OccupiedTablesWarningModal from './OccupiedTablesWarningModal';
 import { getOccupiedTablesCount, getOccupiedTablesNames } from '../utils/occupiedTablesHelper';
 import api from '../services/api';
+import { printThroughLocalBridge } from '../utils/localPrintBridge';
 
 // عرف نوع read بشكل صحيح
 interface NotificationRead {
@@ -310,15 +311,22 @@ const Layout = () => {
       totalConsumption: Array.from(items.values()).reduce((sum, item) => sum + item.consumedQuantity, 0),
     };
     const organizationResponse = await api.getOrganization();
-    const organization = organizationResponse.success && organizationResponse.data
-      ? organizationResponse.data
-      : user?.organization;
-    const response = await api.printConsumptionReport({
-      reportData,
-      organization,
-      language: i18n.language,
-    });
-    if (!response.success) throw new Error(response.message || 'Failed to print consumption report');
+    const organization = organizationResponse.success && organizationResponse.data ? organizationResponse.data : user?.organization;
+    const settings = organization?.printSettings;
+    const profile = settings?.printers?.find((item: any) => item.id === settings?.documentPrinterMap?.consumptionReport);
+    const printerName = profile?.printerName || settings?.printerName;
+    const rows = reportData.items.map((item) => `<tr><td>${item.name}</td><td>${item.consumedQuantity}</td></tr>`).join('');
+    const printContent = `<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8"><style>
+      @page{size:auto;margin:0}body{font-family:Arial,sans-serif;margin:0;padding:8px;text-align:center;font-weight:700}
+      h1{font-size:20px;margin:0 0 6px}h2{font-size:16px;margin:0 0 8px}
+      table{width:100%;border-collapse:collapse;font-size:15px}th,td{border:1px solid #000;padding:3px}
+    </style></head><body><h1>${organization?.name || user?.organizationName || ''}</h1>
+      <h2>${i18n.language === 'ar' ? 'تقرير الاستهلاك' : 'Consumption Report'}</h2>
+      <table><thead><tr><th>${i18n.language === 'ar' ? 'الصنف' : 'Item'}</th><th>${i18n.language === 'ar' ? 'الكمية' : 'Quantity'}</th></tr></thead><tbody>${rows}</tbody></table>
+      <p>${i18n.language === 'ar' ? 'إجمالي المبيعات' : 'Total Sales'}: ${reportData.totalSales}</p>
+    </body></html>`;
+    const printed = await printThroughLocalBridge(printContent, printerName);
+    if (!printed) throw new Error('Failed to print consumption report');
   };
 
   const requestLogout = () => {
