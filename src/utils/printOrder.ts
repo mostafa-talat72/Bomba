@@ -486,17 +486,17 @@ body {
 
 /* ===== NOTES ===== */
 .notes {
-  margin-top: 4px;
+  margin-top: 2px;
   font-size: 9px;
-  padding: 0 4px;
+  padding: 0 2px;
   text-align: center;
 }
 
 /* ===== FOOTER ===== */
 .footer {
-  margin-top: 6px;
-  padding-top: 6px;
-  font-size: 1em;
+  margin-top: 2px;
+  padding-top: 2px;
+  font-size: 0.8em;
   text-align: center;
   font-weight: bold;
   border-top: 1px dashed #000;
