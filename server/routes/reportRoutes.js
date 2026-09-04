@@ -79,6 +79,7 @@ router.get("/sold-items", authorize("soldItems", "all"), async (req, res) => {
         // Get all orders (excluding cancelled) with populated data - scoped to organization
         const orders = await Order.find({
             organization: req.user.organization,
+            isDeleted: false,
             status: { $ne: 'cancelled' },
             items: { $exists: true, $ne: [], $type: 'array' },
             ...dateQuery
