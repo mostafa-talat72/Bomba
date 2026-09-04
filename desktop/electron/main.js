@@ -21,7 +21,9 @@ const isDev = process.argv.includes("--dev");
 const isPrintAgent = process.argv.includes("--print-agent");
 const CASH_DRAWER_PULSES = [
   [0x1b, 0x70, 0x00, 0x19, 0xfa],
+  [0x1b, 0x70, 0x00, 0x32, 0xfa],
   [0x1b, 0x70, 0x01, 0x19, 0xfa],
+  [0x1b, 0x70, 0x01, 0x32, 0xfa],
 ];
 
 // Keep userData at a stable location across branding changes so all
@@ -165,9 +167,10 @@ async function sendPrinterPostCommands(printerName, { openDrawer = false, cutPap
     let lastDrawerError = "";
     for (const pulse of CASH_DRAWER_PULSES) {
       const drawer = await sendWindowsRawCommand(printerName, pulse);
+      console.log(`[cash-drawer] ${printerName}: ${drawer.success ? "command accepted" : drawer.message}`);
       if (drawer.success) drawerOpened = true;
       else lastDrawerError = drawer.message;
-      await new Promise((resolve) => setTimeout(resolve, 120));
+      await new Promise((resolve) => setTimeout(resolve, 250));
     }
     if (!drawerOpened) warnings.push(`Cash drawer: ${lastDrawerError || "Cash drawer command failed"}`);
   }
@@ -350,8 +353,10 @@ function startLocalPrintServer() {
         }
         if (request.url === "/cash-drawer") {
           const printers = await mainWindow?.webContents?.getPrintersAsync();
-          const printer = payload.printerName
-            ? (printers || []).find((item) => item.name === payload.printerName)
+          const requestedPrinterName = typeof payload.printerName === "string" ? payload.printerName.trim() : "";
+          const printer = requestedPrinterName
+            ? (printers || []).find((item) => item.name === requestedPrinterName)
+              || (printers || []).find((item) => item.name.toLowerCase() === requestedPrinterName.toLowerCase())
             : (printers || []).find((item) => !["Microsoft Print to PDF", "Microsoft XPS", "OneNote", "Fax"].some((name) => item.name.toLowerCase().includes(name.toLowerCase())));
           if (!printer?.name) {
             response.writeHead(422, { "Content-Type": "application/json" });
@@ -360,8 +365,10 @@ function startLocalPrintServer() {
           }
           const results = [];
           for (const pulse of CASH_DRAWER_PULSES) {
-            results.push(await sendWindowsRawCommand(printer.name, pulse));
-            await new Promise((resolve) => setTimeout(resolve, 120));
+            const result = await sendWindowsRawCommand(printer.name, pulse);
+            console.log(`[cash-drawer] ${printer.name}: ${result.success ? "command accepted" : result.message}`);
+            results.push(result);
+            await new Promise((resolve) => setTimeout(resolve, 250));
           }
           const result = results.find((item) => item.success) || results[results.length - 1];
           response.writeHead(result.success ? 200 : 503, { "Content-Type": "application/json" });
