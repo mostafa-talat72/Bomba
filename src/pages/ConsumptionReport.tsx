@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { useLocation } from 'react-router-dom';
 import { ConfigProvider, Table, DatePicker, Tabs, Spin, Empty } from 'antd';
 import LocalizedTimePicker from '../components/common/LocalizedTimePicker';
 import {
@@ -79,9 +78,7 @@ interface ConsumptionItem {
 const ConsumptionReport = () => {
   const { t, i18n } = useTranslation();
   const rtl = useRTL();
-  const { menuItems, fetchMenuItems, menuSections, fetchMenuSections, user, logout } = useApp();
-  const location = useLocation();
-  const logoutPrintHandled = useRef(false);
+  const { menuItems, fetchMenuItems, menuSections, fetchMenuSections, user } = useApp();
   
   // Helper function to format currency with organization settings
   const formatCurrency = useCallback((amount: number) => {
@@ -136,7 +133,6 @@ const ConsumptionReport = () => {
   const [activeTab, setActiveTab] = useState<string>('all');
   const [pageSize, setPageSize] = useState<number>(10);
   const [loading, setLoading] = useState(false);
-  const [dataReady, setDataReady] = useState(false);
   const [consumptionData, setConsumptionData] = useState<Record<string, ConsumptionItem[]>>({});
   const [error, setError] = useState<string | null>(null);
   const [showTotalSales, setShowTotalSales] = useState(false);
@@ -444,7 +440,6 @@ const ConsumptionReport = () => {
       console.error('❌ Error fetching data:', error);
     } finally {
       setLoading(false);
-      setDataReady(true);
     }
   }, [dateRange, fetchMenuItems, fetchMenuSections, menuItems, menuSections, processOrdersAndSessions, t]);
 
@@ -819,15 +814,6 @@ const ConsumptionReport = () => {
       console.error('Print error:', error);
     }
   };
-
-  useEffect(() => {
-    if (!location.state?.printOnLogout || loading || !dataReady || logoutPrintHandled.current) return;
-    logoutPrintHandled.current = true;
-    void (async () => {
-      await printReport();
-      await logout();
-    })();
-  }, [location.state, loading, dataReady, printReport, logout]);
 
   const exportToPDF = () => {
     setLoading(true);
