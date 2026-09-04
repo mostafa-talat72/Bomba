@@ -334,7 +334,7 @@ class PrintController {
     content += '-'.repeat(charsPerLine) + '\n';
 
     if (order.items && order.items.length > 0) {
-      order.items.forEach(item => {
+      order.items.filter(item => !item.isService || item.showInPrint !== false).forEach(item => {
         content += `${item.name}\n`;
         content += `Qty: ${item.quantity} | Price: ${item.price}\n`;
       });
