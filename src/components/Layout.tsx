@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
+import { Outlet, Link, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
   Home,
@@ -31,7 +31,8 @@ import {
   PanelLeftOpen,
   RefreshCw,
   Maximize2,
-  Minimize2
+  Minimize2,
+  Printer
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useTheme } from '../context/ThemeContext';
@@ -45,6 +46,7 @@ import LanguageSwitcher from './LanguageSwitcher';
 import ScrollButtons from './ScrollButtons';
 import OccupiedTablesWarningModal from './OccupiedTablesWarningModal';
 import { getOccupiedTablesCount, getOccupiedTablesNames } from '../utils/occupiedTablesHelper';
+import api from '../services/api';
 
 // عرف نوع read بشكل صحيح
 interface NotificationRead {
@@ -53,7 +55,7 @@ interface NotificationRead {
 }
 
 const Layout = () => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { isRTL } = useLanguage();
   const { formatDate: formatOrgDate } = useOrganization();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -64,12 +66,13 @@ const Layout = () => {
     try { localStorage.setItem('sidebarCollapsed', String(sidebarCollapsed)); } catch {}
   }, [sidebarCollapsed]);
   const location = useLocation();
-  const navigate = useNavigate();
   const { user, logout, sessions, orders, notifications, subscriptionStatus, tables, bills } = useApp();
   const { isDarkMode, toggleDarkMode } = useTheme();
   const tablesHeader = useTablesHeader();
   const mainContentRef = useRef<HTMLElement>(null);
   const [subscriptionInfo, setSubscriptionInfo] = useState<any>(null);
+  const [showLogoutPrintPrompt, setShowLogoutPrintPrompt] = useState(false);
+  const [isPrintingLogoutReport, setIsPrintingLogoutReport] = useState(false);
   const currentUserId = user?._id || user?.id;
   const organizationOwnerId = user?.organization?.owner;
   const canPrintConsumptionOnLogout = user?.role === 'admin'
@@ -272,15 +275,70 @@ const Layout = () => {
     return tableIdsWithStatus.size > 0 || hasOpenBill || hasActiveSession;
   }, [user, tables, bills, sessions]);
 
+  const finishLogout = async () => {
+    try { sessionStorage.removeItem('bombaExitGuard'); } catch {}
+    await logout();
+  };
+
+  const printConsumptionBeforeLogout = async () => {
+    const now = new Date();
+    const end = new Date(now);
+    end.setHours(7, 0, 0, 0);
+    const start = new Date(end);
+    if (now < end) start.setDate(start.getDate() - 1);
+    end.setDate(start.getDate() + 1);
+    const [ordersResponse, sessionsResponse] = await Promise.all([
+      api.getOrders({ limit: 10000, startDate: start.toISOString(), endDate: end.toISOString(), reportEligible: true }),
+      api.getSessions({ status: 'completed', limit: 10000, startDate: start.toISOString(), endDate: end.toISOString() }),
+    ]);
+    if (!ordersResponse.success || !sessionsResponse.success) {
+      throw new Error('Failed to load consumption report data');
+    }
+    const items = new Map<string, { name: string; soldQuantity: number; consumedQuantity: number }>();
+    (ordersResponse.data || []).forEach((order: any) => (order.items || []).forEach((item: any) => {
+      const key = String(item.menuItem || item.menuItemId || item.name);
+      const current = items.get(key) || { name: item.name, soldQuantity: 0, consumedQuantity: 0 };
+      current.soldQuantity += Number(item.quantity) || 0;
+      current.consumedQuantity += Number(item.quantity) || 0;
+      items.set(key, current);
+    }));
+    const reportData = {
+      items: Array.from(items.values()),
+      totalSales: (ordersResponse.data || []).reduce((sum: number, order: any) => sum + (Number(order.finalAmount ?? order.totalAmount) || 0), 0),
+      totalConsumption: Array.from(items.values()).reduce((sum, item) => sum + item.consumedQuantity, 0),
+    };
+    const response = await api.printConsumptionReport({
+      reportData,
+      organization: user?.organization,
+      language: i18n.language,
+    });
+    if (!response.success) throw new Error(response.message || 'Failed to print consumption report');
+  };
+
+  const requestLogout = () => {
+    setShowLogoutPrintPrompt(false);
+    void (async () => {
+      setIsPrintingLogoutReport(true);
+      try {
+        await printConsumptionBeforeLogout();
+      } catch (error) {
+        console.error('Failed to print consumption report before logout:', error);
+      } finally {
+        setIsPrintingLogoutReport(false);
+        await finishLogout();
+      }
+    })();
+  };
+
   const handleConfirmLogoutWithOccupied = async () => {
     setIsConfirmingLogout(true);
     setShowOccupiedWarning(false);
 
     try {
-      if (canPrintConsumptionOnLogout && window.confirm(t('consumptionReport.logoutPrintPrompt', 'هل تريد طباعة تقرير الاستهلاك قبل تسجيل الخروج؟'))) {
-        navigate('/consumption-report', { replace: true, state: { printOnLogout: true } });
+      if (canPrintConsumptionOnLogout) {
+        setShowLogoutPrintPrompt(true);
       } else {
-        await logout();
+        await finishLogout();
       }
     } finally {
       setIsConfirmingLogout(false);
@@ -293,11 +351,11 @@ const Layout = () => {
       return;
     }
 
-    if (canPrintConsumptionOnLogout && window.confirm(t('consumptionReport.logoutPrintPrompt', 'هل تريد طباعة تقرير الاستهلاك قبل تسجيل الخروج؟'))) {
-      navigate('/consumption-report', { replace: true, state: { printOnLogout: true } });
+    if (canPrintConsumptionOnLogout) {
+      setShowLogoutPrintPrompt(true);
       return;
     }
-    await logout();
+    await finishLogout();
   };
 
   // حالة فتح قائمة الأجهزة
@@ -640,6 +698,27 @@ const Layout = () => {
         isLoading={isConfirmingLogout}
         actionType="logout"
       />
+      {showLogoutPrintPrompt && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl dark:bg-gray-900">
+            <div className="mb-4 flex items-center gap-3">
+              <div className="rounded-full bg-blue-100 p-3 dark:bg-blue-900/30"><Printer className="h-6 w-6 text-blue-600" /></div>
+              <h2 className="text-xl font-bold text-gray-900 dark:text-white">{t('auth.logout', 'تسجيل الخروج')}</h2>
+            </div>
+            <p className="mb-6 text-gray-600 dark:text-gray-300">
+              {t('consumptionReport.logoutPrintPrompt', 'هل تريد طباعة تقرير الاستهلاك قبل تسجيل الخروج؟')}
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <button onClick={finishLogout} disabled={isPrintingLogoutReport} className="rounded-lg bg-gray-100 px-4 py-2.5 font-semibold text-gray-900 dark:bg-gray-800 dark:text-white">
+                {t('common.no', 'لا')}
+              </button>
+              <button onClick={requestLogout} disabled={isPrintingLogoutReport} className="rounded-lg bg-blue-600 px-4 py-2.5 font-semibold text-white disabled:opacity-50">
+                {isPrintingLogoutReport ? t('common.loading', 'جاري الطباعة...') : t('common.yes', 'نعم، اطبع')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
