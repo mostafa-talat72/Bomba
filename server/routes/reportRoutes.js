@@ -16,6 +16,7 @@ import Order from "../models/Order.js";
 import InventoryItem from "../models/InventoryItem.js";
 import Cost from "../models/Cost.js";
 import { getDateRange } from "../utils/helpers.js";
+import { getReportEligibleOrderIds } from "../utils/reportOrderFilter.js";
 
 const router = express.Router();
 
@@ -77,9 +78,11 @@ router.get("/sold-items", authorize("soldItems", "all"), async (req, res) => {
         }
         
         // Get all orders (excluding cancelled) with populated data - scoped to organization
+        const reportOrderIds = await getReportEligibleOrderIds(req.user.organization);
         const orders = await Order.find({
             organization: req.user.organization,
             isDeleted: false,
+            _id: { $in: reportOrderIds },
             status: { $ne: 'cancelled' },
             items: { $exists: true, $ne: [], $type: 'array' },
             ...dateQuery

@@ -3,6 +3,7 @@ import Order from "../models/Order.js";
 import InventoryItem from "../models/InventoryItem.js";
 import MenuItem from "../models/MenuItem.js";
 import Bill from "../models/Bill.js";
+import { getReportEligibleOrderIds } from "../utils/reportOrderFilter.js";
 import Table from "../models/Table.js";
 import Logger from "../middleware/logger.js";
 import NotificationService from "../services/notificationService.js";
@@ -456,7 +457,8 @@ export const getOrders = async (req, res) => {
             page = 1, 
             limit = 50, 
             startDate,  // NEW: Date range filtering
-            endDate     // NEW: Date range filtering
+            endDate,    // NEW: Date range filtering
+            reportEligible
         } = req.query;
 
         const query = {};
@@ -471,6 +473,10 @@ export const getOrders = async (req, res) => {
         if (table) query.table = table;
         Object.assign(query, organizationFilter(req.user));
         query.isDeleted = false;
+        if (reportEligible === "true") {
+            const reportOrderIds = await getReportEligibleOrderIds(req.user.organization);
+            query._id = { $in: reportOrderIds };
+        }
 
         // NEW: Date range filtering
         if (startDate || endDate) {

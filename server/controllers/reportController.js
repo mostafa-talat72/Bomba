@@ -14,6 +14,7 @@ import {
     generateFilename,
 } from "../utils/exportUtils.js";
 import { getUserLocale } from "../utils/localeHelper.js";
+import { getReportEligibleOrderIds } from "../utils/reportOrderFilter.js";
 
 // @desc    Get dashboard statistics
 // @route   GET /api/reports/dashboard
@@ -22,6 +23,7 @@ export const getDashboardStats = async (req, res) => {
     try {
         const filter = req.query;
         const { startDate, endDate } = getDateRange(filter);
+        const reportOrderIds = await getReportEligibleOrderIds(req.user.organization);
 
         // كل التجميعات متوازية بلا تسلسل — نفس البيانات الكاملة لكن 150ms بدل 800ms
         const [revenueData, ordersData, sessionsData] = await Promise.all([
@@ -48,6 +50,7 @@ export const getDashboardStats = async (req, res) => {
                         createdAt: { $gte: startDate, $lte: endDate },
                         isDeleted: false,
                         organization: req.user.organization,
+                        _id: { $in: reportOrderIds },
                     },
                 },
                 {
@@ -112,6 +115,8 @@ export const getDashboardStats = async (req, res) => {
             Order.countDocuments({
                 status: { $in: ["pending", "preparing", "ready"] },
                 organization: req.user.organization,
+                isDeleted: false,
+                _id: { $in: reportOrderIds },
             })
         ]);
 
@@ -156,6 +161,7 @@ export const getSalesReport = async (req, res) => {
     try {
         const { groupBy = "day", ...filter } = req.query;
         const { startDate, endDate } = getDateRange(filter);
+        const reportOrderIds = await getReportEligibleOrderIds(req.user.organization);
         // Calculate previous period for comparison
         const periodDuration = endDate - startDate;
         const previousStartDate = new Date(startDate.getTime() - periodDuration);
@@ -220,6 +226,7 @@ export const getSalesReport = async (req, res) => {
                     isDeleted: false,
                     status: "delivered",
                     organization: req.user.organization,
+                    _id: { $in: reportOrderIds },
                 },
             },
             {
@@ -519,6 +526,7 @@ export const getFinancialReport = async (req, res) => {
         
         // Get organization ID correctly
         const organizationId = req.user.organization._id || req.user.organization;
+        const reportOrderIds = await getReportEligibleOrderIds(organizationId);
 
         // Revenue from Bills (source of truth)
         const billRevenue = await Bill.aggregate([
@@ -621,6 +629,8 @@ export const getFinancialReport = async (req, res) => {
             createdAt: { $gte: startDate, $lte: endDate },
             status: { $ne: "cancelled" },
             organization: organizationId,
+            isDeleted: false,
+            _id: { $in: reportOrderIds },
         });
 
         const totalSessions = await Session.countDocuments({
@@ -751,6 +761,7 @@ export const getSessionsReport = async (req, res) => {
 export const getRecentActivity = async (req, res) => {
     try {
         const { limit = 10 } = req.query;
+        const reportOrderIds = await getReportEligibleOrderIds(req.user.organization);
 
         // Get recent sessions
         const recentSessions = await Session.find({
@@ -765,6 +776,7 @@ export const getRecentActivity = async (req, res) => {
         const recentOrders = await Order.find({
             organization: req.user.organization,
             isDeleted: false,
+            _id: { $in: reportOrderIds },
         })
             .sort({ createdAt: -1 })
             .limit(parseInt(limit) / 2)
@@ -1197,12 +1209,14 @@ export const exportReportToPDF = async (req, res) => {
 const getSalesReportData = async (organization, startDate, endDate) => {
     // Ensure organization is an ObjectId, not an object
     const organizationId = organization._id || organization;
+    const reportOrderIds = await getReportEligibleOrderIds(organizationId);
     
     // Get ALL orders using the same logic as ConsumptionReport
     const orders = await Order.find({
         createdAt: { $gte: startDate, $lte: endDate },
         isDeleted: false,
         organization: organizationId,
+        _id: { $in: reportOrderIds },
     }).lean();
 
     // Get completed sessions using endTime (same as ConsumptionReport and /api/sessions endpoint)
@@ -1514,12 +1528,14 @@ const getTopProductsBySection = async (organization, startDate, endDate) => {
     try {
         // Ensure organization is an ObjectId, not an object
         const organizationId = organization._id || organization;
+        const reportOrderIds = await getReportEligibleOrderIds(organizationId);
         
         // Get ALL orders in the date range (not just delivered)
         const orders = await Order.find({
             createdAt: { $gte: startDate, $lte: endDate },
             isDeleted: false,
-            organization: organizationId
+            organization: organizationId,
+            _id: { $in: reportOrderIds }
         }).lean();
 
 
@@ -1635,15 +1651,14 @@ const getSessionsDataByType = async (organization, startDate, endDate, deviceTyp
     try {
         // Ensure organization is an ObjectId, not an object
         const organizationId = organization._id || organization;
-        
         // Filter by endTime for completed sessions
         const sessions = await Session.find({
             endTime: { $gte: startDate, $lte: endDate },
             deviceType,
             status: 'completed',
             totalCost: { $gt: 0 },
-            organization: organizationId
-        }).lean();
+                organization: organizationId
+            }).lean();
 
         const totalSessions = sessions.length;
         const totalRevenue = sessions.reduce((sum, s) => sum + (Number(s.finalCost) || 0), 0);
@@ -1739,12 +1754,14 @@ const getPeakHoursData = async (organization, startDate, endDate) => {
     try {
         // Ensure organization is an ObjectId, not an object
         const organizationId = organization._id || organization;
+        const reportOrderIds = await getReportEligibleOrderIds(organizationId);
         
         // Get ALL orders (not just specific statuses)
         const orders = await Order.find({
             createdAt: { $gte: startDate, $lte: endDate },
             isDeleted: false,
-            organization: organizationId
+            organization: organizationId,
+            _id: { $in: reportOrderIds }
         }).lean();
 
         // Get completed sessions - filter by endTime
@@ -1805,12 +1822,14 @@ const getStaffPerformanceData = async (organization, startDate, endDate) => {
     try {
         // Ensure organization is an ObjectId, not an object
         const organizationId = organization._id || organization;
+        const reportOrderIds = await getReportEligibleOrderIds(organizationId);
         
         // Get ALL orders (not just delivered)
         const orders = await Order.find({
             createdAt: { $gte: startDate, $lte: endDate },
             isDeleted: false,
-            organization: organizationId
+            organization: organizationId,
+            _id: { $in: reportOrderIds }
         }).populate('createdBy', 'name').lean();
 
         // Get completed sessions - filter by endTime
