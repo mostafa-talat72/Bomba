@@ -18,7 +18,7 @@ import { formatCurrency as formatCurrencyUtil, formatDecimal } from '../utils/fo
 import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
 import { printOrder } from '../utils/printOrder';
 import { printBill } from '../utils/printBill';
-import { printThroughLocalBridge } from '../utils/localPrintBridge';
+import { openCashDrawerThroughAgent, printThroughLocalBridge } from '../utils/localPrintBridge';
 import { useBillAggregation } from '../hooks/useBillAggregation';
 import {
   canAddOrder, canEditOrder, canDeleteOrder,
@@ -2193,18 +2193,15 @@ const loadInitialData = async () => {
 
   const handleOpenCashDrawer = async () => {
     try {
-      const organization = user?.organization;
-      const response = await api.openCashDrawerOnly(organization);
-      const message = response?.message || '';
-
-      if (response.success) {
+      const printSettings = user?.organization?.printSettings;
+      const billPrinterId = printSettings?.documentPrinterMap?.bill;
+      const printer = printSettings?.printers?.find((item: any) => item.id === billPrinterId)
+        || printSettings?.printers?.[0];
+      const opened = await openCashDrawerThroughAgent(printer?.printerName || printer?.name);
+      if (opened) {
         showNotification(t('settings.organization.printSettings.cashDrawerOpened'), 'success');
       } else {
-        if (message.includes('disabled')) {
-          showNotification(t('settings.organization.printSettings.cashDrawerDisabled'), 'warning');
-        } else {
-          showNotification(t('settings.organization.printSettings.cashDrawerFailed'), 'error');
-        }
+        showNotification(t('settings.organization.printSettings.cashDrawerFailed'), 'error');
       }
     } catch (error) {
       console.error('Error opening cash drawer:', error);

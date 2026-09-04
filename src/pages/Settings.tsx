@@ -13,6 +13,7 @@ import { CURRENCY_SYMBOLS } from '../../shared/currencySymbols';
 import { getTimezoneName } from '../../shared/timezoneNames';
 import { WORLD_LANGUAGES } from '../../shared/languages';
 import api from '../services/api';
+import { openCashDrawerThroughAgent } from '../utils/localPrintBridge';
 
 // Type for alert messages
 type AlertType = 'success' | 'error' | 'info' | 'warning';
@@ -862,11 +863,15 @@ const Settings: FC = () => {
   const testDrawer = async () => {
     setTestingDrawer(true);
     try {
-      const response = await api.openCashDrawerOnly(organization);
-      if (response.success) {
+      const printSettings = organization.printSettings;
+      const billPrinterId = printSettings?.documentPrinterMap?.bill;
+      const printer = printSettings?.printers?.find(item => item.id === billPrinterId)
+        || printSettings?.printers?.[0];
+      const opened = await openCashDrawerThroughAgent(printer?.printerName || printer?.name);
+      if (opened) {
         showAlertMessage(t('settings.organization.printSettings.cashDrawerOpened'), 'success');
       } else {
-        showAlertMessage(response.message || t('settings.organization.printSettings.cashDrawerFailed'), 'warning');
+        showAlertMessage(t('settings.organization.printSettings.cashDrawerFailed'), 'warning');
       }
     } catch (error) {
       console.error('Error testing cash drawer:', error);

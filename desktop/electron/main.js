@@ -309,7 +309,7 @@ function startLocalPrintServer() {
       response.end();
       return;
     }
-    if (request.method !== "POST" || request.url !== "/print") {
+    if (request.method !== "POST" || !["/print", "/cash-drawer"].includes(request.url)) {
       response.writeHead(404, { "Content-Type": "application/json" });
       response.end(JSON.stringify({ success: false, message: "Not found" }));
       return;
@@ -335,6 +335,21 @@ function startLocalPrintServer() {
           payload = JSON.parse(body);
         } catch (error) {
           throw new Error(`Invalid print request JSON: ${error.message}`);
+        }
+        if (request.url === "/cash-drawer") {
+          const printers = await mainWindow?.webContents?.getPrintersAsync();
+          const printer = payload.printerName
+            ? (printers || []).find((item) => item.name === payload.printerName)
+            : (printers || []).find((item) => !["Microsoft Print to PDF", "Microsoft XPS", "OneNote", "Fax"].some((name) => item.name.toLowerCase().includes(name.toLowerCase())));
+          if (!printer?.name) {
+            response.writeHead(422, { "Content-Type": "application/json" });
+            response.end(JSON.stringify({ success: false, message: "No configured printer found" }));
+            return;
+          }
+          const result = await sendWindowsRawCommand(printer.name, CASH_DRAWER_PULSE);
+          response.writeHead(result.success ? 200 : 503, { "Content-Type": "application/json" });
+          response.end(JSON.stringify({ ...result, printerName: printer.name }));
+          return;
         }
         if (typeof payload.html !== "string" || payload.html.length === 0) {
           response.writeHead(422, { "Content-Type": "application/json" });
