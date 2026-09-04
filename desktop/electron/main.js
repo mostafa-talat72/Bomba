@@ -80,13 +80,6 @@ async function waitForPrintResources(printWindow) {
         table.style.tableLayout = "fixed";
       });
       const images = Array.from(document.images);
-      await Promise.race([Promise.all(images.map((image) => image.complete
-        ? Promise.resolve()
-        : new Promise((resolve) => {
-            image.addEventListener("load", resolve, { once: true });
-            image.addEventListener("error", resolve, { once: true });
-          }))), new Promise((resolve) => setTimeout(resolve, 100))]);
-      await new Promise((resolve) => requestAnimationFrame(resolve));
       return {
         failedImages: images
           .filter((image) => !image.complete || image.naturalWidth === 0)
@@ -454,10 +447,12 @@ function startLocalPrintServer() {
         const [drawerWarnings, result] = await Promise.all([drawerPromise, printPromise]);
         if (result.success) {
           if (printKey) completedPrints.set(printKey, Date.now());
-          result.warnings = [
-            ...drawerWarnings,
-            ...(await sendPrinterPostCommands(result.printerName, { cutPaper: payload.cutPaper })),
-          ];
+          result.warnings = drawerWarnings;
+          if (payload.cutPaper) {
+            void sendPrinterPostCommands(result.printerName, { cutPaper: true }).catch((error) => {
+              console.warn(`[paper-cut] ${result.printerName}: ${error.message}`);
+            });
+          }
         } else if (drawerWarnings.length) {
           result.warnings = drawerWarnings;
         }

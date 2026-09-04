@@ -7,6 +7,8 @@ import { getLocaleFromLanguage } from './localeMapper';
 import type { TFunction } from 'i18next';
 import { openCashDrawerThroughAgent, printThroughLocalBridge } from './localPrintBridge';
 
+let cachedOrganizationResponse: { data: any; expiresAt: number } | null = null;
+
 // Function to determine the appropriate link for QR Code based on priority
 const getSocialLinkForQR = (socialLinks: any): { link: string; platform: string } | null => {
   if (!socialLinks) return null;
@@ -747,10 +749,25 @@ export const printBill = async (
   const billId = String((bill as any)._id || (bill as any).id || '');
   const hasOrderDetails = Array.isArray((bill as any).orders)
     && (bill as any).orders.every((order: any) => order && Array.isArray(order.items));
+  const organizationFromBill = billForPrint.organization
+    && typeof billForPrint.organization === 'object'
+    && (billForPrint.organization as any).printSettings
+    ? { success: true, data: billForPrint.organization }
+    : null;
+  const settingsPromise = organizationFromBill
+    ? Promise.resolve(organizationFromBill)
+    : cachedOrganizationResponse && cachedOrganizationResponse.expiresAt > Date.now()
+      ? Promise.resolve({ success: true, data: cachedOrganizationResponse.data })
+      : api.getOrganization().then((response) => {
+        if (response.success && response.data) {
+          cachedOrganizationResponse = { data: response.data, expiresAt: Date.now() + 10000 };
+        }
+        return response;
+      }).catch(() => null);
   const [fullBillResponse, savedPrinter, settingsResponse] = await Promise.all([
     billId && !hasOrderDetails ? api.getBill(billId) : Promise.resolve(null),
     printerName ? Promise.resolve(null) : api.getDevicePrinter().catch(() => null),
-    api.getOrganization().catch(() => null),
+    settingsPromise,
   ]);
   if (fullBillResponse?.success && fullBillResponse.data) {
     billForPrint = fullBillResponse.data;
