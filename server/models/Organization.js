@@ -126,6 +126,7 @@ const OrganizationSchema = new mongoose.Schema({
         printerPort: { type: Number, default: 9100 }, // منفذ الطابعة الشبكية
         openCashDrawer: { type: Boolean, default: true }, // فتح درج الكاشير عند طباعة الفواتير
         openCashDrawerOnPayment: { type: Boolean, default: true }, // فتح درج الكاشير عند الدفع الكامل
+        openCashDrawerShortcut: { type: Boolean, default: true }, // فتح درج الكاشير باختصار F12
         autoPrintOnPayment: { type: Boolean, default: true }, // طباعة الفاتورة تلقائياً عند الدفع الكامل
         promptOrderPrintSections: { type: Boolean, default: false }, // اختيار أقسام الطلب قبل الطباعة
         defaultOrderPrintSections: { type: [String], default: [] }, // الأقسام الافتراضية للطباعة

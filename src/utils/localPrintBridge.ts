@@ -115,12 +115,7 @@ const runPrintJob = async (
   try {
     if (await printThroughAgent(html, printerName, options)) return true;
   } catch (agentError) {
-    const isDesktop = typeof window !== 'undefined'
-      && Boolean((window as Window & { bombaDesktop?: { isDesktop?: boolean } }).bombaDesktop?.isDesktop);
-    if (isDesktop && agentError instanceof Error && agentError.message.startsWith('Print Agent returned')) {
-      console.error('Print Agent rejected the print request:', agentError);
-      return false;
-    }
+    console.error('Print Agent rejected the print request; trying the configured fallback:', agentError);
     try {
       if (await printThroughDesktopFallback(html, printerName, options)) return true;
     } catch (desktopError) {
