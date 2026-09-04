@@ -1634,13 +1634,13 @@ const loadInitialData = async () => {
   const getCategoriesForSection = useCallback((sectionId: string) =>
     menuCategories.filter(c => {
       const s = typeof c.section === 'string' ? c.section : (c.section as MenuSection)?._id || (c.section as MenuSection)?.id;
-      return s === sectionId && c.isActive;
+      return String(s) === String(sectionId) && c.isActive;
     }).sort((a, b) => a.sortOrder - b.sortOrder), [menuCategories]);
 
   const getItemsForCategory = useCallback((categoryId: string) =>
     menuItems.filter(item => {
       const c = typeof item.category === 'string' ? item.category : (item.category as MenuCategory)?._id || (item.category as MenuCategory)?.id;
-      return c === categoryId && item.isAvailable;
+      return String(c) === String(categoryId) && item.isAvailable;
     }), [menuItems]);
 
   const addItemToOrder = (menuItem: MenuItem, variant?: string | null) => {
@@ -4735,13 +4735,8 @@ const OrderModal: React.FC<OrderModalProps> = ({
     const cats = activeCategoryId === 'all'
       ? getCategoriesForSection(activeSectionId)
       : getCategoriesForSection(activeSectionId).filter(c => c._id === activeCategoryId || c.id === activeCategoryId);
-    const items = cats.flatMap(cat => getItemsForCategory(cat.id));
-    // لو القسم/الفئة فاضية لكن المنيو موجود، اعرض المنيو الكامل موزعاً بدل قائمة فاضية
-    if (items.length === 0) return menuItems.filter(i => i.isAvailable);
-    return items;
-  }, [searchQuery, activeSectionId, activeCategoryId, menuItems]);
-  // ملاحظة: getCategoriesForSection/getItemsForCategory محذوفتان من deps
-  // لأنهما دوال خارجية مستقرة (لا تتغير reference)
+    return cats.flatMap(cat => getItemsForCategory(String(cat._id || cat.id)));
+  }, [searchQuery, activeSectionId, activeCategoryId, menuItems, getCategoriesForSection, getItemsForCategory]);
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const itemRefsMap = useRef<Record<string, HTMLDivElement | null>>({});

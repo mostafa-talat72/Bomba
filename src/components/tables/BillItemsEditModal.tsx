@@ -189,11 +189,8 @@ const BillItemsEditModal: React.FC<Props> = ({ isOpen, onClose, bill, menuItems,
     if (!activeSectionId) return menuItems.filter(i => i.isAvailable);
     const cats = activeCategoryId === 'all'
       ? getCategoriesForSection(activeSectionId)
-      : getCategoriesForSection(activeSectionId).filter(c => c._id === activeCategoryId || (c as any).id === activeCategoryId);
-    const catsItems = cats.flatMap(cat => getItemsForCategory((cat as any).id || cat._id));
-    // لو القسم/الفئة فاضية لكن المنيو موجود، اعرض المنيو الكامل موزعاً
-    if (catsItems.length === 0) return menuItems.filter(i => i.isAvailable);
-    return catsItems;
+      : getCategoriesForSection(activeSectionId).filter(c => String((c as any)._id || (c as any).id) === String(activeCategoryId));
+    return cats.flatMap(cat => getItemsForCategory(String((cat as any)._id || (cat as any).id)));
   }, [searchQuery, activeSectionId, activeCategoryId, menuItems, getCategoriesForSection, getItemsForCategory]);
 
   // flash logic
