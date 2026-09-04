@@ -486,9 +486,9 @@ body {
 
 /* ===== NOTES ===== */
 .notes {
-  margin-top: 4px;
+  margin-top: 2px;
   font-size: 9px;
-  padding: 0 4px;
+  padding: 0 2px;
   text-align: center;
 }
 

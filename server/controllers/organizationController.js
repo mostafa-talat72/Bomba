@@ -4,6 +4,7 @@ import Logger from "../middleware/logger.js";
 import organizationWebsiteService from "../services/organizationWebsiteService.js";
 import { getUserLocale } from "../utils/localeHelper.js";
 import { getOrganizationId } from "../utils/organization.js";
+import { findReportEligibleOrders } from "../utils/reportOrderFilter.js";
 
 // @desc    Get organization details by ID
 // @route   GET /api/organization/:id
@@ -777,7 +778,6 @@ export const generateAndSendDailyReport = async (organizationId, userLocale = 'a
 
     // استدعاء نفس الكود الموجود في sendReportNow
     // سأنسخ الكود كاملاً هنا
-    const { default: Order } = await import('../models/Order.js');
     const { default: Session } = await import('../models/Session.js');
     const { default: Cost } = await import('../models/Cost.js');
     const { default: MenuItem } = await import('../models/MenuItem.js');
@@ -806,11 +806,9 @@ export const generateAndSendDailyReport = async (organizationId, userLocale = 'a
     });
 
     // نفس منطق جلب البيانات من sendReportNow
-    const orders = await Order.find({
+    const orders = await findReportEligibleOrders(organizationId, {
         createdAt: { $gte: startOfReport, $lte: endOfReport },
-        isDeleted: false,
-        organization: organizationId,
-    }).lean();
+    });
 
     const sessions = await Session.find({
         endTime: { $gte: startOfReport, $lte: endOfReport },
@@ -1193,7 +1191,6 @@ export const sendReportNow = async (req, res) => {
         }
 
         // Import required modules
-        const { default: Order } = await import('../models/Order.js');
         const { default: Session } = await import('../models/Session.js');
         const { default: Cost } = await import('../models/Cost.js');
         const { default: MenuItem } = await import('../models/MenuItem.js');
@@ -1222,11 +1219,9 @@ export const sendReportNow = async (req, res) => {
     
         // Fetch data using the SAME logic as Reports page
         // Get ALL orders (not just specific statuses)
-        const orders = await Order.find({
+        const orders = await findReportEligibleOrders(organizationId, {
             createdAt: { $gte: startOfReport, $lte: endOfReport },
-            isDeleted: false,
-            organization: organizationId,
-        }).lean();
+        });
 
         // ✅ Get completed sessions - يجب استخدام endTime وليس createdAt!
         const sessions = await Session.find({
@@ -1579,11 +1574,9 @@ export const sendReportNow = async (req, res) => {
                 
                 // Fetch monthly data
                 const [monthlyOrders, monthlySessions, monthlyCosts] = await Promise.all([
-                    Order.find({
+                    findReportEligibleOrders(organizationId, {
                         createdAt: { $gte: lastMonthStart, $lt: lastMonthEnd },
-                        isDeleted: false,
-                        organization: organizationId,
-                    }).lean(),
+                    }),
                     Session.find({
                         endTime: { $gte: lastMonthStart, $lt: lastMonthEnd },
                         status: "completed",

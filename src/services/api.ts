@@ -1020,7 +1020,7 @@ class ApiClient {
   }
 
   // Orders endpoints
-  async getOrders(params?: { status?: string; customerName?: string; page?: number; limit?: number; startDate?: string; endDate?: string }): Promise<ApiResponse<Order[]>> {
+  async getOrders(params?: { status?: string; customerName?: string; page?: number; limit?: number; startDate?: string; endDate?: string; reportEligible?: boolean }): Promise<ApiResponse<Order[]>> {
     const searchParams = new URLSearchParams();
     if (params) {
       Object.entries(params).forEach(([key, value]) => {
@@ -1382,7 +1382,7 @@ class ApiClient {
   }
 
   // Bills endpoints
-  async getBills(params?: { status?: string; table?: string; page?: number; limit?: number; customerName?: string; q?: string; fresh?: boolean }): Promise<ApiResponse<Bill[]>> {
+  async getBills(params?: { status?: string; table?: string; page?: number; limit?: number; customerName?: string; q?: string; all?: boolean; fresh?: boolean }): Promise<ApiResponse<Bill[]>> {
     const searchParams = new URLSearchParams();
     if (params) {
       Object.entries(params).forEach(([key, value]) => {
