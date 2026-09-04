@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { X, Search, Save, ShoppingCart, Table as TableIcon, AlertTriangle, CheckCircle, Printer, Plus, Trash2 } from 'lucide-react';
+import { X, Search, Save, ShoppingCart, Table as TableIcon, AlertTriangle, CheckCircle, Printer, Plus, Trash2, Edit } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Bill, MenuItem, MenuSection, MenuCategory } from '../../services/api';
 import { api } from '../../services/api';
@@ -52,6 +52,7 @@ const BillItemsEditModal: React.FC<Props> = ({ isOpen, onClose, bill, menuItems,
   const [serviceName, setServiceName] = useState('خدمة');
   const [serviceAmount, setServiceAmount] = useState('');
   const [serviceShowInPrint, setServiceShowInPrint] = useState(true);
+  const [editingServiceIndex, setEditingServiceIndex] = useState<number | null>(null);
   const flashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const prevLengthRef = useRef(items.length);
 
@@ -327,11 +328,23 @@ const BillItemsEditModal: React.FC<Props> = ({ isOpen, onClose, bill, menuItems,
   const handleSave = () => doSave({ shouldPrint: false, shouldPayFull: false });
   const handleSaveAndPrint = () => doSave({ shouldPrint: true, shouldPayFull: false });
   const handleSaveAndPayFull = () => doSave({ shouldPrint: false, shouldPayFull: true });
-  const addService = () => {
+  const saveService = () => {
     const amount = Number(serviceAmount);
     if (!serviceName.trim() || !Number.isFinite(amount) || amount < 0) return;
-    setItems(prev => [...prev, { menuItem: `service-${Date.now()}`, name: serviceName.trim(), price: amount, quantity: 1, isService: true, showInPrint: serviceShowInPrint } as any]);
-    setServiceName('خدمة'); setServiceAmount(''); setServiceShowInPrint(true); setShowServiceDialog(false);
+    setItems(prev => {
+      const current = editingServiceIndex === null ? null : prev[editingServiceIndex];
+      const service = { menuItem: current?.menuItem || `service-${Date.now()}`, name: serviceName.trim(), price: amount, quantity: current?.quantity || 1, isService: true, showInPrint: serviceShowInPrint } as any;
+      return editingServiceIndex === null ? [...prev, service] : prev.map((item, index) => index === editingServiceIndex ? service : item);
+    });
+    setServiceName('خدمة'); setServiceAmount(''); setServiceShowInPrint(true); setEditingServiceIndex(null); setShowServiceDialog(false);
+  };
+  const openServiceEditor = (index: number) => {
+    const service = items[index] as any;
+    setEditingServiceIndex(index);
+    setServiceName(service.name || 'خدمة');
+    setServiceAmount(String(service.price ?? ''));
+    setServiceShowInPrint(service.showInPrint !== false);
+    setShowServiceDialog(true);
   };
 
   if (!isOpen || !bill) return null;
@@ -516,7 +529,7 @@ const BillItemsEditModal: React.FC<Props> = ({ isOpen, onClose, bill, menuItems,
                   const itemVariant = (item as any).variant || null;
                   return (
                   <div key={compositeKey + idx} ref={el => { itemRefsMap.current[compositeKey] = el as HTMLDivElement | null; itemRefsMap.current[item.menuItem] = el as HTMLDivElement | null; }}>
-                    {(item as any).isService && <div className="flex items-center gap-2 text-indigo-600 text-xs font-bold">خدمة <button onClick={() => setItems(prev => prev.filter((_, i) => i !== idx))} className="mr-auto text-red-500"><Trash2 className="h-4 w-4" /></button></div>}
+                    {(item as any).isService && <div className="flex items-center gap-2 text-indigo-600 text-xs font-bold">خدمة <button onClick={() => openServiceEditor(idx)} className="rounded-md p-1 text-indigo-600 hover:bg-indigo-100 dark:hover:bg-indigo-900/40" title="تعديل الخدمة"><Edit className="h-4 w-4" /></button><button onClick={() => setItems(prev => prev.filter((_, i) => i !== idx))} className="mr-auto text-red-500" title="حذف الخدمة"><Trash2 className="h-4 w-4" /></button></div>}
                     <OrderItemRow
                       item={item}
                       isFlash={flashId === compositeKey || flashId === item.menuItem}
@@ -573,7 +586,7 @@ const BillItemsEditModal: React.FC<Props> = ({ isOpen, onClose, bill, menuItems,
               <div className="flex items-start justify-between bg-gradient-to-r from-indigo-600 to-violet-600 px-5 py-4 text-white">
                 <div className="flex items-center gap-3">
                   <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white/15 ring-1 ring-white/25"><Plus className="h-5 w-5" /></div>
-                  <div><h3 className="text-lg font-black">إضافة خدمة للفاتورة</h3><p className="mt-0.5 text-xs text-indigo-100">أضف قيمة إضافية مع التحكم في ظهورها بالطباعة</p></div>
+                  <div><h3 className="text-lg font-black">{editingServiceIndex === null ? 'إضافة خدمة للفاتورة' : 'تعديل الخدمة'}</h3><p className="mt-0.5 text-xs text-indigo-100">أضف قيمة إضافية مع التحكم في ظهورها بالطباعة</p></div>
                 </div>
                 <button onClick={() => setShowServiceDialog(false)} className="rounded-lg p-1.5 text-white/80 transition hover:bg-white/15 hover:text-white"><X className="h-5 w-5" /></button>
               </div>
@@ -581,7 +594,7 @@ const BillItemsEditModal: React.FC<Props> = ({ isOpen, onClose, bill, menuItems,
                 <label className="block"><span className="mb-1.5 block text-sm font-bold text-slate-700 dark:text-slate-200">اسم الخدمة</span><input autoFocus value={serviceName} onChange={e => setServiceName(e.target.value)} className="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2.5 text-slate-900 outline-none transition focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/15 dark:border-slate-600 dark:bg-slate-800 dark:text-white" placeholder="مثال: خدمة توصيل" /></label>
                 <label className="block"><span className="mb-1.5 block text-sm font-bold text-slate-700 dark:text-slate-200">المبلغ</span><div className="relative"><input value={serviceAmount} onChange={e => setServiceAmount(e.target.value)} type="number" min="0" step="0.01" className="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2.5 pl-14 text-slate-900 outline-none transition focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/15 dark:border-slate-600 dark:bg-slate-800 dark:text-white" placeholder="0.00" /><span className="absolute inset-y-0 left-3 flex items-center text-xs font-bold text-slate-500">EGP</span></div></label>
                 <label className="flex cursor-pointer items-center justify-between rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800/70"><span><span className="block text-sm font-bold text-slate-800 dark:text-slate-100">إظهار الخدمة في الطباعة</span><span className="mt-0.5 block text-xs text-slate-500 dark:text-slate-400">مفعّل تلقائيًا ويمكن إلغاؤه</span></span><input type="checkbox" checked={serviceShowInPrint} onChange={e => setServiceShowInPrint(e.target.checked)} className="h-5 w-5 accent-indigo-600" /></label>
-                <div className="flex gap-3 border-t border-slate-200 pt-4 dark:border-slate-700"><button onClick={() => setShowServiceDialog(false)} className="flex-1 rounded-xl border border-slate-300 px-4 py-2.5 font-bold text-slate-700 transition hover:bg-slate-100 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800">إلغاء</button><button onClick={addService} disabled={!serviceName.trim() || !serviceAmount || Number(serviceAmount) < 0} className="flex-1 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 px-4 py-2.5 font-bold text-white shadow-md transition hover:from-indigo-700 hover:to-violet-700 disabled:cursor-not-allowed disabled:opacity-50">إضافة الخدمة</button></div>
+                <div className="flex gap-3 border-t border-slate-200 pt-4 dark:border-slate-700"><button onClick={() => { setShowServiceDialog(false); setEditingServiceIndex(null); }} className="flex-1 rounded-xl border border-slate-300 px-4 py-2.5 font-bold text-slate-700 transition hover:bg-slate-100 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800">إلغاء</button><button onClick={saveService} disabled={!serviceName.trim() || !serviceAmount || Number(serviceAmount) < 0} className="flex-1 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 px-4 py-2.5 font-bold text-white shadow-md transition hover:from-indigo-700 hover:to-violet-700 disabled:cursor-not-allowed disabled:opacity-50">{editingServiceIndex === null ? 'إضافة الخدمة' : 'حفظ التعديل'}</button></div>
               </div>
             </div>
           </div>
