@@ -37,6 +37,8 @@ let localPrintServer = null;
 let localBackendPort = 5000;
 let cachedPrinters = null;
 let cachedPrintersAt = 0;
+let silentPrintWindow = null;
+let silentPrintWindowQueue = Promise.resolve();
 
 // ---- Paths (userData pinned to bomba-desktop for data compatibility) ----
 const userDataDir = app.getPath("userData");
@@ -229,7 +231,10 @@ async function sendPrinterPostCommands(printerName, { openDrawer = false, cutPap
 }
 
 async function printHtmlSilently(html, requestedPrinterName, paperWidthMm = 80) {
-  let printWindow = null;
+  let releasePrintWindow;
+  const previousPrint = silentPrintWindowQueue;
+  silentPrintWindowQueue = new Promise((resolve) => { releasePrintWindow = resolve; });
+  await previousPrint;
   try {
     const normalizedPaperWidthMm = Math.max(58, Math.min(150, Number(paperWidthMm) || 80));
     const printCss = `
@@ -310,20 +315,21 @@ async function printHtmlSilently(html, requestedPrinterName, paperWidthMm = 80) 
     }
     if (!printerName) return { success: false, message: "No configured printer found" };
 
-    printWindow = new BrowserWindow({
-      show: false,
-      skipTaskbar: true,
-      useContentSize: true,
-      // Keep the render viewport wide enough for common 58/76/80/90mm
-      // profiles; the Windows printer profile controls the final paper width.
-      width: Math.round(normalizedPaperWidthMm * 3.78),
-      height: 2400,
-      backgroundColor: "#ffffff",
-      webPreferences: { contextIsolation: true, sandbox: true, javascript: true },
-      parent: mainWindow || undefined,
-    });
-    await printWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(printableHtml)}`);
-    let resources = await waitForPrintResources(printWindow);
+    if (!silentPrintWindow || silentPrintWindow.isDestroyed()) {
+      silentPrintWindow = new BrowserWindow({
+        show: false,
+        skipTaskbar: true,
+        useContentSize: true,
+        width: Math.round(normalizedPaperWidthMm * 3.78),
+        height: 2400,
+        backgroundColor: "#ffffff",
+        webPreferences: { contextIsolation: true, sandbox: true, javascript: true },
+        parent: mainWindow || undefined,
+      });
+    }
+    silentPrintWindow.setSize(Math.round(normalizedPaperWidthMm * 3.78), 2400);
+    await silentPrintWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(printableHtml)}`);
+    let resources = await waitForPrintResources(silentPrintWindow);
     if (resources?.failedImages?.length) {
       return { success: false, message: "Print content contains images that failed to load", failedImages: resources.failedImages };
     }
@@ -332,7 +338,7 @@ async function printHtmlSilently(html, requestedPrinterName, paperWidthMm = 80) 
       (resources?.contentHeight || 2400) * 25400 / 96
     )));
     const printed = await new Promise((resolve) => {
-      printWindow.webContents.print({
+      silentPrintWindow.webContents.print({
         silent: true,
         preview: false,
         printBackground: true,
@@ -345,7 +351,7 @@ async function printHtmlSilently(html, requestedPrinterName, paperWidthMm = 80) 
       ? { success: true, printerName }
       : { success: false, message: printed.failureReason || "Print job failed", printerName };
   } finally {
-    if (printWindow && !printWindow.isDestroyed()) printWindow.close();
+    releasePrintWindow();
   }
 }
 
@@ -1128,6 +1134,10 @@ if (!gotLock) {
 
   app.on("before-quit", () => {
     isQuitting = true;
+    if (silentPrintWindow && !silentPrintWindow.isDestroyed()) {
+      silentPrintWindow.close();
+      silentPrintWindow = null;
+    }
     if (localPrintServer) {
       localPrintServer.close();
       localPrintServer = null;
