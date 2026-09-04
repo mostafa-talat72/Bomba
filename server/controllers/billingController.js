@@ -3718,7 +3718,7 @@ export const updateBillAggregatedItems = async (req, res) => {
         // Process final items: resolve menuItem details, validate, build processedItems
         const processedItems = [];
         let subtotal = 0;
-        const menuItemIds = finalRaw.filter((it) => it.menuItem).map((it) => it.menuItem);
+        const menuItemIds = finalRaw.filter((it) => it.menuItem && !it.isService).map((it) => it.menuItem);
         const menuItemsMap = new Map();
         if (menuItemIds.length > 0) {
             const menuItems = await MenuItem.find({ _id: { $in: menuItemIds }, ...organizationFilter(req.user) }).lean();
@@ -3730,7 +3730,26 @@ export const updateBillAggregatedItems = async (req, res) => {
             if (!qty || qty < 1) {
                 return res.status(400).json({ success: false, message: `كمية غير صحيحة للصنف ${raw.name || raw.menuItem}` });
             }
-            if (raw.menuItem) {
+            if (raw.isService) {
+                const name = String(raw.name || "خدمة").trim();
+                const price = Number(raw.price);
+                if (!name || !Number.isFinite(price) || price < 0) {
+                    return res.status(400).json({ success: false, message: "بيانات الخدمة غير صحيحة" });
+                }
+                const itemTotal = price * qty;
+                subtotal += itemTotal;
+                processedItems.push({
+                    name,
+                    price,
+                    quantity: qty,
+                    itemTotal,
+                    notes: raw.notes || null,
+                    variant: null,
+                    isService: true,
+                    showInPrint: raw.showInPrint === true,
+                    preparationTime: 0,
+                });
+            } else if (raw.menuItem) {
                 if (!mongoose.Types.ObjectId.isValid(raw.menuItem)) {
                     return res.status(400).json({ success: false, message: `معرف الصنف غير صحيح: ${raw.menuItem}` });
                 }
@@ -3758,6 +3777,8 @@ export const updateBillAggregatedItems = async (req, res) => {
                     notes: raw.notes || null,
                     variant: raw.variant || null,
                     preparationTime: mi.preparationTime || 5,
+                    isService: false,
+                    showInPrint: raw.showInPrint !== false,
                     section: mi.category ? null : null,
                 });
             } else {
@@ -3778,6 +3799,8 @@ export const updateBillAggregatedItems = async (req, res) => {
                     notes: raw.notes || null,
                     variant: raw.variant || null,
                     preparationTime: raw.preparationTime || 5,
+                    isService: false,
+                    showInPrint: raw.showInPrint !== false,
                 });
             }
         }

@@ -204,7 +204,7 @@ export function aggregateItemsWithPayments(
 
         order.items.forEach((item, itemIndex) => {
             const itemId = `${order._id}-${itemIndex}`;
-            const key = createItemKey(item.name, item.price, item.addons, item.variant);
+            const key = `${item.isService ? 'service' : 'item'}|${createItemKey(item.name, item.price, item.addons, item.variant)}|${item.showInPrint !== false}`;
 
             if (!itemMap.has(key)) {
                 // Create new aggregated item
@@ -220,6 +220,8 @@ export function aggregateItemsWithPayments(
                     hasAddons: !!(item.addons && item.addons.length > 0),
                     orderId: order._id.toString(),
                     itemIds: [itemId], // Track all itemIds for this aggregated item
+                    isService: item.isService === true,
+                    showInPrint: item.showInPrint !== false,
                 };
                 itemMap.set(key, newItem);
             } else {

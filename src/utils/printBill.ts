@@ -256,7 +256,7 @@ export const buildBillPrintHTML = async (
       billStatus,
       billPaid,
       billTotal
-    );
+    ).filter((item: any) => !item.isService || item.showInPrint !== false);
     
     if (aggregatedItems.length === 0) {
       return '';

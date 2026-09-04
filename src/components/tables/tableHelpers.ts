@@ -8,6 +8,8 @@ export interface LocalOrderItem {
   variant?: string | null;
   quantity: number;
   notes?: string;
+  isService?: boolean;
+  showInPrint?: boolean;
 }
 
 export const getTableDisplay = (v: string | number | undefined | null, lang = 'ar'): string => {
