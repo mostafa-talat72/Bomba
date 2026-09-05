@@ -52,6 +52,30 @@ const PageLoader = () => (
   </div>
 );
 
+const CashDrawerShortcut = () => {
+  React.useEffect(() => {
+    const handleKeyDown = async (event: KeyboardEvent) => {
+      if (event.key !== 'F12') return;
+      event.preventDefault();
+      event.stopPropagation();
+
+      try {
+        const organizationResponse = await api.getOrganization();
+        const organization = organizationResponse.success ? organizationResponse.data : null;
+        if (!organization || organization.printSettings?.openCashDrawerShortcut === false) return;
+        await api.openCashDrawerOnly(organization);
+      } catch (error) {
+        console.error('Failed to open cash drawer with F12:', error);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  return null;
+};
+
 // Restore focus after parent click handlers trigger a render.
 const EditableFocusGuard = () => {
   React.useEffect(() => {
@@ -74,30 +98,6 @@ const EditableFocusGuard = () => {
           editable.focus({ preventScroll: true });
         }
       });
-    };
-
-    const CashDrawerShortcut = () => {
-      React.useEffect(() => {
-        const handleKeyDown = async (event: KeyboardEvent) => {
-          if (event.key !== 'F12') return;
-          event.preventDefault();
-          event.stopPropagation();
-
-          try {
-            const organizationResponse = await api.getOrganization();
-            const organization = organizationResponse.success ? organizationResponse.data : null;
-            if (!organization || organization.printSettings?.openCashDrawerShortcut === false) return;
-            await api.openCashDrawerOnly(organization);
-          } catch (error) {
-            console.error('Failed to open cash drawer with F12:', error);
-          }
-        };
-
-        window.addEventListener('keydown', handleKeyDown);
-        return () => window.removeEventListener('keydown', handleKeyDown);
-      }, []);
-
-      return null;
     };
 
     document.addEventListener('pointerdown', handlePointerDown, true);
