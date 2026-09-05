@@ -39,7 +39,9 @@ function queryPath(segments) {
     return segments.filter((s) => s !== "$").join(".");
 }
 
-// Walk typed paths with numeric indices, collecting $set ops for changed leaves
+// Walk typed paths with numeric indices, collecting $set ops for changed leaves.
+// NOTE: _id is deliberately excluded — MongoDB forbids $set on the immutable
+// _id field. String _ids are resolved by auditStringIds() (delete + re-insert).
 function diffTypedPaths(original, fixed, typedPaths) {
     const setOps = {};
     const walk = (origNode, fixedNode, segments, dotted) => {
@@ -79,18 +81,92 @@ function diffTypedPaths(original, fixed, typedPaths) {
     };
     for (const { segments } of typedPaths) {
         try {
+            if (segments.length === 1 && segments[0] === "_id") continue;
             walk(original, fixed, segments, "");
         } catch {}
     }
     return setOps;
 }
 
-async function auditCollection(db, collectionName, typedPaths, fix, stats) {
+/**
+ * Resolve documents whose _id itself was stored as a string (duplicates the
+ * old upsert-with-string-filter bug could create). Strategy per doc:
+ *  - non-24-hex string _id → cannot be mapped, logged as skipped.
+ *  - no ObjectId twin exists → insert healed copy, delete the string-_id doc.
+ *  - twin exists → last-write-wins by updatedAt/createdAt, then delete the loser.
+ */
+async function auditStringIds(db, collectionName, fix, stats) {
+    const collection = db.collection(collectionName);
+    let resolved = 0;
+    let skipped = 0;
+    let ids = [];
+    try {
+        const cursor = collection
+            .find({ _id: { $type: "string" } }, { projection: { _id: 1 } })
+            .limit(MAX_IDS_PER_PATH);
+        for await (const d of cursor) ids.push(d._id);
+    } catch (e) {
+        Logger.warn(`[typeAudit] _id scan failed for ${collectionName}: ${e.message}`);
+        return { resolved, skipped };
+    }
+    if (!ids.length) return { resolved, skipped };
+
+    for (const sid of ids) {
+        try {
+            if (typeof sid !== "string" || !/^[a-f0-9]{24}$/i.test(sid)) {
+                skipped++;
+                continue;
+            }
+            const oid = new mongoose.Types.ObjectId(sid);
+            const strDoc = await collection.findOne({ _id: sid });
+            if (!strDoc) continue;
+            const existing = await collection.findOne({ _id: oid });
+            rehydrateDocument(collectionName, strDoc);
+            strDoc._id = oid;
+            if (!fix) {
+                resolved++;
+                continue;
+            }
+            if (!existing) {
+                await collection.insertOne(strDoc);
+                await collection.deleteOne({ _id: sid });
+            } else {
+                const tNew = new Date(strDoc.updatedAt || strDoc.createdAt || 0).getTime();
+                const tOld = new Date(existing.updatedAt || existing.createdAt || 0).getTime();
+                if (tNew >= tOld) {
+                    const { _id, ...rest } = strDoc;
+                    await collection.replaceOne({ _id: oid }, { ...rest, _id: oid });
+                }
+                await collection.deleteOne({ _id: sid });
+            }
+            resolved++;
+        } catch (e) {
+            Logger.warn(`[typeAudit] _id resolve failed ${collectionName}:${sid}: ${e.message}`);
+            skipped++;
+        }
+    }
+    if (resolved > 0 || skipped > 0) {
+        Logger.info(`🔧 [typeAudit] ${collectionName}: resolved ${resolved} string-_id docs, skipped ${skipped}${fix ? "" : " [dry-run]"}`);
+    }
+    stats.totalFixedDocs += resolved;
+    return { resolved, skipped };
+}
+
+export async function auditCollection(db, collectionName, typedPaths, fix, stats) {
     const collection = db.collection(collectionName);
     let passes = 0;
     let fixedDocs = 0;
     let fixedFields = 0;
     let skippedDocs = 0;
+
+    // _id pass first: string _ids can't be $set, resolve (re-insert) them up front
+    // so the field passes below only deal with clean ObjectId docs.
+    let resolvedIds = 0;
+    try {
+        ({ resolved: resolvedIds } = await auditStringIds(db, collectionName, fix, stats));
+    } catch (e) {
+        Logger.warn(`[typeAudit] _id pass failed for ${collectionName}: ${e.message}`);
+    }
 
     while (passes < MAX_PASSES_PER_COLLECTION) {
         passes++;
@@ -171,13 +247,13 @@ async function auditCollection(db, collectionName, typedPaths, fix, stats) {
         if (idSet.size < MAX_IDS_PER_PATH) break;
     }
 
-    stats.collections.push({ collection: collectionName, fixedDocs, fixedFields, skippedDocs, passes });
+    stats.collections.push({ collection: collectionName, fixedDocs, fixedFields, skippedDocs, passes, resolvedIds });
     stats.totalFixedDocs += fixedDocs;
     stats.totalFixedFields += fixedFields;
     if (fixedDocs > 0) {
         Logger.info(`🔧 [typeAudit] ${collectionName}: fixed ${fixedDocs} docs (${fixedFields} fields)${fix ? "" : " [dry-run]"}`);
     }
-    return { fixedDocs, fixedFields };
+    return { fixedDocs, fixedFields, resolvedIds };
 }
 
 /**

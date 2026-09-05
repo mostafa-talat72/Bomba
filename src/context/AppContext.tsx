@@ -141,12 +141,12 @@ interface AppContextType {
   deliverOrderSection: (orderId: string, sectionId: string) => Promise<any>;
   cancelOrder: (orderId: string, reason?: string) => Promise<any>;
   createSessionWithExistingBill: (sessionData: any) => Promise<any>;
-  changeSessionTable: (sessionId: string, newTableId: string) => Promise<any>;
-  linkSessionToTable: (sessionId: string, tableId: string) => Promise<any>;
-  unlinkTableFromSession: (sessionId: string, customerName?: string) => Promise<any>;
-  updateSessionTimes: (sessionId: string, data: { startTime: string; endTime: string }) => Promise<any>;
+  changeSessionTable: (sessionId: string, newTableId: string, options?: { silent?: boolean }) => Promise<any>;
+  linkSessionToTable: (sessionId: string, tableId: string, options?: { silent?: boolean }) => Promise<any>;
+  unlinkTableFromSession: (sessionId: string, customerName?: string, options?: { silent?: boolean }) => Promise<any>;
+  updateSessionTimes: (sessionId: string, data: { startTime: string; endTime: string }, options?: { silent?: boolean }) => Promise<any>;
   updateSessionStartTime: (sessionId: string, data: { startTime: string }) => Promise<any>;
-  updateControllersPeriodTime: (sessionId: string, periodIndex: number, newStartTime: string, newEndTime?: string) => Promise<any>;
+  updateControllersPeriodTime: (sessionId: string, periodIndex: number, newStartTime: string, newEndTime?: string, options?: { silent?: boolean }) => Promise<any>;
   updateSessionCost: (sessionId: string) => Promise<any>;
   getRecentActivity: (limit?: number) => Promise<any>;
   getSalesReport: (filter: any, groupBy?: string) => Promise<any>;

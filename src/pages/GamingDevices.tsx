@@ -124,7 +124,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
   };
   const { isRTL } = useLanguage();
   const { timezone, formatDateTime } = useOrganization();
-  const { sessions, createSession, endSession, user, createDevice, updateDevice, deleteDevice, fetchBills, showNotification, tables, tableSections, fetchTables, fetchTableSections, fetchSessions } = useApp();
+  const { sessions, createSession, endSession, user, createDevice, updateDevice, deleteDevice, fetchBills, showNotification, tables, tableSections, fetchTables, fetchTableSections, fetchSessions, updateSessionStartTime, updateControllersPeriodTime, changeSessionTable, linkSessionToTable, unlinkTableFromSession } = useApp();
 
   // اسم قسم الطاولة (يميز الطاولات المكررة الرقم عبر الأقسام)
   const getTableSectionLabel = (table: any): string => {
@@ -605,19 +605,19 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
       
       // ????? ??? UTC ??????? ???????
       const utcDateTime = localDateTime.utc().toISOString();
-      
-      await api.updateSessionStartTime(selectedSessionForEditTime.id, {
+
+      // ⚡ تحديث متفائل عبر الـ context (لحظي + إشعاراته) + إغلاق فوري + مزامنة خلفية.
+      const updated = await updateSessionStartTime(selectedSessionForEditTime.id, {
         startTime: utcDateTime
       });
+      if (!updated) return;
 
-      await fetchSessions();
-      await fetchBills();
-
-      showNotification(t('gaming.startTimeUpdatedSuccess'), 'success');
-      
       setShowEditStartTimeModal(false);
       setSelectedSessionForEditTime(null);
       setNewStartTime('');
+
+      fetchSessions().catch(() => {});
+      fetchBills().catch(() => {});
 
     } catch (error: any) {
       const errorMessage = error?.response?.data?.message || error?.message || t('gaming.startTimeUpdatedError');
@@ -671,8 +671,9 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
     try {
       setEndingSessions(prev => ({ ...prev, [sessionId]: true }));
       await endSession(sessionId);
-      await loadDevices();
-      await fetchSessions();
+      // ⚡ تحديث خلفي غير حاجب (endSession متفائل أصلاً).
+      loadDevices().catch(() => {});
+      fetchSessions().catch(() => {});
     } catch (error) {
       showNotification(t('gaming.sessionEndedError'), 'error');
     } finally {
@@ -692,9 +693,10 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
     try {
       setEndingSessions(prev => ({ ...prev, [sessionToEnd.id]: true }));
       await endSession(sessionToEnd.id, customerNameForEnd.trim());
-      await loadDevices();
-      await fetchSessions();
-      
+      // ⚡ تحديث خلفي غير حاجب (endSession متفائل أصلاً).
+      loadDevices().catch(() => {});
+      fetchSessions().catch(() => {});
+
       setShowEndSessionConfirm(false);
       setSessionToEnd(null);
       setCustomerNameForEnd('');
@@ -734,16 +736,17 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
 
     try {
       setUpdatingControllers(prev => ({ ...prev, [sessionId]: true }));
-      
+
       await api.updateSessionControllers(sessionId, newCount);
-      await fetchSessions();
-      await fetchBills();
-      
-      const message = t('gaming.controllersUpdatedSuccess', { count: newCount }).replace(newCount.toString(), formatDecimal(newCount, i18n.language));
-      showNotification(message, 'success');
-      
+
+      // ⚡ إغلاق وإشعار فورياً + تحديث القوائم في الخلفية.
       setShowControllersConfirm(false);
       setControllersChangeData(null);
+
+      const message = t('gaming.controllersUpdatedSuccess', { count: newCount }).replace(newCount.toString(), formatDecimal(newCount, i18n.language));
+      showNotification(message, 'success');
+      fetchSessions().catch(() => {});
+      fetchBills().catch(() => {});
     } catch (error: any) {
       const errorMessage = error?.response?.data?.message || error?.message || t('gaming.controllersUpdatedError');
       showNotification(errorMessage, 'error');
@@ -828,27 +831,24 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
       const utcStartDateTime = localStartDateTime.utc().toISOString();
       const utcEndDateTime = localEndDateTime ? localEndDateTime.utc().toISOString() : undefined;
 
-      // إرسال الطلب للباك إند مع forceUpdate: true للتحديث التلقائي
-      await api.updateControllersPeriodTime(
+      // ⚡ تحديث متفائل عبر الـ context (لحظي + إشعاراته) + إغلاق فوري + مزامنة خلفية.
+      const updated = await updateControllersPeriodTime(
         selectedSessionForPeriodEdit.id,
         selectedPeriodIndex,
         utcStartDateTime,
-        utcEndDateTime,
-        true // دائماً نرسل forceUpdate: true للتحديث التلقائي
+        utcEndDateTime
       );
+      if (!updated) return;
 
-      showNotification(t('gaming.periodTimeUpdatedSuccess'), 'success');
-
-      // تحديث قائمة الجلسات والفواتير
-      await fetchSessions();
-      await fetchBills();
-      
       // إغلاق النافذة وإعادة التعيين
       setShowEditPeriodTimeModal(false);
       setSelectedSessionForPeriodEdit(null);
       setSelectedPeriodIndex(0);
       setNewPeriodStartTime('');
       setNewPeriodEndTime('');
+
+      fetchSessions().catch(() => {});
+      fetchBills().catch(() => {});
 
     } catch (error: any) {
       const errorMessage = error?.response?.data?.message || error?.message || t('gaming.periodTimeUpdatedError');
@@ -870,15 +870,19 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
 
     try {
       setLinkingTable(true);
-      
+
+      // ⚡ ربط متفائل عبر الـ context (لحظي، صامت) — الرسالة التفصيلية هنا.
       let result;
-      
+      const sid = session._id || session.id;
+
       if (isCurrentlyLinkedToTable) {
-        result = await api.changeSessionTable(session._id || session.id, tableId);
+        const data = await changeSessionTable(sid, tableId, { silent: true });
+        result = data ? { success: true, data } : null;
       } else {
-        result = await api.linkSessionToTable(session._id || session.id, tableId);
+        const data = await linkSessionToTable(sid, tableId, { silent: true });
+        result = data ? { success: true, data } : null;
       }
-      
+
       if (result && result.success) {
         const tableDoc = tables.find(t => t._id === tableId);
         const tableNumber = tableDoc?.number;
@@ -902,13 +906,14 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
         }
         
         showNotification(message, 'success');
-        
-        await Promise.all([fetchBills(), loadDevices(), fetchSessions()]);
+
+        // ⚡ إغلاق فوري + مزامنة خلفية (الحالة محدثة لحظياً أصلاً).
         setShowLinkTableModal(false);
         setSelectedSessionForLink(null);
         setTableSearch('');
+        Promise.all([fetchBills(), loadDevices(), fetchSessions()]).catch(() => {});
       } else {
-        const errorMessage = result.message || (isCurrentlyLinkedToTable ? t('gaming.tableChangeError') : t('gaming.tableLinkError'));
+        const errorMessage = (result as any)?.message || (isCurrentlyLinkedToTable ? t('gaming.tableChangeError') : t('gaming.tableLinkError'));
         showNotification(errorMessage, 'error');
       }
     } catch (error) {
@@ -927,23 +932,25 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
     try {
       setUnlinkingTable(true);
 
-      const response = await api.unlinkTableFromSession(
+      // ⚡ فك ربط متفائل عبر الـ context (لحظي، صامت).
+      const data = await unlinkTableFromSession(
         selectedSessionForUnlink.id,
-        customerNameForUnlink.trim() || undefined
+        customerNameForUnlink.trim() || undefined,
+        { silent: true }
       );
 
-      if (response && response.success) {
-        const tableNumber = response.data?.unlinkedFromTable;
+      if (data) {
+        const tableNumber = (data as any)?.unlinkedFromTable;
         showNotification(
           t('gaming.tableUnlinkedSuccess', { table: getTableDisplay(tableNumber) }),
           'success'
         );
 
-        await Promise.all([fetchBills(), fetchSessions(), loadDevices()]);
-
+        // ⚡ إغلاق فوري + مزامنة خلفية (الحالة محدثة لحظياً أصلاً).
         setShowUnlinkTableModal(false);
         setSelectedSessionForUnlink(null);
         setCustomerNameForUnlink('');
+        Promise.all([fetchBills(), fetchSessions(), loadDevices()]).catch(() => {});
       } else {
         showNotification(t('gaming.tableUnlinkError'), 'error');
       }

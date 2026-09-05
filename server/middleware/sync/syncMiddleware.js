@@ -1,6 +1,7 @@
 import Logger from "../../middleware/logger.js";
 import syncConfig from "../../config/syncConfig.js";
 import syncQueueManager from "../../services/sync/syncQueueManager.js";
+import { meshSyncEnabled, pushLanOp } from "../../utils/lanPeerSync.js";
 import OriginTracker from "../../services/sync/originTracker.js";
 
 /**
@@ -47,15 +48,30 @@ function shouldLanSync(collectionName) {
     return true;
 }
 
+// Simple HTTP mesh push (offline-first: no Atlas, no replicaSet, no election).
+// Enabled by default; set LAN_PEER_SYNC_ENABLED=false to turn off.
+function shouldMeshSync(collectionName) {
+    if (!meshSyncEnabled()) return false;
+    if (syncConfig.excludedCollections.includes(collectionName)) return false;
+    return true;
+}
+
 function broadcastToLan(operation) {
-    if (!shouldLanSync(operation.collection)) return;
-    // Non-blocking, lazy import to avoid circular deps
-    import("../../services/sync/lanSyncService.js")
-        .then((mod) => {
-            const svc = mod.default;
-            if (svc?.handleLocalOperation) svc.handleLocalOperation(operation).catch(() => {});
-        })
-        .catch(() => {});
+    if (shouldLanSync(operation.collection)) {
+        // Non-blocking, lazy import to avoid circular deps
+        import("../../services/sync/lanSyncService.js")
+            .then((mod) => {
+                const svc = mod.default;
+                if (svc?.handleLocalOperation) svc.handleLocalOperation(operation).catch(() => {});
+            })
+            .catch(() => {});
+    }
+    // Direct HTTP push to LAN peers (fire-and-forget, 2s timeout, never throws)
+    if (shouldMeshSync(operation.collection)) {
+        try {
+            pushLanOp(operation);
+        } catch {}
+    }
 }
 
 /**
@@ -157,7 +173,8 @@ function postSaveHook(doc, next) {
 
         const needsAtlas = shouldSync(collectionName);
         const needsLan = shouldLanSync(collectionName);
-        if (!needsAtlas && !needsLan) {
+        const needsMesh = shouldMeshSync(collectionName);
+        if (!needsAtlas && !needsLan && !needsMesh) {
             Logger.info(`⏭️  [MIDDLEWARE] Skipping sync for ${collectionName} (not in sync list)`);
             return next();
         }
@@ -189,7 +206,7 @@ function postSaveHook(doc, next) {
             Logger.info(`✅ [MIDDLEWARE] Operation queued: insert on ${collectionName} (${doc._id})`);
             Logger.info(`📊 [MIDDLEWARE] Queue size now: ${syncQueueManager.size()}`);
         }
-        if (needsLan) broadcastToLan(operation);
+        if (needsLan || needsMesh) broadcastToLan(operation);
     } catch (error) {
         // Log error but don't block the operation
         Logger.error("❌ Sync middleware error (post-save):", error.message);
@@ -211,7 +228,8 @@ function postUpdateHook(result, next) {
 
         const needsAtlas = shouldSync(collectionName);
         const needsLan = shouldLanSync(collectionName);
-        if (!needsAtlas && !needsLan) {
+        const needsMesh = shouldMeshSync(collectionName);
+        if (!needsAtlas && !needsLan && !needsMesh) {
             Logger.info(`⏭️  [MIDDLEWARE] Skipping sync for ${collectionName} (not in sync list)`);
             return next();
         }
@@ -258,7 +276,7 @@ function postUpdateHook(result, next) {
             Logger.info(`✅ [MIDDLEWARE] Operation queued: update on ${collectionName}`);
             Logger.info(`📊 [MIDDLEWARE] Queue size now: ${syncQueueManager.size()}`);
         }
-        if (needsLan) broadcastToLan(operation);
+        if (needsLan || needsMesh) broadcastToLan(operation);
     } catch (error) {
         Logger.error("❌ Sync middleware error (post-update):", error.message);
     }
@@ -280,7 +298,8 @@ function postFindOneAndUpdateHook(doc, next) {
 
         const needsAtlas = shouldSync(collectionName);
         const needsLan = shouldLanSync(collectionName);
-        if (!needsAtlas && !needsLan) return next();
+        const needsMesh = shouldMeshSync(collectionName);
+        if (!needsAtlas && !needsLan && !needsMesh) return next();
 
         const tracker = getOriginTracker();
 
@@ -302,7 +321,7 @@ function postFindOneAndUpdateHook(doc, next) {
         };
 
         if (needsAtlas) syncQueueManager.enqueue(operation);
-        if (needsLan) broadcastToLan(operation);
+        if (needsLan || needsMesh) broadcastToLan(operation);
     } catch (error) {
         Logger.error(
             "❌ Sync middleware error (post-findOneAndUpdate):",
@@ -323,7 +342,8 @@ function postRemoveHook(doc, next) {
 
         const needsAtlas = shouldSync(collectionName);
         const needsLan = shouldLanSync(collectionName);
-        if (!needsAtlas && !needsLan) return next();
+        const needsMesh = shouldMeshSync(collectionName);
+        if (!needsAtlas && !needsLan && !needsMesh) return next();
 
         const tracker = getOriginTracker();
 
@@ -341,7 +361,7 @@ function postRemoveHook(doc, next) {
         };
 
         if (needsAtlas) syncQueueManager.enqueue(operation);
-        if (needsLan) broadcastToLan(operation);
+        if (needsLan || needsMesh) broadcastToLan(operation);
     } catch (error) {
         Logger.error("❌ Sync middleware error (post-remove):", error.message);
     }
@@ -363,7 +383,8 @@ function postFindOneAndDeleteHook(doc, next) {
 
         const needsAtlas = shouldSync(collectionName);
         const needsLan = shouldLanSync(collectionName);
-        if (!needsAtlas && !needsLan) return next();
+        const needsMesh = shouldMeshSync(collectionName);
+        if (!needsAtlas && !needsLan && !needsMesh) return next();
 
         const tracker = getOriginTracker();
 
@@ -381,7 +402,7 @@ function postFindOneAndDeleteHook(doc, next) {
         };
 
         if (needsAtlas) syncQueueManager.enqueue(operation);
-        if (needsLan) broadcastToLan(operation);
+        if (needsLan || needsMesh) broadcastToLan(operation);
     } catch (error) {
         Logger.error(
             "❌ Sync middleware error (post-findOneAndDelete):",
@@ -402,7 +423,8 @@ function postDeleteOneHook(result, next) {
 
         const needsAtlas = shouldSync(collectionName);
         const needsLan = shouldLanSync(collectionName);
-        if (!needsAtlas && !needsLan) return next();
+        const needsMesh = shouldMeshSync(collectionName);
+        if (!needsAtlas && !needsLan && !needsMesh) return next();
 
         const tracker = getOriginTracker();
 
@@ -425,7 +447,7 @@ function postDeleteOneHook(result, next) {
         };
 
         if (needsAtlas) syncQueueManager.enqueue(operation);
-        if (needsLan) broadcastToLan(operation);
+        if (needsLan || needsMesh) broadcastToLan(operation);
     } catch (error) {
         Logger.error(
             "❌ Sync middleware error (post-deleteOne):",
@@ -446,7 +468,8 @@ function postDeleteManyHook(result, next) {
 
         const needsAtlas = shouldSync(collectionName);
         const needsLan = shouldLanSync(collectionName);
-        if (!needsAtlas && !needsLan) return next();
+        const needsMesh = shouldMeshSync(collectionName);
+        if (!needsAtlas && !needsLan && !needsMesh) return next();
 
         const tracker = getOriginTracker();
 
@@ -469,7 +492,7 @@ function postDeleteManyHook(result, next) {
         };
 
         if (needsAtlas) syncQueueManager.enqueue(operation);
-        if (needsLan) broadcastToLan(operation);
+        if (needsLan || needsMesh) broadcastToLan(operation);
     } catch (error) {
         Logger.error(
             "❌ Sync middleware error (post-deleteMany):",
@@ -486,8 +509,8 @@ function postDeleteManyHook(result, next) {
  * @param {string} collectionName - Name of the collection (optional, for logging)
  */
 export function applySyncMiddleware(schema, collectionName = 'Unknown') {
-    if (!syncConfig.enabled && !syncConfig.lanSync?.enabled) {
-        Logger.info(`ℹ️  [MIDDLEWARE] Sync disabled (Atlas and LAN off), not applying to ${collectionName}`);
+    if (!syncConfig.enabled && !syncConfig.lanSync?.enabled && !meshSyncEnabled()) {
+        Logger.info(`ℹ️  [MIDDLEWARE] Sync disabled (Atlas, LAN and mesh off), not applying to ${collectionName}`);
         return;
     }
 
@@ -532,7 +555,7 @@ export function createSyncMiddleware() {
  * @param {mongoose.Connection} connection - Mongoose connection
  */
 export function applySyncMiddlewareToAllModels(connection) {
-    if (!syncConfig.enabled) {
+    if (!syncConfig.enabled && !meshSyncEnabled()) {
         Logger.info("ℹ️  Sync disabled, middleware not applied");
         return;
     }

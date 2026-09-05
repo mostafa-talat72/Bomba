@@ -780,6 +780,9 @@ function buildServerEnv(config, secrets, distDir) {
     ...process.env,
     NODE_ENV: "production",
     PORT: String(config.port || 5000),
+    // Bind all interfaces so a peer device on the same LAN can connect.
+    // (Windows Firewall still needs inbound TCP PORT + inbound UDP 41234.)
+    HOST: "0.0.0.0",
     MONGODB_LOCAL_URI: config.databaseUri,
     MONGODB_URI: config.databaseUri,
     MONGODB_ATLAS_URI: effectiveAtlasUri || "",
@@ -1227,6 +1230,16 @@ if (!gotLock) {
 
   app.whenReady().then(async () => {
     ensureDirs();
+    // Zero-config LAN: silently open firewall for TCP 5000 + UDP 41234 so a
+    // direct Ethernet cable just works (APIPA, no manual IP). Fire-and-forget.
+    try {
+      if (process.platform === "win32") {
+        const { execFile: _execFile } = await import("child_process");
+        const _run = (args) => new Promise((res) => _execFile("netsh", args, { windowsHide: true, timeout: 15000 }, () => res()));
+        _run(["advfirewall", "firewall", "add", "rule", "name=MTE Systems LAN (TCP)", "dir=in", "action=allow", "protocol=TCP", "localport=5000", "profile=private,domain", "enable=yes"]).catch(() => {});
+        _run(["advfirewall", "firewall", "add", "rule", "name=MTE Systems LAN Discovery (UDP)", "dir=in", "action=allow", "protocol=UDP", "localport=41234", "profile=private,domain", "enable=yes"]).catch(() => {});
+      }
+    } catch {}
     if (isPrintAgent) {
       await createPrintAgentWindow();
       startLocalPrintServer();

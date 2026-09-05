@@ -160,12 +160,12 @@ interface DataContextType {
   deliverOrderSection: (orderId: string, sectionId: string) => Promise<Order | null>;
   cancelOrder: (orderId: string, reason?: string) => Promise<Order | null>;
   createSessionWithExistingBill: (sessionData: any) => Promise<Session | null>;
-  changeSessionTable: (sessionId: string, newTableId: string) => Promise<any>;
-  linkSessionToTable: (sessionId: string, tableId: string) => Promise<any>;
-  unlinkTableFromSession: (sessionId: string, customerName?: string) => Promise<any>;
-  updateSessionTimes: (sessionId: string, data: { startTime: string; endTime: string }) => Promise<Session | null>;
+  changeSessionTable: (sessionId: string, newTableId: string, options?: { silent?: boolean }) => Promise<any>;
+  linkSessionToTable: (sessionId: string, tableId: string, options?: { silent?: boolean }) => Promise<any>;
+  unlinkTableFromSession: (sessionId: string, customerName?: string, options?: { silent?: boolean }) => Promise<any>;
+  updateSessionTimes: (sessionId: string, data: { startTime: string; endTime: string }, options?: { silent?: boolean }) => Promise<Session | null>;
   updateSessionStartTime: (sessionId: string, data: { startTime: string }) => Promise<Session | null>;
-  updateControllersPeriodTime: (sessionId: string, periodIndex: number, newStartTime: string, newEndTime?: string) => Promise<Session | null>;
+  updateControllersPeriodTime: (sessionId: string, periodIndex: number, newStartTime: string, newEndTime?: string, options?: { silent?: boolean }) => Promise<Session | null>;
   updateSessionCost: (sessionId: string) => Promise<any>;
   getRecentActivity: (limit?: number) => Promise<any[]>;
 
@@ -586,7 +586,29 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const createSession = async (sessionData: any): Promise<Session | null> => {
+    // ⚡ إدراج متفائل فوري: الجلسة والطاولة يتحدثان لحظياً قبل رد السيرفر.
+    let tempId: string | null = null;
     try {
+      tempId = `temp-session-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+      const optimistic: any = {
+        ...sessionData,
+        _id: tempId,
+        id: tempId,
+        deviceName: sessionData.deviceName,
+        deviceType: sessionData.deviceType,
+        status: 'active',
+        startTime: sessionData.startTime || new Date(),
+        _optimistic: true,
+      };
+      setSessions(prev => [optimistic, ...prev]);
+      const tempTableId = sessionData.table
+        ? String((sessionData.table as any)?._id || (sessionData.table as any)?.id || sessionData.table)
+        : null;
+      if (tempTableId) {
+        setTables(prev => prev.map((table: any) =>
+          String(table._id || table.id) === tempTableId ? { ...table, status: 'occupied' } : table
+        ));
+      }
       const response = await api.createSession(sessionData);
       if (response.success && response.data) {
         const data = response.data as any;
@@ -594,11 +616,12 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         const bill = data.bill;
 
         setSessions(prev => {
+          const without = tempId ? prev.filter((s: any) => String(s._id || s.id) !== String(tempId)) : prev;
           const sid = String(session._id || session.id);
-          const exists = prev.some((s: any) => String(s._id || s.id) === sid);
+          const exists = without.some((s: any) => String(s._id || s.id) === sid);
           return exists
-            ? prev.map((s: any) => String(s._id || s.id) === sid ? { ...s, ...session } : s)
-            : [session, ...prev];
+            ? without.map((s: any) => String(s._id || s.id) === sid ? { ...s, ...session } : s)
+            : [session, ...without];
         });
 
         if (bill) {
@@ -623,8 +646,13 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         updateNotificationCount(1);
         return session;
       }
+      if (tempId) setSessions(prev => prev.filter((s: any) => String(s._id || s.id) !== String(tempId)));
+      // مسار الفشل نادر: صحح حالة الطاولة من السيرفر في الخلفية دون حجب الواجهة.
+      try { void fetchTables(); } catch {}
       return null;
     } catch (error: unknown) {
+      if (tempId) setSessions(prev => prev.filter((s: any) => String(s._id || s.id) !== String(tempId)));
+      try { void fetchTables(); } catch {}
       const err = error as { message?: string };
       showNotification(err.message || t('toast.session.createError'), 'error');
       return null;
@@ -632,17 +660,31 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const updateSession = async (id: string, updates: any): Promise<Session | null> => {
+    // ⚡ تحديث متفائل فوري مع استرجاع عند الفشل.
+    let snapshot: any = null;
     try {
+      setSessions(prev => {
+        snapshot = prev.find((s: any) => String(s._id || s.id) === String(id)) || null;
+        return prev.map(session =>
+          String((session as any)._id || (session as any).id) === String(id) ? { ...session, ...updates } : session
+        );
+      });
       const response = await api.updateSession(id, updates);
       if (response.success && response.data) {
         setSessions(prev => prev.map(session =>
-          session.id === id ? response.data! : session
+          String((session as any)._id || (session as any).id) === String(id) ? response.data! : session
         ));
         showNotification(t('toast.session.updated'), 'success');
         return response.data;
       }
+      if (snapshot) setSessions(prev => prev.map(session =>
+        String((session as any)._id || (session as any).id) === String(id) ? snapshot : session
+      ));
       return null;
     } catch (error: unknown) {
+      if (snapshot) setSessions(prev => prev.map(session =>
+        String((session as any)._id || (session as any).id) === String(id) ? snapshot : session
+      ));
       const err = error as { message?: string };
       showNotification(err.message || t('toast.session.updateError'), 'error');
       return null;
@@ -729,7 +771,8 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       return null;
     }
   };
-  const changeSessionTable = async (sessionId: string, newTableId: string): Promise<any> => {
+  const changeSessionTable = async (sessionId: string, newTableId: string, options?: { silent?: boolean }): Promise<any> => {
+    const silent = options?.silent === true;
     let snapSessions: Session[] = [];
     let snapBills: Bill[] = [];
     let snapTables: any[] = [];
@@ -747,7 +790,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           if (exists) return prev.map((b: any) => String(b._id || b.id) === bid ? { ...b, ...bill } : b);
           return [...prev, bill];
         });
-        showNotification('تم نقل الجلسة بنجاح', 'success');
+        if (!silent) showNotification('تم نقل الجلسة بنجاح', 'success');
         return response.data;
       }
       setSessions(snapSessions); setBills(snapBills); setTables(snapTables);
@@ -755,11 +798,12 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     } catch (e: unknown) {
       setSessions(snapSessions); setBills(snapBills); setTables(snapTables);
       const err = e as { message?: string };
-      showNotification(err.message || 'خطأ في نقل الجلسة', 'error');
+      if (!silent) showNotification(err.message || 'خطأ في نقل الجلسة', 'error');
       return null;
     }
   };
-  const linkSessionToTable = async (sessionId: string, tableId: string): Promise<any> => {
+  const linkSessionToTable = async (sessionId: string, tableId: string, options?: { silent?: boolean }): Promise<any> => {
+    const silent = options?.silent === true;
     let snapSessions: Session[] = []; let snapBills: Bill[] = [];
     try {
       setSessions(prev => { snapSessions = [...prev]; return prev.map((s: any) => String(s._id || s.id) === String(sessionId) ? { ...s, table: tableId, _optimistic: true } : s); });
@@ -775,7 +819,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           if (exists) return prev.map((b: any) => String(b._id || b.id) === bid ? { ...b, ...bill } : b);
           return [...prev, bill];
         });
-        showNotification('تم ربط الجلسة بالطاولة', 'success');
+        if (!silent) showNotification('تم ربط الجلسة بالطاولة', 'success');
         return response.data;
       }
       setSessions(snapSessions); setBills(snapBills);
@@ -783,11 +827,12 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     } catch (e: unknown) {
       setSessions(snapSessions); setBills(snapBills);
       const err = e as { message?: string };
-      showNotification(err.message || 'خطأ في ربط الجلسة', 'error');
+      if (!silent) showNotification(err.message || 'خطأ في ربط الجلسة', 'error');
       return null;
     }
   };
-  const unlinkTableFromSession = async (sessionId: string, customerName?: string): Promise<any> => {
+  const unlinkTableFromSession = async (sessionId: string, customerName?: string, options?: { silent?: boolean }): Promise<any> => {
+    const silent = options?.silent === true;
     let snapSessions: Session[] = []; let snapBills: Bill[] = [];
     try {
       setSessions(prev => { snapSessions = [...prev]; return prev.map((s: any) => String(s._id || s.id) === String(sessionId) ? { ...s, table: null, customerName: customerName || s.customerName, _optimistic: true } : s); });
@@ -802,7 +847,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           if (exists) return prev.map((b: any) => String(b._id || b.id) === bid ? { ...b, ...bill } : b);
           return [...prev, bill];
         });
-        showNotification('تم فك ربط الجلسة', 'success');
+        if (!silent) showNotification('تم فك ربط الجلسة', 'success');
         return response.data;
       }
       setSessions(snapSessions); setBills(snapBills);
@@ -810,11 +855,12 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     } catch (e: unknown) {
       setSessions(snapSessions); setBills(snapBills);
       const err = e as { message?: string };
-      showNotification(err.message || 'خطأ في فك الربط', 'error');
+      if (!silent) showNotification(err.message || 'خطأ في فك الربط', 'error');
       return null;
     }
   };
-  const updateSessionTimes = async (sessionId: string, data: { startTime: string; endTime: string }): Promise<Session | null> => {
+  const updateSessionTimes = async (sessionId: string, data: { startTime: string; endTime: string }, options?: { silent?: boolean }): Promise<Session | null> => {
+    const silent = options?.silent === true;
     let snapshot: Session[] = [];
     let didOptimistic = false;
     try {
@@ -831,7 +877,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         setSessions(prev => prev.map((s: any) => String(s._id || s.id) === String(sessionId) ? { ...s, ...response.data, _optimistic: undefined } : s));
         const sess = response.data as any;
         if (sess.bill) setBills(prev => prev.map((b: any) => String(b._id || b.id) === String(sess.bill?._id || sess.bill) ? { ...b, sessions: (b.sessions || []).map((ss: any) => String(ss._id || ss.id || ss) === String(sessionId) ? sess : ss) } : b));
-        showNotification('تم تعديل أوقات الجلسة', 'success');
+        if (!silent) showNotification('تم تعديل أوقات الجلسة', 'success');
         return response.data;
       }
       if (didOptimistic) setSessions(snapshot);
@@ -839,7 +885,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     } catch (e: unknown) {
       if (didOptimistic) setSessions(snapshot);
       const err = e as { message?: string };
-      showNotification(err.message || 'خطأ في تعديل الوقت', 'error');
+      if (!silent) showNotification(err.message || 'خطأ في تعديل الوقت', 'error');
       return null;
     }
   };
@@ -869,7 +915,8 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       return null;
     }
   };
-  const updateControllersPeriodTime = async (sessionId: string, periodIndex: number, newStartTime: string, newEndTime?: string): Promise<Session | null> => {
+  const updateControllersPeriodTime = async (sessionId: string, periodIndex: number, newStartTime: string, newEndTime?: string, options?: { silent?: boolean }): Promise<Session | null> => {
+    const silent = options?.silent === true;
     let snapshot: Session[] = [];
     let didOptimistic = false;
     try {
@@ -896,7 +943,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const response = await api.updateControllersPeriodTime(sessionId, periodIndex, newStartTime, newEndTime, true);
       if (response.success && response.data) {
         setSessions(prev => prev.map((s: any) => String(s._id || s.id) === String(sessionId) ? { ...s, ...response.data, _optimistic: undefined } : s));
-        showNotification('تم تعديل فترة الدراعات', 'success');
+        if (!silent) showNotification('تم تعديل فترة الدراعات', 'success');
         return response.data;
       }
       if (didOptimistic) setSessions(snapshot);
@@ -905,7 +952,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     } catch (e: unknown) {
       if (didOptimistic) setSessions(snapshot);
       const err = e as { message?: string };
-      showNotification(err.message || 'خطأ في تعديل الفترة', 'error');
+      if (!silent) showNotification(err.message || 'خطأ في تعديل الفترة', 'error');
       return null;
     }
   };

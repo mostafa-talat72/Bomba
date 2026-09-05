@@ -73,18 +73,25 @@ export const buildOrderPrintHTML = async (
       // If organization is a populated object
       establishmentName = org.name;
     } else if (typeof org === 'string') {
-      // If organization is just a string ID, try to fetch data
-      try {
-        const response = await fetch(`/api/organization/${org}`);
-        if (response.ok) {
-          const orgData = await response.json();
-          if (orgData.success && orgData.data?.name) {
-            establishmentName = orgData.data.name;
+      // ⚡ اسم المنشأة الممرر من الذاكرة يكفي — لا انتظار شبكة إطلاقاً.
+      // (كل المنادين يمررون user.organizationName مسبقاً)
+      if (fallbackOrganizationName) {
+        establishmentName = fallbackOrganizationName;
+      } else {
+        try {
+          const response = await Promise.race([
+            fetch(`/api/organization/${org}`),
+            new Promise<null>((resolve) => setTimeout(() => resolve(null), 800)),
+          ]) as Response | null;
+          if (response && response.ok) {
+            const orgData = await response.json();
+            if (orgData.success && orgData.data?.name) {
+              establishmentName = orgData.data.name;
+            }
           }
+        } catch (error) {
+          console.warn('Failed to fetch organization name for order:', error);
         }
-      } catch (error) {
-        console.warn('Failed to fetch organization name for order:', error);
-        // Use fallback name in case of failure
       }
     }
   }
@@ -549,6 +556,11 @@ export const printOrder = async (
   printerName?: string,
   paperWidthMm?: number
 ) => {
+  // ⚡ إشعار فوري: الطباعة بدأت لحظة الضغط.
+  try {
+    const startingMsg = language === 'ar' ? 'جارٍ طباعة الطلب...' : language === 'fr' ? 'Impression en cours...' : 'Printing order...';
+    if (typeof window !== 'undefined' && (window as any).showNotification) (window as any).showNotification(startingMsg, 'info');
+  } catch {}
   const savedPrinter = printerName ? null : await getCachedDevicePrinter();
   const selectedPrinterName = printerName || savedPrinter?.data?.printerName || savedPrinter?.data?.name;
   const sectionsToPrint = selectedSectionIds && selectedSectionIds.length > 1

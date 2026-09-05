@@ -173,10 +173,12 @@ export const printThroughLocalBridge = (
   const printKey = options.printKey || getPrintKey(html, printerName);
   const now = Date.now();
   const previousPrint = recentPrints.get(printKey);
-  if (previousPrint && now - previousPrint < 3000) return Promise.resolve(true);
+  // Short window: absorbs accidental double-clicks (~300ms) but never swallows
+  // an intentional quick reprint.
+  if (previousPrint && now - previousPrint < 1200) return Promise.resolve(true);
   recentPrints.set(printKey, now);
   for (const [key, timestamp] of recentPrints) {
-    if (now - timestamp >= 3000) recentPrints.delete(key);
+    if (now - timestamp >= 1200) recentPrints.delete(key);
   }
   const queueKey = printerName?.trim() || '__default__';
   const previousJob = printQueues.get(queueKey) || Promise.resolve(true);

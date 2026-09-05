@@ -41,6 +41,7 @@ import { useTablesHeader } from '../context/TablesHeaderContext';
 import { API_BASE_URL } from '../utils/apiBase';
 import { useOrganization } from '../context/OrganizationContext';
 import NotificationCenter from './NotificationCenter';
+import LanStatusBadge from './LanStatusBadge';
 import PermissionGuard from './PermissionGuard';
 import LanguageSwitcher from './LanguageSwitcher';
 import ScrollButtons from './ScrollButtons';
@@ -613,6 +614,7 @@ const Layout = () => {
                 </div>
               )}
               <LanguageSwitcher />
+              <LanStatusBadge />
               <PermissionGuard requiredPermissions={['dashboard', 'playstation', 'computer', 'cafe', 'menu', 'billing', 'reports', 'inventory', 'costs', 'users', 'settings']}>
                 <NotificationCenter />
               </PermissionGuard>

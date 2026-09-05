@@ -1597,6 +1597,11 @@ const loadInitialData = async () => {
   // #11 Print daily report
   const handlePrintDailyReport = async () => {
     setIsPrintingReport(true);
+    // ⚡ إشعار فوري: الطباعة بدأت لحظة الضغط.
+    try {
+      const msg = i18n.language === 'ar' ? 'جارٍ طباعة التقرير...' : i18n.language === 'fr' ? 'Impression en cours...' : 'Printing report...';
+      showNotification(msg, 'info');
+    } catch {}
     const today = new Date();
     const todayStr = today.toLocaleDateString('ar-EG', { weekday:'long', year:'numeric', month:'long', day:'numeric' });
     const todayBills = bills.filter(b => {
@@ -1907,8 +1912,9 @@ const loadInitialData = async () => {
   };
 
   const printOrderRouted = async (order: Order, selectedIds: string[], map: Map<string, any>, tableForOrder?: Table | null) => {
-    const response = await api.getOrganization().catch(() => null);
-    const settings = response?.success === true ? response.data?.printSettings : user?.organization?.printSettings;
+    // ⚡ الإعدادات من الذاكرة أولاً — بدون انتظار شبكة قبل طباعة الطلب.
+    const settings = (user as any)?.organization?.printSettings
+      ?? (await api.getOrganization().catch(() => null))?.data?.printSettings;
     const profiles = settings?.printers || [];
     const routes = settings?.sectionPrinterMap || {};
     const groups = new Map<string, string[]>();
@@ -1940,10 +1946,9 @@ const loadInitialData = async () => {
       }
     });
     const sections = Array.from(sectionMap, ([id, name]) => ({ id, name }));
-    const organizationResponse = await api.getOrganization().catch(() => null);
-    const printSettings = organizationResponse?.success === true
-      ? organizationResponse.data?.printSettings
-      : user?.organization?.printSettings;
+    // ⚡ الإعدادات من الذاكرة أولاً — بدون انتظار شبكة قبل طباعة الطلب.
+    const printSettings = (user as any)?.organization?.printSettings
+      ?? (await api.getOrganization().catch(() => null))?.data?.printSettings;
     const defaultSections = (printSettings?.defaultOrderPrintSections || [])
       .map((id: string) => String(id))
       .filter((id: string) => sections.some(section => section.id === id));
@@ -2077,10 +2082,17 @@ const loadInitialData = async () => {
     if (selectedBill && String(selectedBill._id || selectedBill.id) === String(bill._id || bill.id)) setSelectedBill(optimisticBill as Bill);
     const result = await api.updatePayment(bill.id || bill._id, paymentData);
     if (!result?.data) throw new Error('payment failed');
-    // تأكيد بالبيانات الراجعة من السيرفر
-    setBills(prev => prev.map(b => String(b._id || b.id) === String(bill._id || bill.id) ? result.data : b));
+    // تأكيد بالبيانات الراجعة من السيرفر + تحديث حالة الطاولة لحظياً من نفس البيانات (بدون fetch حاجب).
+    const paidTableId = String((bill.table as any)?._id || (bill.table as any)?.id || bill.table || '');
+    setBills(prev => {
+      const next = prev.map(b => String(b._id || b.id) === String(bill._id || bill.id) ? result.data : b);
+      if (paidTableId) {
+        const hasUnpaid = next.some((b: any) => String(b.table?._id || b.table) === paidTableId && ['draft', 'partial', 'overdue'].includes(b.status));
+        setTables(tprev => tprev.map((t: any) => String(t._id || t.id) === paidTableId ? { ...t, status: hasUnpaid ? 'occupied' : 'empty' } : t));
+      }
+      return next;
+    });
     if (selectedBill && String(selectedBill._id || selectedBill.id) === String(bill._id || bill.id)) setSelectedBill(result.data as Bill);
-    await fetchTables();
     if (newStatus === 'paid') {
       setShowPaymentSuccessAnim(true);
       setTimeout(() => setShowPaymentSuccessAnim(false), 2500);
@@ -2191,9 +2203,14 @@ const loadInitialData = async () => {
         const tableId = String((finalPaidBill.table as any)?._id || finalPaidBill.table || '');
         setBills(prev => {
           const next = prev.map(b => String(b._id || b.id) === String(billToPayFull._id || billToPayFull.id) ? finalPaidBill : b);
-          if (tableId && !next.some((b: any) => String(b.table?._id || b.table) === tableId && ['draft','partial','overdue'].includes(b.status))) {
-            setShowUnifiedTableModal(false);
-            setSelectedTable(null);
+          const hasUnpaid = tableId ? next.some((b: any) => String(b.table?._id || b.table) === tableId && ['draft','partial','overdue'].includes(b.status)) : true;
+          if (tableId) {
+            // تحديث حالة الطاولة لحظياً من نفس البيانات (بدون fetch حاجب).
+            setTables(tprev => tprev.map((t: any) => String(t._id || t.id) === tableId ? { ...t, status: hasUnpaid ? 'occupied' : 'empty' } : t));
+            if (!hasUnpaid) {
+              setShowUnifiedTableModal(false);
+              setSelectedTable(null);
+            }
           }
           return next;
         });
@@ -2205,8 +2222,8 @@ const loadInitialData = async () => {
         if (user?.organization?.printSettings?.autoPrintOnPayment === true) {
           try { await printBill(finalPaidBill, user?.organizationName, i18n.language, t, getTableSectionName(finalPaidBill.table), 'payment'); } catch {}
         }
-        await fetchTables();
-        fetchBills().catch(()=>{});
+        // مزامنة خلفية غير حاجبة بدل fetchTables/fetchBills المتزامنين.
+        scheduleBackgroundRefetch(true);
       }
     } catch {
       showNotification(t('billing.notifications.payFullBillError'), 'error');
@@ -2252,9 +2269,14 @@ const loadInitialData = async () => {
         const tableId = String((finalPaidBill.table as any)?._id || finalPaidBill.table || '');
         setBills(prev => {
           const next = prev.map(b => String(b._id || (b as any).id) === String((bill as any)._id || (bill as any).id) ? finalPaidBill : b);
-          if (tableId && !next.some((b: any) => String(b.table?._id || b.table) === tableId && ['draft','partial','overdue'].includes(b.status))) {
-            setShowUnifiedTableModal(false);
-            setSelectedTable(null);
+          const hasUnpaid = tableId ? next.some((b: any) => String(b.table?._id || b.table) === tableId && ['draft','partial','overdue'].includes(b.status)) : true;
+          if (tableId) {
+            // تحديث حالة الطاولة لحظياً من نفس البيانات (بدون fetch حاجب).
+            setTables(tprev => tprev.map((t: any) => String(t._id || t.id) === tableId ? { ...t, status: hasUnpaid ? 'occupied' : 'empty' } : t));
+            if (!hasUnpaid) {
+              setShowUnifiedTableModal(false);
+              setSelectedTable(null);
+            }
           }
           return next;
         });
@@ -2266,9 +2288,8 @@ const loadInitialData = async () => {
         if (user?.organization?.printSettings?.autoPrintOnPayment === true) {
           await printBill(finalPaidBill, user?.organizationName, i18n.language, t, getTableSectionName(finalPaidBill.table), 'payment');
         }
-        await fetchTables();
-        // fetch فوري بدون throttle عشان حالة الطاولة تتأكد
-        fetchBills().catch(()=>{});
+        // مزامنة خلفية غير حاجبة بدل fetchTables/fetchBills المتزامنين.
+        scheduleBackgroundRefetch(true);
       } else {
         setIsProcessingPayment(false);
       }
@@ -2498,62 +2519,63 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
     setEndAllTarget({ table, sessions: info.sessions });
   }, [sessionUrgencyByTable]);
 
-  const confirmEndAllSessions = async () => {
+  const confirmEndAllSessions = () => {
     if (!endAllTarget) return;
-    setIsEndingAll(true);
-    const ended = endAllTarget.sessions.map(s => ({ ...s }));
-    const billId = String(endAllTarget.sessions[0]?._billObj?._id || endAllTarget.sessions[0]?._billId || '');
-    try {
-      let ok = 0;
-      for (const s of ended) {
-        try { const r = await api.endSession(String(s._id || s.id)); if (r?.success) ok++; } catch { /* التالي */ }
+    const target = endAllTarget;
+    const ended = target.sessions.map(s => ({ ...s }));
+    const billId = String(target.sessions[0]?._billObj?._id || target.sessions[0]?._billId || '');
+    const targetTableId = String((target.table as any)._id || (target.table as any).id || '');
+    // ⚡ تحديث متفائل فوري أولاً — الواجهة تتحدث لحظياً قبل انتظار السيرفر.
+    setBills(prev => prev.map(b => {
+      if (String((b.table as any)?._id || b.table) !== targetTableId) return b;
+      return {
+        ...b,
+        sessions: (b.sessions || []).map((bs: any) => {
+          const match = ended.find(s => String(s._id || s.id) === String(bs._id || bs.id));
+          if (!match || bs.status !== 'active') return bs;
+          const cost = getSessionCost(bs);
+          return { ...bs, status: 'completed', endTime: new Date(), totalCost: cost, finalCost: cost - (bs.discount || 0) };
+        }),
+      };
+    }));
+    // ↩️ تراجع — إعادة فتح كل الجلسات المنتهية
+    setUndoRequest({
+      message: `تم إنهاء ${ended.length} جلسة على ${getTableDisplay(target.table.number, i18n.language)}`,
+      action: async () => {
+        for (const s of ended) {
+          try {
+            await api.createSessionWithExistingBill({
+              deviceType: s.deviceType,
+              deviceNumber: Number(s.deviceNumber) || 0,
+              deviceName: s.deviceName,
+              customerName: s.customerName,
+              controllers: s.controllers || 1,
+              billId,
+            } as any);
+          } catch { /* التالي */ }
+        }
+        showNotification('تمت إعادة فتح الجلسات', 'success');
+        scheduleBackgroundRefetch(true);
+      },
+    });
+    setEndAllTarget(null);
+    // استدعاءات السيرفر في الخلفية (بالتوازي) دون حجب الواجهة.
+    void (async () => {
+      setIsEndingAll(true);
+      try {
+        const results = await Promise.all(ended.map(s =>
+          api.endSession(String(s._id || s.id)).then(r => !!(r as any)?.success).catch(() => false)
+        ));
+        const ok = results.filter(Boolean).length;
+        if (ok > 0) showNotification(`تم إنهاء ${ok} جلسة`, 'success');
+        else showNotification(t('billing.notifications.endSessionError'), 'error');
+        scheduleBackgroundRefetch(true);
+      } catch {
+        showNotification(t('billing.notifications.endSessionUnexpectedError'), 'error');
+      } finally {
+        setIsEndingAll(false);
       }
-      setIsEndingAll(false);
-      if (ok > 0) {
-        showNotification(`تم إنهاء ${ok} جلسة`, 'success');
-        // ⚡ تحديث متفائل محلي
-        setBills(prev => prev.map(b => {
-          const bid = String((b as any)._id || b.id);
-          if (!ended.some(s => String((b.table as any)?._id || b.table) === String((endAllTarget.table as any)._id || endAllTarget.table.id)) ) return b;
-          return {
-            ...b,
-            sessions: (b.sessions || []).map((bs: any) => {
-              const match = ended.find(s => String(s._id || s.id) === String(bs._id || bs.id));
-              if (!match || bs.status !== 'active') return bs;
-              const cost = getSessionCost(bs);
-              return { ...bs, status: 'completed', endTime: new Date(), totalCost: cost, finalCost: cost - (bs.discount || 0) };
-            }),
-          };
-        }));
-        // ↩️ تراجع — إعادة فتح كل الجلسات المنتهية
-        setUndoRequest({
-          message: `تم إنهاء ${ok} جلسة على ${getTableDisplay(endAllTarget.table.number, i18n.language)}`,
-          action: async () => {
-            for (const s of ended) {
-              try {
-                await api.createSessionWithExistingBill({
-                  deviceType: s.deviceType,
-                  deviceNumber: Number(s.deviceNumber) || 0,
-                  deviceName: s.deviceName,
-                  customerName: s.customerName,
-                  controllers: s.controllers || 1,
-                  billId,
-                } as any);
-              } catch { /* التالي */ }
-            }
-            showNotification('تمت إعادة فتح الجلسات', 'success');
-            scheduleBackgroundRefetch(true);
-          },
-        });
-      } else {
-        showNotification(t('billing.notifications.endSessionError'), 'error');
-      }
-      setEndAllTarget(null);
-      scheduleBackgroundRefetch(true);
-    } catch {
-      setIsEndingAll(false); setEndAllTarget(null);
-      showNotification(t('billing.notifications.endSessionUnexpectedError'), 'error');
-    }
+    })();
   };
 
   // ── Callbacks مستقرة لـ TableButton — تمنع إعادة رسم الكروت غير الضرورية ──
@@ -2565,15 +2587,15 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
     if (tb) void repairTableBills(tb);
   }, [repairTableBills]);
 
-  const handleQuickPrint = useCallback(async (tb: Table, e: React.MouseEvent) => {
+  const handleQuickPrint = useCallback((tb: Table, e: React.MouseEvent) => {
     e.stopPropagation();
     const bills = tableCardData.get((tb._id || (tb as any).id).toString())?.tBills || [];
     const unpaid = bills.filter((b: any) => ['draft', 'partial', 'overdue'].includes(b.status));
     if (unpaid.length === 0) { showNotification('لا توجد فاتورة غير مدفوعة', 'error'); return; }
-    try {
-      const r = await api.getBill(unpaid[0].id || unpaid[0]._id);
-      if (r.success && r.data) await printBill(r.data, user?.organizationName, i18n.language, t, getTableSectionName(tb));
-    } catch { showNotification('خطأ في الطباعة', 'error'); }
+    // ⚡ الدرج لحظياً + الطباعة مباشرة (printBill تجلب الكاملة داخلياً عند الحاجة فقط).
+    fireInstantDrawer(unpaid[0] as Bill, 'bill');
+    printBill(unpaid[0] as Bill, user?.organizationName, i18n.language, t, getTableSectionName(tb))
+      .catch(() => { showNotification('خطأ في الطباعة', 'error'); });
   }, [tableCardData, user, i18n.language, t]);
 
   const stableQuickPrint = useCallback((tb: Table, e: React.MouseEvent) => { handleQuickPrint(tb, e); }, [handleQuickPrint]);
@@ -2689,7 +2711,7 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
       const sid = sessionToEdit.id || (sessionToEdit as any)._id;
       // ── optimistic <50ms via DataContext ──
       (setSelectedBill as any)?.((prev: any) => prev); // keep reference
-      const result = await updateSessionTimes(sid, { startTime: start.toISOString(), endTime: end.toISOString() });
+      const result = await updateSessionTimes(sid, { startTime: start.toISOString(), endTime: end.toISOString() }, { silent: true });
       if (result) {
         showNotification(t('billing.notifications.sessionTimeUpdated'), 'success');
         setShowEditSessionTimeModal(false); setSessionToEdit(null);
@@ -2720,7 +2742,7 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
       const end = new Date(editPeriodEndTime);
       if (end <= start) { showNotification(t('gaming.notifications.endTimeBeforeStart'), 'error'); setIsEditingPeriod(false); return; }
       const sid = sessionToEdit.id || (sessionToEdit as any)._id;
-      const result = await updateControllersPeriodTime(sid, periodIndex, start.toISOString(), end.toISOString());
+      const result = await updateControllersPeriodTime(sid, periodIndex, start.toISOString(), end.toISOString(), { silent: true });
       if (result) {
         showNotification(t('billing.notifications.periodTimeUpdated'), 'success');
         setShowEditControllersPeriodModal(false); setSessionToEdit(null); setPeriodToEdit(null); setPeriodIndex(-1);
@@ -4409,10 +4431,9 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
         menuCategories={menuCategories}
         getCategoriesForSection={getCategoriesForSection}
         getItemsForCategory={getItemsForCategory}
-        onSuccess={async (updatedBill) => {
-          // refresh bills and orders
-          try { await fetchBills(); } catch {}
-          try { await fetchOrders(); } catch {}
+        onSuccess={(updatedBill) => {
+          // تحديث لحظي من البيانات الراجعة + مزامنة خلفية (بدون fetch حاجب).
+          scheduleBackgroundRefetch(true);
           // update selectedBill if open
           if (selectedBill && (selectedBill as any)._id === (updatedBill as any)._id) {
             setSelectedBill(updatedBill as any);
@@ -4427,9 +4448,9 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
               }
               return next;
             });
-            if (user?.organization?.printSettings?.autoPrintOnPayment === true) {
-              try { await printBill(updatedBill, user?.organizationName, i18n.language, t, getTableSectionName((updatedBill as any).table), 'payment'); } catch {}
-            }
+              if (user?.organization?.printSettings?.autoPrintOnPayment === true) {
+                printBill(updatedBill, user?.organizationName, i18n.language, t, getTableSectionName((updatedBill as any).table), 'payment').catch(() => {});
+              }
           }
           showNotification('تم تحديث أصناف الفاتورة بنجاح', 'success');
         }}

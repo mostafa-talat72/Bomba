@@ -63,6 +63,10 @@ import upgradeRoutes from "./routes/upgradeRoutes.js";
 import tableRoutes from "./routes/tableRoutes.js";
 import performanceRoutes from "./routes/performanceRoutes.js";
 import syncRoutes from "./routes/syncRoutes.js";
+import lanRoutes from "./routes/lanRoutes.js";
+import lanMeshDiscovery from "./utils/lanDiscovery.js";
+import { wirePeerCatchUp } from "./utils/lanPeerSync.js";
+import { ensureLanFirewall } from "./utils/lanAutoSetup.js";
 import organizationRoutes from "./routes/organizationRoutes.js";
 import publicRoutes from "./routes/publicRoutes.js";
 import payrollRoutes from "./routes/payroll.js";
@@ -757,6 +761,7 @@ app.use("/api/upgrades", upgradeRoutes);
 app.use("/api/tables", tableRoutes);
 app.use("/api/performance", performanceRoutes);
 app.use("/api/sync", syncRoutes);
+app.use("/api/lan", lanRoutes); // mesh peer-sync: /peers, /receive, /sync-missing (no auth, LAN-trusted)
 app.use("/api/organization", organizationRoutes);
 app.use("/api/payroll", payrollRoutes);
 app.use("/api/warehouse", warehouseRoutes);
@@ -811,11 +816,19 @@ app.use("/api/orders", (req, res, next) => {
 });
 
 const PORT = process.env.PORT || 5000;
+// Bind to all interfaces so a second device on the LAN (Ethernet/WiFi, same
+// subnet) can reach this server. Windows Firewall must allow inbound TCP on
+// PORT and inbound UDP on LAN_DISCOVERY_PORT (default 41234).
+const HOST = process.env.HOST || "0.0.0.0";
 
 // Global readiness flag for /health endpoint
 let serverReady = false;
 
-server.listen(PORT, async () => {
+// Zero-config LAN: try to open Windows Firewall silently (fire-and-forget,
+// never blocks). Direct Ethernet cable works via APIPA with no manual IP.
+ensureLanFirewall();
+
+server.listen(PORT, HOST, async () => {
     Logger.info(`Server started on port ${PORT}`, {
         environment: process.env.NODE_ENV,
         port: PORT,
@@ -833,6 +846,33 @@ server.listen(PORT, async () => {
 
     // Mark server as ready for health checks (lightweight)
     serverReady = true;
+
+    // LAN mesh peer-sync (offline-first, works without Atlas): UDP discovery
+    // on 224.0.0.1:41234 + direct HTTP push between devices. Disable with
+    // LAN_PEER_SYNC_ENABLED=false.
+    if (process.env.LAN_PEER_SYNC_ENABLED !== "false") {
+        try {
+            Logger.info("📡 Starting LAN mesh discovery (offline peer-sync)...");
+            await lanMeshDiscovery.start();
+            global.lanMeshDiscovery = lanMeshDiscovery;
+            wirePeerCatchUp(); // auto-pull missing changes when a peer (re)appears
+            // Instant UI: push peer join/leave to browsers the moment it happens
+            // (badge + toast), so the user sees "device connected" immediately.
+            try {
+                lanMeshDiscovery.on("peer-up", (peer) => {
+                    try { io.emit("lan:peer-up", { ...(peer || {}), count: lanMeshDiscovery.getPeers().length }); } catch {}
+                });
+                lanMeshDiscovery.on("peer-down", (peer) => {
+                    try { io.emit("lan:peer-down", { ...(peer || {}), count: lanMeshDiscovery.getPeers().length }); } catch {}
+                });
+            } catch {}
+            Logger.info(`✅ LAN mesh ready — reachable at http://${lanMeshDiscovery.getStatus().localIP}:${PORT}`);
+        } catch (e) {
+            Logger.warn("⚠️  LAN mesh discovery failed to start:", e.message);
+        }
+    } else {
+        Logger.info("ℹ️  LAN mesh peer-sync disabled (LAN_PEER_SYNC_ENABLED=false)");
+    }
 
     // Initialize scheduled tasks
     if (process.env.NODE_ENV === "production") {
@@ -909,6 +949,13 @@ const gracefulShutdown = async (signal) => {
         syncStatusMonitor.stop();
     }
     
+    // Stop LAN mesh discovery
+    try {
+        if (global.lanMeshDiscovery) await global.lanMeshDiscovery.stop();
+    } catch (e) {
+        Logger.error("❌ Error stopping LAN mesh discovery:", e.message);
+    }
+
     // Stop LAN sync if enabled
     if (syncConfig.lanSync?.enabled) {
         try {

@@ -825,6 +825,11 @@ export const printBill = async (
 ) => {
   let billForPrint = bill;
   const billId = String((bill as any)._id || (bill as any).id || '');
+  // ⚡ إشعار فوري: الطباعة بدأت لحظة الضغط.
+  try {
+    const startingMsg = language === 'ar' ? 'جارٍ طباعة الفاتورة...' : language === 'fr' ? 'Impression en cours...' : 'Printing bill...';
+    if (typeof window !== 'undefined' && (window as any).showNotification) (window as any).showNotification(startingMsg, 'info');
+  } catch {}
   const hasOrderDetails = Array.isArray((bill as any).orders)
     && (bill as any).orders.every((order: any) => order && Array.isArray(order.items));
   const organizationFromBill = billForPrint.organization

@@ -437,6 +437,8 @@ const ConsumptionReport = () => {
         const processedData = processOrdersAndSessions(filteredOrders, filteredSessions);
         setConsumptionData(processedData);
         setDataReady(true);
+        // ⚡ سخّن كاش الطابعة في الخلفية: زر الطباعة يجد كل شيء جاهزاً.
+        try { void getCachedDevicePrinter(); } catch {}
       } else {
         console.error('❌ Failed to fetch data:', {
           orders: ordersResponse.message,
@@ -465,6 +467,8 @@ const ConsumptionReport = () => {
   };
 
   const printReport = async (): Promise<boolean> => {
+    // ⚡ إشعار فوري: الطباعة بدأت لحظة الضغط.
+    try { toast.info(t('consumptionReport.messages.printOpening')); } catch {}
     try {
       const reportData = {
         consumptionData,
