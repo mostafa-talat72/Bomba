@@ -47,52 +47,42 @@ const configPath = path.join(userDataDir, "config.json");
 const logPath = path.join(userDataDir, "server.log");
 
 async function waitForPrintResources(printWindow) {
+  // Fast path: wait for fonts/images only, measure height via scrollHeight.
+  // (The old version scanned every DOM node with getBoundingClientRect which
+  // added seconds on large receipts.)
   return printWindow.webContents.executeJavaScript(`
     (async () => {
+      try { await Promise.race([document.fonts.ready, new Promise((r) => setTimeout(r, 150))]); } catch {}
       const viewportWidth = Math.max(1, document.documentElement.clientWidth);
-      document.documentElement.style.width = viewportWidth + "px";
-      document.documentElement.style.margin = "0";
-      document.body.style.width = "100%";
-      document.body.style.maxWidth = "100%";
-      document.body.style.margin = "0";
-      document.body.style.position = "relative";
-     document.body.style.left = "-3mm";
-     document.body.style.transform = "scale(0.93)";
-      document.body.style.transformOrigin = "top center";
-      document.body.style.paddingLeft = "0";
-      document.body.style.paddingRight = "0";
-      document.body.style.boxSizing = "border-box";
-      document.body.style.overflow = "visible";
-      document.documentElement.style.direction = "ltr";
-      document.body.style.direction = "ltr";
-      document.body.style.display = "flex";
-      document.body.style.flexDirection = "column";
-      document.body.style.alignItems = "stretch";
-      document.body.querySelectorAll(":scope > *").forEach((element) => {
-        element.style.width = "100%";
-        element.style.maxWidth = "100%";
-        element.style.marginLeft = "0";
-        element.style.marginRight = "0";
-        element.style.direction = "rtl";
-        element.style.boxSizing = "border-box";
-      });
-      document.body.querySelectorAll("table").forEach((table) => {
-        table.style.width = "100%";
-        table.style.maxWidth = "100%";
-        table.style.tableLayout = "fixed";
-      });
-      const images = Array.from(document.images);
+      const rootStyle = document.documentElement.style;
+      rootStyle.width = viewportWidth + "px";
+      rootStyle.margin = "0";
+      rootStyle.direction = "ltr";
+      const bodyStyle = document.body.style;
+      bodyStyle.width = "100%";
+      bodyStyle.maxWidth = "100%";
+      bodyStyle.margin = "0";
+      bodyStyle.position = "relative";
+      bodyStyle.left = "-3mm";
+      bodyStyle.transform = "scale(0.93)";
+      bodyStyle.transformOrigin = "top center";
+      bodyStyle.paddingLeft = "0";
+      bodyStyle.paddingRight = "0";
+      bodyStyle.boxSizing = "border-box";
+      bodyStyle.overflow = "visible";
+      bodyStyle.direction = "ltr";
+      bodyStyle.display = "flex";
+      bodyStyle.flexDirection = "column";
+      bodyStyle.alignItems = "stretch";
+      const images = Array.from(document.images || []);
       return {
         failedImages: images
           .filter((image) => !image.complete || image.naturalWidth === 0)
           .map((image) => image.src || image.alt || "unknown image"),
-        contentHeight: Math.max(document.documentElement.scrollHeight, document.body.scrollHeight),
-        contentWidth: Math.max(document.documentElement.scrollWidth, document.body.scrollWidth),
+        contentHeight: Math.max(document.documentElement.scrollHeight || 0, document.body.scrollHeight || 0),
+        contentWidth: Math.max(document.documentElement.scrollWidth || 0, document.body.scrollWidth || 0),
         viewportWidth,
-        widestElement: Math.max(...Array.from(document.querySelectorAll("*")).map((element) => {
-          const rect = element.getBoundingClientRect();
-          return Math.max(rect.width, element.scrollWidth || 0);
-        }), 0),
+        widestElement: 0,
       };
     })();
   `, true);
@@ -106,19 +96,7 @@ async function getAvailablePrinters() {
   return cachedPrinters;
 }
 
-async function sendWindowsRawCommand(printerName, bytes) {
-  if (process.platform !== "win32") {
-    return { success: false, message: "Raw printer commands are supported on Windows only" };
-  }
-  const tempPath = path.join(os.tmpdir(), `bomba-print-command-${Date.now()}-${crypto.randomUUID()}.bin`);
-  try {
-    fs.writeFileSync(tempPath, Buffer.from(bytes));
-    const escapedPath = tempPath.replace(/'/g, "''");
-    const escapedPrinter = String(printerName).replace(/'/g, "''");
-    const script = `
-$bytes = [System.IO.File]::ReadAllBytes('${escapedPath}')
-Add-Type -TypeDefinition @"
-using System;
+const BOMBA_RAW_PRINT_CS = `using System;
 using System.Runtime.InteropServices;
 public static class BombaRawPrint {
   public static string LastError = "";
@@ -134,14 +112,14 @@ public static class BombaRawPrint {
   [DllImport("winspool.drv", SetLastError=true)] static extern bool EndPagePrinter(IntPtr handle);
   [DllImport("winspool.drv", SetLastError=true)]
   static extern bool WritePrinter(IntPtr handle, byte[] bytes, int count, out int written);
-  public static bool Send(string name, byte[] bytes) {
+  public static bool Send(string name, byte[] bytes, string doc) {
     IntPtr handle;
     if (!OpenPrinter(name, out handle, IntPtr.Zero)) {
       LastError = "OpenPrinter failed: " + Marshal.GetLastWin32Error();
       return false;
     }
     try {
-      var info = new DocInfo { DocName = "Bomba printer command", DataType = "RAW" };
+      var info = new DocInfo { DocName = doc, DataType = "RAW" };
       if (StartDocPrinter(handle, 1, info) == 0) {
         LastError = "StartDocPrinter failed: " + Marshal.GetLastWin32Error();
         return false;
@@ -161,57 +139,225 @@ public static class BombaRawPrint {
       return true;
     } finally { ClosePrinter(handle); }
   }
+}`;
+
+function runRawPrintScript(encodedScript, timeoutMs = 4000) {
+  return new Promise((resolve, reject) => {
+    const child = spawn("powershell.exe", [
+      "-NoLogo",
+      "-NoProfile",
+      "-NonInteractive",
+      "-EncodedCommand",
+      encodedScript,
+    ], { windowsHide: true });
+    let stderr = "";
+    const timeout = setTimeout(() => {
+      child.kill();
+      reject(new Error("Raw printer command timed out"));
+    }, timeoutMs);
+    child.stderr.on("data", (chunk) => { stderr += chunk.toString(); });
+    child.once("error", (error) => {
+      clearTimeout(timeout);
+      reject(error);
+    });
+    child.once("close", (code) => {
+      clearTimeout(timeout);
+      if (code === 0) resolve();
+      else {
+        const details = stderr
+          .replace(/#< CLIXML[\s\S]*?<S S="Error">/g, "")
+          .replace(/_x000D__x000A_/g, "\n")
+          .replace(/<\/S>[\s\S]*?<\/Objs>/g, "")
+          .trim();
+        reject(new Error(details || `PowerShell exited with code ${code}`));
+      }
+    });
+  });
 }
+
+// ---- Persistent PowerShell raw-print daemon (fast drawer) ----
+// One PowerShell process with the WinSpool helper compiled ONCE at startup.
+// Drawer kicks then take ~100ms instead of ~1s per one-shot spawn.
+let rawPrintDaemon = null;
+let rawPrintDaemonStarting = null;
+
+function startRawPrintDaemon() {
+  if (process.platform !== "win32") return Promise.resolve(null);
+  if (rawPrintDaemon && !rawPrintDaemon.dead) return Promise.resolve(rawPrintDaemon);
+  if (rawPrintDaemonStarting) return rawPrintDaemonStarting;
+  rawPrintDaemonStarting = new Promise((resolve) => {
+    let settled = false;
+    const done = (daemon) => {
+      if (settled) return;
+      settled = true;
+      rawPrintDaemonStarting = null;
+      resolve(daemon);
+    };
+    try {
+      const bootstrap = `$null = Add-Type -TypeDefinition @"
+${BOMBA_RAW_PRINT_CS}
 "@
-if (-not [BombaRawPrint]::Send('${escapedPrinter}', $bytes)) {
-  throw [BombaRawPrint]::LastError
-}
-`;
-    const encodedScript = Buffer.from(script, "utf16le").toString("base64");
-    await new Promise((resolve, reject) => {
+[Console]::Out.WriteLine('READY')
+while ($true) {
+  $l = [Console]::In.ReadLine()
+  if ($null -eq $l) { break }
+  if ($l -eq '') { continue }
+  try {
+    $p = $l.Split('|')
+    $sent = [BombaRawPrint]::Send($p[0], [Convert]::FromBase64String($p[1]), $p[2])
+    if ($sent) { [Console]::Out.WriteLine('OK') } else { [Console]::Out.WriteLine('ERR ' + [BombaRawPrint]::LastError) }
+  } catch { [Console]::Out.WriteLine('ERR ' + $_.Exception.Message) }
+}`;
+      const encoded = Buffer.from(bootstrap, "utf16le").toString("base64");
       const child = spawn("powershell.exe", [
         "-NoLogo",
         "-NoProfile",
         "-NonInteractive",
         "-EncodedCommand",
-        encodedScript,
-      ], { windowsHide: true });
-      let stderr = "";
-      const timeout = setTimeout(() => {
-        child.kill();
-        reject(new Error("Raw printer command timed out"));
-      }, 5000);
-      child.stderr.on("data", (chunk) => { stderr += chunk.toString(); });
-      child.once("error", (error) => {
-        clearTimeout(timeout);
-        reject(error);
-      });
-      child.once("close", (code) => {
-        clearTimeout(timeout);
-        if (code === 0) resolve();
-        else {
-          const details = stderr
-            .replace(/#< CLIXML[\s\S]*?<S S="Error">/g, "")
-            .replace(/_x000D__x000A_/g, "\n")
-            .replace(/<\/S>[\s\S]*?<\/Objs>/g, "")
-            .trim();
-          reject(new Error(details || `PowerShell exited with code ${code}`));
+        encoded,
+      ], { windowsHide: true, stdio: ["pipe", "pipe", "pipe"] });
+      const daemon = { child, dead: false, ready: false, pending: [], queue: Promise.resolve() };
+      rawPrintDaemon = daemon;
+      let outBuf = "";
+      const failAll = (err) => {
+        daemon.dead = true;
+        if (rawPrintDaemon === daemon) rawPrintDaemon = null;
+        daemon.pending.splice(0).forEach((job) => job.reject(err));
+      };
+      child.stdout.on("data", (chunk) => {
+        outBuf += chunk.toString();
+        let idx;
+        while ((idx = outBuf.indexOf("\n")) >= 0) {
+          const line = outBuf.slice(0, idx).replace(/\r$/, "");
+          outBuf = outBuf.slice(idx + 1);
+          if (!daemon.ready) {
+            if (line === "READY") done(daemon);
+            continue;
+          }
+          const job = daemon.pending.shift();
+          if (!job) continue;
+          if (line === "OK") job.resolve();
+          else job.reject(new Error(line.replace(/^ERR\s*/, "") || "Raw print failed"));
         }
       });
+      child.stderr.on("data", () => {});
+      child.on("error", (err) => { failAll(err); done(null); });
+      child.on("close", () => { failAll(new Error("Print daemon exited")); done(null); });
+      setTimeout(() => { if (!daemon.ready) { try { child.kill(); } catch {} failAll(new Error("Print daemon start timed out")); done(null); } }, 10000);
+    } catch (err) {
+      done(null);
+    }
+  });
+  return rawPrintDaemonStarting;
+}
+
+// One ESC/POS job through the persistent daemon (serialized, single flight).
+function daemonSend(printerName, bytes, doc) {
+  return startRawPrintDaemon().then((daemon) => {
+    if (!daemon || daemon.dead) throw new Error("daemon unavailable");
+    const run = () => new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        try { daemon.child.kill(); } catch {}
+        daemon.dead = true;
+        if (rawPrintDaemon === daemon) rawPrintDaemon = null;
+        reject(new Error("Raw printer command timed out"));
+      }, 3000);
+      const job = {
+        resolve: (v) => { clearTimeout(timer); resolve(v); },
+        reject: (e) => {
+          clearTimeout(timer);
+          const i = daemon.pending.indexOf(job);
+          if (i >= 0) daemon.pending.splice(i, 1);
+          reject(e);
+        },
+      };
+      daemon.pending.push(job);
+      daemon.child.stdin.write(
+        `${printerName}|${Buffer.from(bytes).toString("base64")}|${doc || "Bomba printer command"}\n`,
+        (err) => { if (err) job.reject(err); }
+      );
     });
+    daemon.queue = daemon.queue.then(run, run);
+    return daemon.queue;
+  });
+}
+
+async function sendWindowsRawCommand(printerName, bytes) {
+  if (process.platform !== "win32") {
+    return { success: false, message: "Raw printer commands are supported on Windows only" };
+  }
+  try {
+    await daemonSend(String(printerName), bytes, "Bomba printer command");
+    return { success: true };
+  } catch (daemonError) {
+    try {
+    // Fast path: bytes go as base64 CLI arg — no temp file, no disk read.
+    const payload = Buffer.from(bytes).toString("base64");
+    const escapedPrinter = String(printerName).replace(/'/g, "''");
+    const script = `
+$bytes = [Convert]::FromBase64String('${payload}')
+Add-Type -TypeDefinition @"
+${BOMBA_RAW_PRINT_CS}
+"@
+if (-not [BombaRawPrint]::Send('${escapedPrinter}', $bytes, 'Bomba printer command')) {
+  throw [BombaRawPrint]::LastError
+}
+`;
+    const encodedScript = Buffer.from(script, "utf16le").toString("base64");
+    await runRawPrintScript(encodedScript, 4000);
     return { success: true };
   } catch (error) {
     return { success: false, message: error.message || "Raw printer command failed" };
-  } finally {
-    try { fs.unlinkSync(tempPath); } catch {}
+  }
+  }
+}
+
+// Send several ESC/POS jobs through the persistent daemon (no spawn at all).
+// Used after printing: drawer kick + paper cut together instead of 2 spawns.
+async function sendWindowsRawCommands(printerName, jobs) {
+  if (process.platform !== "win32") {
+    return { success: false, message: "Raw printer commands are supported on Windows only" };
+  }
+  try {
+    for (const job of jobs) {
+      await daemonSend(String(printerName), job.bytes, job.doc);
+    }
+    return { success: true };
+  } catch (daemonError) {
+    // Fall through to the one-shot PowerShell fallback below.
+  }
+  try {
+    const escapedPrinter = String(printerName).replace(/'/g, "''");
+    const sends = jobs.map((job) => {
+      const payload = Buffer.from(job.bytes).toString("base64");
+      const doc = String(job.doc || "Bomba printer command").replace(/'/g, "''");
+      return `$b=[Convert]::FromBase64String('${payload}'); if(-not [BombaRawPrint]::Send('${escapedPrinter}',$b,'${doc}')){throw [BombaRawPrint]::LastError}`;
+    }).join("\n");
+    const script = `Add-Type -TypeDefinition @"\n${BOMBA_RAW_PRINT_CS}\n"@\n${sends}\n`;
+    const encodedScript = Buffer.from(script, "utf16le").toString("base64");
+    await runRawPrintScript(encodedScript, 5000);
+    return { success: true };
+  } catch (error) {
+    return { success: false, message: error.message || "Raw printer command failed" };
   }
 }
 
 async function sendPrinterPostCommands(printerName, { openDrawer = false, cutPaper = false } = {}) {
   const warnings = [];
+  const jobs = [];
+  if (openDrawer) jobs.push({ bytes: CASH_DRAWER_PULSES[0], doc: "Bomba cash drawer" });
+  if (cutPaper) jobs.push({ bytes: [0x1d, 0x56, 0x00], doc: "Bomba paper cut" });
+  if (jobs.length === 0) return warnings;
+  // One PowerShell spawn for drawer+cut together (was 2 sequential spawns).
+  const combined = await sendWindowsRawCommands(printerName, jobs);
+  if (combined.success) {
+    if (openDrawer) console.log(`[cash-drawer] ${printerName}: command accepted`);
+    return warnings;
+  }
+  // Fallback: drawer pulses one by one (different PIN/wiring), then cut alone.
   if (openDrawer) {
     let drawerOpened = false;
-    let lastDrawerError = "";
+    let lastDrawerError = combined.message || "";
     for (const pulse of CASH_DRAWER_PULSES) {
       const drawer = await sendWindowsRawCommand(printerName, pulse);
       console.log(`[cash-drawer] ${printerName}: ${drawer.success ? "command accepted" : drawer.message}`);
@@ -222,12 +368,31 @@ async function sendPrinterPostCommands(printerName, { openDrawer = false, cutPap
       lastDrawerError = drawer.message;
     }
     if (!drawerOpened) warnings.push(`Cash drawer: ${lastDrawerError || "Cash drawer command failed"}`);
-  }
-  if (cutPaper) {
-    const cut = await sendWindowsRawCommand(printerName, [0x1d, 0x56, 0x00]);
-    if (!cut.success) warnings.push(`Paper cut: ${cut.message}`);
+    else if (cutPaper) {
+      const cut = await sendWindowsRawCommand(printerName, [0x1d, 0x56, 0x00]);
+      if (!cut.success) warnings.push(`Paper cut: ${cut.message}`);
+    }
+  } else if (cutPaper) {
+    warnings.push(`Paper cut: ${combined.message || "Paper cut failed"}`);
   }
   return warnings;
+}
+
+// Hidden print window, created once and reused. Pre-warmed at startup so the
+// first receipt doesn't pay BrowserWindow creation cost on click.
+function ensureSilentPrintWindow(paperWidthMm = 80) {
+  if (silentPrintWindow && !silentPrintWindow.isDestroyed()) return silentPrintWindow;
+  silentPrintWindow = new BrowserWindow({
+    show: false,
+    skipTaskbar: true,
+    useContentSize: true,
+    width: Math.round(paperWidthMm * 3.78),
+    height: 2400,
+    backgroundColor: "#ffffff",
+    webPreferences: { contextIsolation: true, sandbox: true, javascript: true },
+    parent: mainWindow || undefined,
+  });
+  return silentPrintWindow;
 }
 
 async function printHtmlSilently(html, requestedPrinterName, paperWidthMm = 80) {
@@ -315,18 +480,7 @@ async function printHtmlSilently(html, requestedPrinterName, paperWidthMm = 80) 
     }
     if (!printerName) return { success: false, message: "No configured printer found" };
 
-    if (!silentPrintWindow || silentPrintWindow.isDestroyed()) {
-      silentPrintWindow = new BrowserWindow({
-        show: false,
-        skipTaskbar: true,
-        useContentSize: true,
-        width: Math.round(normalizedPaperWidthMm * 3.78),
-        height: 2400,
-        backgroundColor: "#ffffff",
-        webPreferences: { contextIsolation: true, sandbox: true, javascript: true },
-        parent: mainWindow || undefined,
-      });
-    }
+    ensureSilentPrintWindow(normalizedPaperWidthMm);
     silentPrintWindow.setSize(Math.round(normalizedPaperWidthMm * 3.78), 2400);
     await silentPrintWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(printableHtml)}`);
     let resources = await waitForPrintResources(silentPrintWindow);
@@ -859,6 +1013,12 @@ function createWindow(url) {
   void getAvailablePrinters().catch((error) => {
     console.warn("Printer list prewarm failed:", error.message);
   });
+  // Pre-warm the silent print window + raw-print daemon while the user logs in,
+  // so the first print/drawer click pays no init cost.
+  setTimeout(() => {
+    try { ensureSilentPrintWindow(80); } catch {}
+    if (process.platform === "win32") startRawPrintDaemon().catch(() => {});
+  }, 4000);
 
 mainWindow.webContents.setWindowOpenHandler(({ url: targetUrl }) => {
     if (targetUrl.startsWith(url) || targetUrl === "about:blank" || targetUrl === "") {
@@ -1077,6 +1237,11 @@ if (!gotLock) {
     const port = config.port || 5000;
     localBackendPort = port;
     startLocalPrintServer();
+    // Pre-warm the persistent raw-print PowerShell so the FIRST drawer kick
+    // is already fast (~100ms) instead of paying the C# compile cost on click.
+    setTimeout(() => {
+      if (process.platform === "win32") startRawPrintDaemon().catch(() => {});
+    }, 4000);
 
     if (isDev) {
       // Dev mode: expects `npm run dev` (vite on :3000) already running

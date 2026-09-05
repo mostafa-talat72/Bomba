@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import {
   ShoppingCart, Plus, Edit, Trash2, X, Printer,
-  Settings, AlertTriangle, Search, CheckCircle, DollarSign,
+  AlertTriangle, Search, CheckCircle, DollarSign,
   Calendar, Receipt, Table as TableIcon, Eye, EyeOff,
-  Gamepad2, ChevronDown, ChevronUp, ChefHat,
-  Clock, History, FileText, Zap, Layers
+  Gamepad2, ChevronDown, ChevronUp,
+  Clock, Zap, History
 } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
@@ -17,8 +17,8 @@ import { api } from '../services/api';
 import { formatCurrency as formatCurrencyUtil, formatDecimal } from '../utils/formatters';
 import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
 import { printOrder } from '../utils/printOrder';
-import { printBill } from '../utils/printBill';
-import { openCashDrawerThroughAgent, printThroughLocalBridge } from '../utils/localPrintBridge';
+import { preloadBillReceipt, printBill } from '../utils/printBill';
+import { getCachedDevicePrinter, openCashDrawerThroughAgent, printThroughLocalBridge } from '../utils/localPrintBridge';
 import { useBillAggregation } from '../hooks/useBillAggregation';
 import {
   canAddOrder, canEditOrder, canDeleteOrder,
@@ -39,6 +39,12 @@ import ModalPortal from '../components/ModalPortal';
 import UndoBar, { UndoRequest } from '../components/UndoBar';
 import { playWarnBeep, playDangerBeep, isSoundEnabled } from '../utils/sound';
 import BillItemsEditModal from '../components/tables/BillItemsEditModal';
+import QuickAddModal from '../components/tables/QuickAddModal';
+import DailyReportModal from '../components/tables/DailyReportModal';
+import OrderModal from '../components/tables/OrderModal';
+import ManagementModal from '../components/tables/ManagementModal';
+import SectionModal from '../components/tables/SectionModal';
+import TableModalComp from '../components/tables/TableModalComp';
 import PriceEditModal from '../components/tables/PriceEditModal';
 import { canEditItemPrice } from '../utils/permissionHelper';
 
@@ -69,7 +75,9 @@ const Tables: React.FC = () => {
     createTableSection, updateTableSection, deleteTableSection,
     createTable, updateTable, deleteTable,
     bills, fetchBills, setBills, orders, fetchOrders, setOrders, user,
-    cancelBill, addPartialPayment,
+    cancelBill, addPartialPayment, addPartialPaymentAggregated, payForItems, paySessionPartial, updateBillAggregatedItems, deleteBill, updateBill,
+    endSession, createSessionWithExistingBill, changeSessionTable, linkSessionToTable, unlinkTableFromSession, updateSessionTimes, updateSessionStartTime, updateControllersPeriodTime, updateSessionCost,
+    deliverItem, deliverOrderSection, cancelOrder,
   } = useApp() as any;
 
   const socketRef = useRef<Socket | null>(null);
@@ -784,23 +792,88 @@ const loadInitialData = async () => {
       if (!tid || !status) return;
       setTables((prev: any[]) => prev.map((t: any) => String(t._id || (t as any).id) === String(tid) ? { ...t, status } : t));
     };
+    const getSecId = (sec: any) => {
+      if (!sec) return '';
+      if (typeof sec === 'object') return String((sec as any)._id || (sec as any).id || '');
+      return String(sec);
+    };
     const onTableCreatedColon = (table: any) => {
       if (!table || !(table._id || (table as any).id)) return;
       const tid = table._id || (table as any).id;
+      const normalized = { ...table, _id: tid, id: tid } as any;
       setTables((prev: any[]) => {
-        if (prev.some((t: any) => String(t._id || (t as any).id) === String(tid))) return prev.map((t: any) => String(t._id || (t as any).id) === String(tid) ? table : t);
-        return [...prev, table];
+        if (prev.some((t: any) => String(t._id || (t as any).id) === String(tid))) {
+          return prev.map((t: any) => String(t._id || (t as any).id) === String(tid) ? normalized : t);
+        }
+        const realNum = String(table.number ?? '').trim();
+        const realSec = getSecId(table.section);
+        const optIdx = prev.findIndex((t: any) => {
+          const isOpt = (t as any)._optimistic || String(t._id || (t as any).id).startsWith('temp-');
+          if (!isOpt) return false;
+          return String(t.number ?? '').trim() === realNum && getSecId(t.section) === realSec;
+        });
+        if (optIdx !== -1) {
+          const copy = [...prev];
+          copy[optIdx] = normalized;
+          return copy;
+        }
+        return [...prev, normalized];
       });
     };
     const onTableUpdatedColon = (table: any) => {
       if (!table || !(table._id || (table as any).id)) return;
       const tid = table._id || (table as any).id;
-      setTables((prev: any[]) => prev.map((t: any) => String(t._id || (t as any).id) === String(tid) ? { ...table, _id: tid, id: tid } : t));
+      const normalized = { ...table, _id: tid, id: tid } as any;
+      setTables((prev: any[]) => {
+        if (prev.some((t: any) => String(t._id || (t as any).id) === String(tid))) {
+          return prev.map((t: any) => String(t._id || (t as any).id) === String(tid) ? normalized : t);
+        }
+        const realNum = String(table.number ?? '').trim();
+        const realSec = getSecId(table.section);
+        const optIdx = prev.findIndex((t: any) => {
+          const isOpt = (t as any)._optimistic || String(t._id || (t as any).id).startsWith('temp-');
+          if (!isOpt) return false;
+          return String(t.number ?? '').trim() === realNum && getSecId(t.section) === realSec;
+        });
+        if (optIdx !== -1) {
+          const copy = [...prev];
+          copy[optIdx] = normalized;
+          return copy;
+        }
+        return prev.map((t: any) => String(t._id || (t as any).id) === String(tid) ? normalized : t);
+      });
     };
     const onTableDeletedColon = (payload: any) => {
       const tid = payload?._id || payload?.id || payload;
       if (!tid) return;
       setTables((prev: any[]) => prev.filter((t: any) => String(t._id || (t as any).id) !== String(tid)));
+    };
+    const onTableSectionCreatedColon = (section: any) => {
+      if (!section || !(section._id || (section as any).id)) return;
+      const sid = section._id || (section as any).id;
+      const normalized = { ...section, _id: sid, id: sid } as any;
+      setTableSections((prev: any[]) => {
+        if (prev.some((s: any) => String(s._id || s.id) === String(sid))) return prev.map((s: any) => String(s._id || s.id) === String(sid) ? normalized : s);
+        const optIdx = prev.findIndex((s: any) => ((s as any)._optimistic || String(s._id || s.id).startsWith('temp-')) && String(s.name ?? '').trim() === String(section.name ?? '').trim());
+        if (optIdx !== -1) { const copy = [...prev]; copy[optIdx] = normalized; return copy; }
+        return [...prev.filter((s: any) => String(s._id || s.id) !== String(sid)), normalized];
+      });
+    };
+    const onTableSectionUpdatedColon = (section: any) => {
+      if (!section || !(section._id || (section as any).id)) return;
+      const sid = section._id || (section as any).id;
+      const normalized = { ...section, _id: sid, id: sid } as any;
+      setTableSections((prev: any[]) => {
+        if (prev.some((s: any) => String(s._id || s.id) === String(sid))) return prev.map((s: any) => String(s._id || s.id) === String(sid) ? normalized : s);
+        const optIdx = prev.findIndex((s: any) => ((s as any)._optimistic || String(s._id || s.id).startsWith('temp-')) && String(s.name ?? '').trim() === String(section.name ?? '').trim());
+        if (optIdx !== -1) { const copy = [...prev]; copy[optIdx] = normalized; return copy; }
+        return [...prev, normalized];
+      });
+    };
+    const onTableSectionDeletedColon = (payload: any) => {
+      const sid = payload?._id || payload?.id || payload;
+      if (!sid) return;
+      setTableSections((prev: any[]) => prev.filter((s: any) => String(s._id || s.id) !== String(sid) && String(s.id) !== String(sid)));
     };
     const onSessionUpdatedColon = (session: any) => {
       if (!session || !(session._id || (session as any).id)) return;
@@ -820,6 +893,15 @@ const loadInitialData = async () => {
     socket.on('table:created', onTableCreatedColon);
     socket.on('table:updated', onTableUpdatedColon);
     socket.on('table:deleted', onTableDeletedColon);
+    socket.on('tableSection:created', onTableSectionCreatedColon);
+    socket.on('tableSection:updated', onTableSectionUpdatedColon);
+    socket.on('tableSection:deleted', onTableSectionDeletedColon);
+    socket.on('table-section-update', (data: any) => {
+      if (!data) return;
+      if (data.type === 'created' && data.section) onTableSectionCreatedColon(data.section);
+      else if (data.type === 'deleted') onTableSectionDeletedColon(data.section || data);
+      else if (data.section) onTableSectionUpdatedColon(data.section);
+    });
     socket.on('session:updated', onSessionUpdatedColon);
     socket.on('session:created', onSessionUpdatedColon);
     socket.on('session:ended', onSessionUpdatedColon);
@@ -841,7 +923,7 @@ const loadInitialData = async () => {
       if (import.meta.env.DEV) {
         ['reconnect', 'order-update', 'bill-update', 'payment-received', 'partial-payment-received',
          'table-status-update', 'session-update', 'inventory-update',
-         'order:created','order:updated','order:deleted','bill:updated','bill:created','bill:deleted','table:statusChanged','table:created','table:updated','table:deleted','session:updated','session:created','session:ended'].forEach(e => socket.off(e));
+         'order:created','order:updated','order:deleted','bill:updated','bill:created','bill:deleted','table:statusChanged','table:created','table:updated','table:deleted','tableSection:created','tableSection:updated','tableSection:deleted','table-section-update','session:updated','session:created','session:ended'].forEach(e => socket.off(e));
       } else {
         socket.disconnect();
       }
@@ -1585,8 +1667,13 @@ const loadInitialData = async () => {
       </table>
       <div class="footer">طُبع في ${new Date().toLocaleTimeString('ar-EG')}</div>
       </body></html>`;
-    const savedPrinter = await api.getDevicePrinter().catch(() => null);
-    const organizationResponse = await api.getOrganization().catch(() => null);
+    // ⚡ إعدادات متزامنة من الذاكرة + طابعة مخزنة — بدون انتظار متسلسل.
+    const [savedPrinter, organizationResponse] = await Promise.all([
+      getCachedDevicePrinter(),
+      (user as any)?.organization?.printSettings
+        ? Promise.resolve({ success: true, data: (user as any).organization })
+        : api.getOrganization().catch(() => null),
+    ]);
     const settings = organizationResponse?.success === true ? organizationResponse.data?.printSettings : undefined;
     const profile = settings?.printers?.find((item: any) => item.id === settings?.documentPrinterMap?.dailyReport);
     const printerName = profile?.printerName || savedPrinter?.data?.printerName || savedPrinter?.data?.name;
@@ -1926,6 +2013,8 @@ const loadInitialData = async () => {
     setPaymentAmount(bill.remaining?.toString() || '0');
     setDiscountPercentage(''); setPaymentMethod('cash'); setPaymentReference('');
     setShowPaymentModal(true);
+    // ⚡ سخّن الإيصال في الخلفية: عند الضغط على دفع/طباعة يكون جاهزاً.
+    try { preloadBillReceipt(bill, user?.organizationName, i18n.language, t, getTableSectionName(bill.table)); } catch {}
     // ثم حدّث بيانات الفاتورة في الخلفية
     try {
       const r = await api.getBill(bill.id || bill._id);
@@ -2022,6 +2111,7 @@ const loadInitialData = async () => {
         if (isNaN(a1) || isNaN(a2) || a1 <= 0 || a2 <= 0) {
           showNotification(t('billing.notifications.invalidAmount'), 'error'); setIsProcessingPayment(false); return;
         }
+        if (paymentMethod === 'cash' || method2 === 'cash') fireInstantDrawer(selectedBill, 'payment');
         const updatedAfterFirst = await paySinglePart(selectedBill, a1, paymentMethod, effectiveTotal, discountAmount, discountPercentage);
         await paySinglePart(updatedAfterFirst || { ...selectedBill, paid: (selectedBill.paid || 0) + a1 }, a2, method2, effectiveTotal, discountAmount, discountPercentage);
         handleClosePaymentModal();
@@ -2037,6 +2127,7 @@ const loadInitialData = async () => {
         payVal = roundedRemaining;
       }
 
+      if (paymentMethod === 'cash') fireInstantDrawer(selectedBill, 'payment');
       await paySinglePart(selectedBill, payVal, paymentMethod, effectiveTotal, discountAmount, discountPercentage);
       handleClosePaymentModal();
       showNotification(t('billing.notifications.paymentSuccess'), 'success');
@@ -2075,11 +2166,13 @@ const loadInitialData = async () => {
     if (bill.status === 'paid') { showNotification(t('billing.notifications.billAlreadyPaid'), 'info'); return; }
     if ((bill.remaining || 0) <= 0) { showNotification(t('billing.notifications.noRemainingAmount'), 'info'); return; }
     setBillToPayFull(bill); setShowPayFullBillConfirmModal(true);
+    try { preloadBillReceipt(bill, user?.organizationName, i18n.language, t, getTableSectionName(bill.table)); } catch {}
   };
 
   const confirmPayFullBill = async () => {
     if (!billToPayFull || paymentActionLockRef.current) return;
     paymentActionLockRef.current = true;
+    fireInstantDrawer(billToPayFull, 'payment');
     try {
       setIsProcessingPayment(true);
       if (selectedBill && (selectedBill.id === billToPayFull.id || selectedBill._id === billToPayFull._id)) {
@@ -2128,9 +2221,10 @@ const loadInitialData = async () => {
     if (bill && hasActiveSession(bill)) { showNotification(t('billing.notifications.cannotPayActiveSession'), 'error'); return; }
     if (bill.status === 'paid') { showNotification(t('billing.notifications.billAlreadyPaid'), 'info'); return; }
     if ((bill.remaining || 0) <= 0) { showNotification(t('billing.notifications.noRemainingAmount'), 'info'); return; }
+    fireInstantDrawer(bill, 'payment');
     try {
       setIsProcessingPayment(true);
-      if (selectedBill && (selectedBill.id === bill.id || (selectedBill as any)._id === (bill as any)._id)) {
+      if (selectedBill && (selectedBill.id === bill.id || (selectedBill as any)._id === (bill as any).id)) {
         await processPayment();
         setIsProcessingPayment(false);
         setShowPaymentSuccessAnim(true);
@@ -2181,6 +2275,22 @@ const loadInitialData = async () => {
     } catch { showNotification(t('billing.notifications.payFullBillError'), 'error'); setIsProcessingPayment(false); }
   };
 
+  // ⚡ فتح فوري للدرج لحظة الضغط على زر الدفع (قبل انتظار السيرفر).
+  // يستخدم نفس مفتاح printBill (`bill:<id>:payment`) فيُفتح الدرج مرة واحدة فقط.
+  const fireInstantDrawer = (bill: Bill, drawerMode: 'bill' | 'payment' = 'payment') => {
+    try {
+      const settings = user?.organization?.printSettings;
+      const settingName = drawerMode === 'payment' ? 'openCashDrawerOnPayment' : 'openCashDrawer';
+      if (settings?.[settingName] === false) return;
+      const billPrinterId = settings?.documentPrinterMap?.bill;
+      const printer = settings?.printers?.find((item: any) => item.id === billPrinterId)
+        || settings?.printers?.[0];
+      const billId = String((bill as any)._id || (bill as any).id || '');
+      const key = `bill:${billId || (bill as any).billNumber || ''}:${drawerMode}`;
+      void openCashDrawerThroughAgent(printer?.printerName || printer?.name, key).catch(() => {});
+    } catch {}
+  };
+
   const handleOpenCashDrawer = async () => {
     try {
       const printSettings = user?.organization?.printSettings;
@@ -2206,30 +2316,37 @@ const loadInitialData = async () => {
 
   const handlePartialPaymentSubmit = async (items: Array<{ itemId: string; quantity: number }>, method: 'cash' | 'card' | 'transfer') => {
     if (!selectedBill || items.length === 0) return;
+    if (method === 'cash') fireInstantDrawer(selectedBill, 'payment');
+    const snapBills = [...bills] as Bill[];
+    const snapSelected = selectedBill ? { ...selectedBill } as Bill : null;
+    const totalPaidOptimistic = items.reduce((s, item) => {
+      const agg = backendAggregatedItems.find(a => a.id === item.itemId);
+      return s + (agg ? agg.price * item.quantity : 0);
+    }, 0);
+    // ── optimistic <50ms ──
+    try {
+      setBills(prev => prev.map((b: any) => String(b._id || b.id) === String(selectedBill._id || selectedBill.id) ? { ...b, paid: (Number(b.paid)||0)+totalPaidOptimistic, remaining: Math.max(0,(Number(b.total)||0)-(Number(b.paid)||0)-totalPaidOptimistic), _optimistic: true } : b));
+      if (snapSelected) setSelectedBill({ ...snapSelected, paid: (Number(snapSelected.paid)||0)+totalPaidOptimistic, remaining: Math.max(0,(Number(snapSelected.total)||0)-(Number(snapSelected.paid)||0)-totalPaidOptimistic) } as Bill);
+    } catch {}
     try {
       setIsProcessingPartialPayment(true);
-      const response = await api.addPartialPaymentAggregated(selectedBill.id || selectedBill._id, { items, paymentMethod: method });
-      if (response.success) {
-        const totalPaid = items.reduce((s, item) => {
-          const agg = backendAggregatedItems.find(a => a.id === item.itemId);
-          return s + (agg ? agg.price * item.quantity : 0);
-        }, 0);
+      const bill = await addPartialPaymentAggregated(selectedBill.id || selectedBill._id, { items, paymentMethod: method });
+      if (bill) {
         setIsProcessingPartialPayment(false);
-        showNotification(t('billing.notifications.partialPaymentSuccess', { amount: formatCurrency(totalPaid) }), 'success');
-        if (response.data) {
-          setBills(prev => prev.map(b => String(b._id || b.id) === String(selectedBill._id || selectedBill.id) ? response.data : b));
-          setSelectedBill(response.data as Bill);
-          scheduleBackgroundRefetch(true);
-          if ((response.data as Bill).status === 'paid') {
-            setShowPartialPaymentModal(false);
-            showNotification(t('billing.notifications.billCompleted'), 'success');
-          }
+        showNotification(t('billing.notifications.partialPaymentSuccess', { amount: formatCurrency(totalPaidOptimistic) }), 'success');
+        setBills(prev => prev.map((b: any) => String(b._id || b.id) === String(selectedBill._id || selectedBill.id) ? { ...b, ...bill, _optimistic: undefined } : b));
+        setSelectedBill({ ...bill } as Bill);
+        scheduleBackgroundRefetch(true);
+        if ((bill as Bill).status === 'paid') {
+          setShowPartialPaymentModal(false);
+          showNotification(t('billing.notifications.billCompleted'), 'success');
         }
       } else {
-        showNotification(response.message || t('billing.notifications.partialPaymentError'), 'error');
+        setBills(snapBills); if (snapSelected) setSelectedBill(snapSelected);
+        showNotification(t('billing.notifications.partialPaymentError'), 'error');
         setIsProcessingPartialPayment(false);
       }
-    } catch { showNotification(t('billing.notifications.partialPaymentError'), 'error'); setIsProcessingPartialPayment(false); }
+    } catch { setBills(snapBills); if (snapSelected) setSelectedBill(snapSelected); showNotification(t('billing.notifications.partialPaymentError'), 'error'); setIsProcessingPartialPayment(false); }
   };
 
   const handlePaySessionPartial = async (session?: Session) => {
@@ -2251,24 +2368,32 @@ const loadInitialData = async () => {
 
   const confirmSessionPayment = async () => {
     if (!selectedBill || !sessionToPayData) return;
+    const snapBills = [...bills] as Bill[];
+    const snapSelected = selectedBill ? { ...selectedBill } as Bill : null;
+    const amt = parseFloat(sessionToPayData.amount);
+    try {
+      setBills(prev => prev.map((b: any) => String(b._id || b.id) === String(selectedBill._id || selectedBill.id) ? { ...b, paid: (Number(b.paid)||0)+amt, remaining: Math.max(0,(Number(b.total)||0)-(Number(b.paid)||0)-amt), _optimistic: true } : b));
+      if (snapSelected) setSelectedBill({ ...snapSelected, paid: (Number(snapSelected.paid)||0)+amt, remaining: Math.max(0,(Number(snapSelected.total)||0)-(Number(snapSelected.paid)||0)-amt) } as Bill);
+    } catch {}
     try {
       setIsProcessingSessionPayment(true);
-      const result = await api.paySessionPartial(selectedBill.id || selectedBill._id, {
+      const bill = await paySessionPartial(selectedBill.id || selectedBill._id, {
         sessionId: sessionToPayData.session._id || sessionToPayData.session.id,
         amount: parseFloat(sessionToPayData.amount), paymentMethod: sessionToPayData.method,
       });
-      if (result.success && result.data) {
-        setBills(prev => prev.map(b => String(b._id || b.id) === String(selectedBill._id || selectedBill.id) ? result.data : b));
-        setSelectedBill(result.data as Bill);
+      if (bill) {
+        setBills(prev => prev.map((b: any) => String(b._id || b.id) === String(selectedBill._id || selectedBill.id) ? { ...b, ...bill, _optimistic: undefined } : b));
+        setSelectedBill({ ...bill } as Bill);
         setShowSessionPaymentConfirmModal(false); setSessionToPayData(null);
         setIsProcessingSessionPayment(false); setSessionPaymentAmount(''); setSelectedSession(null);
         scheduleBackgroundRefetch(true);
         showNotification(t('billing.notifications.sessionPaymentSuccess'), 'success');
       } else {
-        showNotification(result.message || t('billing.notifications.sessionPaymentError'), 'error');
+        setBills(snapBills); if (snapSelected) setSelectedBill(snapSelected);
+        showNotification(t('billing.notifications.sessionPaymentError'), 'error');
         setIsProcessingSessionPayment(false); setShowSessionPaymentConfirmModal(false);
       }
-    } catch { showNotification(t('billing.notifications.sessionPaymentError'), 'error'); setIsProcessingSessionPayment(false); setShowSessionPaymentConfirmModal(false); }
+    } catch { setBills(snapBills); if (snapSelected) setSelectedBill(snapSelected); showNotification(t('billing.notifications.sessionPaymentError'), 'error'); setIsProcessingSessionPayment(false); setShowSessionPaymentConfirmModal(false); }
   };
 
   const handleEndSession = async (sessionId: string) => {
@@ -2294,27 +2419,38 @@ const loadInitialData = async () => {
     // بيانات الجلسة قبل الإنهاء — للتراجع والتحديث المتفائل
     const endedSession = (targetBill as any)?.sessions?.find((s: any) => String(s._id || s.id) === String(endedSessionId));
     const optimisticCost = endedSession ? getSessionCost(endedSession) : 0;
+    // ── optimistic <50ms before API ──
+    if (targetBill && endedSession) {
+      const now = new Date();
+      const patchBillOpt = (b: any) => ({
+        ...b,
+        sessions: (b.sessions || []).map((s: any) =>
+          (s._id || s.id) === endedSessionId
+            ? { ...s, status: 'completed', endTime: now, totalCost: optimisticCost, finalCost: optimisticCost - (s.discount || 0), _optimistic: true }
+            : s),
+      });
+      const bidOpt = targetBill._id || targetBill.id;
+      setBills(prev => prev.map(b => ((b._id || b.id) === bidOpt ? patchBillOpt(b) : b)));
+      setSelectedBill(prev => (prev && ((prev._id || prev.id) === bidOpt) ? (patchBillOpt(prev) as Bill) : prev));
+    }
     try {
-      const result = await api.endSession(endedSessionId, customerNameForEndSession.trim() || undefined);
-      if (result?.success) {
+      const result = await endSession(endedSessionId, customerNameForEndSession.trim() || undefined) ? { success: true } as any : await api.endSession(endedSessionId, customerNameForEndSession.trim() || undefined);
+      const isSuccess = (result as any)?.success || !!(result as any)?.session || !!(result as any)?.data?.session;
+      if (isSuccess) {
         setShowSessionEndModal(false); setSessionToEnd(null); setCustomerNameForEndSession('');
         setIsEndingSession(false);
         showNotification(t('billing.notifications.endSessionSuccess'), 'success');
         setPaymentAmount(''); setPaymentMethod('cash'); setPaymentReference('');
 
-        // ⚡ تحديث متفائل — إنهاء الجلسة محلياً فوراً بدون انتظار السيرفر
+        // ensure server data replaces optimistic
         if (targetBill && endedSession) {
           const now = new Date();
           const patchBill = (b: any) => ({
             ...b,
             sessions: (b.sessions || []).map((s: any) =>
               (s._id || s.id) === endedSessionId
-                ? { ...s, status: 'completed', endTime: now, totalCost: optimisticCost, finalCost: optimisticCost - (s.discount || 0) }
+                ? { ...s, status: 'completed', endTime: now, totalCost: optimisticCost, finalCost: optimisticCost - (s.discount || 0), _optimistic: undefined }
                 : s),
-            sessionPayments: (b.sessionPayments || []).map((sp: any) =>
-              sp.sessionId === endedSessionId && sp.remainingAmount === undefined
-                ? { ...sp, sessionCost: optimisticCost, remainingAmount: Math.max(0, optimisticCost - (sp.paidAmount || 0)) }
-                : sp),
           });
           const bid = targetBill._id || targetBill.id;
           setBills(prev => prev.map(b => ((b._id || b.id) === bid ? patchBill(b) : b)));
@@ -2550,19 +2686,20 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
       const start = new Date(editSessionStartTime);
       const end = new Date(editSessionEndTime);
       if (end <= start) { showNotification(t('gaming.notifications.endTimeBeforeStart'), 'error'); setIsEditingSessionTime(false); return; }
-      const response = await api.updateSessionTimes(sessionToEdit.id || sessionToEdit._id, { startTime: start.toISOString(), endTime: end.toISOString() });
-      if (response.success) {
+      const sid = sessionToEdit.id || (sessionToEdit as any)._id;
+      // ── optimistic <50ms via DataContext ──
+      (setSelectedBill as any)?.((prev: any) => prev); // keep reference
+      const result = await updateSessionTimes(sid, { startTime: start.toISOString(), endTime: end.toISOString() });
+      if (result) {
         showNotification(t('billing.notifications.sessionTimeUpdated'), 'success');
         setShowEditSessionTimeModal(false); setSessionToEdit(null);
-        // تحديث الفاتورة والكروت فوراً في الخلفية
         scheduleBackgroundRefetch();
-        // تحديث الفاتورة المفتوحة بدون انتظار
         if (selectedBill) {
-          api.getBill(selectedBill.id || selectedBill._id).then(r => {
+          api.getBill(selectedBill.id || (selectedBill as any)._id).then(r => {
             if (r?.data) { setSelectedBill(r.data); setPaymentAmount(r.data.remaining?.toString() || '0'); setOriginalAmount(r.data.remaining?.toString() || '0'); }
           }).catch(() => {});
         }
-      } else { showNotification(response.message || t('billing.notifications.sessionTimeUpdateFailed'), 'error'); }
+      } else { showNotification(t('billing.notifications.sessionTimeUpdateFailed'), 'error'); }
     } catch (error: any) { showNotification(error.message || t('billing.notifications.sessionTimeUpdateFailed'), 'error'); }
     finally { setIsEditingSessionTime(false); }
   };
@@ -2582,18 +2719,18 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
       const start = new Date(editPeriodStartTime);
       const end = new Date(editPeriodEndTime);
       if (end <= start) { showNotification(t('gaming.notifications.endTimeBeforeStart'), 'error'); setIsEditingPeriod(false); return; }
-      const response = await api.updateControllersPeriodTime(sessionToEdit.id || sessionToEdit._id, periodIndex, start.toISOString(), end.toISOString(), true);
-      if (response.success) {
+      const sid = sessionToEdit.id || (sessionToEdit as any)._id;
+      const result = await updateControllersPeriodTime(sid, periodIndex, start.toISOString(), end.toISOString());
+      if (result) {
         showNotification(t('billing.notifications.periodTimeUpdated'), 'success');
         setShowEditControllersPeriodModal(false); setSessionToEdit(null); setPeriodToEdit(null); setPeriodIndex(-1);
-        // تحديث في الخلفية فوراً
         scheduleBackgroundRefetch();
         if (selectedBill) {
-          api.getBill(selectedBill.id || selectedBill._id).then(r => {
+          api.getBill(selectedBill.id || (selectedBill as any)._id).then(r => {
             if (r?.data) { setSelectedBill(r.data); setPaymentAmount(r.data.remaining?.toString() || '0'); setOriginalAmount(r.data.remaining?.toString() || '0'); }
           }).catch(() => {});
         }
-      } else { showNotification(response.message || t('billing.notifications.periodTimeUpdateFailed'), 'error'); }
+      } else { showNotification(t('billing.notifications.periodTimeUpdateFailed'), 'error'); }
     } catch (error: any) { showNotification(error.message || t('billing.notifications.periodTimeUpdateFailed'), 'error'); }
     finally { setIsEditingPeriod(false); }
   };
@@ -3359,7 +3496,7 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
                                           <DollarSign className="h-3 w-3" />دفع
                                         </button>
                                       )}
-                                      <button onClick={async e => { e.stopPropagation(); try { const r = await api.getBill(bill.id || bill._id); if (r.success && r.data) await printBill(r.data, user?.organizationName, i18n.language, t, getTableSectionName(bill.table)); } catch {} }}
+                                      <button onClick={e => { e.stopPropagation(); printBill(bill as any, user?.organizationName, i18n.language, t, getTableSectionName(bill.table)).catch(() => {}); }}
                                         className="w-7 h-7 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-500 dark:text-gray-400 rounded-lg flex items-center justify-center transition-all">
                                         <Printer className="h-3 w-3" />
                                       </button>
@@ -4141,7 +4278,7 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
         <ManagementModal tableSections={tableSections} tables={tables} onClose={() => setShowManagementModal(false)}
           onAddSection={() => { setEditingSection(null); setSectionFormData({ name: '', description: '', sortOrder: 0 }); setShowSectionModal(true); }}
           onEditSection={section => { setEditingSection(section); setSectionFormData({ name: section.name, description: section.description || '', sortOrder: section.sortOrder }); setShowSectionModal(true); }}
-          onDeleteSection={async id => { showConfirm('حذف القسم', 'هل أنت متأكد من حذف هذا القسم؟ سيتم حذف جميع الطاولات التابعة له.', async () => { await deleteTableSection(id); await fetchTables(); setShowConfirmModal(false); }); }}
+          onDeleteSection={async id => { showConfirm('حذف القسم', 'هل أنت متأكد من حذف هذا القسم؟ سيتم حذف جميع الطاولات التابعة له.', async () => { await deleteTableSection(id); setShowConfirmModal(false); }); }}
           onAddTable={sectionId => { setEditingTable(null); setTableFormData({ number: '', section: sectionId }); setShowTableModal(true); }}
           onEditTable={table => { setEditingTable(table); const sid = typeof table.section === 'string' ? table.section : (table.section as TableSection)?.id || (table.section as TableSection)?._id || ''; setTableFormData({ number: table.number.toString(), section: sid }); setShowTableModal(true); }}
           onDeleteTable={async id => { showConfirm('حذف الطاولة', 'هل أنت متأكد من حذف هذه الطاولة؟', async () => { await deleteTable(id); setShowConfirmModal(false); }); }}
@@ -4342,922 +4479,9 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
 };
 
 
-const QuickAddModal: React.FC<{
-  table: Table;
-  menuItems: MenuItem[];
-  menuSections: MenuSection[];
-  menuCategories: MenuCategory[];
-  items: LocalOrderItem[];
-  setItems: React.Dispatch<React.SetStateAction<LocalOrderItem[]>>;
-  onSave: () => void;
-  onClose: () => void;
-  saving: boolean;
-}> = ({ table, menuItems, menuSections, menuCategories, items, setItems, onSave, onClose, saving }) => {
-  const { t, i18n } = useTranslation();
-  const { isRTL } = useLanguage();
-  const [search, setSearch] = useState('');
-  const cur = localStorage.getItem('organizationCurrency') || 'EGP';
-
-  const filtered = useMemo(() => {
-    if (!search.trim()) return menuItems.filter(m => m.isAvailable);
-    const q = search.toLowerCase();
-    return menuItems.filter(m => m.isAvailable && m.name.toLowerCase().includes(q));
-  }, [menuItems, search]);
-
-  const total = items.reduce((s, i) => s + i.price * i.quantity, 0);
-
-  const addItem = (mi: MenuItem, variant?: string | null) => {
-    let effPrice = mi.price;
-    let effVariant: string | null = variant ? String(variant).trim() : null;
-    if (mi.variants && mi.variants.length > 0) {
-      if (effVariant) {
-        const m = mi.variants.find(v => v.size === effVariant);
-        if (m) effPrice = m.price;
-      } else {
-        effVariant = mi.variants[0].size;
-        effPrice = mi.variants[0].price;
-      }
-    } else effVariant = effVariant || null;
-    const keyVariant = effVariant || '';
-    setItems(prev => {
-      const ex = prev.find(i => i.menuItem === mi.id && (i.variant || '') === keyVariant);
-      if (ex) return prev.map(i => (i.menuItem === mi.id && (i.variant || '') === keyVariant) ? { ...i, quantity: i.quantity + 1 } : i);
-      return [...prev, { menuItem: mi.id, name: mi.name, price: effPrice, variant: effVariant, quantity: 1 }];
-    });
-  };
-
-  const changeQty = (id: string, delta: number, variant?: string | null) => {
-    setItems(prev => prev.map(i => {
-      const match = variant !== undefined ? (i.menuItem === id && (i.variant || '') === (variant || '')) : i.menuItem === id;
-      if (!match) return i;
-      const q = i.quantity + delta;
-      return q <= 0 ? null as any : { ...i, quantity: q };
-    }).filter(Boolean));
-  };
-
-  return (
-    <ModalPortal>
-    <div className="fixed inset-0 bg-black/70 backdrop-blur-md flex items-center justify-center z-[300] p-3" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden border border-gray-200 dark:border-gray-700">
-        {/* Header */}
-        <div className="p-4 bg-gradient-to-br from-orange-500 to-red-500 flex items-center justify-between flex-shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center border border-white/30">
-              <Zap className="h-5 w-5 text-white" />
-            </div>
-            <div>
-              <h3 className="text-2xl font-bold text-white">إضافة سريعة</h3>
-              <p className="text-base text-orange-100">طاولة {getTableDisplay(table.number, i18n.language)}</p>
-            </div>
-          </div>
-          <button onClick={onClose} className="w-8 h-8 bg-white/20 hover:bg-white/30 rounded-lg flex items-center justify-center text-white transition-all">
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-
-        {/* Search */}
-        <div className="p-3 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
-          <div className="relative">
-            <Search className={`absolute ${isRTL ? 'right-3' : 'left-3'} top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400`} />
-            <input autoFocus type="text" value={search} onChange={e => setSearch(e.target.value)}
-              placeholder="ابحث في المنيو..."
-              className={`w-full ${isRTL ? 'pr-9 pl-3' : 'pl-9 pr-3'} py-2 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-lg focus:ring-2 focus:ring-orange-400`} />
-          </div>
-        </div>
-
-        {/* Content with variant support */}
-        <div className="flex-1 overflow-y-auto p-3 min-h-0 grid grid-cols-1 gap-2">
-          {filtered.length === 0 ? (
-            <p className="text-center text-gray-400 py-8">لا توجد أصناف</p>
-          ) : filtered.map(mi => {
-            const hasVariants = mi.variants && mi.variants.length > 1;
-            if (hasVariants) {
-              return (
-                <div key={mi.id} className="p-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
-                  <p className="font-medium text-lg text-gray-900 dark:text-gray-100 truncate mb-2">{mi.name}</p>
-                  <div className="grid grid-cols-2 gap-2">
-                    {mi.variants!.map(v => {
-                      const inOrderV = items.find(i => i.menuItem === mi.id && i.variant === v.size);
-                      return (
-                        <div key={v.size} className={`flex items-center justify-between p-2 rounded-lg border ${inOrderV ? 'border-orange-300 bg-orange-50 dark:bg-orange-900/20' : 'border-gray-200 dark:border-gray-600'}`}>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{v.size}</p>
-                            <p className="text-xs text-orange-600 dark:text-orange-400 font-semibold">{formatCurrencyUtil(v.price, i18n.language, cur)}</p>
-                          </div>
-                          <div className="flex items-center gap-1 flex-shrink-0">
-                            {inOrderV ? (
-                              <>
-                                <button onClick={() => changeQty(mi.id, -1, v.size)} className="w-6 h-6 bg-red-500 hover:bg-red-600 text-white rounded-lg flex items-center justify-center font-bold text-sm">−</button>
-                                <span className="w-5 text-center font-bold text-sm text-gray-900 dark:text-gray-100">{inOrderV.quantity}</span>
-                                <button onClick={() => changeQty(mi.id, 1, v.size)} className="w-6 h-6 bg-green-500 hover:bg-green-600 text-white rounded-lg flex items-center justify-center font-bold text-sm">+</button>
-                              </>
-                            ) : (
-                              <button onClick={() => addItem(mi, v.size)} className="w-6 h-6 bg-orange-500 hover:bg-orange-600 text-white rounded-lg flex items-center justify-center">
-                                <Plus className="h-3 w-3" />
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              );
-            }
-            const displayPrice = mi.variants && mi.variants.length === 1 ? mi.variants[0].price : mi.price;
-            const displaySize = mi.variants && mi.variants.length === 1 ? mi.variants[0].size : null;
-            const inOrder = items.find(i => i.menuItem === mi.id);
-            return (
-              <div key={mi.id} className={`flex items-center justify-between p-2.5 rounded-xl border transition-all ${inOrder ? 'border-orange-300 bg-orange-50 dark:bg-orange-900/20 dark:border-orange-700' : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'}`}>
-                <div className="flex-1 min-w-0">
-                  <p className="font-medium text-lg text-gray-900 dark:text-gray-100 truncate flex items-center gap-1">{mi.name} {displaySize && displaySize !== 'عادي' && <span className="text-xs bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 px-1.5 py-0.5 rounded-full">{displaySize}</span>}</p>
-                  <p className="text-base text-orange-600 dark:text-orange-400 font-semibold">{formatCurrencyUtil(displayPrice, i18n.language, cur)}</p>
-                </div>
-                <div className="flex items-center gap-2 flex-shrink-0">
-                  {inOrder ? (
-                    <>
-                      <button onClick={() => changeQty(mi.id, -1)} className="w-7 h-7 bg-red-500 hover:bg-red-600 text-white rounded-lg flex items-center justify-center font-bold text-lg transition-colors">−</button>
-                      <span className="w-6 text-center font-bold text-gray-900 dark:text-gray-100 text-lg">{inOrder.quantity}</span>
-                      <button onClick={() => changeQty(mi.id, 1)} className="w-7 h-7 bg-green-500 hover:bg-green-600 text-white rounded-lg flex items-center justify-center font-bold text-lg transition-colors">+</button>
-                    </>
-                  ) : (
-                    <button onClick={() => addItem(mi)} className="w-7 h-7 bg-orange-500 hover:bg-orange-600 text-white rounded-lg flex items-center justify-center transition-colors">
-                      <Plus className="h-4 w-4" />
-                    </button>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Footer */}
-        <div className="p-3 border-t border-gray-200 dark:border-gray-700 flex-shrink-0 space-y-2">
-          {items.length > 0 && (
-            <div className="flex items-center justify-between bg-orange-50 dark:bg-orange-900/20 px-3 py-2 rounded-xl border border-orange-200 dark:border-orange-700">
-              <span className="text-lg font-medium text-gray-700 dark:text-gray-300">{items.length} أصناف</span>
-              <span className="text-lg font-bold text-orange-600 dark:text-orange-400">{formatCurrencyUtil(total, i18n.language, cur)}</span>
-            </div>
-          )}
-          <div className="flex gap-2">
-            <button onClick={onClose} className="flex-1 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-xl text-lg font-medium transition-colors">إلغاء</button>
-            <button onClick={onSave} disabled={saving || items.length === 0}
-              className="flex-1 py-2 bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white rounded-xl text-lg font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1.5">
-              {saving ? <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg> : <CheckCircle className="h-4 w-4" />}
-              {saving ? 'جاري الحفظ...' : 'إرسال الطلب'}
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-    </ModalPortal>
-  );
-};
-
-// ─── #11 DailyReportModal ────────────────────────────────────────────────────
-
-const DailyReportModal: React.FC<{
-  bills: Bill[];
-  formatCurrency: (n: number) => string;
-  onPrint: () => void;
-  onClose: () => void;
-  isPrinting: boolean;
-}> = ({ bills, formatCurrency, onPrint, onClose, isPrinting }) => {
-  const today = new Date();
-  const todayBills = bills.filter(b => new Date(b.createdAt).toDateString() === today.toDateString());
-  const paid = todayBills.filter(b => b.status === 'paid');
-  const unpaid = todayBills.filter(b => ['draft','partial','overdue'].includes(b.status));
-  const totalRevenue = paid.reduce((s, b) => s + (b.total || 0), 0);
-  const totalCollected = todayBills.reduce((s, b) => s + (b.paid || 0), 0);
-  const totalRemaining = unpaid.reduce((s, b) => s + (b.remaining || 0), 0);
-
-  return (
-    <ModalPortal>
-    <div className="fixed inset-0 bg-black/70 backdrop-blur-md flex items-center justify-center z-[300] p-3" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden border border-gray-200 dark:border-gray-700">
-        <div className="p-4 bg-gradient-to-br from-emerald-500 to-green-600 flex items-center justify-between flex-shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center border border-white/30">
-              <FileText className="h-5 w-5 text-white" />
-            </div>
-            <div>
-              <h3 className="text-2xl font-bold text-white">التقرير اليومي</h3>
-              <p className="text-base text-green-100">{today.toLocaleDateString('ar-EG', { weekday:'long', year:'numeric', month:'long', day:'numeric' })}</p>
-            </div>
-          </div>
-          <button onClick={onClose} className="w-8 h-8 bg-white/20 hover:bg-white/30 rounded-lg flex items-center justify-center text-white"><X className="h-5 w-5" /></button>
-        </div>
-
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
-          {/* Stats */}
-          <div className="grid grid-cols-3 gap-3">
-            {[
-              { label: 'إيرادات الفواتير المدفوعة', value: formatCurrency(totalRevenue), color: 'text-green-600', bg: 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-700' },
-              { label: 'إجمالي المحصّل', value: formatCurrency(totalCollected), color: 'text-blue-600', bg: 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-700' },
-              { label: 'إجمالي المتبقي', value: formatCurrency(totalRemaining), color: 'text-red-600', bg: 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-700' },
-            ].map((s, i) => (
-              <div key={i} className={`p-3 rounded-xl border ${s.bg}`}>
-                <p className={`text-xl font-bold ${s.color}`}>{s.value}</p>
-                <p className="text-base text-gray-500 dark:text-gray-400 mt-0.5">{s.label}</p>
-              </div>
-            ))}
-          </div>
-          <div className="grid grid-cols-3 gap-3">
-            {[
-              { label: 'إجمالي الفواتير', value: todayBills.length, color: 'text-gray-700 dark:text-gray-300' },
-              { label: 'مدفوعة', value: paid.length, color: 'text-green-600' },
-              { label: 'غير مدفوعة', value: unpaid.length, color: 'text-red-600' },
-            ].map((s, i) => (
-              <div key={i} className="p-3 rounded-xl bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-center">
-                <p className={`text-4xl font-bold ${s.color}`}>{s.value}</p>
-                <p className="text-base text-gray-500 dark:text-gray-400 mt-0.5">{s.label}</p>
-              </div>
-            ))}
-          </div>
-
-          {/* Bills Table */}
-          {todayBills.length > 0 && (
-            <div className="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-700">
-              <table className="w-full text-lg">
-                <thead className="bg-emerald-500 text-white">
-                  <tr>
-                    {['#', 'رقم الفاتورة', 'الطاولة', 'الإجمالي', 'المدفوع', 'المتبقي', 'الحالة'].map(h => (
-                      <th key={h} className="px-3 py-2 text-right font-semibold text-base">{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {todayBills.map((b, i) => (
-                    <tr key={b.id || b._id} className={i % 2 === 0 ? 'bg-white dark:bg-gray-800' : 'bg-gray-50 dark:bg-gray-750'}>
-                      <td className="px-3 py-2 text-base text-gray-500">{i + 1}</td>
-                      <td className="px-3 py-2 font-medium text-gray-900 dark:text-gray-100 text-base">#{b.billNumber || (b.id || b._id)?.slice(-6)}</td>
-                      <td className="px-3 py-2 text-base text-gray-600 dark:text-gray-400">{b.table ? `طاولة ${(b.table as any).number || ''}` : '—'}</td>
-                      <td className="px-3 py-2 font-semibold text-base text-gray-900 dark:text-gray-100">{formatCurrency(b.total || 0)}</td>
-                      <td className="px-3 py-2 text-base text-green-600 dark:text-green-400 font-semibold">{formatCurrency(b.paid || 0)}</td>
-                      <td className="px-3 py-2 text-base text-red-600 dark:text-red-400 font-semibold">{formatCurrency(b.remaining || 0)}</td>
-                      <td className="px-3 py-2">
-                        <span className={`px-1.5 py-0.5 rounded-full text-base font-bold ${
-                          b.status === 'paid' ? 'bg-green-100 text-green-700' :
-                          b.status === 'partial' ? 'bg-yellow-100 text-yellow-700' :
-                          'bg-gray-100 text-gray-600'}`}>
-                          {b.status === 'paid' ? 'مدفوعة' : b.status === 'partial' ? 'جزئي' : b.status === 'draft' ? 'معلقة' : b.status}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-          {todayBills.length === 0 && (
-            <div className="text-center py-8 text-gray-400">
-              <FileText className="h-10 w-10 mx-auto mb-3 opacity-40" />
-              <p>لا توجد فواتير اليوم</p>
-            </div>
-          )}
-        </div>
-
-        <div className="p-3 border-t border-gray-200 dark:border-gray-700 flex-shrink-0 flex gap-2">
-          <button onClick={onClose} className="flex-1 py-2.5 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-xl text-lg font-medium transition-colors">إغلاق</button>
-          <button onClick={onPrint} disabled={isPrinting}
-            className="flex-1 py-2.5 bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700 text-white rounded-xl text-lg font-bold transition-all disabled:opacity-50 flex items-center justify-center gap-2">
-            {isPrinting ? <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg> : <Printer className="h-4 w-4" />}
-            {isPrinting ? 'جاري الطباعة...' : 'طباعة التقرير'}
-          </button>
-        </div>
-      </div>
-    </div>
-    </ModalPortal>
-  );
-};
 
 
-// ─── OrderModal ──────────────────────────────────────────────────────────────
 
 
-interface OrderModalProps {
-  table: { _id: string; number: string | number; name?: string };
-  orderItems: LocalOrderItem[];
-  setOrderItems: React.Dispatch<React.SetStateAction<LocalOrderItem[]>>;
-  orderNotes: string; setOrderNotes: (n: string) => void;
-  menuSections: MenuSection[]; menuCategories: MenuCategory[]; menuItems: MenuItem[];
-  expandedSections: Record<string, boolean>; expandedCategories: Record<string, boolean>;
-  toggleSection: (id: string) => void; toggleCategory: (id: string) => void;
-  getCategoriesForSection: (id: string) => MenuCategory[];
-  getItemsForCategory: (id: string) => MenuItem[];
-  addItemToOrder: (item: MenuItem, variant?: string | null) => void;
-  updateItemQuantity: (id: string, delta: number, variant?: string | null) => void;
-  updateItemNotes: (id: string, notes: string, variant?: string | null) => void;
-  removeItemFromOrder: (id: string, variant?: string | null) => void;
-  calculateTotal: () => number;
-  onSave: () => void; onSaveAndPrint: () => void; onSaveAndSend: () => void; onClose: () => void;
-  loading: boolean; isEdit: boolean;
-  canEditPrice?: boolean;
-  onEditPrice?: (index: number, item: LocalOrderItem) => void;
-}
-
-
-const OrderModal: React.FC<OrderModalProps> = ({
-  table, orderItems, setOrderItems, orderNotes, setOrderNotes, menuSections, menuCategories, menuItems,
-  expandedSections, expandedCategories, toggleSection, toggleCategory, getCategoriesForSection,
-  getItemsForCategory, addItemToOrder, updateItemQuantity, updateItemNotes, removeItemFromOrder,
-  calculateTotal, onSave, onSaveAndPrint, onSaveAndSend, onClose, loading, isEdit,
-  canEditPrice, onEditPrice,
-}) => {
-  const { t, i18n } = useTranslation();
-  const { isRTL } = useLanguage();
-  const [searchQuery, setSearchQuery] = useState('');
-  const searchInputRef = useRef<HTMLInputElement>(null);
-
-  // ── مرة واحدة، لا تتغير في كل render ──────────────────────────────
-  const cur = useRef(localStorage.getItem('organizationCurrency') || 'EGP').current;
-  const fmt = useCallback((n: number) => formatCurrencyUtil(n, i18n.language, cur), [i18n.language, cur]);
-
-  // ── map الكمية: O(1) بدل O(n) في كل صنف — with variant support ───────
-  const qtyMap = useMemo(() => {
-    const map: Record<string, number> = {};
-    orderItems.forEach(i => { map[i.menuItem] = (map[i.menuItem] || 0) + i.quantity; });
-    return map;
-  }, [orderItems]);
-  const qtyByVariantMap = useMemo(() => {
-    const map: Record<string, Record<string, number>> = {};
-    orderItems.forEach(i => {
-      const v = i.variant || '';
-      if (!map[i.menuItem]) map[i.menuItem] = {};
-      map[i.menuItem][v] = (map[i.menuItem][v] || 0) + i.quantity;
-      if (i.variant) map[i.menuItem][i.variant] = (map[i.menuItem][i.variant] || 0) + i.quantity;
-    });
-    return map;
-  }, [orderItems]);
-
-  // ── الأقسام النشطة ───────────────────────────────────────────────────
-  const activeSections = useMemo(() =>
-    menuSections.filter(s => s.isActive).sort((a, b) => a.sortOrder - b.sortOrder),
-  [menuSections]);
-
-  const [activeSectionId, setActiveSectionId] = useState<string>(() =>
-    menuSections.find(s => s.isActive)?._id || menuSections.find(s => s.isActive)?.id || ''
-  );
-  const [activeCategoryId, setActiveCategoryId] = useState<string>('all');
-  useEffect(() => { setActiveCategoryId('all'); }, [activeSectionId]);
-  // لو المنيو لسه بيحمل أو activeSectionId فاضي، اختار أول قسم متاح تلقائياً (يضمن التوزيع يظهر في الإضافة والتعديل)
-  useEffect(() => {
-    if (!activeSectionId && activeSections.length > 0) {
-      const firstId = (activeSections[0] as any).id || activeSections[0]._id;
-      setActiveSectionId(String(firstId));
-    }
-  }, [activeSections, activeSectionId]);
-
-  const activeSectionCategories = useMemo(() => {
-    if (!activeSectionId) return [];
-    return getCategoriesForSection(activeSectionId);
-  }, [activeSectionId, menuCategories]);
-
-  // ── الأصناف المعروضة — توزيع كامل: أقسام → فئات → أصناف + بحث + fallback للمنيو الكامل ──
-  const displayedItems = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
-    if (q) return menuItems.filter(i => i.isAvailable && i.name.toLowerCase().includes(q));
-    if (!activeSectionId) return menuItems.filter(i => i.isAvailable);
-    const cats = activeCategoryId === 'all'
-      ? getCategoriesForSection(activeSectionId)
-      : getCategoriesForSection(activeSectionId).filter(c => c._id === activeCategoryId || c.id === activeCategoryId);
-    return cats.flatMap(cat => getItemsForCategory(String(cat._id || cat.id)));
-  }, [searchQuery, activeSectionId, activeCategoryId, menuItems, getCategoriesForSection, getItemsForCategory]);
-
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const itemRefsMap = useRef<Record<string, HTMLDivElement | null>>({});
-  const [flashId, setFlashId] = useState<string | null>(null);
-  const flashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [expandedNotes, setExpandedNotes] = useState<Record<string, boolean>>({});
-
-  const prevLengthRef = useRef(orderItems.length);
-  useEffect(() => {
-    if (orderItems.length > prevLengthRef.current) {
-      const last = orderItems[orderItems.length - 1];
-      if (last) {
-        if (flashTimerRef.current) clearTimeout(flashTimerRef.current);
-        setFlashId(last.menuItem);
-        flashTimerRef.current = setTimeout(() => setFlashId(null), 700);
-        setTimeout(() => { itemRefsMap.current[last.menuItem]?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }, 30);
-      }
-    }
-    prevLengthRef.current = orderItems.length;
-  }, [orderItems.length]);
-
-  const handleAddWithFlash = useCallback((menuItem: MenuItem, variant?: string | null) => {
-    addItemToOrder(menuItem, variant);
-    let effPrice = menuItem.price;
-    if (menuItem.variants && menuItem.variants.length > 0) {
-      if (variant) {
-        const m = menuItem.variants.find(v => v.size === variant);
-        if (m) effPrice = m.price;
-        else effPrice = menuItem.variants[0].price;
-      } else {
-        effPrice = menuItem.variants[0].price;
-      }
-    }
-    if (flashTimerRef.current) clearTimeout(flashTimerRef.current);
-    const flashKey = `${menuItem.id}::${variant || ''}::${effPrice}`;
-    const fallbackKey = variant ? `${menuItem.id}::${variant}` : menuItem.id;
-    setFlashId(flashKey);
-    flashTimerRef.current = setTimeout(() => setFlashId(null), 700);
-    setTimeout(() => {
-      const el = itemRefsMap.current[flashKey] || itemRefsMap.current[fallbackKey] || itemRefsMap.current[menuItem.id];
-      el?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    }, 30);
-  }, [addItemToOrder]);
-
-  useEffect(() => {
-    searchInputRef.current?.focus();
-  }, []);
-
-  useEffect(() => () => { if (flashTimerRef.current) clearTimeout(flashTimerRef.current); }, []);
-
-  return (
-    <ModalPortal>
-    <div className="fixed inset-0 z-[300] flex bg-black/50" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="bg-white dark:bg-gray-900 w-full flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
-
-        {/* HEADER — بدون بحث */}
-        <div className="bg-gradient-to-r from-orange-500 to-red-500 px-4 py-3 flex items-center justify-between flex-shrink-0">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="w-9 h-9 bg-white/15 rounded-xl flex items-center justify-center ring-1 ring-white/25 flex-shrink-0">
-              <ShoppingCart className="h-4 w-4 text-white" />
-            </div>
-            <div className="min-w-0">
-              <h2 className="text-xl sm:text-2xl font-bold text-white truncate">{isEdit ? t('cafe.orderModal.editOrderTitle') : t('cafe.orderModal.newOrderTitle')}</h2>
-              <p className="text-base text-orange-100 flex items-center gap-1">
-                <TableIcon className="h-3 w-3 flex-shrink-0" />
-                {t('cafe.orderModal.table', { number: getTableDisplay(table.number, i18n.language) })}
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2 flex-shrink-0">
-            {orderItems.length > 0 && (
-              <div className="bg-white/15 rounded-xl px-3 py-1.5 ring-1 ring-white/25 text-center">
-                <p className="text-base text-orange-100 leading-none">الإجمالي</p>
-                <p className="text-lg font-bold text-white">{fmt(calculateTotal())}</p>
-              </div>
-            )}
-            <button onClick={onClose} className="w-8 h-8 bg-white/15 hover:bg-white/25 rounded-xl flex items-center justify-center text-white ring-1 ring-white/25 transition-all">
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-        </div>
-
-        {/* BODY */}
-        <div className="flex-1 flex overflow-hidden min-h-0">
-
-          {/* Col 1: Sections */}
-          {!searchQuery.trim() && (
-            <div className="w-24 sm:w-28 flex-shrink-0 flex flex-col border-l border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
-              <div className="px-2 py-2 border-b border-gray-100 dark:border-gray-700 flex-shrink-0">
-                <p className="text-base font-semibold text-gray-400 dark:text-gray-500 text-center">الأقسام</p>
-              </div>
-              <div className="flex-1 overflow-y-auto py-1.5 px-1.5 space-y-1">
-                {activeSections.map(sec => {
-                  const hasCats = getCategoriesForSection(sec.id).length > 0;
-                  if (!hasCats) return null;
-                  const isAct = activeSectionId === sec.id;
-                  return (
-                    <button key={sec.id} onClick={() => setActiveSectionId(sec.id)}
-                      className={`w-full px-2 py-2 rounded-lg text-base font-medium transition-all text-right leading-snug ${isAct ? 'bg-orange-500 text-white shadow-sm' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'}`}>
-                      {sec.name}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* Col 2: Categories */}
-          {!searchQuery.trim() && activeSectionCategories.length > 1 && (
-            <div className="w-24 sm:w-28 flex-shrink-0 flex flex-col border-l border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
-              <div className="px-2 py-2 border-b border-gray-100 dark:border-gray-700 flex-shrink-0">
-                <p className="text-base font-semibold text-gray-400 dark:text-gray-500 text-center">الفئات</p>
-              </div>
-              <div className="flex-1 overflow-y-auto py-1.5 px-1.5 space-y-1">
-                <button onClick={() => setActiveCategoryId('all')}
-                  className={`w-full px-2 py-2 rounded-lg text-base font-medium transition-all text-right ${activeCategoryId === 'all' ? 'bg-gray-800 dark:bg-gray-200 text-white dark:text-gray-900 shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'}`}>
-                  الكل
-                </button>
-                {activeSectionCategories.map(cat => {
-                  const catId = cat._id || cat.id;
-                  const isAct = activeCategoryId === catId;
-                  const count = getItemsForCategory(cat.id).length;
-                  if (count === 0) return null;
-                  return (
-                    <button key={catId} onClick={() => setActiveCategoryId(catId)}
-                      className={`w-full px-2 py-2 rounded-lg text-base font-medium transition-all text-right leading-snug ${isAct ? 'bg-gray-800 dark:bg-gray-200 text-white dark:text-gray-900 shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'}`}>
-                      <span className="block">{cat.name}</span>
-                      <span className={`text-base ${isAct ? 'text-white/70 dark:text-gray-700' : 'text-gray-400'}`}>{count}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* Col 3: Items */}
-          <div className="flex-1 flex flex-col min-h-0 min-w-0 bg-gray-50 dark:bg-gray-900">
-
-            {/* البحث داخل الأصناف */}
-            <div className="px-2 pt-2 pb-1.5 flex-shrink-0">
-              <div className="relative">
-                <Search className={`absolute ${isRTL ? 'right-2.5' : 'left-2.5'} top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400 pointer-events-none`} />
-                <input
-                  ref={searchInputRef}
-                  type="text"
-                  value={searchQuery}
-                  onChange={e => setSearchQuery(e.target.value)}
-                  placeholder={t('cafe.orderModal.searchPlaceholder')}
-                  className={`w-full ${isRTL ? 'pr-8 pl-7' : 'pl-8 pr-7'} py-1.5 text-base rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:ring-1 focus:ring-orange-400 focus:border-orange-400 outline-none transition-all`}
-                />
-                {searchQuery && (
-                  <button onClick={() => setSearchQuery('')} className={`absolute ${isRTL ? 'left-2' : 'right-2'} top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600`}>
-                    <X className="h-3 w-3" />
-                  </button>
-                )}
-              </div>
-            </div>
-
-            <div className="px-2 py-1 border-b border-gray-100 dark:border-gray-700 flex-shrink-0 flex items-center justify-between">
-              <p className="text-base font-semibold text-gray-400 dark:text-gray-500">
-                {searchQuery
-                  ? 'نتائج البحث'
-                  : (activeSectionCategories.find(c => (c._id || c.id) === activeCategoryId)?.name
-                    || activeSections.find(s => s.id === activeSectionId)?.name
-                    || 'الأصناف')}
-              </p>
-              {displayedItems.length > 0 && <span className="text-base text-gray-400">{displayedItems.length}</span>}
-            </div>
-            <div className="flex-1 overflow-y-auto p-1.5 min-h-0">
-              {displayedItems.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-full text-gray-300 dark:text-gray-600 select-none">
-                  <Search className="h-8 w-8 mb-2 opacity-30" />
-                  <p className="text-base">{searchQuery ? t('cafe.orderModal.noResults') : 'اختر قسماً'}</p>
-                </div>
-              ) : (
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-1">
-                  {displayedItems.map(item => (
-                    <ItemCard
-                      key={item.id}
-                      item={item}
-                      qty={qtyMap[item.id] || 0}
-                      qtyByVariant={qtyByVariantMap[item.id]}
-                      onAdd={handleAddWithFlash}
-                      fmt={fmt}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Col 4: Order — أوسع */}
-          <div className="w-64 sm:w-72 flex-shrink-0 flex flex-col border-r border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
-            <div className="px-3 py-2 border-b border-gray-100 dark:border-gray-700 flex-shrink-0 flex items-center justify-between">
-              <div className="flex items-center gap-1.5">
-                <div className="w-1 h-4 bg-gradient-to-b from-green-400 to-emerald-500 rounded-full"></div>
-                <span className="font-bold text-gray-800 dark:text-gray-100 text-base">{t('cafe.orderModal.orders')}</span>
-                {orderItems.length > 0 && (
-                  <span className="min-w-[18px] h-[18px] px-1 bg-green-100 dark:bg-green-900/50 text-green-700 dark:text-green-300 text-base font-bold rounded-full flex items-center justify-center leading-none">{orderItems.length}</span>
-                )}
-              </div>
-              <span className="text-base font-bold text-orange-600 dark:text-orange-400">{fmt(calculateTotal())}</span>
-            </div>
-
-            <div ref={scrollContainerRef} className="flex-1 overflow-y-auto px-2 py-2 space-y-1.5 min-h-0">
-              {orderItems.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-full select-none">
-                  <ShoppingCart className="h-8 w-8 text-gray-200 dark:text-gray-700 mb-1" />
-                  <p className="text-base text-gray-300 dark:text-gray-600">{t('cafe.orderModal.noItems')}</p>
-                </div>
-              ) : orderItems.map((item, idx) => {
-                const compositeKey = item.variant ? `${item.menuItem}::${item.variant}::${item.price}` : `${item.menuItem}::${item.price}`;
-                return (
-                <div key={compositeKey + idx} ref={el => { itemRefsMap.current[compositeKey] = el as HTMLDivElement | null; if (!item.variant) itemRefsMap.current[item.menuItem] = el as HTMLDivElement | null; }}>
-                  <OrderItemRow
-                    item={item}
-                    isFlash={flashId === compositeKey || flashId === item.menuItem}
-                    isExpanded={!!expandedNotes[compositeKey]}
-                    onMinus={() => setOrderItems(prev => { const cp=[...prev]; const it=cp[idx]; if(!it) return prev; const q=it.quantity-1; if(q<=0) cp.splice(idx,1); else cp[idx]={...it, quantity:q}; return cp; })}
-                    onPlus={() => setOrderItems(prev => { const cp=[...prev]; const it=cp[idx]; if(!it) return prev; cp[idx]={...it, quantity:it.quantity+1}; return cp; })}
-                    onRemove={() => setOrderItems(prev => prev.filter((_, i) => i !== idx))}
-                    onToggleNote={() => setExpandedNotes(p => ({ ...p, [compositeKey]: !p[compositeKey] }))}
-                    onNoteChange={v => setOrderItems(prev => { const cp=[...prev]; if(cp[idx]) cp[idx]={...cp[idx], notes:v}; return cp; })}
-                    notePlaceholder={t('cafe.orderModal.itemNotesPlaceholder')}
-                    fmt={fmt}
-                    canEditPrice={canEditPrice}
-                    onEditPrice={onEditPrice ? () => onEditPrice(idx, item) : undefined}
-                  />
-                </div>
-                );
-              })}
-            </div>
-
-            <div className="px-2 pt-2 pb-1 border-t border-gray-100 dark:border-gray-700 flex-shrink-0">
-              <textarea value={orderNotes} onChange={e => setOrderNotes(e.target.value)}
-                placeholder={t('cafe.orderModal.orderNotesPlaceholder')} rows={2}
-                className="w-full text-base border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1.5 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 placeholder-gray-400 resize-none focus:ring-1 focus:ring-orange-400 outline-none" />
-            </div>
-
-            <div className="px-2 pb-3 flex-shrink-0 space-y-1.5">
-              <button onClick={onSaveAndSend} disabled={loading || orderItems.length === 0}
-                className="w-full py-2.5 bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white font-bold text-base rounded-xl flex items-center justify-center gap-1.5 shadow-sm transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed">
-                {loading
-                  ? <><svg className="animate-spin h-3.5 w-3.5" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>{t('cafe.orderModal.saving')}</>
-                  : <><ChefHat className="h-3.5 w-3.5" />{t('cafe.orderModal.saveAndSend')}</>}
-              </button>
-              <div className="flex gap-1.5">
-                <button onClick={onSave} disabled={loading || orderItems.length === 0}
-                  className="flex-1 py-2 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 hover:bg-gray-50 text-gray-600 dark:text-gray-300 font-medium text-base rounded-lg flex items-center justify-center gap-1 transition-all disabled:opacity-50">
-                  <CheckCircle className="h-3 w-3 text-green-500" />{t('cafe.orderModal.save')}
-                </button>
-                <button onClick={onSaveAndPrint} disabled={loading || orderItems.length === 0}
-                  className="flex-1 py-2 border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 text-blue-600 dark:text-blue-400 font-medium text-base rounded-lg flex items-center justify-center gap-1 transition-all disabled:opacity-50">
-                  <Printer className="h-3 w-3" />{t('cafe.orderModal.saveAndPrint')}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-    </ModalPortal>
-  );
-};
-
-
-// ─── ManagementModal ──────────────────────────────────────────────────────────
-
-const ManagementModal: React.FC<{
-  tableSections: TableSection[]; tables: Table[]; onClose: () => void;
-  onAddSection: () => void; onEditSection: (s: TableSection) => void; onDeleteSection: (id: string) => Promise<void>;
-  onAddTable: (sectionId: string) => void; onEditTable: (t: Table) => void; onDeleteTable: (id: string) => Promise<void>;
-  getTablesBySection: (id: string) => Table[];
-}> = ({ tableSections, tables, onClose, onAddSection, onEditSection, onDeleteSection, onAddTable, onEditTable, onDeleteTable, getTablesBySection }) => {
-  const { t, i18n } = useTranslation();
-  const { isRTL } = useLanguage();
-
-  // ── #8 Drag & Drop state ──
-  const [draggedId, setDraggedId] = useState<string | null>(null);
-  const [dragOverId, setDragOverId] = useState<string | null>(null);
-  const [localOrder, setLocalOrder] = useState<Table[]>(tables);
-
-  useEffect(() => { setLocalOrder(tables); }, [tables]);
-
-  const handleDragStart = (e: React.DragEvent, tableId: string) => {
-    setDraggedId(tableId);
-    e.dataTransfer.effectAllowed = 'move';
-  };
-
-  const handleDragOver = (e: React.DragEvent, tableId: string) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    if (tableId !== draggedId) setDragOverId(tableId);
-  };
-
-  const handleDrop = (e: React.DragEvent, targetId: string, sectionId: string) => {
-    e.preventDefault();
-    if (!draggedId || draggedId === targetId) { setDraggedId(null); setDragOverId(null); return; }
-    setLocalOrder(prev => {
-      const secTables = prev.filter(tb => {
-        const sid = typeof tb.section === 'string' ? tb.section : (tb.section as TableSection)?._id || (tb.section as TableSection)?.id;
-        return sid === sectionId;
-      });
-      const dragIdx = secTables.findIndex(tb => (tb._id || (tb as any).id) === draggedId);
-      const dropIdx = secTables.findIndex(tb => (tb._id || (tb as any).id) === targetId);
-      if (dragIdx === -1 || dropIdx === -1) return prev;
-      const reordered = [...secTables];
-      const [moved] = reordered.splice(dragIdx, 1);
-      reordered.splice(dropIdx, 0, moved);
-      const otherTables = prev.filter(tb => {
-        const sid = typeof tb.section === 'string' ? tb.section : (tb.section as TableSection)?._id || (tb.section as TableSection)?.id;
-        return sid !== sectionId;
-      });
-      return [...otherTables, ...reordered];
-    });
-    setDraggedId(null);
-    setDragOverId(null);
-  };
-
-  const getLocalTablesBySection = (sectionId: string) =>
-    localOrder.filter(tb => {
-      const sid = typeof tb.section === 'string' ? tb.section : (tb.section as TableSection)?._id || (tb.section as TableSection)?.id;
-      return sid === sectionId;
-    });
-
-  return (
-    <ModalPortal>
-    <div className="fixed inset-0 bg-black/70 backdrop-blur-md flex items-center justify-center z-[300] p-3 sm:p-4 md:p-6">
-      <div className="bg-white dark:bg-gray-800 rounded-2xl sm:rounded-3xl shadow-2xl max-w-sm sm:max-w-2xl md:max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col border border-gray-200 dark:border-gray-700">
-        <div className="relative p-4 sm:p-5 md:p-6 bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 flex-shrink-0">
-          <div className="relative flex items-center justify-between z-10">
-            <div className="flex items-center gap-2 sm:gap-3 md:gap-4 min-w-0 flex-1">
-              <div className="w-10 h-10 sm:w-12 sm:h-12 bg-white/20 backdrop-blur-sm rounded-xl sm:rounded-2xl flex items-center justify-center shadow-xl border border-white/30 flex-shrink-0">
-                <Settings className="h-5 w-5 sm:h-6 sm:w-6 md:h-7 md:w-7 text-white" />
-              </div>
-              <div>
-                <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white drop-shadow-lg truncate">{t('cafe.managementModal.title')}</h2>
-                <p className="text-base sm:text-lg text-white/80 mt-1">{t('cafe.managementModal.sectionsCount', { count: tableSections.length })} • {t('cafe.managementModal.tablesCount', { count: tables.length })}</p>
-              </div>
-            </div>
-            <button onClick={onClose} className="p-2 sm:p-2.5 hover:bg-white/20 backdrop-blur-sm rounded-xl border border-white/30 hover:scale-110 flex-shrink-0"><X className="h-5 w-5 sm:h-6 sm:w-6 text-white" /></button>
-          </div>
-        </div>
-        <div className="flex-1 overflow-y-auto p-4 sm:p-5 md:p-6 bg-gray-50 dark:bg-gray-900">
-          <div className="mb-4 sm:mb-6">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 mb-4 sm:mb-5">
-              <h3 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-                <div className="w-1 h-5 sm:h-6 bg-gradient-to-b from-indigo-500 to-purple-500 rounded-full"></div>{t('cafe.managementModal.sections')}
-              </h3>
-              <button onClick={onAddSection} className="w-full sm:w-auto bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white px-4 py-2.5 rounded-xl flex items-center justify-center text-lg font-bold shadow-lg hover:scale-105">
-                <Plus className={`h-4 w-4 ${isRTL ? 'ml-1' : 'mr-1'}`} />{t('cafe.managementModal.addSection')}
-              </button>
-            </div>
-            <div className="space-y-3 sm:space-y-4">
-              {tableSections.sort((a, b) => a.sortOrder - b.sortOrder).map(section => {
-                const sectionTables = getLocalTablesBySection(section.id);
-                return (
-                  <div key={section.id} className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl sm:rounded-2xl p-4 sm:p-5 hover:shadow-lg transition-all">
-                    <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 sm:gap-4 mb-3 sm:mb-4">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex flex-col sm:flex-row sm:items-center gap-2 mb-2">
-                          <h4 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100 truncate">{section.name}</h4>
-                          <span className="w-fit px-2 py-1 bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300 text-base font-bold rounded-full">{t('cafe.managementModal.tableCount', { count: sectionTables.length })}</span>
-                        </div>
-                        {section.description && <p className="text-base sm:text-lg text-gray-600 dark:text-gray-400 line-clamp-2">{section.description}</p>}
-                      </div>
-                      <div className="flex items-center gap-2 flex-shrink-0">
-                        <button onClick={() => onEditSection(section)} className="p-2 sm:p-2.5 hover:bg-orange-50 dark:hover:bg-orange-900/30 rounded-xl transition-all hover:scale-110 border border-transparent hover:border-orange-200"><Edit className="h-4 w-4 sm:h-5 sm:w-5 text-orange-600 dark:text-orange-400" /></button>
-                        <button onClick={() => onDeleteSection(section.id)} className="p-2 sm:p-2.5 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-xl transition-all hover:scale-110 border border-transparent hover:border-red-200"><Trash2 className="h-4 w-4 sm:h-5 sm:w-5 text-red-600 dark:text-red-400" /></button>
-                      </div>
-                    </div>
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3 border-t border-gray-200 dark:border-gray-700">
-                      {/* #8 Drag & Drop table chips */}
-                      <div className="flex flex-wrap gap-2 flex-1">
-                        {sectionTables.length === 0 && (
-                          <span className="text-base text-gray-400 italic">اسحب الطاولات هنا</span>
-                        )}
-                        {sectionTables.map(table => {
-                          const tid = table._id || (table as any).id;
-                          const isDragging = draggedId === tid;
-                          const isDragOver = dragOverId === tid;
-                          return (
-                            <div
-                              key={String(tid)}
-                              draggable
-                              onDragStart={e => handleDragStart(e, tid)}
-                              onDragOver={e => handleDragOver(e, tid)}
-                              onDrop={e => handleDrop(e, tid, section.id)}
-                              onDragEnd={() => { setDraggedId(null); setDragOverId(null); }}
-                              className={`group flex items-center gap-2 px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg sm:rounded-xl border transition-all cursor-grab active:cursor-grabbing select-none
-                                ${isDragging ? 'opacity-40 scale-95 border-dashed border-indigo-400 bg-indigo-50 dark:bg-indigo-900/30' :
-                                  isDragOver ? 'border-2 border-indigo-500 bg-indigo-50 dark:bg-indigo-900/40 shadow-lg scale-105' :
-                                  'bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-700 dark:to-gray-800 border-gray-300 dark:border-gray-600 hover:border-indigo-300 hover:shadow-md'}`}>
-                              {/* Drag handle */}
-                              <div className="flex flex-col gap-0.5 opacity-40 group-hover:opacity-100 transition-opacity">
-                                <div className="w-3 h-0.5 bg-gray-500 rounded-full"></div>
-                                <div className="w-3 h-0.5 bg-gray-500 rounded-full"></div>
-                                <div className="w-3 h-0.5 bg-gray-500 rounded-full"></div>
-                              </div>
-                              <span className="text-base sm:text-lg font-bold text-gray-900 dark:text-gray-100">{getTableDisplay(table.number, i18n.language)}</span>
-                              <div className="flex items-center gap-1">
-                                <button onClick={e => { e.stopPropagation(); onEditTable(table); }} className="p-1 hover:bg-orange-200 dark:hover:bg-orange-800 rounded-lg transition-all"><Edit className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-orange-600 dark:text-orange-400" /></button>
-                                <button onClick={e => { e.stopPropagation(); onDeleteTable(table.id); }} className="p-1 hover:bg-red-200 dark:hover:bg-red-800 rounded-lg transition-all"><Trash2 className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-red-600 dark:text-red-400" /></button>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                      <button onClick={() => onAddTable(section.id)} className="w-full sm:w-auto bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white px-3 py-2 rounded-xl text-base sm:text-lg font-bold flex items-center justify-center gap-1 shadow-md hover:scale-105">
-                        <Plus className="h-3 w-3 sm:h-4 sm:w-4" />{t('cafe.managementModal.addTable')}
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-          {draggedId && (
-            <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-indigo-600 text-white px-4 py-2 rounded-full shadow-xl text-lg font-medium z-50 flex items-center gap-2 pointer-events-none">
-              <Layers className="h-4 w-4" />
-              اسحب فوق طاولة أخرى لتبديل الترتيب
-            </div>
-          )}
-        </div>
-        <div className="flex items-center justify-end p-4 sm:p-5 md:p-6 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 flex-shrink-0">
-          <button onClick={onClose} className="w-full sm:w-auto px-4 py-2.5 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-xl transition-colors text-lg sm:text-xl font-medium">{t('common.close')}</button>
-        </div>
-      </div>
-    </div>
-    </ModalPortal>
-  );
-};
-
-// ─── SectionModal ─────────────────────────────────────────────────────────────
-
-const SectionModal: React.FC<{
-  formData: { name: string; description: string; sortOrder: number };
-  setFormData: (d: { name: string; description: string; sortOrder: number }) => void;
-  editingSection: TableSection | null; onSave: () => void; onClose: () => void;
-}> = ({ formData, setFormData, editingSection, onSave, onClose }) => {
-  const { t } = useTranslation();
-  const nameRef = useRef<HTMLInputElement>(null);
-  useEffect(() => { const timer = setTimeout(() => nameRef.current?.focus(), 100); return () => clearTimeout(timer); }, []);
-  return (
-    <ModalPortal>
-    <div className="fixed inset-0 bg-black/70 backdrop-blur-md flex items-center justify-center z-[300] p-3 sm:p-4">
-      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-sm sm:max-w-md w-full border border-gray-200 dark:border-gray-700 overflow-hidden">
-        <div className="relative p-4 sm:p-5 bg-gradient-to-br from-blue-500 to-indigo-600">
-          <div className="relative flex items-center justify-between z-10">
-            <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
-              <div className="w-10 h-10 sm:w-12 sm:h-12 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center border border-white/30 flex-shrink-0"><Settings className="h-5 w-5 sm:h-6 sm:w-6 text-white" /></div>
-              <h2 className="text-2xl sm:text-3xl font-bold text-white drop-shadow-lg truncate">{editingSection ? t('cafe.sectionModal.editTitle') : t('cafe.sectionModal.addTitle')}</h2>
-            </div>
-            <button onClick={onClose} className="p-2 sm:p-2.5 hover:bg-white/20 backdrop-blur-sm rounded-xl border border-white/30 flex-shrink-0"><X className="h-5 w-5 sm:h-6 sm:w-6 text-white" /></button>
-          </div>
-        </div>
-        <div className="p-4 sm:p-5 space-y-4 sm:space-y-5 bg-gray-50 dark:bg-gray-900">
-          <div>
-            <label className="block text-lg font-bold text-gray-700 dark:text-gray-300 mb-2">{t('cafe.sectionModal.sectionNameRequired')}</label>
-            <input ref={nameRef} type="text" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} autoFocus
-              className="w-full border border-gray-300 dark:border-gray-600 rounded-xl px-3 py-2.5 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-lg sm:text-xl focus:ring-2 focus:ring-blue-500"
-              placeholder={t('cafe.sectionModal.sectionNamePlaceholder')} />
-          </div>
-          <div>
-            <label className="block text-lg font-medium text-gray-700 dark:text-gray-300 mb-2">{t('cafe.sectionModal.description')}</label>
-            <textarea value={formData.description} onChange={e => setFormData({ ...formData, description: e.target.value })}
-              className="w-full border border-gray-300 dark:border-gray-600 rounded-xl px-3 py-2.5 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-lg sm:text-xl focus:ring-2 focus:ring-blue-500 resize-none"
-              placeholder={t('cafe.sectionModal.descriptionPlaceholder')} rows={3} />
-          </div>
-          <div>
-            <label className="block text-lg font-medium text-gray-700 dark:text-gray-300 mb-2">{t('cafe.sectionModal.sortOrder')}</label>
-            <input type="number" value={formData.sortOrder} onChange={e => setFormData({ ...formData, sortOrder: parseInt(e.target.value) || 0 })}
-              className="w-full border border-gray-300 dark:border-gray-600 rounded-xl px-3 py-2.5 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-lg sm:text-xl focus:ring-2 focus:ring-blue-500"
-              placeholder={t('cafe.sectionModal.sortOrderPlaceholder')} />
-          </div>
-        </div>
-        <div className="flex flex-col sm:flex-row items-center justify-end gap-3 p-4 sm:p-5 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
-          <button onClick={onClose} className="w-full sm:w-auto px-4 py-2.5 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-xl text-lg sm:text-xl font-medium">{t('cafe.sectionModal.cancel')}</button>
-          <button onClick={onSave} className="w-full sm:w-auto px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-lg sm:text-xl font-medium">{t('cafe.sectionModal.save')}</button>
-        </div>
-      </div>
-    </div>
-    </ModalPortal>
-  );
-};
-
-// ─── TableModalComp ──────────────────────────────────────────────────────────
-
-const TableModalComp: React.FC<{
-  formData: { number: string; section: string };
-  setFormData: (d: { number: string; section: string }) => void;
-  tableSections: TableSection[]; editingTable: Table | null; onSave: () => void; onClose: () => void;
-}> = ({ formData, setFormData, tableSections, editingTable, onSave, onClose }) => {
-  const { t } = useTranslation();
-  const numRef = useRef<HTMLInputElement>(null);
-  useEffect(() => { const timer = setTimeout(() => numRef.current?.focus(), 100); return () => clearTimeout(timer); }, []);
-  return (
-    <ModalPortal>
-    <div className="fixed inset-0 bg-black/70 backdrop-blur-md flex items-center justify-center z-[300] p-3 sm:p-4">
-      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-sm sm:max-w-md w-full border border-gray-200 dark:border-gray-700 overflow-hidden">
-        <div className="relative p-4 sm:p-5 bg-gradient-to-br from-green-500 to-emerald-600">
-          <div className="relative flex items-center justify-between z-10">
-            <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
-              <div className="w-10 h-10 sm:w-12 sm:h-12 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center border border-white/30 flex-shrink-0"><Plus className="h-5 w-5 sm:h-6 sm:w-6 text-white" /></div>
-              <h2 className="text-2xl sm:text-3xl font-bold text-white drop-shadow-lg truncate">{editingTable ? t('cafe.tableModal.editTitle') : t('cafe.tableModal.addTitle')}</h2>
-            </div>
-            <button onClick={onClose} className="p-2 sm:p-2.5 hover:bg-white/20 backdrop-blur-sm rounded-xl border border-white/30 flex-shrink-0"><X className="h-5 w-5 sm:h-6 sm:w-6 text-white" /></button>
-          </div>
-        </div>
-        <div className="p-4 sm:p-5 space-y-4 sm:space-y-5 bg-gray-50 dark:bg-gray-900">
-          <div>
-            <label className="block text-lg font-bold text-gray-700 dark:text-gray-300 mb-2">{t('cafe.tableModal.tableNumberRequired')}</label>
-            <input ref={numRef} type="text" value={formData.number} onChange={e => setFormData({ ...formData, number: e.target.value })} autoFocus
-              className="w-full border border-gray-300 dark:border-gray-600 rounded-xl px-3 py-2.5 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-lg sm:text-xl focus:ring-2 focus:ring-green-500"
-              placeholder={t('cafe.tableModal.tableNumberPlaceholder')} />
-          </div>
-          <div>
-            <label className="block text-lg font-medium text-gray-700 dark:text-gray-300 mb-2">{t('cafe.tableModal.sectionRequired')}</label>
-            <select value={formData.section} onChange={e => setFormData({ ...formData, section: e.target.value })}
-              className="w-full border border-gray-300 dark:border-gray-600 rounded-xl px-3 py-2.5 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-lg sm:text-xl focus:ring-2 focus:ring-green-500">
-              <option value="">{t('cafe.tableModal.selectSection')}</option>
-              {tableSections.filter(s => s.isActive !== false).sort((a, b) => a.sortOrder - b.sortOrder).map(s => (
-                <option key={s.id} value={s.id}>{s.name}</option>
-              ))}
-            </select>
-          </div>
-        </div>
-        <div className="flex flex-col sm:flex-row items-center justify-end gap-3 p-4 sm:p-5 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
-          <button onClick={onClose} className="w-full sm:w-auto px-4 py-2.5 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-xl text-lg sm:text-xl font-medium">{t('cafe.tableModal.cancel')}</button>
-          <button onClick={onSave} className="w-full sm:w-auto px-4 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-xl text-lg sm:text-xl font-medium">{t('cafe.tableModal.save')}</button>
-        </div>
-      </div>
-    </div>
-    </ModalPortal>
-  );
-};
 
 export default Tables;

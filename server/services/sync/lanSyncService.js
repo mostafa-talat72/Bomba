@@ -6,6 +6,8 @@ import syncConfig from "../../config/syncConfig.js";
 import Logger from "../../middleware/logger.js";
 import { getDeviceId } from "../../utils/deviceIdentity.js";
 import lanDiscovery from "./lanDiscovery.js";
+import { EJSON } from "bson";
+import { rehydrateDocument, rehydrateFilter } from "../../utils/bsonRehydrate.js";
 
 let originTrackerInstance = null;
 let conflictResolverInstance = null;
@@ -57,7 +59,7 @@ class LanQueueManager {
         try {
             const dir = path.dirname(this.filePath);
             if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-            fs.writeFileSync(this.filePath, JSON.stringify({ version: 1, queue: this.queue }, null, 2), "utf8");
+            fs.writeFileSync(this.filePath, EJSON.stringify({ version: 1, queue: this.queue }, null, 2), "utf8");
         } catch (e) {
             Logger.warn("[LanSync] Failed to persist LAN queue:", e.message);
         }
@@ -65,7 +67,7 @@ class LanQueueManager {
     load() {
         try {
             if (!fs.existsSync(this.filePath)) return 0;
-            const data = JSON.parse(fs.readFileSync(this.filePath, "utf8"));
+            const data = EJSON.parse(fs.readFileSync(this.filePath, "utf8"));
             if (Array.isArray(data.queue)) {
                 this.queue = data.queue;
                 Logger.info(`[LanSync] Loaded ${this.queue.length} ops from LAN queue`);
@@ -471,6 +473,8 @@ class LanSyncService {
             }
             // Direct collection upsert bypassing middleware
             const toInsert = { ...data };
+            // Restore BSON types (socket.io is JSON: Dates/nested ObjectIds arrive as strings)
+            rehydrateDocument(collectionName, toInsert);
             // Ensure _id is ObjectId if it looks like one
             try { if (typeof toInsert._id === 'string' && /^[a-f0-9]{24}$/i.test(toInsert._id)) toInsert._id = new mongoose.Types.ObjectId(toInsert._id); } catch {}
             await collection.replaceOne({ _id: toInsert._id }, toInsert, { upsert: true });
@@ -493,6 +497,8 @@ class LanSyncService {
                 }
             }
             const filterObj = { _id: objectId };
+            // Restore BSON types in payload (socket.io JSON degrades Dates/nested ObjectIds)
+            rehydrateDocument(collectionName, data);
             // Use $set for update
             const updateDoc = { $set: { ...data, updatedAt: new Date() } };
             // Remove _id from $set
@@ -590,6 +596,9 @@ class LanSyncService {
 
                 let id = doc._id;
                 try { if (typeof id === 'string' && /^[a-f0-9]{24}$/i.test(id)) doc._id = new mongoose.Types.ObjectId(id); } catch {}
+
+                // Restore BSON types for nested refs + dates (initial sync travels as JSON)
+                rehydrateDocument(collection, doc);
 
                 // Check if exists and compare timestamps
                 const existing = await coll.findOne({ _id: doc._id }).catch(() => null);

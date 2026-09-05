@@ -1,6 +1,7 @@
 import { v4 as uuidv4 } from "uuid";
 import fs from "fs/promises";
 import path from "path";
+import { EJSON } from "bson";
 import Logger from "../../middleware/logger.js";
 import syncConfig from "../../config/syncConfig.js";
 
@@ -437,10 +438,11 @@ class SyncQueueManager {
                 operations: this.queue,
             };
 
-            // Write to file
+            // Write to file as EJSON so ObjectId/Date/Binary survive the round-trip
+            // (plain JSON would degrade them to strings — the original BSON corruption bug)
             await fs.writeFile(
                 this.persistencePath,
-                JSON.stringify(data, null, 2),
+                EJSON.stringify(data, null, 2),
                 "utf8"
             );
 
@@ -472,9 +474,9 @@ class SyncQueueManager {
                 return 0;
             }
 
-            // Read file
+            // Read file (EJSON.parse also reads legacy plain-JSON queue files)
             const fileContent = await fs.readFile(this.persistencePath, "utf8");
-            const data = JSON.parse(fileContent);
+            const data = EJSON.parse(fileContent);
 
             // Validate data
             if (!data.operations || !Array.isArray(data.operations)) {

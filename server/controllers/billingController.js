@@ -22,6 +22,7 @@ import { getUserLanguage } from "../utils/localeHelper.js";
 import { getTableName } from "../utils/translations.js";
 import { getInstanceId } from "../utils/instanceId.js";
 import { writeToAtlas } from "../utils/atlasWrite.js";
+import cache from "../utils/simpleCache.js";
 import MenuItem from "../models/MenuItem.js";
 import InventoryItem from "../models/InventoryItem.js";
 import {
@@ -37,6 +38,19 @@ const VALID_SUBSCRIPTION_AMOUNTS = { monthly: 299, yearly: 2999 };
 
 // ── Helper: instant <100ms emit for bills + table status, keeps DB writes immediate ──
 function emitBillUpdated(req, bill, type = "updated") {
+    // invalidate getBill cache (<50ms) — fire-and-forget
+    try {
+        const orgIdInv = getOrganizationId(req.user);
+        const bidInv = bill?._id || bill?.id;
+        if (orgIdInv && bidInv) {
+            cache.delete(`bill:${String(orgIdInv)}:${String(bidInv)}`);
+            cache.deleteByPrefix(`bills:${String(orgIdInv)}`);
+        }
+    } catch {}
+    // fire-and-forget Atlas write — local save already done before emit
+    try {
+        if (bill?._id) writeToAtlas('bills', 'upsert', bill.toObject ? bill.toObject() : bill, { _id: bill._id });
+    } catch {}
     if (!req.io || !bill) return;
     try {
         const orgId = getOrganizationId(req.user);
@@ -54,9 +68,28 @@ function emitBillUpdated(req, bill, type = "updated") {
                 );
             }
         } catch {}
+        // also emit colon mutation for instant tables/bills sync
+        try {
+            req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit(type === "created" ? 'bill:created' : type === "deleted" ? 'bill:deleted' : 'bill:updated', bill);
+        } catch {}
+        if (bill.table) {
+            try {
+                const tbl = bill.table?._id || bill.table;
+                req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('table:statusChanged', { tableId: tbl, status: bill.status === 'paid' || bill.status === 'cancelled' ? 'empty' : 'occupied' });
+                req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('table-status-update', { tableId: tbl, status: bill.status === 'paid' || bill.status === 'cancelled' ? 'empty' : 'occupied' });
+            } catch {}
+        }
     } catch (e) { Logger.warn('emitBillUpdated failed', e.message); }
 }
 function emitBillDeleted(req, billId, tableId) {
+    try {
+        const orgIdInv = getOrganizationId(req.user);
+        if (orgIdInv && billId) {
+            cache.delete(`bill:${String(orgIdInv)}:${String(billId)}`);
+            cache.deleteByPrefix(`bills:${String(orgIdInv)}`);
+        }
+    } catch {}
+    try { if (billId) writeToAtlas('bills', 'delete', null, { _id: billId }); } catch {}
     if (!req.io) return;
     try {
         const orgId = getOrganizationId(req.user);
@@ -71,9 +104,20 @@ function emitBillDeleted(req, billId, tableId) {
                 req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('bill:deleted', payload);
             }
         } catch {}
-        // The caller recalculates table status from all remaining unpaid
-        // bills.  Do not optimistically emit "empty" here.
+        try { req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('bill:deleted', payload); } catch {}
+        if (tableId) {
+            try {
+                req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('table:statusChanged', { tableId, status: 'empty' });
+                req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('table-status-update', { tableId, status: 'empty' });
+            } catch {}
+        }
     } catch {}
+}
+function invalidateBillCache(orgId, billId) {
+    if (!orgId || !billId) return;
+    try { cache.delete(`bill:${String(orgId)}:${String(billId)}`); } catch {}
+    try { cache.deleteByPrefix(`bills:${String(orgId)}`); } catch {}
+    try { cache.deleteByPrefix(`bill:${String(orgId)}`); } catch {}
 }
 
 // دالة لتحويل الأرقام الإنجليزية إلى العربية
@@ -222,6 +266,14 @@ export const getBills = async (req, res) => {
 
         query.organization = getOrganizationId(req.user);
 
+        // ── SimpleCache 10s TTL for getBills — fast fetch (<50ms) ──
+        const billsOrgId = String(getOrganizationId(req.user));
+        const billsCacheKey = `bills:${billsOrgId}:${JSON.stringify({ status, table, tableNumber, customerName, q, all, page, limit })}`;
+        const cachedBills = cache.get(billsCacheKey);
+        if (cachedBills && !q) {
+            return res.json(cachedBills);
+        }
+
         // Pagination: default no limit for unpaid (<200), if all=true then paginate with limit 50
         const pageNum = Math.max(1, parseInt(page, 10) || 1);
         const limitNum = Math.max(1, parseInt(limit, 10) || 50);
@@ -364,8 +416,9 @@ export const getBills = async (req, res) => {
             filters: { status, table, tableNumber, customerName, all },
         });
 
+        let responsePayload;
         if (shouldPaginate) {
-            res.json({
+            responsePayload = {
                 success: true,
                 count: bills.length,
                 total,
@@ -373,15 +426,17 @@ export const getBills = async (req, res) => {
                 limit: limitNum,
                 totalPages: Math.ceil(total / limitNum),
                 data: bills
-            });
+            };
         } else {
-            res.json({
+            responsePayload = {
                 success: true,
                 count: bills.length,
                 total,
                 data: bills
-            });
+            };
         }
+        try { cache.set(billsCacheKey, responsePayload, 10); } catch {}
+        return res.json(responsePayload);
     } catch (error) {
         Logger.error("خطأ في جلب الفواتير", {
             error: error.message,
@@ -481,6 +536,15 @@ export const getBill = async (req, res) => {
                 message:
                     "المستخدم غير مصرح أو لا يوجد منشأة مرتبطة به. يرجى إعادة تسجيل الدخول.",
             });
+        }
+        const orgIdForCache = getOrganizationId(req.user);
+        const billCacheKey = `bill:${String(orgIdForCache)}:${String(req.params.id)}`;
+        // 10s TTL cache for getBill — invalidate on any bill mutation
+        if (!req.query.upgrade) {
+            const cachedBill = cache.get(billCacheKey);
+            if (cachedBill) {
+                return res.json({ success: true, data: cachedBill });
+            }
         }
 
         // Background upgrade only if explicitly requested via ?upgrade=1 (non-blocking)
@@ -610,6 +674,9 @@ export const getBill = async (req, res) => {
         } catch (e) {
             Logger.warn('live calc failed for getBill', e);
         }
+
+        // cache for 10s (fire-and-forget, active bills will be re-calculated on next fetch after TTL)
+        try { cache.set(billCacheKey, bill, 10); } catch {}
 
         return res.json({
             success: true,
@@ -1783,12 +1850,15 @@ export const removeOrderFromBill = async (req, res) => {
             // Delete the bill if it has no orders or sessions from Local and Atlas
             Logger.info(`🗑️ Deleting empty bill ${updatedBill.billNumber} after removing order`);
             const { deleteFromBothDatabases } = await import('../utils/deleteHelper.js');
+            const deletedBillId = updatedBill._id;
+            const deletedBillTable = updatedBill.table;
             await deleteFromBothDatabases(updatedBill, 'bills', `bill ${updatedBill.billNumber}`);
-            try { await createTombstone('bills', updatedBill._id, getOrganizationId(req.user), req.user._id); } catch (e) {}
+            try { await createTombstone('bills', deletedBillId, getOrganizationId(req.user), req.user._id); } catch (e) {}
+            emitBillDeleted(req, deletedBillId, deletedBillTable);
             
             // Update table status if bill had a table
-            if (updatedBill.table) {
-                await updateTableStatusIfNeeded(updatedBill.table, getOrganizationId(req.user), req.io);
+            if (deletedBillTable) {
+                await updateTableStatusIfNeeded(deletedBillTable, getOrganizationId(req.user), req.io);
             }
         }
 
@@ -4072,7 +4142,7 @@ export const updateBillAggregatedItems = async (req, res) => {
         // Sync to Atlas if enabled
         try {
             if (syncConfig?.isAtlasEnabled?.()) {
-                await writeToAtlas("bills", bill._id, bill.toObject());
+                writeToAtlas("bills", "upsert", bill.toObject ? bill.toObject() : bill, { _id: bill._id });
             }
         } catch {}
 

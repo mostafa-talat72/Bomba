@@ -105,6 +105,11 @@ interface DataContextType {
   cancelBill: (id: string) => Promise<boolean>;
   getBillItems: (id: string) => Promise<BillItem[]>;
   addPartialPayment: (id: string, paymentData: any) => Promise<Bill | null>;
+  addPartialPaymentAggregated: (id: string, paymentData: any) => Promise<Bill | null>;
+  payForItems: (id: string, paymentData: any) => Promise<Bill | null>;
+  paySessionPartial: (id: string, paymentData: any) => Promise<Bill | null>;
+  updateBillAggregatedItems: (id: string, data: any) => Promise<Bill | null>;
+  deleteBill: (id: string) => Promise<boolean>;
 
   createCost: (costData: any) => Promise<Cost | null>;
   updateCost: (id: string, updates: any) => Promise<Cost | null>;
@@ -151,6 +156,17 @@ interface DataContextType {
 
   updateOrderItemPrepared: (orderId: string, itemIndex: number, data: { preparedCount: number }) => Promise<Order | null>;
   updateOrderStatus: (orderId: string, status: 'pending' | 'preparing' | 'ready' | 'delivered' | 'cancelled') => Promise<Order | null>;
+  deliverItem: (orderId: string, itemIndex: number) => Promise<Order | null>;
+  deliverOrderSection: (orderId: string, sectionId: string) => Promise<Order | null>;
+  cancelOrder: (orderId: string, reason?: string) => Promise<Order | null>;
+  createSessionWithExistingBill: (sessionData: any) => Promise<Session | null>;
+  changeSessionTable: (sessionId: string, newTableId: string) => Promise<any>;
+  linkSessionToTable: (sessionId: string, tableId: string) => Promise<any>;
+  unlinkTableFromSession: (sessionId: string, customerName?: string) => Promise<any>;
+  updateSessionTimes: (sessionId: string, data: { startTime: string; endTime: string }) => Promise<Session | null>;
+  updateSessionStartTime: (sessionId: string, data: { startTime: string }) => Promise<Session | null>;
+  updateControllersPeriodTime: (sessionId: string, periodIndex: number, newStartTime: string, newEndTime?: string) => Promise<Session | null>;
+  updateSessionCost: (sessionId: string) => Promise<any>;
   getRecentActivity: (limit?: number) => Promise<any[]>;
 
   getSalesReport: (filter: Filter, groupBy?: string) => Promise<any>;
@@ -634,30 +650,279 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const endSession = async (id: string, customerName?: string): Promise<Session | null> => {
+    let snapshot: Session[] = [];
+    let ended: Session | null = null;
     try {
+      setSessions(prev => {
+        snapshot = [...prev];
+        const found = prev.find((s: any) => String(s._id || s.id) === String(id));
+        if (found) ended = found as any;
+        return prev.map((s: any) => String(s._id || s.id) === String(id) ? { ...s, status: 'completed', endTime: new Date(), _optimistic: true } as any : s);
+      });
+      // optimistic bill update: mark session completed inside bill
+      setBills(prev => prev.map((b: any) => ({ ...b, sessions: (b.sessions || []).map((s: any) => String(s._id || s.id || s) === String(id) ? { ...(typeof s === 'object' ? s : { _id: s }), status: 'completed', endTime: new Date() } : s) })));
       const response = await api.endSession(id, customerName);
       if (response.success && response.data) {
         const data = response.data as any;
         const session = data.session;
         const bill = data.bill;
-
-        setSessions(prev => prev.filter(s => s.id !== id));
-
+        setSessions(prev => prev.filter((s: any) => String(s._id || s.id) !== String(id)));
+        // update bills with server bill
         if (bill) {
-          setBills(prev => prev.map(b => b.id === bill.id ? bill : b));
+          setBills(prev => {
+            const bid = String(bill._id || bill.id);
+            const exists = prev.some((b: any) => String(b._id || b.id) === bid);
+            if (exists) return prev.map((b: any) => String(b._id || b.id) === bid ? { ...b, ...bill } : b);
+            return [...prev, bill];
+          });
+          if (bill.table) {
+            const tid = String((bill.table as any)?._id || (bill.table as any)?.id || bill.table);
+            // keep table occupied until bill paid — but if session ended, table may still be occupied via other sessions/orders
+            // socket will correct; optimistic keep occupied
+          }
           showNotification(t('toast.session.ended', { deviceName: session.deviceName, cost: session.finalCost }), 'success');
         } else {
           showNotification(t('toast.session.endedSuccess', { deviceName: session.deviceName }), 'success');
         }
-
         return session;
       }
-      throw new Error(response.message || t('toast.session.endError'));
+      // revert on failure
+      setSessions(snapshot);
+      setBills(prev => prev); // revert bills via re-fetch? For now restore snapshot bills via snapshot fetchBills
+      fetchBills().catch(()=>{});
+      throw new Error((response as any).message || t('toast.session.endError'));
     } catch (error: unknown) {
+      setSessions(snapshot);
+      fetchBills().catch(()=>{});
       const err = error as { message?: string };
       showNotification(err.message || t('toast.session.endError'), 'error');
       throw error;
     }
+  };
+  const createSessionWithExistingBill = async (sessionData: any): Promise<Session | null> => {
+    let tempId: string | null = null;
+    try {
+      tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2,7)}`;
+      const optimistic: any = { _id: tempId, id: tempId, deviceName: sessionData.deviceName, deviceType: sessionData.deviceType, status: 'active', startTime: new Date(), controllers: sessionData.controllers || 1, _optimistic: true, bill: sessionData.billId };
+      setSessions(prev => [optimistic, ...prev]);
+      const response = await api.createSessionWithExistingBill(sessionData);
+      if (response.success && response.data) {
+        const data = response.data as any;
+        const session = data.session;
+        const bill = data.bill;
+        setSessions(prev => {
+          const without = prev.filter((s: any) => String(s._id || s.id) !== String(tempId));
+          const exists = without.some((s: any) => String(s._id || s.id) === String(session._id || session.id));
+          if (exists) return without.map((s: any) => String(s._id || s.id) === String(session._id || session.id) ? { ...s, ...session } : s);
+          return [session, ...without];
+        });
+        if (bill) setBills(prev => prev.map((b: any) => String(b._id || b.id) === String(bill._id || bill.id) ? { ...b, ...bill } : b));
+        showNotification(t('toast.session.startedWithBill', { deviceName: session.deviceName, billNumber: bill?.billNumber || '' }), 'success');
+        return session;
+      }
+      if (tempId) setSessions(prev => prev.filter((s: any) => String(s._id || s.id) !== String(tempId)));
+      return null;
+    } catch (e: unknown) {
+      if (tempId) setSessions(prev => prev.filter((s: any) => String(s._id || s.id) !== String(tempId)));
+      const err = e as { message?: string };
+      showNotification(err.message || t('toast.session.createError'), 'error');
+      return null;
+    }
+  };
+  const changeSessionTable = async (sessionId: string, newTableId: string): Promise<any> => {
+    let snapSessions: Session[] = [];
+    let snapBills: Bill[] = [];
+    let snapTables: any[] = [];
+    try {
+      setSessions(prev => { snapSessions = [...prev]; return prev.map((s: any) => String(s._id || s.id) === String(sessionId) ? { ...s, table: newTableId, _optimistic: true } : s); });
+      setBills(prev => { snapBills = [...prev]; return prev.map((b: any) => ({ ...b, sessions: (b.sessions || []).map((s: any) => String(s._id || s.id || s) === String(sessionId) ? { ...(typeof s === 'object' ? s : { _id: s }), table: newTableId } : s) })); });
+      setTables(prev => { snapTables = [...prev]; return prev.map((t: any) => String(t._id || t.id) === String(newTableId) ? { ...t, status: 'occupied' } : t); });
+      const response = await api.changeSessionTable(sessionId, newTableId);
+      if (response.success && response.data) {
+        const { session, bill } = response.data as any;
+        if (session) setSessions(prev => prev.map((s: any) => String(s._id || s.id) === String(sessionId) ? { ...s, ...session, _optimistic: undefined } : s));
+        if (bill) setBills(prev => {
+          const bid = String(bill._id || bill.id);
+          const exists = prev.some((b: any) => String(b._id || b.id) === bid);
+          if (exists) return prev.map((b: any) => String(b._id || b.id) === bid ? { ...b, ...bill } : b);
+          return [...prev, bill];
+        });
+        showNotification('تم نقل الجلسة بنجاح', 'success');
+        return response.data;
+      }
+      setSessions(snapSessions); setBills(snapBills); setTables(snapTables);
+      return null;
+    } catch (e: unknown) {
+      setSessions(snapSessions); setBills(snapBills); setTables(snapTables);
+      const err = e as { message?: string };
+      showNotification(err.message || 'خطأ في نقل الجلسة', 'error');
+      return null;
+    }
+  };
+  const linkSessionToTable = async (sessionId: string, tableId: string): Promise<any> => {
+    let snapSessions: Session[] = []; let snapBills: Bill[] = [];
+    try {
+      setSessions(prev => { snapSessions = [...prev]; return prev.map((s: any) => String(s._id || s.id) === String(sessionId) ? { ...s, table: tableId, _optimistic: true } : s); });
+      setBills(prev => { snapBills = [...prev]; return prev; });
+      setTables(prev => prev.map((t: any) => String(t._id || t.id) === String(tableId) ? { ...t, status: 'occupied' } : t));
+      const response = await api.linkSessionToTable(sessionId, tableId);
+      if (response.success && response.data) {
+        const { session, bill } = response.data as any;
+        if (session) setSessions(prev => prev.map((s: any) => String(s._id || s.id) === String(sessionId) ? { ...s, ...session, _optimistic: undefined } : s));
+        if (bill) setBills(prev => {
+          const bid = String(bill._id || bill.id);
+          const exists = prev.some((b: any) => String(b._id || b.id) === bid);
+          if (exists) return prev.map((b: any) => String(b._id || b.id) === bid ? { ...b, ...bill } : b);
+          return [...prev, bill];
+        });
+        showNotification('تم ربط الجلسة بالطاولة', 'success');
+        return response.data;
+      }
+      setSessions(snapSessions); setBills(snapBills);
+      return null;
+    } catch (e: unknown) {
+      setSessions(snapSessions); setBills(snapBills);
+      const err = e as { message?: string };
+      showNotification(err.message || 'خطأ في ربط الجلسة', 'error');
+      return null;
+    }
+  };
+  const unlinkTableFromSession = async (sessionId: string, customerName?: string): Promise<any> => {
+    let snapSessions: Session[] = []; let snapBills: Bill[] = [];
+    try {
+      setSessions(prev => { snapSessions = [...prev]; return prev.map((s: any) => String(s._id || s.id) === String(sessionId) ? { ...s, table: null, customerName: customerName || s.customerName, _optimistic: true } : s); });
+      setBills(prev => { snapBills = [...prev]; return prev; });
+      const response = await api.unlinkTableFromSession(sessionId, customerName);
+      if (response.success && response.data) {
+        const { session, bill } = response.data as any;
+        if (session) setSessions(prev => prev.map((s: any) => String(s._id || s.id) === String(sessionId) ? { ...s, ...session, _optimistic: undefined } : s));
+        if (bill) setBills(prev => {
+          const bid = String(bill._id || bill.id);
+          const exists = prev.some((b: any) => String(b._id || b.id) === bid);
+          if (exists) return prev.map((b: any) => String(b._id || b.id) === bid ? { ...b, ...bill } : b);
+          return [...prev, bill];
+        });
+        showNotification('تم فك ربط الجلسة', 'success');
+        return response.data;
+      }
+      setSessions(snapSessions); setBills(snapBills);
+      return null;
+    } catch (e: unknown) {
+      setSessions(snapSessions); setBills(snapBills);
+      const err = e as { message?: string };
+      showNotification(err.message || 'خطأ في فك الربط', 'error');
+      return null;
+    }
+  };
+  const updateSessionTimes = async (sessionId: string, data: { startTime: string; endTime: string }): Promise<Session | null> => {
+    let snapshot: Session[] = [];
+    let didOptimistic = false;
+    try {
+      setSessions(prev => {
+        snapshot = [...prev];
+        const idx = prev.findIndex((s: any) => String(s._id || s.id) === String(sessionId));
+        if (idx !== -1) { didOptimistic = true; const copy = [...prev] as any[]; copy[idx] = { ...copy[idx], startTime: new Date(data.startTime), endTime: new Date(data.endTime), _optimistic: true }; return copy; }
+        return prev;
+      });
+      // also update bills sessions nested
+      setBills(prev => prev.map((b: any) => ({ ...b, sessions: (b.sessions || []).map((s: any) => String(s._id || s.id || s) === String(sessionId) ? { ...(typeof s === 'object' ? s : { _id: s }), startTime: new Date(data.startTime), endTime: new Date(data.endTime) } : s) })));
+      const response = await api.updateSessionTimes(sessionId, data);
+      if (response.success && response.data) {
+        setSessions(prev => prev.map((s: any) => String(s._id || s.id) === String(sessionId) ? { ...s, ...response.data, _optimistic: undefined } : s));
+        const sess = response.data as any;
+        if (sess.bill) setBills(prev => prev.map((b: any) => String(b._id || b.id) === String(sess.bill?._id || sess.bill) ? { ...b, sessions: (b.sessions || []).map((ss: any) => String(ss._id || ss.id || ss) === String(sessionId) ? sess : ss) } : b));
+        showNotification('تم تعديل أوقات الجلسة', 'success');
+        return response.data;
+      }
+      if (didOptimistic) setSessions(snapshot);
+      return null;
+    } catch (e: unknown) {
+      if (didOptimistic) setSessions(snapshot);
+      const err = e as { message?: string };
+      showNotification(err.message || 'خطأ في تعديل الوقت', 'error');
+      return null;
+    }
+  };
+  const updateSessionStartTime = async (sessionId: string, data: { startTime: string }): Promise<Session | null> => {
+    let snapshot: Session[] = [];
+    let didOptimistic = false;
+    try {
+      setSessions(prev => {
+        snapshot = [...prev];
+        const idx = prev.findIndex((s: any) => String(s._id || s.id) === String(sessionId));
+        if (idx !== -1) { didOptimistic = true; const copy = [...prev] as any[]; copy[idx] = { ...copy[idx], startTime: new Date(data.startTime), _optimistic: true }; return copy; }
+        return prev;
+      });
+      setBills(prev => prev.map((b: any) => ({ ...b, sessions: (b.sessions || []).map((s: any) => String(s._id || s.id || s) === String(sessionId) ? { ...(typeof s === 'object' ? s : { _id: s }), startTime: new Date(data.startTime) } : s) })));
+      const response = await api.updateSessionStartTime(sessionId, data);
+      if (response.success && response.data) {
+        setSessions(prev => prev.map((s: any) => String(s._id || s.id) === String(sessionId) ? { ...s, ...response.data, _optimistic: undefined } : s));
+        showNotification('تم تعديل وقت البداية', 'success');
+        return response.data;
+      }
+      if (didOptimistic) setSessions(snapshot);
+      return null;
+    } catch (e: unknown) {
+      if (didOptimistic) setSessions(snapshot);
+      const err = e as { message?: string };
+      showNotification(err.message || 'خطأ في تعديل الوقت', 'error');
+      return null;
+    }
+  };
+  const updateControllersPeriodTime = async (sessionId: string, periodIndex: number, newStartTime: string, newEndTime?: string): Promise<Session | null> => {
+    let snapshot: Session[] = [];
+    let didOptimistic = false;
+    try {
+      setSessions(prev => {
+        snapshot = [...prev];
+        const idx = prev.findIndex((s: any) => String(s._id || s.id) === String(sessionId));
+        if (idx !== -1 && Array.isArray((prev[idx] as any).controllersHistory)) {
+          didOptimistic = true;
+          const copy = [...prev] as any[];
+          const sess: any = { ...copy[idx] };
+          const hist = [...sess.controllersHistory];
+          if (hist[periodIndex]) {
+            hist[periodIndex] = { ...hist[periodIndex], from: new Date(newStartTime), ...(newEndTime ? { to: new Date(newEndTime) } : {}) };
+            // also adjust adjacent periods optimistically
+            if (periodIndex > 0 && hist[periodIndex - 1]) hist[periodIndex - 1] = { ...hist[periodIndex - 1], to: new Date(newStartTime) };
+            if (newEndTime && hist[periodIndex + 1]) hist[periodIndex + 1] = { ...hist[periodIndex + 1], from: new Date(newEndTime) };
+            sess.controllersHistory = hist;
+            copy[idx] = { ...sess, _optimistic: true };
+            return copy;
+          }
+        }
+        return prev;
+      });
+      const response = await api.updateControllersPeriodTime(sessionId, periodIndex, newStartTime, newEndTime, true);
+      if (response.success && response.data) {
+        setSessions(prev => prev.map((s: any) => String(s._id || s.id) === String(sessionId) ? { ...s, ...response.data, _optimistic: undefined } : s));
+        showNotification('تم تعديل فترة الدراعات', 'success');
+        return response.data;
+      }
+      if (didOptimistic) setSessions(snapshot);
+      // if conflict 409, revert and show message
+      return null;
+    } catch (e: unknown) {
+      if (didOptimistic) setSessions(snapshot);
+      const err = e as { message?: string };
+      showNotification(err.message || 'خطأ في تعديل الفترة', 'error');
+      return null;
+    }
+  };
+  const updateSessionCost = async (sessionId: string): Promise<any> => {
+    let snapshot: Session[] = [];
+    try {
+      setSessions(prev => { snapshot = [...prev]; return prev.map((s: any) => String(s._id || s.id) === String(sessionId) ? { ...s, _optimistic: true } : s); });
+      const response = await api.updateSessionCost(sessionId);
+      if (response.success && response.data) {
+        const data: any = response.data;
+        setSessions(prev => prev.map((s: any) => String(s._id || s.id) === String(sessionId) ? { ...s, totalCost: data.totalCost, finalCost: data.currentCost, _optimistic: undefined } : s));
+        if (data.billUpdated) fetchBills().catch(()=>{});
+        return response.data;
+      }
+      setSessions(snapshot);
+      return null;
+    } catch (e: unknown) { setSessions(snapshot); const err = e as { message?: string }; showNotification(err.message || 'خطأ في تحديث التكلفة', 'error'); return null; }
   };
 
   const createOrder = async (orderData: any): Promise<Order | null> => {
@@ -783,16 +1048,40 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const updateOrder = async (id: string, updates: any): Promise<Order | null> => {
+    let snapshot: Order[] = [];
+    let didOptimistic = false;
     try {
+      // ── optimistic <50ms ──
+      setOrders(prev => {
+        snapshot = [...prev];
+        const idx = prev.findIndex((o: any) => String(o._id || o.id) === String(id));
+        if (idx !== -1) {
+          didOptimistic = true;
+          const copy = [...prev];
+          copy[idx] = { ...copy[idx], ...updates, _optimistic: true } as any;
+          return copy;
+        }
+        return prev;
+      });
       const response = await api.updateOrder(id, updates);
       if (response.success && response.data) {
-        setOrders(prev => prev.map(order =>
-          order.id === id ? response.data! : order
+        setOrders(prev => prev.map((order: any) =>
+          String(order._id || order.id) === String(id) ? { ...order, ...response.data, _optimistic: undefined } : order
         ));
+        // also update bills if order belongs to a bill — instant cross-collection sync
+        if ((response.data as any).bill) {
+          setBills(prev => prev.map((b: any) => {
+            const bid = (response.data as any).bill?._id || (response.data as any).bill;
+            if (String(b._id || b.id) === String(bid)) {
+              return { ...b, orders: (b.orders || []).map((o: any) => String(o._id || o.id) === String(id) ? response.data : o) };
+            }
+            return b;
+          }));
+        }
         showNotification(t('toast.order.updated'), 'success');
         return response.data;
       }
-
+      if (didOptimistic) setOrders(snapshot);
       if (response && !response.success) {
         const responseWithErrors = response as any;
         const currentLang = window.i18n?.language || 'ar';
@@ -826,6 +1115,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
       return null;
     } catch (error: unknown) {
+      if (didOptimistic) setOrders(snapshot);
       const err = error as { message?: string };
       showNotification(err.message || t('toast.order.updateError'), 'error');
       return null;
@@ -833,17 +1123,39 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const updateOrderItemPrepared = async (orderId: string, itemIndex: number, data: { preparedCount: number }): Promise<Order | null> => {
+    let snapshot: Order[] = [];
+    let didOptimistic = false;
     try {
+      setOrders(prev => {
+        snapshot = [...prev];
+        const idx = prev.findIndex((o: any) => String(o._id || o.id) === String(orderId));
+        if (idx !== -1) {
+          didOptimistic = true;
+          const copy = [...prev] as any[];
+          const orderCopy: any = { ...copy[idx] };
+          if (Array.isArray(orderCopy.items) && orderCopy.items[itemIndex]) {
+            const itemsCopy = [...orderCopy.items];
+            itemsCopy[itemIndex] = { ...itemsCopy[itemIndex], preparedCount: data.preparedCount };
+            orderCopy.items = itemsCopy;
+          }
+          orderCopy._optimistic = true;
+          copy[idx] = orderCopy;
+          return copy;
+        }
+        return prev;
+      });
       const response = await api.updateOrderItemPrepared(orderId, itemIndex, data);
       if (response.success && response.data) {
-        setOrders(prev => prev.map(order =>
-          order.id === orderId ? response.data! : order
+        setOrders(prev => prev.map((order: any) =>
+          String(order._id || order.id) === String(orderId) ? { ...order, ...response.data, _optimistic: undefined } : order
         ));
         showNotification(t('toast.order.preparingUpdated'), 'success');
         return response.data;
       }
+      if (didOptimistic) setOrders(snapshot);
       return null;
     } catch (error: unknown) {
+      if (didOptimistic) setOrders(snapshot);
       const err = error as { message?: string };
       showNotification(err.message || t('toast.order.preparingError'), 'error');
       return null;
@@ -851,18 +1163,32 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const updateOrderStatus = async (orderId: string, status: 'pending' | 'preparing' | 'ready' | 'delivered' | 'cancelled'): Promise<Order | null> => {
+    let snapshot: Order[] = [];
+    let didOptimistic = false;
     try {
+      setOrders(prev => {
+        snapshot = [...prev];
+        const idx = prev.findIndex((o: any) => String(o._id || o.id) === String(orderId));
+        if (idx !== -1) {
+          didOptimistic = true;
+          const copy = [...prev] as any[];
+          copy[idx] = { ...copy[idx], status, _optimistic: true };
+          return copy;
+        }
+        return prev;
+      });
       const response = await api.updateOrderStatus(orderId, status);
       if (response.success && response.data) {
-        setOrders(prev => prev.map(order => order.id === orderId ? response.data! : order));
-
+        setOrders(prev => prev.map((order: any) => String(order._id || order.id) === String(orderId) ? { ...order, ...response.data, _optimistic: undefined } : order));
         const statusKey = `toast.order.status${status.charAt(0).toUpperCase() + status.slice(1)}`;
         showNotification(t(statusKey), 'success');
         updateNotificationCount(1);
         return response.data;
       }
+      if (didOptimistic) setOrders(snapshot);
       return null;
     } catch (error: unknown) {
+      if (didOptimistic) setOrders(snapshot);
       const err = error as { message?: string };
       showNotification(err.message || t('toast.order.statusError'), 'error');
       return null;
@@ -870,19 +1196,127 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const deleteOrder = async (id: string): Promise<boolean> => {
+    let snapshot: Order[] = [];
+    let deleted: Order | null = null;
     try {
+      setOrders(prev => {
+        snapshot = [...prev];
+        const found = prev.find((o: any) => String(o._id || o.id) === String(id));
+        if (found) deleted = found as any;
+        return prev.filter((order: any) => String(order._id || order.id) !== String(id));
+      });
       const response = await api.deleteOrder(id);
-
       if (response && response.success === true) {
-        setOrders(prev => prev.filter(order => order.id !== id));
+        // also remove from bills optimistically
+        setBills(prev => prev.map((b: any) => ({ ...b, orders: (b.orders || []).filter((o: any) => String(o._id || o.id || o) !== String(id)) })));
         return true;
       }
-
+      if (deleted) setOrders(snapshot);
       return false;
     } catch (error: unknown) {
+      if (deleted) setOrders(snapshot);
       const err = error as { message?: string };
       console.error('Error deleting order:', err);
       return false;
+    }
+  };
+
+  const deliverItem = async (orderId: string, itemIndex: number): Promise<Order | null> => {
+    let snapshot: Order[] = [];
+    let didOptimistic = false;
+    try {
+      setOrders(prev => {
+        snapshot = [...prev];
+        const idx = prev.findIndex((o: any) => String(o._id || o.id) === String(orderId));
+        if (idx !== -1 && Array.isArray((prev[idx] as any).items)) {
+          didOptimistic = true;
+          const copy = [...prev] as any[];
+          const oc: any = { ...copy[idx] };
+          const items = [...oc.items];
+          if (items[itemIndex]) items[itemIndex] = { ...items[itemIndex], deliveredCount: items[itemIndex].quantity, preparedCount: items[itemIndex].quantity };
+          oc.items = items;
+          // if all items delivered, mark order delivered
+          if (items.every((it: any) => (it.deliveredCount || 0) >= (it.quantity || 0))) oc.status = 'delivered';
+          copy[idx] = { ...oc, _optimistic: true };
+          return copy;
+        }
+        return prev;
+      });
+      const response = await api.deliverItem(orderId, itemIndex);
+      if (response.success && response.data) {
+        setOrders(prev => prev.map((o: any) => String(o._id || o.id) === String(orderId) ? { ...o, ...response.data, _optimistic: undefined } : o));
+        return response.data;
+      }
+      if (didOptimistic) setOrders(snapshot);
+      return null;
+    } catch (e: unknown) {
+      if (didOptimistic) setOrders(snapshot);
+      const err = e as { message?: string };
+      showNotification(err.message || 'delivery error', 'error');
+      return null;
+    }
+  };
+  const deliverOrderSection = async (orderId: string, sectionId: string): Promise<Order | null> => {
+    let snapshot: Order[] = [];
+    let didOptimistic = false;
+    try {
+      setOrders(prev => {
+        snapshot = [...prev];
+        const idx = prev.findIndex((o: any) => String(o._id || o.id) === String(orderId));
+        if (idx !== -1) {
+          didOptimistic = true;
+          const copy = [...prev] as any[];
+          const oc: any = { ...copy[idx] };
+          if (Array.isArray(oc.items)) {
+            oc.items = oc.items.map((it: any) => (String(it.section) === String(sectionId) ? { ...it, deliveredCount: it.quantity, preparedCount: it.quantity } : it));
+            if (oc.items.every((it: any) => (it.deliveredCount || 0) >= (it.quantity || 0))) oc.status = 'delivered';
+          }
+          copy[idx] = { ...oc, _optimistic: true };
+          return copy;
+        }
+        return prev;
+      });
+      const response = await api.deliverOrderSection(orderId, sectionId);
+      if (response.success && response.data) {
+        setOrders(prev => prev.map((o: any) => String(o._id || o.id) === String(orderId) ? { ...o, ...response.data, _optimistic: undefined } : o));
+        return response.data;
+      }
+      if (didOptimistic) setOrders(snapshot);
+      return null;
+    } catch (e: unknown) {
+      if (didOptimistic) setOrders(snapshot);
+      const err = e as { message?: string };
+      showNotification(err.message || 'delivery error', 'error');
+      return null;
+    }
+  };
+  const cancelOrder = async (orderId: string, reason?: string): Promise<Order | null> => {
+    let snapshot: Order[] = [];
+    let didOptimistic = false;
+    try {
+      setOrders(prev => {
+        snapshot = [...prev];
+        const idx = prev.findIndex((o: any) => String(o._id || o.id) === String(orderId));
+        if (idx !== -1) {
+          didOptimistic = true;
+          const copy = [...prev] as any[];
+          copy[idx] = { ...copy[idx], status: 'cancelled', _optimistic: true };
+          return copy;
+        }
+        return prev;
+      });
+      const response = await api.cancelOrder(orderId);
+      if (response.success && response.data) {
+        setOrders(prev => prev.map((o: any) => String(o._id || o.id) === String(orderId) ? { ...o, ...response.data, _optimistic: undefined } : o));
+        return response.data;
+      }
+      if (didOptimistic) setOrders(snapshot);
+      return null;
+    } catch (e: unknown) {
+      if (didOptimistic) setOrders(snapshot);
+      const err = e as { message?: string };
+      showNotification(err.message || 'cancel error', 'error');
+      return null;
     }
   };
 
@@ -967,17 +1401,40 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const updateBill = async (id: string, updates: any): Promise<Bill | null> => {
+    let snapshot: Bill[] = [];
+    let didOptimistic = false;
     try {
+      setBills(prev => {
+        snapshot = [...prev];
+        const idx = prev.findIndex((b: any) => String(b._id || b.id) === String(id));
+        if (idx !== -1) {
+          didOptimistic = true;
+          const copy = [...prev] as any[];
+          copy[idx] = { ...copy[idx], ...updates, _optimistic: true };
+          return copy;
+        }
+        return prev;
+      });
+      // optimistic table status if table changed
+      if (updates.table) {
+        setTables(prev => prev.map((t: any) => String(t._id || t.id) === String(updates.table) ? { ...t, status: 'occupied' } : t));
+      }
       const response = await api.updateBill(id, updates);
       if (response.success && response.data) {
-        setBills(prev => prev.map(bill =>
-          bill.id === id ? response.data! : bill
+        setBills(prev => prev.map((bill: any) =>
+          String(bill._id || bill.id) === String(id) ? { ...bill, ...response.data, _optimistic: undefined } : bill
         ));
+        if ((response.data as any).table) {
+          const tid = String((response.data as any).table?._id || (response.data as any).table?.id || (response.data as any).table);
+          if (tid) setTables(prev => prev.map((t: any) => String(t._id || t.id) === tid ? { ...t, status: (response.data as any).status === 'paid' || (response.data as any).status === 'cancelled' ? 'empty' : 'occupied' } : t));
+        }
         showNotification(t('toast.bill.updated'), 'success');
         return response.data;
       }
+      if (didOptimistic) setBills(snapshot);
       return null;
     } catch (error: unknown) {
+      if (didOptimistic) setBills(snapshot);
       const err = error as { message?: string };
       showNotification(err.message || t('toast.bill.updateError'), 'error');
       return null;
@@ -985,19 +1442,44 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const addPayment = async (id: string, paymentData: any): Promise<Bill | null> => {
+    let snapshot: Bill[] = [];
+    let didOptimistic = false;
     try {
+      setBills(prev => {
+        snapshot = [...prev];
+        const idx = prev.findIndex((b: any) => String(b._id || b.id) === String(id));
+        if (idx !== -1) {
+          didOptimistic = true;
+          const copy = [...prev] as any[];
+          const b: any = { ...copy[idx] };
+          const amt = Number(paymentData.amount || paymentData.paymentAmount || 0);
+          b.paid = (Number(b.paid) || 0) + amt;
+          b.remaining = Math.max(0, (Number(b.total) || 0) - b.paid);
+          if (b.remaining <= 0) b.status = 'paid'; else if (b.paid > 0) b.status = 'partial';
+          copy[idx] = { ...b, _optimistic: true };
+          return copy;
+        }
+        return prev;
+      });
       const response = await api.addPayment(id, paymentData);
       if (response.success && response.data) {
-        setBills(prev => prev.map(bill => bill.id === id ? response.data! : bill));
-
+        setBills(prev => prev.map((bill: any) => String(bill._id || bill.id) === String(id) ? { ...bill, ...response.data, _optimistic: undefined } : bill));
         const { amount, method } = paymentData;
         const methodText = t(`toast.paymentMethods.${method}`, method);
         showNotification(t('toast.bill.paymentAdded', { amount, method: methodText }), 'success');
         updateNotificationCount(1);
+        // table status update optimistically
+        const tbl = (response.data as any).table;
+        if (tbl) {
+          const tid = String((tbl as any)._id || (tbl as any).id || tbl);
+          setTables(prev => prev.map((t: any) => String(t._id || t.id) === tid ? { ...t, status: (response.data as any).status === 'paid' ? 'empty' : 'occupied' } : t));
+        }
         return response.data;
       }
+      if (didOptimistic) setBills(snapshot);
       return null;
     } catch (error: unknown) {
+      if (didOptimistic) setBills(snapshot);
       const err = error as { message?: string };
       showNotification(err.message || t('toast.bill.paymentError'), 'error');
       return null;
@@ -1005,24 +1487,33 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const cancelBill = async (id: string): Promise<boolean> => {
+    let snapshot: Bill[] = [];
+    let didOptimistic = false;
     try {
+      setBills(prev => {
+        snapshot = [...prev];
+        const idx = prev.findIndex((b: any) => String(b._id || b.id) === String(id));
+        if (idx !== -1) {
+          didOptimistic = true;
+          const copy = [...prev] as any[];
+          copy[idx] = { ...copy[idx], status: 'cancelled' as const, _optimistic: true };
+          return copy;
+        }
+        return prev;
+      });
       const response = await api.cancelBill(id);
-
       if (response.success) {
-        setBills(prev => {
-          const newBills = prev.map(bill =>
-            bill.id === id
-              ? { ...bill, status: 'cancelled' as const }
-              : bill
-          );
-          return newBills;
-        });
+        setBills(prev => prev.map((bill: any) =>
+          String(bill._id || bill.id) === String(id) ? { ...bill, status: 'cancelled' as const, _optimistic: undefined } : bill
+        ));
         showNotification(t('toast.bill.cancelled'), 'success');
         return true;
       } else {
+        if (didOptimistic) setBills(snapshot);
         return false;
       }
     } catch (error: unknown) {
+      if (didOptimistic) setBills(snapshot);
       const err = error as { message?: string };
       showNotification(err.message || t('toast.bill.cancelError'), 'error');
       return false;
@@ -1039,21 +1530,151 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const addPartialPayment = async (id: string, paymentData: any): Promise<Bill | null> => {
+    let snapshot: Bill[] = [];
+    let didOptimistic = false;
     try {
+      setBills(prev => {
+        snapshot = [...prev];
+        const idx = prev.findIndex((b: any) => String(b._id || b.id) === String(id));
+        if (idx !== -1 && paymentData?.items) {
+          didOptimistic = true;
+          const copy = [...prev] as any[];
+          const b: any = { ...copy[idx] };
+          const addAmt = (paymentData.items || []).reduce((s: number, it: any) => s + (Number(it.price || 0) * Number(it.quantity || 0) || 0), 0);
+          // fallback: if no price in paymentData.items, estimate via bill items
+          b.paid = (Number(b.paid) || 0) + (addAmt || 0);
+          b.remaining = Math.max(0, (Number(b.total) || 0) - b.paid);
+          if (b.remaining <= 0) b.status = 'paid'; else if (b.paid > 0) b.status = 'partial';
+          copy[idx] = { ...b, _optimistic: true };
+          return copy;
+        } else if (idx !== -1) {
+          didOptimistic = true;
+          const copy = [...prev] as any[];
+          copy[idx] = { ...copy[idx], _optimistic: true };
+          return copy;
+        }
+        return prev;
+      });
       const response = await api.addPartialPayment(id, paymentData);
       if (response.success && response.data) {
-        setBills(prev => prev.map(bill =>
-          bill.id === id ? response.data! : bill
+        setBills(prev => prev.map((bill: any) =>
+          String(bill._id || bill.id) === String(id) ? { ...bill, ...response.data, _optimistic: undefined } : bill
         ));
         showNotification(t('toast.bill.partialPayment'), 'success');
         return response.data;
       }
+      if (didOptimistic) setBills(snapshot);
       return null;
     } catch (error: unknown) {
+      if (didOptimistic) setBills(snapshot);
       const err = error as { message?: string };
       showNotification(err.message || t('toast.bill.partialPaymentError'), 'error');
       return null;
     }
+  };
+  const addPartialPaymentAggregated = async (id: string, paymentData: any): Promise<Bill | null> => {
+    let snapshot: Bill[] = [];
+    let didOptimistic = false;
+    try {
+      setBills(prev => {
+        snapshot = [...prev];
+        const idx = prev.findIndex((b: any) => String(b._id || b.id) === String(id));
+        if (idx !== -1) { didOptimistic = true; const copy = [...prev] as any[]; copy[idx] = { ...copy[idx], _optimistic: true }; return copy; }
+        return prev;
+      });
+      const response = await api.addPartialPaymentAggregated(id, paymentData);
+      if (response.success && response.data) {
+        setBills(prev => prev.map((b: any) => String(b._id || b.id) === String(id) ? { ...b, ...response.data, _optimistic: undefined } : b));
+        showNotification(t('toast.bill.partialPayment'), 'success');
+        return response.data;
+      }
+      if (didOptimistic) setBills(snapshot);
+      return null;
+    } catch (e: unknown) { if (didOptimistic) setBills(snapshot); const err = e as { message?: string }; showNotification(err.message || t('toast.bill.partialPaymentError'), 'error'); return null; }
+  };
+  const payForItems = async (id: string, paymentData: any): Promise<Bill | null> => {
+    let snapshot: Bill[] = [];
+    let didOptimistic = false;
+    try {
+      setBills(prev => {
+        snapshot = [...prev];
+        const idx = prev.findIndex((b: any) => String(b._id || b.id) === String(id));
+        if (idx !== -1) { didOptimistic = true; const copy = [...prev] as any[]; copy[idx] = { ...copy[idx], _optimistic: true }; return copy; }
+        return prev;
+      });
+      const response = await api.payForItems(id, paymentData);
+      if (response.success && response.data) {
+        setBills(prev => prev.map((b: any) => String(b._id || b.id) === String(id) ? { ...b, ...response.data, _optimistic: undefined } : b));
+        showNotification(t('toast.bill.partialPayment'), 'success');
+        return response.data;
+      }
+      if (didOptimistic) setBills(snapshot);
+      return null;
+    } catch (e: unknown) { if (didOptimistic) setBills(snapshot); const err = e as { message?: string }; showNotification(err.message || t('toast.bill.partialPaymentError'), 'error'); return null; }
+  };
+  const paySessionPartial = async (id: string, paymentData: any): Promise<Bill | null> => {
+    let snapshot: Bill[] = [];
+    let didOptimistic = false;
+    try {
+      setBills(prev => {
+        snapshot = [...prev];
+        const idx = prev.findIndex((b: any) => String(b._id || b.id) === String(id));
+        if (idx !== -1) { didOptimistic = true; const copy = [...prev] as any[]; const b:any = { ...copy[idx] }; b.paid = (Number(b.paid)||0) + Number(paymentData.amount||0); b.remaining = Math.max(0, (Number(b.total)||0)-b.paid); if (b.remaining<=0) b.status='paid'; else if (b.paid>0) b.status='partial'; copy[idx] = { ...b, _optimistic: true }; return copy; }
+        return prev;
+      });
+      const response = await api.paySessionPartial(id, paymentData);
+      if (response.success && response.data) {
+        setBills(prev => prev.map((b: any) => String(b._id || b.id) === String(id) ? { ...b, ...response.data, _optimistic: undefined } : b));
+        showNotification(t('toast.bill.partialPayment'), 'success');
+        return response.data;
+      }
+      if (didOptimistic) setBills(snapshot);
+      return null;
+    } catch (e: unknown) { if (didOptimistic) setBills(snapshot); const err = e as { message?: string }; showNotification(err.message || t('toast.bill.partialPaymentError'), 'error'); return null; }
+  };
+  const updateBillAggregatedItems = async (id: string, data: any): Promise<Bill | null> => {
+    let snapshot: Bill[] = [];
+    let didOptimistic = false;
+    try {
+      setBills(prev => {
+        snapshot = [...prev];
+        const idx = prev.findIndex((b: any) => String(b._id || b.id) === String(id));
+        if (idx !== -1) { didOptimistic = true; const copy = [...prev] as any[]; copy[idx] = { ...copy[idx], _optimistic: true }; return copy; }
+        return prev;
+      });
+      const response = await api.updateBillAggregatedItems(id, data);
+      if (response.success && response.data) {
+        setBills(prev => prev.map((b: any) => String(b._id || b.id) === String(id) ? { ...b, ...response.data, _optimistic: undefined } : b));
+        showNotification(t('toast.bill.updated'), 'success');
+        return response.data;
+      }
+      if (didOptimistic) setBills(snapshot);
+      return null;
+    } catch (e: unknown) { if (didOptimistic) setBills(snapshot); const err = e as { message?: string }; showNotification(err.message || t('toast.bill.updateError'), 'error'); return null; }
+  };
+  const deleteBill = async (id: string): Promise<boolean> => {
+    let snapshot: Bill[] = [];
+    let deleted: Bill | null = null;
+    try {
+      setBills(prev => {
+        snapshot = [...prev];
+        const found = prev.find((b: any) => String(b._id || b.id) === String(id));
+        if (found) deleted = found as any;
+        return prev.filter((b: any) => String(b._id || b.id) !== String(id));
+      });
+      const response = await api.deleteBill(id);
+      if (response.success) {
+        showNotification(t('toast.bill.deleted') || 'تم حذف الفاتورة', 'success');
+        // update tables optimistically to empty if no other unpaid bills for that table
+        if ((deleted as any)?.table) {
+          const tid = String(((deleted as any).table as any)?._id || ((deleted as any).table as any)?.id || (deleted as any).table);
+          setTables(prev => prev.map((t: any) => String(t._id || t.id) === tid ? { ...t, status: 'empty' } : t));
+        }
+        return true;
+      }
+      if (deleted) setBills(snapshot);
+      return false;
+    } catch (e: unknown) { if (deleted) setBills(snapshot); const err = e as { message?: string }; showNotification(err.message || 'delete error', 'error'); return false; }
   };
 
   const createCost = async (costData: any): Promise<Cost | null> => {
@@ -1398,8 +2019,10 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     try {
       const response = await api.getTableSections();
       if (response.success && response.data) {
-        setTableSections(response.data);
-        return response.data;
+        const normalized = response.data.map((s: any) => ({ ...s, _id: s._id || s.id, id: s._id || s.id }));
+        const unique = Array.from(new Map(normalized.filter((s: any) => s.id).map((s: any) => [String(s.id), s])).values());
+        setTableSections(unique);
+        return unique;
       }
       throw new Error(response.message || 'Failed to load table sections');
     } catch (error) {
@@ -1409,15 +2032,39 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const createTableSection = async (sectionData: any): Promise<any> => {
+    const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    const optimisticSection: any = {
+      _id: tempId,
+      id: tempId,
+      name: sectionData.name?.trim() || sectionData.name,
+      description: sectionData.description ?? null,
+      sortOrder: sectionData.sortOrder ?? 0,
+      isActive: true,
+      createdAt: new Date().toISOString(),
+      _optimistic: true,
+    };
+    setTableSections(prev => [...prev, optimisticSection]);
     try {
       const response = await api.createTableSection(sectionData);
       if (response.success && response.data) {
-        await fetchTableSections();
+        const real: any = { ...response.data, _id: response.data._id || response.data.id, id: response.data._id || response.data.id };
+        setTableSections(prev => {
+          if (prev.some((s: any) => String(s._id || s.id) === tempId)) {
+            return prev.map((s: any) => String(s._id || s.id) === tempId ? { ...real } : s);
+          }
+          if (prev.some((s: any) => String(s._id || s.id) === String(real._id || real.id))) {
+            return prev.map((s: any) => String(s._id || s.id) === String(real._id || real.id) ? { ...s, ...real } : s).filter((s: any) => String(s._id || s.id) !== tempId);
+          }
+          return [...prev.filter((s: any) => String(s._id || s.id) !== tempId), real];
+        });
         showNotification('تم إضافة القسم بنجاح', 'success');
         return response.data;
       }
+      setTableSections(prev => prev.filter((s: any) => String(s._id || s.id) !== tempId));
+      showNotification((response as any)?.message || 'خطأ في إضافة القسم', 'error');
       return null;
     } catch (error: unknown) {
+      setTableSections(prev => prev.filter((s: any) => String(s._id || s.id) !== tempId));
       const err = error as { message?: string };
       showNotification(err.message || 'خطأ في إضافة القسم', 'error');
       return null;
@@ -1425,15 +2072,25 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const updateTableSection = async (id: string, updates: any): Promise<any> => {
+    let revertData: any = null;
+    setTableSections(prev => {
+      const found = prev.find((s: any) => String(s._id || s.id) === String(id));
+      if (found) revertData = { ...found };
+      return prev.map((s: any) => String(s._id || s.id) === String(id) ? { ...s, ...updates } : s);
+    });
     try {
       const response = await api.updateTableSection(id, updates);
       if (response.success && response.data) {
-        await fetchTableSections();
+        const real: any = { ...response.data, _id: response.data._id || response.data.id, id: response.data._id || response.data.id };
+        setTableSections(prev => prev.map((s: any) => String(s._id || s.id) === String(id) ? { ...s, ...real } : s));
         showNotification('تم تحديث القسم بنجاح', 'success');
         return response.data;
       }
+      if (revertData) setTableSections(prev => prev.map((s: any) => String(s._id || s.id) === String(id) ? revertData : s));
+      showNotification((response as any)?.message || 'خطأ في تحديث القسم', 'error');
       return null;
     } catch (error: unknown) {
+      if (revertData) setTableSections(prev => prev.map((s: any) => String(s._id || s.id) === String(id) ? revertData : s));
       const err = error as { message?: string };
       showNotification(err.message || 'خطأ في تحديث القسم', 'error');
       return null;
@@ -1441,15 +2098,22 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const deleteTableSection = async (id: string): Promise<boolean> => {
+    let deleted: any = null;
+    setTableSections(prev => {
+      deleted = prev.find((s: any) => String(s._id || s.id) === String(id));
+      return prev.filter((s: any) => String(s._id || s.id) !== String(id));
+    });
     try {
       const response = await api.deleteTableSection(id);
       if (response.success) {
-        await fetchTableSections();
         showNotification('تم حذف القسم بنجاح', 'success');
         return true;
       }
+      if (deleted) setTableSections(prev => [...prev, deleted]);
+      showNotification((response as any)?.message || 'خطأ في حذف القسم', 'error');
       return false;
     } catch (error: unknown) {
+      if (deleted) setTableSections(prev => [...prev, deleted]);
       const err = error as { message?: string };
       showNotification(err.message || 'خطأ في حذف القسم', 'error');
       return false;
@@ -1506,35 +2170,75 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const createTable = async (tableData: any): Promise<any> => {
+    const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    const optimisticTable: any = {
+      _id: tempId,
+      id: tempId,
+      number: typeof tableData.number === 'string' ? tableData.number.trim() : tableData.number,
+      section: tableData.section,
+      status: 'empty',
+      isActive: true,
+      createdAt: new Date().toISOString(),
+      _optimistic: true,
+    };
+    setTables(prev => [...prev, optimisticTable]);
     try {
       const response = await api.createTable(tableData);
-
       if (response.success && response.data) {
-        await fetchTables();
+        const real: any = { ...response.data, _id: response.data._id || response.data.id, id: response.data._id || response.data.id };
+        // ensure section id is normalized
+        setTables(prev => {
+          if (prev.some((t: any) => String(t._id || t.id) === tempId)) {
+            return prev.map((t: any) => String(t._id || t.id) === tempId ? { ...t, ...real, _optimistic: undefined, id: real._id, _id: real._id } : t);
+          }
+          const realIdStr = String(real._id || real.id);
+          if (prev.some((t: any) => String(t._id || t.id) === realIdStr)) {
+            return prev.map((t: any) => String(t._id || t.id) === realIdStr ? { ...t, ...real, _optimistic: undefined } : t).filter((t: any) => String(t._id || t.id) !== tempId);
+          }
+          // if socket already inserted optimistic replacement via number+section, ensure dedup by filtering temp
+          // also handle socket race: remove any remaining temp with same number+section
+          const filtered = prev.filter((t: any) => String(t._id || t.id) !== tempId);
+          // if there was an optimistic with same number+section still lingering (matching logic in socket), it's already filtered
+          return [...filtered, { ...optimisticTable, ...real, _id: real._id, id: real._id, _optimistic: undefined }];
+        });
         showNotification('تم إضافة الطاولة بنجاح', 'success');
         return response.data;
       }
-
-      console.warn('Frontend: Response not successful:', response);
+      setTables(prev => prev.filter((t: any) => String(t._id || t.id) !== tempId));
+      showNotification((response as any)?.message || 'خطأ في إضافة الطاولة', 'error');
       return null;
     } catch (error: unknown) {
+      setTables(prev => prev.filter((t: any) => String(t._id || t.id) !== tempId));
       const err = error as { message?: string };
-      console.error('Frontend: Error creating table:', error);
       showNotification(err.message || 'خطأ في إضافة الطاولة', 'error');
       return null;
     }
   };
 
   const updateTable = async (id: string, updates: any): Promise<any> => {
+    let revertData: any = null;
+    const normalizedUpdates: any = { ...updates };
+    if (normalizedUpdates.number !== undefined) {
+      normalizedUpdates.number = typeof normalizedUpdates.number === 'string' ? normalizedUpdates.number.trim() : normalizedUpdates.number;
+    }
+    setTables(prev => {
+      const found = prev.find((t: any) => String(t._id || t.id) === String(id));
+      if (found) revertData = { ...found };
+      return prev.map((t: any) => String(t._id || t.id) === String(id) ? { ...t, ...normalizedUpdates } : t);
+    });
     try {
       const response = await api.updateTable(id, updates);
       if (response.success && response.data) {
-        await fetchTables();
+        const real: any = { ...response.data, _id: response.data._id || response.data.id, id: response.data._id || response.data.id };
+        setTables(prev => prev.map((t: any) => String(t._id || t.id) === String(id) ? { ...t, ...real } : t));
         showNotification('تم تحديث الطاولة بنجاح', 'success');
         return response.data;
       }
+      if (revertData) setTables(prev => prev.map((t: any) => String(t._id || t.id) === String(id) ? revertData : t));
+      showNotification((response as any)?.message || 'خطأ في تحديث الطاولة', 'error');
       return null;
     } catch (error: unknown) {
+      if (revertData) setTables(prev => prev.map((t: any) => String(t._id || t.id) === String(id) ? revertData : t));
       const err = error as { message?: string };
       showNotification(err.message || 'خطأ في تحديث الطاولة', 'error');
       return null;
@@ -1542,15 +2246,22 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const deleteTable = async (id: string): Promise<boolean> => {
+    let deleted: any = null;
+    setTables(prev => {
+      deleted = prev.find((t: any) => String(t._id || t.id) === String(id));
+      return prev.filter((t: any) => String(t._id || t.id) !== String(id));
+    });
     try {
       const response = await api.deleteTable(id);
       if (response.success) {
-        await fetchTables();
         showNotification('تم حذف الطاولة بنجاح', 'success');
         return true;
       }
+      if (deleted) setTables(prev => [...prev, deleted]);
+      showNotification((response as any)?.message || 'خطأ في حذف الطاولة', 'error');
       return false;
     } catch (error: unknown) {
+      if (deleted) setTables(prev => [...prev, deleted]);
       const err = error as { message?: string };
       showNotification(err.message || 'خطأ في حذف الطاولة', 'error');
       return false;
@@ -1770,17 +2481,13 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const oid = order._id || order.id;
       if (!oid) return;
       setOrders(prev => {
-        // If there's an optimistic temp order, replace it with real (socket confirm)
         const optimisticIdx = prev.findIndex((o: any) => String(o._id).startsWith('temp-') || (o as any)._optimistic);
         if (optimisticIdx !== -1) {
-          // remove optimistic and insert real at its position (top)
           const withoutOptimistic = prev.filter((_, i) => i !== optimisticIdx);
-          // if real already exists (from api response race), just replace
           if (withoutOptimistic.some((o: any) => normalizeId(o._id) === normalizeId(oid) || normalizeId(o.id) === normalizeId(oid))) {
             return withoutOptimistic.map((o: any) => (normalizeId(o._id) === normalizeId(oid) || normalizeId(o.id) === normalizeId(oid)) ? { ...o, ...order, id: oid, _id: oid } : o);
           }
           const normalized = { ...order, id: oid, _id: oid };
-          // insert at same index where optimistic was (if top, keep top)
           const before = withoutOptimistic.slice(0, optimisticIdx);
           const after = withoutOptimistic.slice(optimisticIdx);
           return [...before, normalized, ...after];
@@ -1792,16 +2499,64 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         const normalized = { ...order, id: oid, _id: oid };
         return [normalized, ...filtered];
       });
+      // ── cross-collection instant sync: bills + tables ──
+      try {
+        const billId = (order as any).bill?._id || (order as any).bill?.id || (order as any).bill;
+        if (billId) {
+          setBills(prev => {
+            const bid = String(billId);
+            const idx = prev.findIndex((b: any) => String(b._id || b.id) === bid);
+            if (idx !== -1) {
+              const copy = [...prev] as any[];
+              const b: any = { ...copy[idx] };
+              const ordersArr = Array.isArray(b.orders) ? [...b.orders] : [];
+              if (!ordersArr.some((o: any) => String(o._id || o.id || o) === String(oid))) {
+                ordersArr.push(order);
+                b.orders = ordersArr;
+              } else {
+                b.orders = ordersArr.map((o: any) => String(o._id || o.id || o) === String(oid) ? order : o);
+              }
+              copy[idx] = b;
+              return copy;
+            }
+            return prev;
+          });
+        }
+      } catch {}
+      try {
+        const tid = (order as any).table?._id || (order as any).table?.id || (order as any).table;
+        if (tid) setTables(prev => prev.map((t: any) => String(t._id || t.id) === String(tid) ? { ...t, status: 'occupied' } : t));
+      } catch {}
     };
     const onOrderUpdated = (order: any) => {
       if (!order || !(order._id || order.id)) return;
       const oid = order._id || order.id;
       setOrders(prev => prev.map((o: any) => (normalizeId(o._id) === normalizeId(oid) || normalizeId(o.id) === normalizeId(oid)) ? { ...o, ...order, id: oid, _id: oid } : o));
+      // cross-sync bill
+      try {
+        const billId = (order as any).bill?._id || (order as any).bill?.id || (order as any).bill;
+        if (billId) {
+          setBills(prev => prev.map((b: any) => {
+            const bid = String(billId);
+            if (String(b._id || b.id) !== bid) return b;
+            const ordersArr = Array.isArray(b.orders) ? b.orders.map((o: any) => String(o._id || o.id || o) === String(oid) ? order : o) : [order];
+            return { ...b, orders: ordersArr };
+          }));
+        }
+      } catch {}
+      try {
+        const tid = (order as any).table?._id || (order as any).table?.id || (order as any).table;
+        if (tid) setTables(prev => prev.map((t: any) => String(t._id || t.id) === String(tid) ? { ...t, status: 'occupied' } : t));
+      } catch {}
     };
     const onOrderDeleted = (payload: any) => {
       const oid = payload?._id || payload?.id || payload;
       if (!oid) return;
       setOrders(prev => prev.filter((o: any) => normalizeId(o._id) !== normalizeId(oid) && normalizeId(o.id) !== normalizeId(oid)));
+      // cross-sync bill + table
+      try {
+        setBills(prev => prev.map((b: any) => ({ ...b, orders: (b.orders || []).filter((o: any) => String(o._id || o.id || o) !== String(oid)) })));
+      } catch {}
     };
     const onBillUpdated = (bill: any, eventType?: string) => {
       if (!bill) return;
@@ -1812,6 +2567,11 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
       if (eventType === 'deleted') {
         setBills(prev => prev.filter((b: any) => normalizeId(b._id) !== normalizeId(bid) && normalizeId(b.id) !== normalizeId(bid)));
+        // table status will be handled via table:statusChanged event; optimistic empty
+        try {
+          const tbl = (bill as any).table?._id || (bill as any).table?.id || (bill as any).table;
+          if (tbl) setTables(prev => prev.map((t: any) => String(t._id || t.id) === String(tbl) ? { ...t, status: 'empty' } : t));
+        } catch {}
         return;
       }
       setBills(prev => {
@@ -1821,6 +2581,21 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         if (bill.status && ['paid','cancelled'].includes(bill.status)) return prev.filter((b: any) => normalizeId(b._id) !== normalizeId(bid));
         return [...prev, normalized];
       });
+      // cross-sync tables instantly
+      try {
+        const tbl = (bill as any).table?._id || (bill as any).table?.id || (bill as any).table;
+        if (tbl) {
+          const isPaid = bill.status === 'paid' || bill.status === 'cancelled';
+          setTables(prev => prev.map((t: any) => String(t._id || t.id) === String(tbl) ? { ...t, status: isPaid ? 'empty' : 'occupied' } : t));
+        }
+      } catch {}
+      // cross-sync orders that belong to this bill — update their bill reference status
+      try {
+        if (Array.isArray((bill as any).orders)) {
+          const orderIds = new Set((bill as any).orders.map((o: any) => String(o._id || o.id || o)));
+          setOrders(prev => prev.map((o: any) => orderIds.has(String(o._id || o.id)) ? { ...o, bill: { _id: bid, status: bill.status } } : o));
+        }
+      } catch {}
     };
     const onTableStatusChanged = (payload: any) => {
       const tid = payload?.tableId || payload?._id || payload?.id;
@@ -1828,19 +2603,110 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (!tid || !status) return;
       setTables(prev => prev.map((t: any) => (normalizeId(t._id) === normalizeId(tid) || normalizeId(t.id) === normalizeId(tid)) ? { ...t, status } : t));
     };
+    const getTableSectionIdForMatch = (sec: any): string => {
+      if (!sec) return '';
+      if (typeof sec === 'object') return String((sec as any)._id || (sec as any).id || '');
+      return String(sec);
+    };
+    const onTableCreated = (table: any) => {
+      if (!table || !(table._id || table.id)) return;
+      const tid = table._id || table.id;
+      const normalized = { ...table, id: tid, _id: tid } as any;
+      setTables(prev => {
+        if (prev.some((t: any) => normalizeId(t._id || t.id) === normalizeId(tid))) {
+          return prev.map((t: any) => normalizeId(t._id || t.id) === normalizeId(tid) ? { ...t, ...normalized } : t);
+        }
+        // replace optimistic temp with same number+section if exists
+        const realNum = String(table.number ?? '').trim();
+        const realSec = getTableSectionIdForMatch(table.section);
+        const optIdx = prev.findIndex((t: any) => {
+          const isOpt = (t as any)._optimistic || String(t._id || t.id).startsWith('temp-');
+          if (!isOpt) return false;
+          const oNum = String(t.number ?? '').trim();
+          const oSec = getTableSectionIdForMatch(t.section);
+          return oNum === realNum && oSec === realSec;
+        });
+        if (optIdx !== -1) {
+          const copy = [...prev];
+          copy[optIdx] = normalized;
+          return copy;
+        }
+        return [...prev.filter((t: any) => normalizeId(t._id || t.id) !== normalizeId(tid)), normalized];
+      });
+    };
+    const onTableUpdated = (table: any) => {
+      if (!table || !(table._id || table.id)) return;
+      const tid = table._id || table.id;
+      const normalized = { ...table, id: tid, _id: tid } as any;
+      setTables(prev => {
+        const exists = prev.some((t: any) => normalizeId(t._id || t.id) === normalizeId(tid));
+        if (exists) return prev.map((t: any) => normalizeId(t._id || t.id) === normalizeId(tid) ? { ...t, ...normalized } : t);
+        // if not found but is an update, treat as create with optimistic check
+        const realNum = String(table.number ?? '').trim();
+        const realSec = getTableSectionIdForMatch(table.section);
+        const optIdx = prev.findIndex((t: any) => {
+          const isOpt = (t as any)._optimistic || String(t._id || t.id).startsWith('temp-');
+          if (!isOpt) return false;
+          return String(t.number ?? '').trim() === realNum && getTableSectionIdForMatch(t.section) === realSec;
+        });
+        if (optIdx !== -1) {
+          const copy = [...prev];
+          copy[optIdx] = normalized;
+          return copy;
+        }
+        return [...prev, normalized];
+      });
+    };
     const onTableCreatedOrUpdated = (table: any) => {
       if (!table || !(table._id || table.id)) return;
       const tid = table._id || table.id;
-      setTables(prev => {
-        const normalized = { ...table, id: tid, _id: tid };
-        const next = prev.filter((t: any) => normalizeId(t._id || t.id) !== normalizeId(tid));
-        return [...next, normalized];
-      });
+      if (String(tid).startsWith('temp-')) return;
+      // delegate to update logic which handles both
+      onTableUpdated(table);
     };
     const onTableDeleted = (payload: any) => {
       const tid = payload?._id || payload?.id || payload;
       if (!tid) return;
       setTables(prev => prev.filter((t: any) => normalizeId(t._id) !== normalizeId(tid) && normalizeId(t.id) !== normalizeId(tid)));
+    };
+    const onTableSectionCreated = (section: any) => {
+      if (!section || !(section._id || section.id)) return;
+      const sid = section._id || section.id;
+      const normalized = { ...section, id: sid, _id: sid } as any;
+      setTableSections(prev => {
+        if (prev.some((s: any) => normalizeId(s._id || s.id) === normalizeId(sid))) {
+          return prev.map((s: any) => normalizeId(s._id || s.id) === normalizeId(sid) ? { ...s, ...normalized } : s);
+        }
+        const realName = String(section.name ?? '').trim();
+        const optIdx = prev.findIndex((s: any) => ((s as any)._optimistic || String(s._id || s.id).startsWith('temp-')) && String(s.name ?? '').trim() === realName);
+        if (optIdx !== -1) {
+          const copy = [...prev];
+          copy[optIdx] = normalized;
+          return copy;
+        }
+        return [...prev.filter((s: any) => normalizeId(s._id || s.id) !== normalizeId(sid)), normalized];
+      });
+    };
+    const onTableSectionUpdated = (section: any) => {
+      if (!section || !(section._id || section.id)) return;
+      const sid = section._id || section.id;
+      const normalized = { ...section, id: sid, _id: sid } as any;
+      setTableSections(prev => {
+        const exists = prev.some((s: any) => normalizeId(s._id || s.id) === normalizeId(sid));
+        if (exists) return prev.map((s: any) => normalizeId(s._id || s.id) === normalizeId(sid) ? { ...s, ...normalized } : s);
+        const optIdx = prev.findIndex((s: any) => ((s as any)._optimistic || String(s._id || s.id).startsWith('temp-')) && String(s.name ?? '').trim() === String(section.name ?? '').trim());
+        if (optIdx !== -1) {
+          const copy = [...prev];
+          copy[optIdx] = normalized;
+          return copy;
+        }
+        return [...prev, normalized];
+      });
+    };
+    const onTableSectionDeleted = (payload: any) => {
+      const sid = payload?._id || payload?.id || payload;
+      if (!sid) return;
+      setTableSections(prev => prev.filter((s: any) => normalizeId(s._id || s.id) !== normalizeId(sid) && normalizeId(s.id) !== normalizeId(sid)));
     };
     const onSessionUpdated = (session: any) => {
       if (!session || !(session._id || session.id)) return;
@@ -1887,9 +2753,15 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     socket.on('bill:created', onBillUpdated);
     socket.on('bill:deleted', (bill: any) => onBillUpdated(bill, 'deleted'));
     socket.on('table:statusChanged', onTableStatusChanged);
-    socket.on('table:created', onTableCreatedOrUpdated);
-    socket.on('table:updated', onTableCreatedOrUpdated);
+    socket.on('table:created', onTableCreated);
+    socket.on('table:updated', onTableUpdated);
     socket.on('table:deleted', onTableDeleted);
+    // table sections instant
+    socket.on('tableSection:created', onTableSectionCreated);
+    socket.on('tableSection:updated', onTableSectionUpdated);
+    socket.on('tableSection:deleted', onTableSectionDeleted);
+    socket.on('tableSections:created', onTableSectionCreated);
+    socket.on('tableSections:updated', onTableSectionUpdated);
     socket.on('session:updated', onSessionUpdated);
     socket.on('session:created', onSessionUpdated);
     socket.on('session:ended', onSessionUpdated);
@@ -1908,9 +2780,17 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     });
     socket.on('table-status-update', onTableStatusChanged);
     socket.on('table-update', (data: any) => {
-      if (data?.type === 'created' || data?.type === 'updated') onTableCreatedOrUpdated(data.table || data);
+      if (data?.type === 'created') onTableCreated(data.table || data);
+      else if (data?.type === 'updated') onTableUpdated(data.table || data);
       else if (data?.type === 'deleted') onTableDeleted(data.table || data);
-      else if (data?.table) onTableCreatedOrUpdated(data.table);
+      else if (data?.table) onTableUpdated(data.table);
+    });
+    socket.on('table-section-update', (data: any) => {
+      if (!data) return;
+      if (data.type === 'created' && data.section) onTableSectionCreated(data.section);
+      else if (data.type === 'deleted') onTableSectionDeleted(data.section || data);
+      else if (data.section) onTableSectionUpdated(data.section);
+      else if (data._id) onTableSectionUpdated(data);
     });
     socket.on('session-update', (data: any) => {
       if (data?.session) onSessionUpdated(data.session);
@@ -1950,7 +2830,9 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       socket.off('bill:updated', onBillUpdated); socket.off('bill:created', onBillUpdated);
       socket.off('bill:deleted');
       socket.off('table:statusChanged', onTableStatusChanged);
-      socket.off('table:created', onTableCreatedOrUpdated); socket.off('table:updated', onTableCreatedOrUpdated); socket.off('table:deleted', onTableDeleted);
+      socket.off('table:created', onTableCreated); socket.off('table:updated', onTableUpdated); socket.off('table:deleted', onTableDeleted);
+      socket.off('tableSection:created', onTableSectionCreated); socket.off('tableSection:updated', onTableSectionUpdated); socket.off('tableSection:deleted', onTableSectionDeleted);
+      socket.off('tableSections:created', onTableSectionCreated); socket.off('tableSections:updated', onTableSectionUpdated);
       socket.off('session:updated', onSessionUpdated); socket.off('session:created', onSessionUpdated); socket.off('session:ended', onSessionUpdated);
       socket.off('reconnect');
       socket.disconnect();
@@ -2577,6 +3459,22 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     showNotification,
     updateOrderItemPrepared,
     updateOrderStatus,
+    deliverItem,
+    deliverOrderSection,
+    cancelOrder,
+    createSessionWithExistingBill,
+    changeSessionTable,
+    linkSessionToTable,
+    unlinkTableFromSession,
+    updateSessionTimes,
+    updateSessionStartTime,
+    updateControllersPeriodTime,
+    updateSessionCost,
+    addPartialPaymentAggregated,
+    payForItems,
+    paySessionPartial,
+    updateBillAggregatedItems,
+    deleteBill,
     getRecentActivity,
     getSalesReport,
     getSessionsReport,

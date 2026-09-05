@@ -22,6 +22,7 @@ import "./utils/organization.js";
 import Logger from "./middleware/logger.js";
 import jwt from "jsonwebtoken";
 import Bill from "./models/Bill.js";
+import { validateEnv } from "./config/envValidator.js";
 
 // Sync system imports
 import syncConfig, { validateSyncConfig, getSafeConfig } from "./config/syncConfig.js";
@@ -99,6 +100,9 @@ if (!configValidation.isValid) {
         Logger.info("ℹ️  Bidirectional sync is DISABLED (one-way sync only: Local → Atlas)");
     }
 }
+
+// Validate critical env secrets before connecting (fail fast on weak/missing JWT or Mongo URIs)
+validateEnv();
 
 // Connect to database
 connectDB();
@@ -199,6 +203,17 @@ mongoose.connection.once("open", async () => {
         Logger.info(`✅ Table status startup fix completed: fixed ${tableFixResult.fixed}/${tableFixResult.total} (occupied:${tableFixResult.occupied} empty:${tableFixResult.empty})`);
     } catch (tableFixError) {
         Logger.error("❌ Error in automatic table status fix:", tableFixError.message);
+    }
+
+    // Auto-heal BSON types on startup: converts stringified Dates/ObjectIds
+    // (left by JSON-crossed sync payloads) back to proper types, local + Atlas.
+    // Uses raw collection ops (bypasses sync middleware); each node heals itself.
+    try {
+        Logger.info("🔍 Running automatic BSON type audit on startup...");
+        const { runStartupTypeAudit } = await import("./utils/startupTypeAudit.js");
+        await runStartupTypeAudit({ fix: true });
+    } catch (typeAuditError) {
+        Logger.error("❌ Error in automatic BSON type audit:", typeAuditError.message);
     }
     
     // Initialize sync system (Atlas and/or LAN)

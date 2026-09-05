@@ -93,6 +93,18 @@ export const createTableSection = async (req, res) => {
         // Fire-and-forget Atlas write
         writeToAtlas('tablesections', 'upsert', section.toObject ? section.toObject() : section, { _id: section._id });
 
+        // ── Real-time emit (<50ms) — before response ──
+        if (req.io) {
+            try {
+                const orgId = getOrganizationId(req.user);
+                const orgStr = String(orgId);
+                req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('table-section-update', { type: 'created', section });
+                req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('tableSection:created', section);
+                req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('tableSection:updated', section);
+                try { req.io.notifyTableSectionUpdate("created", section, getOrganizationId(req.user)); } catch {}
+            } catch {}
+        }
+
         // Prepare minimal response data
         const responseData = {
             _id: section._id,
@@ -160,6 +172,17 @@ export const updateTableSection = async (req, res) => {
 
         // Fire-and-forget Atlas write
         writeToAtlas('tablesections', 'upsert', section.toObject ? section.toObject() : section, { _id: section._id });
+
+        // ── Real-time emit (<50ms) ──
+        if (req.io) {
+            try {
+                const orgId = getOrganizationId(req.user);
+                const orgStr = String(orgId);
+                req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('table-section-update', { type: 'updated', section });
+                req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('tableSection:updated', section);
+                try { req.io.notifyTableSectionUpdate("updated", section, getOrganizationId(req.user)); } catch {}
+            } catch {}
+        }
 
         // Prepare minimal response data
         const responseData = {
@@ -232,6 +255,17 @@ export const deleteTableSection = async (req, res) => {
 
         // Fire-and-forget Atlas write for delete
         writeToAtlas('tablesections', 'delete', null, { _id: section._id });
+
+        // ── Real-time emit (<50ms) ──
+        if (req.io) {
+            try {
+                const orgId = getOrganizationId(req.user);
+                const orgStr = String(orgId);
+                req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('table-section-update', { type: 'deleted', section: { _id: id } });
+                req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('tableSection:deleted', { _id: id });
+                try { req.io.notifyTableSectionUpdate("deleted", { _id: id }, getOrganizationId(req.user)); } catch {}
+            } catch {}
+        }
 
         // Return response IMMEDIATELY
         res.json({

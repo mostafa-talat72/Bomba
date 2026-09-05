@@ -58,27 +58,64 @@ const printThroughAgent = async (
 };
 
 const recentDrawerOpens = new Map<string, number>();
+// طلبات درج جارية حسب المفتاح: طلب ثانٍ بنفس المفتاح أثناء سير الأول
+// ينتظر نتيجته بدل إرسال نبضة ثانية (منع الفتح المزدوج).
+const pendingDrawerOpens = new Map<string, Promise<boolean>>();
+
+// ⚡ كاش قصير لطابعة الجهاز: الطباعة المتكررة لا تدفع ثمن roundtrip للسيرفر كل مرة.
+let cachedDevicePrinter: { data: any; expiresAt: number } | null = null;
+
+export const getCachedDevicePrinter = async (): Promise<any> => {
+  if (cachedDevicePrinter && cachedDevicePrinter.expiresAt > Date.now()) {
+    return { success: true, data: cachedDevicePrinter.data };
+  }
+  try {
+    const { api } = await import('../services/api');
+    const response: any = await api.getDevicePrinter();
+    if (response?.success && response.data) {
+      cachedDevicePrinter = { data: response.data, expiresAt: Date.now() + 15000 };
+    }
+    return response;
+  } catch {
+    return null;
+  }
+};
 
 export const openCashDrawerThroughAgent = async (printerName?: string, requestKey?: string): Promise<boolean> => {
+  const now = Date.now();
   if (requestKey) {
-    const now = Date.now();
     const previousOpen = recentDrawerOpens.get(requestKey);
     if (previousOpen && now - previousOpen < 3000) return true;
-    recentDrawerOpens.set(requestKey, now);
+    const inFlight = pendingDrawerOpens.get(requestKey);
+    if (inFlight) return inFlight;
     for (const [key, timestamp] of recentDrawerOpens) {
       if (now - timestamp >= 3000) recentDrawerOpens.delete(key);
     }
   }
-  const response = await fetch(LOCAL_DRAWER_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ printerName }),
-  });
-  const result = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    throw new Error(result?.message || `Print Agent returned ${response.status}`);
+  const job = (async (): Promise<boolean> => {
+    const response = await fetch(LOCAL_DRAWER_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ printerName }),
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(result?.message || `Print Agent returned ${response.status}`);
+    }
+    const opened = result?.success === true;
+    // Record only successful opens: a failed attempt must not suppress the retry
+    // (e.g. optimistic fire on click, then the post-payment call 1s later).
+    if (opened && requestKey) recentDrawerOpens.set(requestKey, Date.now());
+    return opened;
+  })();
+  if (requestKey) {
+    pendingDrawerOpens.set(requestKey, job);
+    const clear = () => {
+      if (pendingDrawerOpens.get(requestKey) === job) pendingDrawerOpens.delete(requestKey);
+    };
+    job.then(clear, clear);
   }
-  return result?.success === true;
+  return job;
 };
 
 const printThroughDesktopFallback = async (html: string, printerName?: string, options: { paperWidthMm?: number } = {}): Promise<boolean> => {

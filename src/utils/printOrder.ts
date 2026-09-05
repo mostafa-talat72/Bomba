@@ -1,7 +1,7 @@
 import api from '../services/api';
 import { formatDecimal, getCurrencySymbol, getDisplayNumber } from './formatters';
 import type { TFunction } from 'i18next';
-import { printThroughLocalBridge } from './localPrintBridge';
+import { getCachedDevicePrinter, printThroughLocalBridge } from './localPrintBridge';
 
 interface OrderItem {
   _id?: string;
@@ -549,7 +549,7 @@ export const printOrder = async (
   printerName?: string,
   paperWidthMm?: number
 ) => {
-  const savedPrinter = printerName ? null : await api.getDevicePrinter().catch(() => null);
+  const savedPrinter = printerName ? null : await getCachedDevicePrinter();
   const selectedPrinterName = printerName || savedPrinter?.data?.printerName || savedPrinter?.data?.name;
   const sectionsToPrint = selectedSectionIds && selectedSectionIds.length > 1
     ? selectedSectionIds

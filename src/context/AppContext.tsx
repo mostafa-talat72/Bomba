@@ -51,6 +51,7 @@ interface AppContextType {
   setBills: React.Dispatch<React.SetStateAction<any[]>>;
   setOrders: React.Dispatch<React.SetStateAction<any[]>>;
   setTables: React.Dispatch<React.SetStateAction<any[]>>;
+  setTableSections: React.Dispatch<React.SetStateAction<any[]>>;
   fetchCosts: () => Promise<void>;
   fetchMenuItems: () => Promise<void>;
   fetchAvailableMenuItems: () => Promise<void>;
@@ -84,6 +85,11 @@ interface AppContextType {
   cancelBill: (id: string) => Promise<boolean>;
   getBillItems: (id: string) => Promise<any>;
   addPartialPayment: (id: string, paymentData: any) => Promise<any>;
+  addPartialPaymentAggregated: (id: string, paymentData: any) => Promise<any>;
+  payForItems: (id: string, paymentData: any) => Promise<any>;
+  paySessionPartial: (id: string, paymentData: any) => Promise<any>;
+  updateBillAggregatedItems: (id: string, data: any) => Promise<any>;
+  deleteBill: (id: string) => Promise<boolean>;
   createCost: (costData: any) => Promise<any>;
   updateCost: (id: string, updates: any) => Promise<any>;
   deleteCost: (id: string) => Promise<boolean>;
@@ -131,6 +137,17 @@ interface AppContextType {
   // Other data methods
   updateOrderItemPrepared: (orderId: string, itemIndex: number, data: { preparedCount: number }) => Promise<any>;
   updateOrderStatus: (orderId: string, status: 'pending' | 'preparing' | 'ready' | 'delivered' | 'cancelled') => Promise<any>;
+  deliverItem: (orderId: string, itemIndex: number) => Promise<any>;
+  deliverOrderSection: (orderId: string, sectionId: string) => Promise<any>;
+  cancelOrder: (orderId: string, reason?: string) => Promise<any>;
+  createSessionWithExistingBill: (sessionData: any) => Promise<any>;
+  changeSessionTable: (sessionId: string, newTableId: string) => Promise<any>;
+  linkSessionToTable: (sessionId: string, tableId: string) => Promise<any>;
+  unlinkTableFromSession: (sessionId: string, customerName?: string) => Promise<any>;
+  updateSessionTimes: (sessionId: string, data: { startTime: string; endTime: string }) => Promise<any>;
+  updateSessionStartTime: (sessionId: string, data: { startTime: string }) => Promise<any>;
+  updateControllersPeriodTime: (sessionId: string, periodIndex: number, newStartTime: string, newEndTime?: string) => Promise<any>;
+  updateSessionCost: (sessionId: string) => Promise<any>;
   getRecentActivity: (limit?: number) => Promise<any>;
   getSalesReport: (filter: any, groupBy?: string) => Promise<any>;
   getSessionsReport: (filter: any, device?: string) => Promise<any>;
@@ -230,6 +247,7 @@ const AppContextInner: React.FC<{ children: ReactNode }> = ({ children }) => {
     setBills: data.setBills as any,
     setOrders: data.setOrders as any,
     setTables: data.setTables as any,
+    setTableSections: (data as any).setTableSections as any,
     fetchCosts: data.fetchCosts,
     fetchMenuItems: data.fetchMenuItems,
     fetchAvailableMenuItems: data.fetchAvailableMenuItems,
@@ -263,6 +281,11 @@ const AppContextInner: React.FC<{ children: ReactNode }> = ({ children }) => {
     cancelBill: data.cancelBill,
     getBillItems: data.getBillItems,
     addPartialPayment: data.addPartialPayment,
+    addPartialPaymentAggregated: (data as any).addPartialPaymentAggregated,
+    payForItems: (data as any).payForItems,
+    paySessionPartial: (data as any).paySessionPartial,
+    updateBillAggregatedItems: (data as any).updateBillAggregatedItems,
+    deleteBill: (data as any).deleteBill,
     createCost: data.createCost,
     updateCost: data.updateCost,
     deleteCost: data.deleteCost,
@@ -310,6 +333,17 @@ const AppContextInner: React.FC<{ children: ReactNode }> = ({ children }) => {
     // Other data methods
     updateOrderItemPrepared: data.updateOrderItemPrepared,
     updateOrderStatus: data.updateOrderStatus,
+    deliverItem: (data as any).deliverItem,
+    deliverOrderSection: (data as any).deliverOrderSection,
+    cancelOrder: (data as any).cancelOrder,
+    createSessionWithExistingBill: (data as any).createSessionWithExistingBill,
+    changeSessionTable: (data as any).changeSessionTable,
+    linkSessionToTable: (data as any).linkSessionToTable,
+    unlinkTableFromSession: (data as any).unlinkTableFromSession,
+    updateSessionTimes: (data as any).updateSessionTimes,
+    updateSessionStartTime: (data as any).updateSessionStartTime,
+    updateControllersPeriodTime: (data as any).updateControllersPeriodTime,
+    updateSessionCost: (data as any).updateSessionCost,
     getRecentActivity: data.getRecentActivity,
     getSalesReport: data.getSalesReport,
     getSessionsReport: data.getSessionsReport,

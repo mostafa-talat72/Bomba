@@ -51,7 +51,7 @@ import { useRTL } from '../hooks/useRTL';
 import { Order, Session } from '../services/api';
 import api from '../services/api';
 import { formatDecimal, formatCurrency as formatCurrencyUtil, replaceAMPM } from '../utils/formatters';
-import { printThroughLocalBridge } from '../utils/localPrintBridge';
+import { getCachedDevicePrinter, printThroughLocalBridge } from '../utils/localPrintBridge';
 
 // Extend dayjs with plugins
 dayjs.extend(isSameOrAfter);
@@ -795,8 +795,13 @@ const ConsumptionReport = () => {
         </html>
       `;
 
-      const savedPrinter = await api.getDevicePrinter().catch(() => null);
-      const organizationResponse = await api.getOrganization().catch(() => null);
+      // ⚡ إعدادات متزامنة من الذاكرة + طابعة مخزنة — بدون انتظار متسلسل.
+      const [savedPrinter, organizationResponse] = await Promise.all([
+        getCachedDevicePrinter(),
+        (user as any)?.organization?.printSettings
+          ? Promise.resolve({ success: true, data: (user as any).organization })
+          : api.getOrganization().catch(() => null),
+      ]);
       const settings = organizationResponse?.success === true ? organizationResponse.data?.printSettings : undefined;
       const profile = settings?.printers?.find((item: any) => item.id === settings?.documentPrinterMap?.consumptionReport);
       const printerName = profile?.printerName || savedPrinter?.data?.printerName || savedPrinter?.data?.name;

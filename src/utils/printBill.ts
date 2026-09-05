@@ -5,10 +5,57 @@ import QRCode from 'qrcode';
 import { api } from '../services/api';
 import { getLocaleFromLanguage } from './localeMapper';
 import type { TFunction } from 'i18next';
-import { openCashDrawerThroughAgent, printThroughLocalBridge } from './localPrintBridge';
+import { getCachedDevicePrinter, openCashDrawerThroughAgent, printThroughLocalBridge } from './localPrintBridge';
 
 let cachedOrganizationResponse: { data: any; expiresAt: number } | null = null;
 const qrCodeCache = new Map<string, string>();
+// ⚡ كاش HTML الإيصال: إعادة طباعة نفس الفاتورة لا تعيد بناء الـ HTML.
+// المفتاح يشمل كل ما يظهر في الإيصال + TTL قصير للأمان.
+const receiptHtmlCache = new Map<string, { html: string; expiresAt: number }>();
+
+const buildReceiptCacheKey = (billForPrint: any, language: string, tableSectionName?: string, fallbackOrganizationName?: string): string =>
+  [
+    String(billForPrint._id || billForPrint.id || billForPrint.billNumber || ''),
+    billForPrint.updatedAt || '',
+    billForPrint.paid ?? '',
+    billForPrint.remaining ?? '',
+    billForPrint.status || '',
+    billForPrint.total ?? '',
+    language, tableSectionName || '', fallbackOrganizationName || '',
+  ].join('|');
+
+export const getCachedReceiptHTML = async (
+  billForPrint: any,
+  fallbackOrganizationName?: string,
+  language: string = 'ar',
+  t: TFunction = ((key: string) => key) as TFunction,
+  tableSectionName?: string,
+): Promise<string> => {
+  const key = buildReceiptCacheKey(billForPrint, language, tableSectionName, fallbackOrganizationName);
+  const cached = receiptHtmlCache.get(key);
+  if (cached && cached.expiresAt > Date.now()) return cached.html;
+  const html = await buildBillPrintHTML(billForPrint, fallbackOrganizationName, language, t, tableSectionName);
+  receiptHtmlCache.set(key, { html, expiresAt: Date.now() + 15000 });
+  if (receiptHtmlCache.size > 20) {
+    const oldest = receiptHtmlCache.keys().next().value;
+    if (oldest) receiptHtmlCache.delete(oldest);
+  }
+  return html;
+};
+
+// ⚡ تسخين مسبق: يُستدعى عند فتح نافذة الدفع/الفاتورة في الخلفية،
+// فيكون الإيصال (وQR) جاهزين قبل الضغط على زر الطباعة.
+export const preloadBillReceipt = (
+  bill: any,
+  fallbackOrganizationName?: string,
+  language: string = 'ar',
+  t: TFunction = ((key: string) => key) as TFunction,
+  tableSectionName?: string,
+): void => {
+  try {
+    void getCachedReceiptHTML(bill, fallbackOrganizationName, language, t, tableSectionName).catch(() => {});
+  } catch {}
+};
 
 // Function to determine the appropriate link for QR Code based on priority
 const getSocialLinkForQR = (socialLinks: any): { link: string; platform: string } | null => {
@@ -438,9 +485,9 @@ export const buildBillPrintHTML = async (
           color: #000;
         }
         .org-phone {
-          font-size: 1.2em;
+          font-size: 1.6em;
           font-weight: 900;
-          margin-bottom: 3px;
+          margin-bottom: 2px;
           color: #000;
         }
         .title { 
@@ -456,7 +503,7 @@ export const buildBillPrintHTML = async (
         }
         .divider { 
           border-top: 2px dashed #000; 
-          margin: 10px 0; 
+          margin: 2px 0; 
         }
         .section-title {
           font-size: 1.5em;
@@ -785,6 +832,23 @@ export const printBill = async (
     && (billForPrint.organization as any).printSettings
     ? { success: true, data: billForPrint.organization }
     : null;
+  // ⚡ فتح فوري للدرج من البيانات المتزامنة (بدون انتظار أي fetch).
+  // نفس مفتاح الاستدعاء اللاحق فيُفتح الدرج مرة واحدة فقط.
+  {
+    const printKey = `bill:${billId || (bill as any).billNumber || ''}:${drawerMode}`;
+    const syncSettings = organizationFromBill
+      ? (billForPrint.organization as any).printSettings
+      : (cachedOrganizationResponse && cachedOrganizationResponse.expiresAt > Date.now()
+        ? cachedOrganizationResponse.data?.printSettings
+        : undefined);
+    if (syncSettings) {
+      const instantSetting = drawerMode === 'payment' ? 'openCashDrawerOnPayment' : 'openCashDrawer';
+      if (syncSettings[instantSetting] !== false) {
+        const instantProfile = syncSettings.printers?.find((item: any) => item.id === syncSettings.documentPrinterMap?.bill);
+        void openCashDrawerThroughAgent(printerName || instantProfile?.printerName, printKey).catch(() => {});
+      }
+    }
+  }
   const settingsPromise = organizationFromBill
     ? Promise.resolve(organizationFromBill)
     : cachedOrganizationResponse && cachedOrganizationResponse.expiresAt > Date.now()
@@ -797,7 +861,7 @@ export const printBill = async (
       }).catch(() => null);
   const [fullBillResponse, savedPrinter, settingsResponse] = await Promise.all([
     billId && !hasOrderDetails ? api.getBill(billId) : Promise.resolve(null),
-    printerName ? Promise.resolve(null) : api.getDevicePrinter().catch(() => null),
+    printerName ? Promise.resolve(null) : getCachedDevicePrinter(),
     settingsPromise,
   ]);
   if (fullBillResponse?.success && fullBillResponse.data) {
@@ -821,7 +885,7 @@ export const printBill = async (
   if (settingsResponse?.success && settingsResponse.data) {
     billForPrint = { ...billForPrint, organization: settingsResponse.data };
   }
-  const receiptHTML = await buildBillPrintHTML(billForPrint, fallbackOrganizationName, language, t, tableSectionName);
+  const receiptHTML = await getCachedReceiptHTML(billForPrint, fallbackOrganizationName, language, t, tableSectionName);
   const bridgePrinted = await printThroughLocalBridge(receiptHTML, selectedPrinterName, {
     paperWidthMm,
     openDrawer: false,

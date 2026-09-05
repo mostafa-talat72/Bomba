@@ -1990,6 +1990,15 @@ export const deleteOrder = async (req, res) => {
                         const { deleteFromBothDatabases } = await import('../utils/deleteHelper.js');
                         await deleteFromBothDatabases(billDoc, 'bills', `bill ${billDoc.billNumber}`);
                         try { await createTombstone('bills', billIdForTombstone, billOrgForTombstone, req.user._id); } catch (e) {}
+                        // ── emit bill:deleted instantly (<100ms) ──
+                        if (req.io) {
+                            try {
+                                const orgStr = String(getOrganizationId(req.user));
+                                req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('bill:deleted', { _id: billIdForTombstone });
+                                req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('bill-update', { type: 'deleted', bill: { _id: billIdForTombstone } });
+                                try { req.io.notifyBillUpdate("deleted", { _id: billIdForTombstone, billNumber: billDoc.billNumber }, getOrganizationId(req.user)); } catch {}
+                            } catch {}
+                        }
 
                         // Update table status to 'empty' if bill is deleted
                         if (tableIdToUpdate) {

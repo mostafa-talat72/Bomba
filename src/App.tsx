@@ -11,6 +11,7 @@ import { LanguageProvider, useLanguage } from './context/LanguageContext';
 import { OrganizationProvider } from './context/OrganizationContext';
 import { TablesHeaderProvider } from './context/TablesHeaderContext';
 import api from './services/api';
+import { openCashDrawerThroughAgent } from './utils/localPrintBridge';
 import Layout from './components/Layout';
 import ToastManager from './components/ToastManager';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -52,25 +53,64 @@ const PageLoader = () => (
   </div>
 );
 
+// ⚡ كاش إعدادات F12: أول ضغطة تجهزه، وبعده الدرج يفتح لحظياً بدون أي fetch.
+let f12OrgCache: { data: any; expiresAt: number } | null = null;
+const getF12Organization = async (): Promise<any> => {
+  if (f12OrgCache && f12OrgCache.expiresAt > Date.now()) return f12OrgCache.data;
+  const organizationResponse = await api.getOrganization();
+  const organization = organizationResponse.success ? organizationResponse.data : null;
+  if (organization) f12OrgCache = { data: organization, expiresAt: Date.now() + 60000 };
+  return organization;
+};
+
 const CashDrawerShortcut = () => {
   React.useEffect(() => {
-    const handleKeyDown = async (event: KeyboardEvent) => {
-      if (event.key !== 'F12') return;
+    // Warm the cache at startup so the FIRST F12 press is already instant.
+    getF12Organization().catch(() => {});
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const isF12 = event.key === 'F12' || event.code === 'F12' || (event as any).keyCode === 123;
+      if (!isF12) return;
+      if (event.repeat) return;
       event.preventDefault();
       event.stopPropagation();
 
-      try {
-        const organizationResponse = await api.getOrganization();
-        const organization = organizationResponse.success ? organizationResponse.data : null;
-        if (!organization || organization.printSettings?.openCashDrawerShortcut === false) return;
-        await api.openCashDrawerOnly(organization);
-      } catch (error) {
-        console.error('Failed to open cash drawer with F12:', error);
-      }
+      // Fire instantly — never block the keypress on network.
+      void (async () => {
+        try {
+          const organization = await getF12Organization();
+          if (!organization || organization.printSettings?.openCashDrawerShortcut === false) return;
+
+          // 1) Try local print agent first (USB printer attached to this PC).
+          // Fixed key collapses key-bounce double events into a single kick.
+          try {
+            const printers = (organization as any)?.printSettings?.printers;
+            const billPrinterId = (organization as any)?.printSettings?.documentPrinterMap?.bill;
+            const printer = printers?.find((item: any) => item.id === billPrinterId) || printers?.[0];
+            const opened = await openCashDrawerThroughAgent(printer?.printerName || printer?.name, 'f12-drawer');
+            if (opened) return;
+          } catch {}
+
+          // 2) Fallback to backend (configured printer)
+          try {
+            const result = await api.openCashDrawerOnly(organization);
+            if ((result as any)?.success) return;
+          } catch {}
+
+          // 3) Last resort: auto-detect printer on server
+          try {
+            await api.autoDetectAndOpenCashDrawer('payment', organization);
+          } catch (error) {
+            console.error('Failed to open cash drawer with F12:', error);
+          }
+        } catch (error) {
+          console.error('Failed to open cash drawer with F12:', error);
+        }
+      })();
     };
 
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    // capture phase so we run before other handlers / browser default
+    window.addEventListener('keydown', handleKeyDown, true);
+    return () => window.removeEventListener('keydown', handleKeyDown, true);
   }, []);
 
   return null;

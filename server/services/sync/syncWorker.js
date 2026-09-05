@@ -2,6 +2,7 @@ import Logger from "../../middleware/logger.js";
 import syncConfig from "../../config/syncConfig.js";
 import dualDatabaseManager from "../../config/dualDatabaseManager.js";
 import syncQueueManager from "./syncQueueManager.js";
+import { rehydrateDocument, rehydrateFilter } from "../../utils/bsonRehydrate.js";
 
 /**
  * SyncWorker
@@ -376,8 +377,12 @@ class SyncWorker {
         }
 
         // Use replaceOne with upsert to handle duplicate _id gracefully
-        // This ensures idempotency - same operation can be retried safely
+        // This ensures idempotency - same operation can be safely retried
+        // Rehydrate first: queue data may have crossed JSON (disk/socket) where
+        // Dates/ObjectIds degrade to strings — restore BSON types via schema.
+        const collName = collection.collectionName;
         if (Array.isArray(operation.data)) {
+            operation.data.forEach((doc) => rehydrateDocument(collName, doc));
             // For arrays, insert each document with upsert
             const bulkOps = operation.data.map((doc) => ({
                 replaceOne: {
@@ -400,6 +405,7 @@ class SyncWorker {
                 Logger.debug(`   🔄 ${result.modifiedCount} existing documents replaced (idempotent retry)`);
             }
         } else {
+            rehydrateDocument(collection.collectionName, operation.data);
             // For single document, use replaceOne with upsert
             const result = await collection.replaceOne(
                 { _id: operation.data._id },
@@ -439,6 +445,13 @@ class SyncWorker {
             throw new Error("Update operation missing data");
         }
 
+        // Rehydrate filter + payload (JSON-crossed Dates/ObjectIds degrade to
+        // strings; a string _id filter would miss ObjectId docs and upsert
+        // would then create duplicates with a string _id).
+        const collName = collection.collectionName;
+        rehydrateFilter(collName, operation.filter);
+        rehydrateDocument(collName, operation.data);
+
         // Use updateOne with upsert to ensure idempotency
         // $set operations are deterministic - same result on retry
         const result = await collection.updateOne(
@@ -477,6 +490,9 @@ class SyncWorker {
         if (!operation.filter) {
             throw new Error("Delete operation missing filter");
         }
+
+        // Rehydrate filter so string _id actually matches ObjectId docs
+        rehydrateFilter(collection.collectionName, operation.filter);
 
         try {
             const result = await collection.deleteOne(operation.filter);
