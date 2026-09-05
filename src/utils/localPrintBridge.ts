@@ -136,7 +136,7 @@ export const printThroughLocalBridge = (
   const printKey = options.printKey || getPrintKey(html, printerName);
   const now = Date.now();
   const previousPrint = recentPrints.get(printKey);
-  if (previousPrint && now - previousPrint < 3000) return true;
+  if (previousPrint && now - previousPrint < 3000) return Promise.resolve(true);
   recentPrints.set(printKey, now);
   for (const [key, timestamp] of recentPrints) {
     if (now - timestamp >= 3000) recentPrints.delete(key);

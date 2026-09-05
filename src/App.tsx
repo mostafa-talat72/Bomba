@@ -280,7 +280,16 @@ const RouteHandler = () => {
     }
   };
 
-  if (isLoading) {
+  const isPublicPath =
+    window.location.pathname === '/login' ||
+    window.location.pathname === '/register' ||
+    window.location.pathname.startsWith('/verify-email') ||
+    window.location.pathname.startsWith('/reset-password') ||
+    window.location.pathname.startsWith('/email-actions') ||
+    window.location.pathname === '/menu-view' ||
+    /^\/bill\/[a-fA-F0-9]{24}$/.test(window.location.pathname);
+
+  if (isLoading && !isPublicPath) {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
         <div className="text-center">
