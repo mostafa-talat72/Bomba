@@ -65,6 +65,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   };
 
   const [user, setUser] = useState<User | null>(null);
+  // Keep process-wide cache in sync for non-React utils (per-user print overrides)
+  useEffect(() => {
+    import('../utils/currentUser').then((m) => m.setCurrentUserCache(user)).catch(() => {});
+  }, [user]);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(getInitialLoadingState());
   const [error, setError] = useState<string | null>(null);

@@ -166,6 +166,7 @@ interface AppContextType {
   exportReportToExcel: (reportType: string, filter: Filter) => Promise<void>;
   exportReportToPDF: (reportType: string, filter: Filter) => Promise<void>;
   updateUserProfile: (profileData: any) => Promise<boolean>;
+  updateMyPrintSettings: (data: { useCustomPrintSettings?: boolean; printSettings?: Record<string, any> }) => Promise<boolean>;
   changePassword: (passwordData: any) => Promise<boolean>;
   updateNotificationSettings: (settings: any) => Promise<boolean>;
   updateGeneralSettings: (settings: any) => Promise<boolean>;
@@ -362,6 +363,7 @@ const AppContextInner: React.FC<{ children: ReactNode }> = ({ children }) => {
     exportReportToExcel: data.exportReportToExcel,
     exportReportToPDF: data.exportReportToPDF,
     updateUserProfile: data.updateUserProfile,
+    updateMyPrintSettings: data.updateMyPrintSettings,
     changePassword: data.changePassword,
     updateNotificationSettings: data.updateNotificationSettings,
     updateGeneralSettings: data.updateGeneralSettings,

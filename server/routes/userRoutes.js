@@ -10,6 +10,8 @@ import {
     changePassword,
     updateUserPermissions,
     updateUserStatus,
+    getMyPrintSettings,
+    updateMyPrintSettings,
 } from "../controllers/userController.js";
 import { protect, authorize } from "../middleware/auth.js";
 import {
@@ -23,6 +25,9 @@ const router = express.Router();
 router.use(protect);
 router.put("/profile", updateProfile);
 router.put("/change-password", changePassword);
+// Own printer settings (no special permissions needed; must be before /:id routes)
+router.get("/me/print-settings", getMyPrintSettings);
+router.put("/me/print-settings", updateMyPrintSettings);
 
 // User management routes - Remove general authorization, handle it per route
 router.route("/")

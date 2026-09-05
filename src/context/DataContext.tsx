@@ -189,6 +189,7 @@ interface DataContextType {
   exportReportToPDF: (reportType: string, filter: Filter) => Promise<void>;
 
   updateUserProfile: (profileData: any) => Promise<boolean>;
+  updateMyPrintSettings: (data: { useCustomPrintSettings?: boolean; printSettings?: Record<string, any> }) => Promise<boolean>;
   changePassword: (passwordData: any) => Promise<boolean>;
   updateNotificationSettings: (settings: any) => Promise<boolean>;
   updateGeneralSettings: (settings: any) => Promise<boolean>;
@@ -3130,6 +3131,28 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
+  const updateMyPrintSettings = async (data: { useCustomPrintSettings?: boolean; printSettings?: Record<string, any> }): Promise<boolean> => {
+    try {
+      const response = await api.updateMyPrintSettings(data);
+      if (response.success) {
+        if (response.data) {
+          setUser(prev => prev ? {
+            ...prev,
+            useCustomPrintSettings: response.data.useCustomPrintSettings,
+            printSettings: response.data.printSettings,
+          } : null);
+        }
+        return true;
+      } else {
+        showNotification(response.message || 'فشل في حفظ إعدادات الطباعة', 'error');
+        return false;
+      }
+    } catch (error) {
+      showNotification('فشل في حفظ إعدادات الطباعة', 'error');
+      return false;
+    }
+  };
+
   const changePassword = async (passwordData: any): Promise<boolean> => {
     try {
       const response = await api.changePassword(passwordData);
@@ -3540,6 +3563,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     exportReportToExcel,
     exportReportToPDF,
     updateUserProfile,
+    updateMyPrintSettings,
     changePassword,
     updateNotificationSettings,
     updateGeneralSettings,

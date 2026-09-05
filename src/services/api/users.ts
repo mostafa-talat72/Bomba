@@ -77,6 +77,28 @@ async function getUserStats(): Promise<ApiResponse<any>> {
 }
 
 
+async function getMyPrintSettings(): Promise<ApiResponse<{
+  useCustomPrintSettings: boolean;
+  printSettings: Record<string, any>;
+  effective: Record<string, any>;
+  organizationDefaults: Record<string, any>;
+}>> {
+  return apiClient.request('/users/me/print-settings');
+}
+
+async function updateMyPrintSettings(data: {
+  useCustomPrintSettings?: boolean;
+  printSettings?: Record<string, any>;
+}): Promise<ApiResponse<{
+  useCustomPrintSettings: boolean;
+  printSettings: Record<string, any>;
+}>> {
+  return apiClient.request('/users/me/print-settings', {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
+}
+
 export const usersApi = {
   getUsers,
   getUser,
@@ -84,4 +106,6 @@ export const usersApi = {
   updateUser,
   deleteUser,
   getUserStats,
+  getMyPrintSettings,
+  updateMyPrintSettings,
 };

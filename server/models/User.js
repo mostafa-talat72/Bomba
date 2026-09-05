@@ -172,6 +172,16 @@ const userSchema = new mongoose.Schema(
             type: String,
             default: null,
         },
+        // Per-user printer settings (override organization defaults when enabled).
+        // Same shape as Organization.printSettings. Empty = fall back to organization.
+        useCustomPrintSettings: {
+            type: Boolean,
+            default: false,
+        },
+        printSettings: {
+            type: mongoose.Schema.Types.Mixed,
+            default: {},
+        },
         // User-specific preferences (not organization-wide)
         preferences: {
             theme: {

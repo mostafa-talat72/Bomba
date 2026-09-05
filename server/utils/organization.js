@@ -91,6 +91,33 @@ export function resolvePrintSettings(organization, fallback = {}) {
     return settings;
 }
 
+/**
+ * Return the user's own print settings when they opted into custom settings,
+ * otherwise null (caller falls back to organization settings).
+ */
+export function resolveUserPrintSettings(user) {
+    if (!user || user.useCustomPrintSettings !== true) return null;
+    const raw = user.printSettings;
+    const ps = raw && typeof raw.toObject === "function" ? raw.toObject() : raw;
+    if (!ps || typeof ps !== "object" || Array.isArray(ps)) return null;
+    return Object.keys(ps).length ? { ...ps } : null;
+}
+
+/**
+ * Effective print settings resolution order:
+ *   1. user's own settings (when useCustomPrintSettings is on)
+ *   2. organization settings (incl. per-device printer merge)
+ * Device-specific printer path keeps resolving from devicePrinters via
+ * resolvePrintSettings(), so a user on another LAN device still lands on
+ * a reachable printer.
+ */
+export function resolvePrintSettingsForUser(user, organization, fallback = {}) {
+    const base = resolvePrintSettings(organization, fallback);
+    const userPs = resolveUserPrintSettings(user);
+    if (!userPs) return base;
+    return { ...base, ...userPs };
+}
+
 function isObjectIdValue(value) {
     return value instanceof mongoose.Types.ObjectId ||
         (typeof value === "string" && mongoose.isValidObjectId(value));

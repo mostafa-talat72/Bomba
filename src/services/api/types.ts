@@ -30,6 +30,8 @@ export interface User {
   notes?: string;
   isActive?: boolean;
   profileImage?: string;
+  useCustomPrintSettings?: boolean;
+  printSettings?: Record<string, any>;
   organizationName?: string;
   organization?: {
     _id: string;

@@ -2,17 +2,18 @@ import printerService from '../services/printerService.js';
 import printerDetectionService from '../services/printerDetectionService.js';
 import Organization from '../models/Organization.js';
 import { aggregateItemsWithPayments } from '../utils/billAggregation.js';
+import { resolvePrintSettingsForUser } from '../utils/organization.js';
 import { organizationFilter, resolvePrintSettings } from '../utils/organization.js';
 
-async function loadPrintSettings(organization) {
+async function loadPrintSettings(organization, user) {
   if (organization && typeof organization === 'object' && organization.printSettings) {
-    return resolvePrintSettings(organization);
+    return resolvePrintSettingsForUser(user, organization);
   }
 
   if (!organization) return {};
   const storedOrganization = await Organization.findOne(organizationFilter(organization))
     .select('printSettings devicePrinters');
-  return resolvePrintSettings(storedOrganization || {});
+  return resolvePrintSettingsForUser(user, storedOrganization || {});
 }
 
 class PrintController {
@@ -42,7 +43,7 @@ class PrintController {
         return res.status(400).json({ success: false, message: 'Bill data is required' });
       }
       // الحصول على إعدادات الطابعة من المنشأة
-      const printSettings = await loadPrintSettings(organization);
+      const printSettings = await loadPrintSettings(organization, req.user);
 
       // التحقق من أن الطابعة معدة
       if (!printSettings || printSettings.printerType === 'none') {
@@ -112,7 +113,7 @@ class PrintController {
       }
 
       // الحصول على إعدادات الطابعة
-      const printSettings = await loadPrintSettings(organization);
+      const printSettings = await loadPrintSettings(organization, req.user);
 
       if (!printSettings || printSettings.printerType === 'none') {
         return res.status(400).json({ 
@@ -167,7 +168,7 @@ class PrintController {
         return res.status(400).json({ success: false, message: 'Report data is required' });
       }
 
-      const printSettings = await loadPrintSettings(organization);
+      const printSettings = await loadPrintSettings(organization, req.user);
 
       if (!printSettings || printSettings.printerType === 'none') {
         return res.status(400).json({ 
@@ -530,7 +531,7 @@ class PrintController {
       }
 
       // الحصول على إعدادات الطابعة من المنشأة
-      const printSettings = await loadPrintSettings(organization);
+      const printSettings = await loadPrintSettings(organization, req.user);
 
       // التحقق من أن الطابعة معدة وأن فتح الدفع مفعلاً
       if (!printSettings || printSettings.printerType === 'none') {
@@ -644,7 +645,7 @@ class PrintController {
       console.log('Selected printer:', selectedPrinter.name, 'at port:', selectedPrinter.path);
 
       // 3. إعداد إعدادات الطابعة المكتشفة تلقائياً
-      const printSettings = await loadPrintSettings(organization);
+      const printSettings = await loadPrintSettings(organization, req.user);
       const openDrawerSetting = drawerMode === 'payment'
         ? 'openCashDrawerOnPayment'
         : 'openCashDrawer';
@@ -790,7 +791,7 @@ class PrintController {
       try {
         const { mode = 'payment', organization } = req.body || {};
         const settingName = mode === 'bill' ? 'openCashDrawer' : 'openCashDrawerOnPayment';
-          const printSettings = await loadPrintSettings(organization);
+          const printSettings = await loadPrintSettings(organization, req.user);
         if (printSettings?.[settingName] === false) {
           return res.json({ success: false, disabled: true, message: 'Cash drawer opening is disabled in settings' });
         }
@@ -826,7 +827,7 @@ class PrintController {
   async cutPaperOnly(req, res) {
       try {
         const { organization } = req.body || {};
-        const printSettings = await loadPrintSettings(organization);
+        const printSettings = await loadPrintSettings(organization, req.user);
         if (!printSettings || printSettings.printerType === 'none') {
           return res.status(400).json({ success: false, message: 'Printer not configured' });
         }

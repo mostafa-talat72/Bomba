@@ -685,3 +685,100 @@ export const updateUserStatus = async (req, res) => {
         });
     }
 };
+
+// Allowed keys for per-user printer settings (same shape as Organization.printSettings)
+const USER_PRINT_SETTINGS_KEYS = [
+    "printerType", "printerDevice", "printerIP", "printerPort", "printerName",
+    "openCashDrawer", "openCashDrawerOnPayment", "openCashDrawerShortcut",
+    "autoPrintOnPayment", "promptOrderPrintSections", "defaultOrderPrintSections",
+    "autoPrintOrderSections", "printers", "sectionPrinterMap", "documentPrinterMap",
+    "charactersPerLine", "printHeader", "printFooter", "autoCut", "printQRCode",
+];
+
+function sanitizeUserPrintSettings(input) {
+    if (!input || typeof input !== "object" || Array.isArray(input)) return {};
+    const out = {};
+    for (const key of USER_PRINT_SETTINGS_KEYS) {
+        if (input[key] === undefined) continue;
+        out[key] = input[key];
+    }
+    // Light shape validation for the printers list
+    if (out.printers !== undefined) {
+        if (!Array.isArray(out.printers)) {
+            throw new Error("printers must be an array");
+        }
+        out.printers = out.printers
+            .filter((p) => p && typeof p === "object" && (p.id || p.printerName || p.name))
+            .map((p) => ({
+                id: String(p.id || p.printerName || p.name),
+                name: String(p.name || p.printerName || p.id),
+                printerName: String(p.printerName || p.name || p.id),
+                printerPath: p.printerPath ? String(p.printerPath) : "",
+                paperWidthMm: Math.min(150, Math.max(30, Number(p.paperWidthMm) || 80)),
+            }));
+    }
+    return out;
+}
+
+// @desc    Get my printer settings (own + effective after org fallback)
+// @route   GET /api/users/me/print-settings
+// @access  Private (own user only)
+export const getMyPrintSettings = async (req, res) => {
+    try {
+        const user = await User.findById(req.user._id).select("printSettings useCustomPrintSettings organization");
+        if (!user) {
+            return res.status(404).json({ success: false, message: "المستخدم غير موجود" });
+        }
+        const { resolvePrintSettingsForUser, resolvePrintSettings } = await import("../utils/organization.js");
+        const { default: Organization } = await import("../models/Organization.js");
+        const orgId = user.organization?._id || user.organization || req.user.organization;
+        const organization = orgId ? await Organization.findById(orgId).select("printSettings devicePrinters") : null;
+        const own = user.printSettings && typeof user.printSettings === "object" ? user.printSettings : {};
+        res.json({
+            success: true,
+            data: {
+                useCustomPrintSettings: user.useCustomPrintSettings === true,
+                printSettings: own,
+                effective: resolvePrintSettingsForUser(user, organization),
+                organizationDefaults: resolvePrintSettings(organization),
+            },
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, message: "خطأ في جلب إعدادات الطباعة", error: error.message });
+    }
+};
+
+// @desc    Update my printer settings
+// @route   PUT /api/users/me/print-settings
+// @access  Private (own user only)
+export const updateMyPrintSettings = async (req, res) => {
+    try {
+        const { useCustomPrintSettings, printSettings } = req.body || {};
+        const user = await User.findById(req.user._id);
+        if (!user) {
+            return res.status(404).json({ success: false, message: "المستخدم غير موجود" });
+        }
+        if (useCustomPrintSettings !== undefined) {
+            user.useCustomPrintSettings = useCustomPrintSettings === true;
+        }
+        if (printSettings !== undefined) {
+            try {
+                const clean = sanitizeUserPrintSettings(printSettings);
+                user.printSettings = { ...(user.printSettings || {}), ...clean };
+            } catch (e) {
+                return res.status(400).json({ success: false, message: e.message });
+            }
+        }
+        await user.save();
+        res.json({
+            success: true,
+            message: "تم حفظ إعدادات الطباعة الخاصة بك بنجاح",
+            data: {
+                useCustomPrintSettings: user.useCustomPrintSettings === true,
+                printSettings: user.printSettings || {},
+            },
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, message: "خطأ في حفظ إعدادات الطباعة", error: error.message });
+    }
+};

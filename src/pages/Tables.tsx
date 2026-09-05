@@ -39,6 +39,7 @@ import ModalPortal from '../components/ModalPortal';
 import UndoBar, { UndoRequest } from '../components/UndoBar';
 import { playWarnBeep, playDangerBeep, isSoundEnabled } from '../utils/sound';
 import BillItemsEditModal from '../components/tables/BillItemsEditModal';
+import { resolveEffectivePrintSettings } from '../utils/resolvePrintSettings';
 import QuickAddModal from '../components/tables/QuickAddModal';
 import DailyReportModal from '../components/tables/DailyReportModal';
 import OrderModal from '../components/tables/OrderModal';
@@ -2300,7 +2301,7 @@ const loadInitialData = async () => {
   // يستخدم نفس مفتاح printBill (`bill:<id>:payment`) فيُفتح الدرج مرة واحدة فقط.
   const fireInstantDrawer = (bill: Bill, drawerMode: 'bill' | 'payment' = 'payment') => {
     try {
-      const settings = user?.organization?.printSettings;
+      const settings = resolveEffectivePrintSettings(user, user?.organization);
       const settingName = drawerMode === 'payment' ? 'openCashDrawerOnPayment' : 'openCashDrawer';
       if (settings?.[settingName] === false) return;
       const billPrinterId = settings?.documentPrinterMap?.bill;
@@ -2314,7 +2315,7 @@ const loadInitialData = async () => {
 
   const handleOpenCashDrawer = async () => {
     try {
-      const printSettings = user?.organization?.printSettings;
+      const printSettings = resolveEffectivePrintSettings(user, user?.organization);
       const billPrinterId = printSettings?.documentPrinterMap?.bill;
       const printer = printSettings?.printers?.find((item: any) => item.id === billPrinterId)
         || printSettings?.printers?.[0];

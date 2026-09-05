@@ -6,6 +6,8 @@ import { api } from '../services/api';
 import { getLocaleFromLanguage } from './localeMapper';
 import type { TFunction } from 'i18next';
 import { getCachedDevicePrinter, openCashDrawerThroughAgent, printThroughLocalBridge } from './localPrintBridge';
+import { resolveUserPrintSettings } from './resolvePrintSettings';
+import { getCurrentUserCache } from './currentUser';
 
 let cachedOrganizationResponse: { data: any; expiresAt: number } | null = null;
 const qrCodeCache = new Map<string, string>();
@@ -846,10 +848,12 @@ export const printBill = async (
       : (cachedOrganizationResponse && cachedOrganizationResponse.expiresAt > Date.now()
         ? cachedOrganizationResponse.data?.printSettings
         : undefined);
-    if (syncSettings) {
+    const instantOverride = resolveUserPrintSettings(getCurrentUserCache());
+    const effectiveInstant = instantOverride ? { ...syncSettings, ...instantOverride } : syncSettings;
+    if (effectiveInstant) {
       const instantSetting = drawerMode === 'payment' ? 'openCashDrawerOnPayment' : 'openCashDrawer';
-      if (syncSettings[instantSetting] !== false) {
-        const instantProfile = syncSettings.printers?.find((item: any) => item.id === syncSettings.documentPrinterMap?.bill);
+      if (effectiveInstant[instantSetting] !== false) {
+        const instantProfile = effectiveInstant.printers?.find((item: any) => item.id === effectiveInstant.documentPrinterMap?.bill);
         void openCashDrawerThroughAgent(printerName || instantProfile?.printerName, printKey).catch(() => {});
       }
     }
@@ -872,7 +876,9 @@ export const printBill = async (
   if (fullBillResponse?.success && fullBillResponse.data) {
     billForPrint = fullBillResponse.data;
   }
-  const printSettings = settingsResponse?.success === true ? settingsResponse.data?.printSettings : undefined;
+  const orgPrintSettings = settingsResponse?.success === true ? settingsResponse.data?.printSettings : undefined;
+  const mainOverride = resolveUserPrintSettings(getCurrentUserCache());
+  const printSettings = mainOverride ? { ...orgPrintSettings, ...mainOverride } : orgPrintSettings;
   const billPrinterId = printSettings?.documentPrinterMap?.bill;
   const billProfile = printSettings?.printers?.find((item: any) => item.id === billPrinterId);
   const selectedPrinterName = printerName || billProfile?.printerName || savedPrinter?.data?.printerName || savedPrinter?.data?.name;
