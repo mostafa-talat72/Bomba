@@ -2659,6 +2659,8 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
 
   // ── Callbacks مستقرة لـ TableButton — تمنع إعادة رسم الكروت غير الضرورية ──
   const stableTableClick = useCallback((tb: Table) => { lastFocusedTableRef.current = tb; handleTableClick(tb); }, []);
+  // زر "فتح" الصريح على الكارت — يوقف الانتشار ثم يفتح (الضغط على جسم الكارت يفتح أيضاً).
+  const stableOpenTable = useCallback((tb: Table, e: React.MouseEvent) => { e.stopPropagation(); lastFocusedTableRef.current = tb; handleTableClick(tb); }, []);
   const stableQuickOrder = useCallback((tb: Table, e: React.MouseEvent) => { lastFocusedTableRef.current = tb; handleQuickOrder(tb, e); }, []);
   const stableQuickBilling = useCallback((tb: Table, e: React.MouseEvent) => { lastFocusedTableRef.current = tb; handleQuickBilling(tb, e); }, [handleQuickBilling]);
   const stableHoverChange = useCallback((tb: Table | null) => {
@@ -3056,6 +3058,7 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
                               sessionUrgency={sessInfo?.urgency || 'none'}
                               liveExtra={cardData?.liveExtra || 0}
                               onClick={stableTableClick}
+                              onOpen={stableOpenTable}
                               onQuickOrder={stableQuickOrder}
                               onQuickBilling={stableQuickBilling}
                               onQuickPrint={stableQuickPrint}

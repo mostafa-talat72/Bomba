@@ -31,6 +31,8 @@ const CASH_DRAWER_PULSES = [
 app.setPath("userData", path.join(app.getPath("appData"), "bomba-desktop"));
 
 let serverProcess = null;
+let mongoProcess = null;
+let splashWindow = null;
 let mainWindow = null;
 let isQuitting = false;
 let localPrintServer = null;
@@ -874,6 +876,85 @@ function waitForHealth(url, timeoutMs) {
   });
 }
 
+// Is the thing on this port OUR already-healthy backend (e.g. orphaned by a
+// force-killed previous run)? If yes, attach a window to it instead of
+// spawning a second server (which would die on EADDRINUSE).
+async function healthyOwnServer(port) {
+  try {
+    const body = await new Promise((resolve) => {
+      const req = http.get(`http://127.0.0.1:${port}/health`, (res) => {
+        let data = "";
+        res.on("data", (c) => {
+          data += c;
+        });
+        res.on("end", () => {
+          try {
+            resolve(JSON.parse(data));
+          } catch {
+            resolve(null);
+          }
+        });
+      });
+      req.on("error", () => resolve(null));
+      req.setTimeout(3000, () => {
+        try {
+          req.destroy();
+        } catch {}
+        resolve(null);
+      });
+    });
+    return !!(body && body.app === "mte-systems" && body.status === "success");
+  } catch {
+    return false;
+  }
+}
+
+// Immediate splash so a slow cold boot (mongod + replica election + server)
+// never looks like a hang. Shown before any heavy work.
+function showSplash() {
+  try {
+    if (splashWindow && !splashWindow.isDestroyed()) return;
+    splashWindow = new BrowserWindow({
+      width: 400,
+      height: 210,
+      frame: false,
+      alwaysOnTop: true,
+      resizable: false,
+      center: true,
+      backgroundColor: "#1e1e2e",
+      webPreferences: { contextIsolation: true, nodeIntegration: false },
+    });
+    const html = `<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="utf-8"><style>
+      body{margin:0;height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#1e1e2e;color:#fff;font-family:Segoe UI,Tahoma,sans-serif}
+      .t{font-size:20px;font-weight:bold;margin-bottom:6px}
+      .s{font-size:13px;color:#c4b5fd;min-height:20px}
+      .spin{width:34px;height:34px;border:4px solid #4c1d95;border-top-color:#fb923c;border-radius:50%;animation:sp 1s linear infinite;margin-bottom:14px}
+      @keyframes sp{to{transform:rotate(360deg)}}
+    </style></head><body><div class="spin"></div><div class="t">MTE Systems</div><div class="s" id="st">...</div></body></html>`;
+    splashWindow.loadURL("data:text/html;charset=utf-8," + encodeURIComponent(html));
+    splashWindow.on("closed", () => {
+      splashWindow = null;
+    });
+  } catch {}
+}
+
+function setSplashStatus(text) {
+  try {
+    if (splashWindow && !splashWindow.isDestroyed() && splashWindow.webContents) {
+      splashWindow.webContents.executeJavaScript(
+        `document.getElementById("st").textContent=${JSON.stringify(String(text))};`
+      ).catch(() => {});
+    }
+  } catch {}
+}
+
+function closeSplash() {
+  try {
+    if (splashWindow && !splashWindow.isDestroyed()) splashWindow.close();
+  } catch {}
+  splashWindow = null;
+}
+
 // ---- Bundled MongoDB runtime ----
 // The installer ships a portable mongod (prepared/mongo/bin). On startup we
 // make sure MongoDB is listening on 27017 as a replica set named rs0, then
@@ -1042,6 +1123,10 @@ async function ensureBundledMongo() {
     ["--dbpath", mongoDbPath, "--port", String(activeMongoPort), "--bind_ip", "127.0.0.1", "--replSet", "rs0", "--quiet"],
     { stdio: ["ignore", mongoLog, mongoLog] }
   );
+  mongoProcess = child;
+  child.on("exit", () => {
+    if (mongoProcess === child) mongoProcess = null;
+  });
   child.on("error", (err) => mongoLogLine(`mongod spawn error: ${err.message}`));
   child.on("exit", (code) => mongoLogLine(`mongod exited (code ${code})`));
   mongoLogLine(`starting bundled mongod (dbpath: ${mongoDbPath}, port: ${activeMongoPort}) ...`);
@@ -1309,6 +1394,9 @@ if (!gotLock) {
     if (mainWindow) {
       if (mainWindow.isMinimized()) mainWindow.restore();
       mainWindow.focus();
+    } else if (splashWindow && !splashWindow.isDestroyed()) {
+      // Still booting (splash visible) — bring it forward instead of silence.
+      splashWindow.focus();
     }
   });
 
@@ -1371,12 +1459,28 @@ if (!gotLock) {
       return;
     }
 
+    showSplash();
+    setSplashStatus("تشغيل قاعدة البيانات...");
     await ensureBundledMongo();
-    const env = buildServerEnv(config, secrets, distDir);
-    serverProcess = spawnServer(serverDir, env);
+    // Orphaned healthy server from a force-killed run? Attach instead of
+    // spawning a second one (which would die on EADDRINUSE).
+    let skipSpawn = false;
+    if (await probePort(port, 1500)) {
+      if (await healthyOwnServer(port)) {
+        mongoLogLine(`backend already healthy on ${port} - attaching window instead of spawning`);
+        skipSpawn = true;
+      }
+    }
+    if (!skipSpawn) {
+      setSplashStatus("تشغيل الخادم الداخلي...");
+      const env = buildServerEnv(config, secrets, distDir);
+      serverProcess = spawnServer(serverDir, env);
+    }
 
     try {
+      setSplashStatus("انتظار جاهزية الخادم...");
       await waitForHealth(`http://127.0.0.1:${port}/health`, 90000);
+        closeSplash();
         createWindow(`http://127.0.0.1:${port}`);
       } catch (err) {
         dialog.showErrorBox(
@@ -1408,5 +1512,15 @@ if (!gotLock) {
         console.error("Failed to stop server process:", err.message);
       }
     }
+    // Don't orphan mongod: only kill if OUR child is still running
+    // (exitCode null = alive; avoids killing a reused PID).
+    try {
+      if (mongoProcess && mongoProcess.exitCode === null && mongoProcess.signalCode === null) {
+        mongoProcess.kill();
+      }
+    } catch (err) {
+      console.error("Failed to stop mongod process:", err.message);
+    }
+    mongoProcess = null;
   });
 }

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Table as TableIcon, ShoppingCart, DollarSign, Plus, Clock, Printer, ArrowLeftRight, Edit } from 'lucide-react';
+import { Table as TableIcon, ShoppingCart, DollarSign, Plus, Clock, Printer, ArrowLeftRight, Edit, DoorOpen } from 'lucide-react';
 import { Table, Bill } from '../../services/api';
 import { formatCurrency as formatCurrencyUtil } from '../../utils/formatters';
 import { getTableDisplay, getAgeLabel, getTableAgeColor } from './tableHelpers';
@@ -17,6 +17,7 @@ export interface TableButtonProps {
   /** مستوى تحذير مدة الجلسة */
   sessionUrgency?: 'none' | 'warn' | 'danger';
   onClick: (table: Table) => void;
+  onOpen?: (table: Table, e: React.MouseEvent) => void;
   onQuickOrder: (table: Table, e: React.MouseEvent) => void;
   onQuickBilling: (table: Table, e: React.MouseEvent) => void;
   onEndAllSessions?: (table: Table, e: React.MouseEvent) => void;
@@ -28,7 +29,7 @@ export interface TableButtonProps {
   liveExtra?: number;
 }
 
-const TableButton = React.memo<TableButtonProps>(({ table, isSelected, isOccupied, tableBills, tableOrdersCount, activeSessionType, activeSessionCount = 0, sessionUrgency = 'none', onClick, onQuickOrder, onQuickBilling, onEndAllSessions, onQuickPrint, onQuickChangeTable, onQuickEditBill, onHoverChange, liveExtra = 0 }) => {
+const TableButton = React.memo<TableButtonProps>(({ table, isSelected, isOccupied, tableBills, tableOrdersCount, activeSessionType, activeSessionCount = 0, sessionUrgency = 'none', onClick, onOpen, onQuickOrder, onQuickBilling, onEndAllSessions, onQuickPrint, onQuickChangeTable, onQuickEditBill, onHoverChange, liveExtra = 0 }) => {
   const { t, i18n } = useTranslation();
   const [showTooltip, setShowTooltip] = useState(false);
 
@@ -150,6 +151,15 @@ const TableButton = React.memo<TableButtonProps>(({ table, isSelected, isOccupie
         {isOccupied && !isSelected && (
           <div className="absolute bottom-1 left-1 right-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-all duration-200 translate-y-0 sm:translate-y-1 sm:group-hover:translate-y-0 z-10">
             <div className="grid grid-cols-2 gap-1.5">
+              {onOpen && (
+                <button
+                  onClick={(e) => onOpen(table, e)}
+                  className="col-span-2 min-h-10 bg-orange-500 hover:bg-orange-600 text-white text-sm font-bold rounded-lg flex items-center justify-center gap-1.5 shadow border border-orange-600 transition-all"
+                  title={t('cafe.openTable', 'فتح الطاولة')}>
+                  <DoorOpen className="h-4 w-4" />
+                  <span>{t('cafe.openTable', 'فتح')}</span>
+                </button>
+              )}
               <button
                 onClick={(e) => onQuickOrder(table, e)}
                 className="min-h-10 bg-white hover:bg-gray-50 dark:bg-gray-900 dark:hover:bg-gray-800 backdrop-blur-sm text-red-600 dark:text-red-400 text-sm font-bold rounded-lg flex items-center justify-center gap-1.5 shadow border border-red-200 dark:border-red-800 transition-all"
@@ -205,13 +215,13 @@ const TableButton = React.memo<TableButtonProps>(({ table, isSelected, isOccupie
           </div>
         )}
         {!isOccupied && (
-          <div className="absolute bottom-1.5 left-1 right-1 flex gap-1 opacity-0 group-hover:opacity-100 transition-all duration-200 translate-y-1 group-hover:translate-y-0 z-10">
+          <div className="absolute bottom-1.5 left-1 right-1 flex gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-all duration-200 translate-y-0 sm:translate-y-1 sm:group-hover:translate-y-0 z-10">
             <button
               onClick={(e) => onQuickOrder(table, e)}
-              className="flex-1 py-1 bg-white/90 hover:bg-white dark:bg-gray-900/90 dark:hover:bg-gray-900 backdrop-blur-sm text-gray-600 dark:text-gray-300 text-xs font-bold rounded-lg flex items-center justify-center gap-0.5 shadow border border-gray-200 dark:border-gray-600 transition-all"
+              className="flex-1 py-1.5 bg-green-500 hover:bg-green-600 dark:bg-green-600 dark:hover:bg-green-500 text-white text-sm font-bold rounded-lg flex items-center justify-center gap-1 shadow-md shadow-green-200 dark:shadow-green-900/40 border border-green-600 dark:border-green-500 transition-all"
               title={t('cafe.tableOrdersModal.newOrder')}>
-              <Plus className="h-3 w-3" />
-              <span className="hidden sm:inline">طلب جديد</span>
+              <Plus className="h-4 w-4" />
+              <span>طلب جديد</span>
             </button>
           </div>
         )}

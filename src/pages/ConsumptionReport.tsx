@@ -150,6 +150,19 @@ const ConsumptionReport = () => {
   // Track if initial data has been loaded
   const hasLoadedInitialData = useRef(false);
 
+  // تعديل التاريخ/التوقيت للمدير أو مالك المنشأة فقط — غيرهم عرض فقط.
+  const canEditDateRange = useMemo(() => {
+    const u: any = user;
+    if (!u) return false;
+    if (u.role === 'admin' || u.role === 'owner') return true;
+    const owner = u.organization?.owner;
+    const ownerId = typeof owner === 'object' && owner !== null
+      ? String((owner as any)._id || (owner as any).id || owner)
+      : String(owner || '');
+    const uid = String(u._id || u.id || '');
+    return !!ownerId && !!uid && ownerId === uid;
+  }, [user]);
+
   // Update dayjs locale when language changes
   useEffect(() => {
     dayjs.locale(i18n.language);
@@ -486,7 +499,8 @@ const ConsumptionReport = () => {
     return items.reduce((sum, item) => sum + item.total, 0);
   };
 
-  const printReport = async (): Promise<boolean> => {
+  // sectionKey: undefined أو 'all' = طباعة كل الأقسام، وغير ذلك طباعة القسم المحدد فقط.
+  const printReport = useCallback(async (sectionKey?: string | null): Promise<boolean> => {
     // ⚡ إشعار فوري: الطباعة بدأت لحظة الضغط.
     try { toast.info(t('consumptionReport.messages.printOpening')); } catch {}
     try {
@@ -515,8 +529,14 @@ const ConsumptionReport = () => {
       // Get organization name from user or use default
       const organizationName = user?.organizationName || t('consumptionReport.print.organization');
 
-      // Create separate pages for each category
-      const categories = Object.entries(consumptionData).filter(([_, items]) => items.length > 0);
+      // Create separate pages for each category — تُقتصر على القسم المختار عند تحديده
+      const categories = Object.entries(consumptionData).filter(([key, items]) =>
+        items.length > 0 && (!sectionKey || sectionKey === 'all' || key === sectionKey)
+      );
+      if (categories.length === 0) {
+        toast.error(t('consumptionReport.messages.noData'));
+        return false;
+      }
       
       const categoryPages = categories
         .map(([category, items]) => {
@@ -840,7 +860,7 @@ const ConsumptionReport = () => {
       console.error('Print error:', error);
       return false;
     }
-  };
+  }, [consumptionData, dateRange, user, i18n.language, t]);
 
   useEffect(() => {
     if (!location.state?.printOnLogout || loading || !dataReady || logoutPrintHandled.current) return;
@@ -979,6 +999,7 @@ const ConsumptionReport = () => {
 
   // Update handlers to work with separate date and time pickers
   const handleDateChange = (newDates: [Dayjs | null, Dayjs | null] | null, type: 'start' | 'end') => {
+    if (!canEditDateRange) return;
     if (!newDates) return;
 
     if (type === 'start' && newDates[0]) {
@@ -997,6 +1018,7 @@ const ConsumptionReport = () => {
   };
 
   const handleTimeChange = (time: Dayjs | null, type: 'start' | 'end') => {
+    if (!canEditDateRange) return;
     if (!time) return;
 
     if (type === 'start') {
@@ -1136,6 +1158,13 @@ const ConsumptionReport = () => {
                     >
                       {showTotalSales ? <EyeInvisibleOutlined className="text-lg" /> : <EyeOutlined className="text-lg" />}
                     </button>
+                    <button
+                      onClick={() => void printReport()}
+                      title="طباعة كل الأقسام"
+                      className="p-2 hover:bg-blue-700 dark:hover:bg-blue-800 rounded-lg transition-colors text-white"
+                    >
+                      <PrinterOutlined className="text-lg" />
+                    </button>
                   </div>
                 </Table.Summary.Cell>
               </Table.Summary.Row>
@@ -1255,6 +1284,13 @@ const ConsumptionReport = () => {
                       >
                         {showSectionTotals[sectionName] ? <EyeInvisibleOutlined className="text-lg" /> : <EyeOutlined className="text-lg" />}
                       </button>
+                      <button
+                        onClick={() => void printReport(sectionName)}
+                        title="طباعة هذا القسم"
+                        className="p-2 hover:bg-blue-700 dark:hover:bg-blue-800 rounded-lg transition-colors text-white"
+                      >
+                        <PrinterOutlined className="text-lg" />
+                      </button>
                     </div>
                   </Table.Summary.Cell>
                 </Table.Summary.Row>
@@ -1266,7 +1302,7 @@ const ConsumptionReport = () => {
     });
 
     return [allTab, ...sectionTabs];
-  }, [allItems, columns, consumptionData, error, loading, totalSales, showTotalSales, showSectionTotals, menuSections, pageSize, t, i18n.language]);
+  }, [allItems, columns, consumptionData, error, loading, totalSales, showTotalSales, showSectionTotals, menuSections, pageSize, t, i18n.language, printReport]);
 
 
   // Add custom styles
@@ -1469,6 +1505,7 @@ const ConsumptionReport = () => {
                       allowClear={false}
                       placeholder={t('consumptionReport.dateRange.startDatePlaceholder')}
                       size="large"
+                      disabled={!canEditDateRange}
                     />
                     <LocalizedTimePicker
                       value={timeRange[0]}
@@ -1477,6 +1514,7 @@ const ConsumptionReport = () => {
                       minuteStep={15}
                       placeholder={t('consumptionReport.dateRange.startTimePlaceholder')}
                       size="large"
+                      disabled={!canEditDateRange}
                     />
                   </div>
                 </div>
@@ -1496,6 +1534,7 @@ const ConsumptionReport = () => {
                       allowClear={false}
                       placeholder={t('consumptionReport.dateRange.endDatePlaceholder')}
                       size="large"
+                      disabled={!canEditDateRange}
                     />
                     <LocalizedTimePicker
                       value={timeRange[1]}
@@ -1504,6 +1543,7 @@ const ConsumptionReport = () => {
                       minuteStep={15}
                       placeholder={t('consumptionReport.dateRange.endTimePlaceholder')}
                       size="large"
+                      disabled={!canEditDateRange}
                     />
                   </div>
                 </div>

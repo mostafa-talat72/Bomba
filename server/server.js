@@ -679,6 +679,7 @@ app.set("trust proxy", 1);
 app.get("/health", (req, res) => {
     const ready = serverReady && mongoose.connection.readyState === 1;
     res.status(ready ? 200 : 503).json({
+        app: "mte-systems",
         status: ready ? "success" : "starting",
         message: ready ? "Server is running" : "Server starting up",
         timestamp: new Date().toISOString(),
