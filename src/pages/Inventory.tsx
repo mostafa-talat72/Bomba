@@ -296,7 +296,8 @@ const Inventory = () => {
       transports: ['websocket', 'polling'],
       reconnection: true,
       reconnectionDelay: 1000,
-      reconnectionAttempts: 5,
+      reconnectionAttempts: Infinity,
+      reconnectionDelayMax: 10000,
     });
 
     socketRef.current = socket;

@@ -1,6 +1,7 @@
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import mongoose from 'mongoose';
+import { sameId } from '../utils/idUtils.js';
 
 const execPromise = promisify(exec);
 let SerialPort = null;
@@ -213,7 +214,7 @@ class PrinterDetectionService {
   async getPrinterForDevice(organization, userId, deviceId) {
     if (!organization || !organization.devicePrinters) return null;
     const devicePrinter = organization.devicePrinters.find(
-      p => (p.userId?.toString() === userId?.toString() || !p.userId) && 
+      p => ((!p.userId && !userId) || sameId(p.userId, userId) || !p.userId) &&
            (p.deviceId === deviceId || !p.deviceId)
     );
 

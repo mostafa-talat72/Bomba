@@ -3,6 +3,7 @@ import Logger from '../../middleware/logger.js';
 import syncConfig from '../../config/syncConfig.js';
 import DeviceValidator from '../validation/deviceValidator.js';
 import BillValidator from '../validation/billValidator.js';
+import { rehydrateDocument } from '../../utils/bsonRehydrate.js';
 
 /**
  * Change Processor
@@ -926,6 +927,10 @@ class ChangeProcessor {
                 }
             }
 
+            // Restore BSON types (change payloads crossing JSON degrade
+            // Dates/ObjectIds to strings) before the raw write.
+            rehydrateDocument(collectionName, sanitizedDocument);
+
             // Bypass sync middleware when applying
             await this.bypassMiddleware(async () => {
                 // Use insertMany with ordered:false to handle duplicates gracefully
@@ -1045,10 +1050,12 @@ class ChangeProcessor {
                 this.stats.conflicts++;
             }
 
-            // Build update object
+            // Build update object (rehydrate: updatedFields crossing JSON
+            // degrade Dates/ObjectIds to strings — restore via schema first)
             const updateObj = {};
-            
+
             if (updateDescription.updatedFields) {
+                rehydrateDocument(collectionName, updateDescription.updatedFields);
                 updateObj.$set = updateDescription.updatedFields;
             }
             
@@ -1275,6 +1282,11 @@ class ChangeProcessor {
                 
                 this.stats.conflicts++;
             }
+
+            // Restore BSON types before the raw write (see applyInsert).
+            // (documentKey._id comes from the live change stream as native
+            // BSON, so the filter needs no conversion.)
+            rehydrateDocument(collectionName, sanitizedDocument);
 
             // Bypass sync middleware when applying
             await this.bypassMiddleware(async () => {

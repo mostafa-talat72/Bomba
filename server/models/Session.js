@@ -123,6 +123,8 @@ sessionSchema.index({ startTime: -1 });
 sessionSchema.index({ bill: 1 }); // للربط مع الفواتير
 sessionSchema.index({ table: 1 }); // للربط مع الطاولات
 sessionSchema.index({ organization: 1, createdAt: -1 }); // للتقارير
+sessionSchema.index({ organization: 1, status: 1, endTime: -1 }); // لتقارير الجلسات المكتملة حسب النطاق
+sessionSchema.index({ organization: 1, endTime: -1 }); // للفلترة الزمنية حسب endTime
 sessionSchema.index({ sessionNumber: 1 }, { unique: true, sparse: true });
 
 // Middleware to initialize controllersHistory on new session

@@ -672,6 +672,9 @@ function loadOrCreateConfig() {
     emailHost: "smtp.gmail.com",
     emailPort: 587,
     emailUser: "mr.robot192002@gmail.com",
+    // Server logging (Logger) on/off. When true, server output — including
+    // the [typeAudit] startup self-heal lines — is written to server.log.
+    enableLogging: false,
   };
 
   let config = {};
@@ -779,6 +782,7 @@ function buildServerEnv(config, secrets, distDir) {
   return {
     ...process.env,
     NODE_ENV: "production",
+    ENABLE_LOGGING: config.enableLogging === true ? "true" : "false",
     PORT: String(config.port || 5000),
     // Bind all interfaces so a peer device on the same LAN can connect.
     // (Windows Firewall still needs inbound TCP PORT + inbound UDP 41234.)
@@ -916,7 +920,7 @@ async function ensureReplicaSet() {
     return;
   }
   const { MongoClient } = require(driverPath);
-  const client = new MongoClient("mongodb://127.0.0.1:27017/?directConnection=true", {
+  const client = new MongoClient(`mongodb://127.0.0.1:${activeMongoPort}/?directConnection=true`, {
     serverSelectionTimeoutMS: 5000,
     connectTimeoutMS: 5000,
   });
@@ -928,15 +932,19 @@ async function ensureReplicaSet() {
       mongoLogLine(`replica set OK: ${status.set} (primary=${status.myState === 1})`);
       initiated = true;
     } catch (err) {
-      mongoLogLine("replica set not initialized - initiating ...");
-      try {
-        await client.db("admin").command({
-          replSetInitiate: { _id: "rs0", members: [{ _id: 0, host: "127.0.0.1:27017" }] },
-        });
-        mongoLogLine("replSetInitiate executed");
-        initiated = true;
-      } catch (err2) {
-        mongoLogLine(`replSetInitiate failed (non-fatal): ${err2.message}`);
+      // Slow first boots (HDD/Defender scan) need retries — never fail silently.
+      for (let attempt = 1; attempt <= 3 && !initiated; attempt++) {
+        mongoLogLine(`replica set not initialized - initiating (attempt ${attempt}/3) ...`);
+        try {
+          await client.db("admin").command({
+            replSetInitiate: { _id: "rs0", members: [{ _id: 0, host: `127.0.0.1:${activeMongoPort}` }] },
+          });
+          mongoLogLine("replSetInitiate executed");
+          initiated = true;
+        } catch (err2) {
+          mongoLogLine(`replSetInitiate attempt ${attempt} failed (non-fatal): ${err2.message}`);
+          if (attempt < 3) await new Promise((r) => setTimeout(r, 2000));
+        }
       }
     }
     // Wait for the primary election so the backend's replicaSet=rs0
@@ -963,6 +971,48 @@ async function ensureReplicaSet() {
   }
 }
 
+// Effective local Mongo port for this run. Auto-switches to 27018 when 27017
+// is held by a foreign (non-rs0) mongod, so the app boots with zero user steps.
+let activeMongoPort = 27017;
+// In-memory handle on the loaded config (kept in sync when we auto-switch ports).
+let appConfig = null;
+
+async function occupantIsOurReplicaSet(port) {
+  const { MongoClient } = await loadMongoDriver();
+  if (!MongoClient) return false;
+  const client = new MongoClient(`mongodb://127.0.0.1:${port}/?directConnection=true`, {
+    serverSelectionTimeoutMS: 3000,
+    connectTimeoutMS: 3000,
+  });
+  try {
+    await client.connect();
+    const status = await client.db("admin").command({ replSetGetStatus: 1 });
+    return status && status.set === "rs0";
+  } catch {
+    return false;
+  } finally {
+    try {
+      await client.close();
+    } catch {}
+  }
+}
+
+async function loadMongoDriver() {
+  try {
+    const serverModules = app.isPackaged
+      ? path.join(process.resourcesPath, "app", "prepared", "server", "node_modules")
+      : path.resolve(__dirname, "..", "prepared", "server", "node_modules");
+    const driverPath = [
+      path.join(serverModules, "mongodb"),
+      path.join(serverModules, "mongoose", "node_modules", "mongodb"),
+    ].find((p) => fs.existsSync(p));
+    if (!driverPath) return {};
+    return require(driverPath);
+  } catch {
+    return {};
+  }
+}
+
 async function ensureBundledMongo() {
   const mongodPath = app.isPackaged
     ? path.join(process.resourcesPath, "app", "prepared", "mongo", "bin", "mongod.exe")
@@ -972,28 +1022,62 @@ async function ensureBundledMongo() {
     return;
   }
   if (await probePort(27017, 1500)) {
-    mongoLogLine("MongoDB already listening on 27017");
-    await ensureReplicaSet();
-    return;
+    if (await occupantIsOurReplicaSet(27017)) {
+      mongoLogLine("MongoDB already listening on 27017 (our rs0) - reusing it");
+      activeMongoPort = 27017;
+      await ensureReplicaSet();
+      return;
+    }
+    // Foreign mongod (e.g. a system MongoDB without rs0) owns 27017.
+    // Don't fight it and don't ask the user: run ours on 27018 instead.
+    mongoLogLine("Port 27017 is held by a foreign MongoDB (not rs0) - switching bundled mongod to 27018 automatically");
+    activeMongoPort = 27018;
+    persistDatabaseUriForPort(27018);
   }
   const mongoDbPath = path.join(userDataDir, "mongo-data");
   fs.mkdirSync(mongoDbPath, { recursive: true });
   const mongoLog = fs.openSync(path.join(userDataDir, "mongod.log"), "a");
-  mongoLogLine(`starting bundled mongod (dbpath: ${mongoDbPath}) ...`);
   const child = spawn(
     mongodPath,
-    ["--dbpath", mongoDbPath, "--port", "27017", "--bind_ip", "127.0.0.1", "--replSet", "rs0", "--quiet"],
+    ["--dbpath", mongoDbPath, "--port", String(activeMongoPort), "--bind_ip", "127.0.0.1", "--replSet", "rs0", "--quiet"],
     { stdio: ["ignore", mongoLog, mongoLog] }
   );
   child.on("error", (err) => mongoLogLine(`mongod spawn error: ${err.message}`));
   child.on("exit", (code) => mongoLogLine(`mongod exited (code ${code})`));
-  const up = await probePort(27017, 60000);
+  mongoLogLine(`starting bundled mongod (dbpath: ${mongoDbPath}, port: ${activeMongoPort}) ...`);
+  const up = await probePort(activeMongoPort, 60000);
   if (!up) {
-    mongoLogLine("mongod did not open port 27017 within 60s");
+    mongoLogLine(`mongod did not open port ${activeMongoPort} within 60s`);
     return;
   }
   mongoLogLine("mongod is up - ensuring replica set");
   await ensureReplicaSet();
+}
+
+// Persist an auto-switched local Mongo port so the backend URI follows it
+// on this boot and every boot after (zero user steps).
+function persistDatabaseUriForPort(port) {
+  try {
+    let cfg = {};
+    if (fs.existsSync(configPath)) {
+      cfg = JSON.parse(fs.readFileSync(configPath, "utf8") || "{}");
+    }
+    const current = String(cfg.databaseUri || "mongodb://localhost:27017/bomba?replicaSet=rs0");
+    const next = current.replace(/localhost:\d+/, `localhost:${port}`);
+    if (next !== current) {
+      cfg.databaseUri = next;
+      fs.writeFileSync(configPath, JSON.stringify(cfg, null, 2), "utf8");
+    }
+    // Keep the in-memory config used for this boot in sync as well.
+    try {
+      if (typeof appConfig === "object" && appConfig !== null) {
+        appConfig.databaseUri = cfg.databaseUri || next;
+      }
+    } catch {}
+    mongoLogLine(`local database URI now uses port ${port}`);
+  } catch (err) {
+    mongoLogLine(`could not persist databaseUri for port ${port}: ${err.message}`);
+  }
 }
 
 function createWindow(url) {
@@ -1247,6 +1331,7 @@ if (!gotLock) {
       return;
     }
     const { config, secrets } = loadOrCreateConfig();
+    appConfig = config;
     const port = config.port || 5000;
     localBackendPort = port;
     startLocalPrintServer();

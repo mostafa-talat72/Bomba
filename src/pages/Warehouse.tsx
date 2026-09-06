@@ -264,7 +264,7 @@ const Warehouse = () => {
     const socket = io(socketUrl, {
         auth: { token: localStorage.getItem('token') || undefined },
       path: '/socket.io/', transports: ['websocket', 'polling'],
-      reconnection: true, reconnectionDelay: 1000, reconnectionAttempts: 5,
+      reconnection: true, reconnectionDelay: 1000, reconnectionAttempts: Infinity, reconnectionDelayMax: 10000,
     });
     socketRef.current = socket;
     socket.on('inventory-update', async () => {

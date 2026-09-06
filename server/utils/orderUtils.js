@@ -64,7 +64,9 @@ const calculateTotalInventoryNeeded = async (orderItems) => {
             if (menuItem.ingredients && menuItem.ingredients.length > 0) {
                 for (const ingredient of menuItem.ingredients) {
                     const requiredQuantityForItem = ingredient.quantity * item.quantity;
-                    const existing = inventoryNeeded.get(ingredient.item);
+                    // مفتاح نصي موحد: ObjectId والنص لنفس الصنف يجب أن يندمجا (لا مفتاحين من نوعين).
+                    const ingredientKey = String(ingredient.item);
+                    const existing = inventoryNeeded.get(ingredientKey);
                     if (existing) {
                         let totalQuantity;
                         if (existing.unit !== ingredient.unit) {
@@ -73,9 +75,9 @@ const calculateTotalInventoryNeeded = async (orderItems) => {
                         } else {
                             totalQuantity = existing.quantity + requiredQuantityForItem;
                         }
-                        inventoryNeeded.set(ingredient.item, { quantity: totalQuantity, unit: ingredient.unit });
+                        inventoryNeeded.set(ingredientKey, { quantity: totalQuantity, unit: ingredient.unit });
                     } else {
-                        inventoryNeeded.set(ingredient.item, { quantity: requiredQuantityForItem, unit: ingredient.unit });
+                        inventoryNeeded.set(ingredientKey, { quantity: requiredQuantityForItem, unit: ingredient.unit });
                     }
                 }
             }

@@ -6,6 +6,21 @@ import { getUserLocale } from "../utils/localeHelper.js";
 import { getOrganizationId } from "../utils/organization.js";
 import { findReportEligibleOrders } from "../utils/reportOrderFilter.js";
 
+// مقارنة هويات آمنة عبر كل الأنواع: ObjectId / نص / كائن مدمج (populated) —
+// تتجنب crash الـ .toString() على القيم الفارغة ورفض المالك المدمج.
+const sameId = (a, b) => {
+    if (a === undefined || a === null || b === undefined || b === null) return false;
+    const na = (a && typeof a === 'object' && a._id !== undefined) ? a._id : a;
+    const nb = (b && typeof b === 'object' && b._id !== undefined) ? b._id : b;
+    if (na === undefined || na === null || nb === undefined || nb === null) return false;
+    return String(na) === String(nb);
+};
+const isOrgOwner = (organization, user) => {
+    const ownerId = organization?.owner?._id || organization?.owner;
+    return (!!ownerId && sameId(ownerId, user?._id)) || user?.role === 'owner';
+};
+const includesUser = (list, user) => Array.isArray(list) && list.some(m => sameId(m?._id || m, user?._id));
+
 // @desc    Get organization details by ID
 // @route   GET /api/organization/:id
 // @access  Private
@@ -100,12 +115,15 @@ export const updateOrganization = async (req, res) => {
             });
         }
 
-        // التحقق من الصلاحيات
-        const isOwner = organization.owner.toString() === req.user._id.toString();
-        const isAuthorizedAdmin = req.user.role === 'admin' && 
-            organization.permissions.allowManagersToEditOrganization &&
-            organization.permissions.authorizedManagers.some(
-                manager => manager._id.toString() === req.user._id.toString()
+        // التحقق من الصلاحيات (آمن ضد owner/permissions الفارغة + دور owner)
+        const ownerId = organization.owner?._id || organization.owner;
+        const isOwner = (ownerId && ownerId.toString() === req.user._id.toString()) ||
+            req.user.role === 'owner';
+        const perms = organization.permissions || {};
+        const isAuthorizedAdmin = req.user.role === 'admin' &&
+            perms.allowManagersToEditOrganization &&
+            (perms.authorizedManagers || []).some(
+                manager => String(manager?._id || manager) === String(req.user._id)
             );
 
         if (!isOwner && !isAuthorizedAdmin) {
@@ -211,7 +229,7 @@ export const updateOrganizationPermissions = async (req, res) => {
         }
 
         // التحقق من أن المستخدم هو المالك
-        const isOwner = organization.owner.toString() === req.user._id.toString();
+        const isOwner = isOrgOwner(organization, req.user);
 
         if (!isOwner) {
             return res.status(403).json({
@@ -277,11 +295,14 @@ export const canEditOrganization = async (req, res) => {
             });
         }
 
-        const isOwner = organization.owner.toString() === req.user._id.toString();
-        const isAuthorizedAdmin = req.user.role === 'admin' && 
-            organization.permissions.allowManagersToEditOrganization &&
-            organization.permissions.authorizedManagers.some(
-                manager => manager._id.toString() === req.user._id.toString()
+        const ownerId = organization.owner?._id || organization.owner;
+        const isOwner = (ownerId && ownerId.toString() === req.user._id.toString()) ||
+            req.user.role === 'owner';
+        const perms = organization.permissions || {};
+        const isAuthorizedAdmin = req.user.role === 'admin' &&
+            perms.allowManagersToEditOrganization &&
+            (perms.authorizedManagers || []).some(
+                manager => String(manager?._id || manager) === String(req.user._id)
             );
 
         const canEdit = isOwner || isAuthorizedAdmin;
@@ -291,8 +312,8 @@ export const canEditOrganization = async (req, res) => {
                 canEdit,
                 isOwner,
                 isAuthorizedAdmin,
-                allowManagersToEditOrganization: organization.permissions.allowManagersToEditOrganization,
-                authorizedManagers: organization.permissions.authorizedManagers
+                allowManagersToEditOrganization: perms.allowManagersToEditOrganization,
+                authorizedManagers: perms.authorizedManagers || []
             },
         });
     } catch (error) {
@@ -323,7 +344,7 @@ export const getAvailableManagers = async (req, res) => {
         }
 
         // التحقق من أن المستخدم هو المالك
-        const isOwner = organization.owner.toString() === req.user._id.toString();
+        const isOwner = isOrgOwner(organization, req.user);
 
         if (!isOwner) {
             return res.status(403).json({
@@ -420,10 +441,8 @@ export const updateReportSettings = async (req, res) => {
         }
 
         // Check if user is owner or authorized to manage reports
-        const isOwner = organization.owner.toString() === req.user._id.toString();
-        const isAuthorized = organization.reportSettings?.authorizedToManageReports?.some(
-            managerId => managerId.toString() === req.user._id.toString()
-        );
+        const isOwner = isOrgOwner(organization, req.user);
+        const isAuthorized = includesUser(organization.reportSettings?.authorizedToManageReports, req.user);
 
         if (!isOwner && !isAuthorized) {
             return res.status(403).json({
@@ -600,10 +619,8 @@ export const canManageReports = async (req, res) => {
             });
         }
 
-        const isOwner = organization.owner.toString() === req.user._id.toString();
-        const isAuthorized = organization.reportSettings?.authorizedToManageReports?.some(
-            managerId => managerId.toString() === req.user._id.toString()
-        );
+        const isOwner = isOrgOwner(organization, req.user);
+        const isAuthorized = includesUser(organization.reportSettings?.authorizedToManageReports, req.user);
 
         res.json({
             success: true,
@@ -642,10 +659,8 @@ export const canManagePayroll = async (req, res) => {
             });
         }
 
-        const isOwner = organization.owner.toString() === req.user._id.toString();
-        const isAuthorized = organization.permissions?.authorizedPayrollManagers?.some(
-            managerId => managerId.toString() === req.user._id.toString()
-        );
+        const isOwner = isOrgOwner(organization, req.user);
+        const isAuthorized = includesUser(organization.permissions?.authorizedPayrollManagers, req.user);
 
         res.json({
             success: true,
@@ -685,7 +700,7 @@ export const updatePayrollPermissions = async (req, res) => {
         }
 
         // التحقق من أن المستخدم هو المالك
-        const isOwner = organization.owner.toString() === req.user._id.toString();
+        const isOwner = isOrgOwner(organization, req.user);
 
         if (!isOwner) {
             return res.status(403).json({
@@ -1029,58 +1044,56 @@ export const generateAndSendDailyReport = async (organizationId, userLocale = 'a
             const startDate = new Date(currentYear, currentMonth - 1, 1, 0, 0, 0, 0);
             const endDate = new Date(currentYear, currentMonth, 0, 23, 59, 59, 999);
                         
-            const detailedEmployeesData = [];
-            
-            for (const empSummary of payrollSummaryData.employees) {
+            // All employees resolve in parallel, and each employee's 6 queries run
+            // in parallel too (were 6 sequential queries per employee — with N
+            // employees this was 6xN sequential round-trips on every emailed report).
+            const detailedResults = await Promise.all(payrollSummaryData.employees.map(async (empSummary) => {
                 try {
-                    
-                    // Get full employee data
-                    const employee = await Employee.findById(empSummary.employeeId);
+                    const [employee, attendance, advances, bonuses, deductions, payments] = await Promise.all([
+                        // Get full employee data
+                        Employee.findById(empSummary.employeeId),
+                        // Get attendance records
+                        Attendance.find({
+                            employeeId: empSummary.employeeId,
+                            organizationId: organizationId,
+                            date: { $gte: startDate, $lte: endDate }
+                        }).sort({ date: 1 }).lean(),
+                        // Get advances
+                        Advance.find({
+                            employeeId: empSummary.employeeId,
+                            organizationId: organizationId,
+                            month: monthStr
+                        }).sort({ requestDate: -1 }).lean(),
+                        // Get bonuses
+                        Bonus.find({
+                            employeeId: empSummary.employeeId,
+                            organizationId: organizationId,
+                            month: monthStr
+                        }).sort({ date: -1 }).lean(),
+                        // Get deductions
+                        Deduction.find({
+                            employeeId: empSummary.employeeId,
+                            organizationId: organizationId,
+                            month: monthStr
+                        }).sort({ date: -1 }).lean(),
+                        // Get payments
+                        Payment.find({
+                            employeeId: empSummary.employeeId,
+                            organizationId: organizationId,
+                            month: monthStr
+                        }).sort({ paymentDate: -1 }).lean(),
+                    ]);
+
                     if (!employee) {
                         console.warn(`Employee not found: ${empSummary.employeeId}`);
-                        continue;
+                        return null;
                     }
-                    
-                    // Get attendance records
-                    const attendance = await Attendance.find({
-                        employeeId: employee._id,
-                        organizationId: organizationId,
-                        date: { $gte: startDate, $lte: endDate }
-                    }).sort({ date: 1 }).lean();
-                    
-                    // Get advances
-                    const advances = await Advance.find({
-                        employeeId: employee._id,
-                        organizationId: organizationId,
-                        month: monthStr
-                    }).sort({ requestDate: -1 }).lean();
-                    
-                    // Get bonuses
-                    const bonuses = await Bonus.find({
-                        employeeId: employee._id,
-                        organizationId: organizationId,
-                        month: monthStr
-                    }).sort({ date: -1 }).lean();
-                    
-                    // Get deductions
-                    const deductions = await Deduction.find({
-                        employeeId: employee._id,
-                        organizationId: organizationId,
-                        month: monthStr
-                    }).sort({ date: -1 }).lean();
-                    
-                    // Get payments
-                    const payments = await Payment.find({
-                        employeeId: employee._id,
-                        organizationId: organizationId,
-                        month: monthStr
-                    }).sort({ paymentDate: -1 }).lean();
-                    
+
                     // Calculate stats (reuse from payrollSummaryData)
                     // remainingBalance should be current month's net salary minus current month's paid amount
                     const currentMonthNetSalary = (empSummary.grossSalary || 0) + (empSummary.bonuses || 0) - (empSummary.deductions || 0);
                     const currentMonthRemaining = currentMonthNetSalary - (empSummary.paidAmount || 0);
-                    
+
                     const stats = {
                         carriedForward: empSummary.carriedForward || 0,
                         currentMonthSalary: empSummary.grossSalary || 0,
@@ -1091,8 +1104,8 @@ export const generateAndSendDailyReport = async (organizationId, userLocale = 'a
                         remainingBalance: (empSummary.carriedForward || 0) + currentMonthRemaining, // Total available = carried forward + current month remaining
                         attendanceDays: attendance.filter(a => a.status === 'present' || a.status === 'late').length
                     };
-                    
-                    detailedEmployeesData.push({
+
+                    return {
                         employee: employee.toObject(),
                         stats,
                         attendance,
@@ -1100,14 +1113,15 @@ export const generateAndSendDailyReport = async (organizationId, userLocale = 'a
                         bonuses,
                         deductions,
                         payments
-                    });
-                                        
+                    };
+
                 } catch (empError) {
                     console.error(`Error preparing detailed data for employee ${empSummary.employeeId}:`, empError);
+                    return null;
                 }
-            }
-            
-            allEmployeesPDFData = detailedEmployeesData;
+            }));
+
+            allEmployeesPDFData = detailedResults.filter(Boolean);
             
         } else {
             console.warn(`⚠️ Cannot prepare all employees PDF - missing data:`, {
@@ -1161,10 +1175,8 @@ export const sendReportNow = async (req, res) => {
         }
 
         // Check if user is owner or authorized to manage reports
-        const isOwner = organization.owner.toString() === req.user._id.toString();
-        const isAuthorized = organization.reportSettings?.authorizedToManageReports?.some(
-            managerId => managerId.toString() === req.user._id.toString()
-        );
+        const isOwner = isOrgOwner(organization, req.user);
+        const isAuthorized = includesUser(organization.reportSettings?.authorizedToManageReports, req.user);
 
         if (!isOwner && !isAuthorized) {
             return res.status(403).json({

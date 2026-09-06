@@ -62,6 +62,8 @@ const BillItemsEditModal: React.FC<Props> = ({ isOpen, onClose, bill, menuItems,
   const [priceEditTarget, setPriceEditTarget] = useState<{ index: number; item: AggregatedEditItem } | null>(null);
 
   const curCurrency = useRef(localStorage.getItem('organizationCurrency') || 'EGP').current;
+  // مفتاح صنف موحد عبر كل الأنواع: ObjectId / نص / كائن مدمج — يمنع تكرار السطور بدل دمج الكمية.
+  const menuItemKey = (v: any): string => String(v?._id || v?.id || v || '');
   const fmt = useCallback((n: number) => formatCurrencyUtil(n, i18n.language, curCurrency), [i18n.language, curCurrency]);
   const calculateTotal = useCallback(() => items.reduce((s, it) => s + it.price * it.quantity, 0), [items]);
 
@@ -220,8 +222,8 @@ const BillItemsEditModal: React.FC<Props> = ({ isOpen, onClose, bill, menuItems,
     }
     const flashKey = `${id}::${effVariant || ''}::${effPrice}`;
     setItems(prev => {
-      const ex = prev.find(i => i.menuItem === id && (i as any).variant === effVariant && i.price === effPrice);
-      if (ex) return prev.map(i => i.menuItem === id && (i as any).variant === effVariant && i.price === effPrice ? { ...i, quantity: i.quantity + 1 } : i);
+      const ex = prev.find(i => menuItemKey(i.menuItem) === menuItemKey(id) && (i as any).variant === effVariant && i.price === effPrice);
+      if (ex) return prev.map(i => menuItemKey(i.menuItem) === menuItemKey(id) && (i as any).variant === effVariant && i.price === effPrice ? { ...i, quantity: i.quantity + 1 } : i);
       return [...prev, { menuItem: id, name: menuItem.name, price: effPrice, variant: effVariant, quantity: 1 } as any];
     });
     if (flashTimerRef.current) clearTimeout(flashTimerRef.current);
@@ -236,8 +238,8 @@ const BillItemsEditModal: React.FC<Props> = ({ isOpen, onClose, bill, menuItems,
     setItems(prev => {
       const cp = [...prev];
       let idx = index;
-      if (!cp[idx] || cp[idx].menuItem !== item.menuItem || cp[idx].price !== item.price) {
-        idx = cp.findIndex(i => i.menuItem === item.menuItem && i.price === item.price);
+      if (!cp[idx] || menuItemKey(cp[idx].menuItem) !== menuItemKey(item.menuItem) || cp[idx].price !== item.price) {
+        idx = cp.findIndex(i => menuItemKey(i.menuItem) === menuItemKey(item.menuItem) && i.price === item.price);
         if (idx === -1) return prev;
       }
       const target = cp[idx];

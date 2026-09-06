@@ -42,6 +42,8 @@ function collectFromSchema(schema, base, out) {
             out.push({ segments: [...base, ...name.split(".")], kind: "objectId" });
         } else if (instance === "Date") {
             out.push({ segments: [...base, ...name.split(".")], kind: "date" });
+        } else if (instance === "Number") {
+            out.push({ segments: [...base, ...name.split(".")], kind: "number" });
         } else if (instance === "Array") {
             const caster = type.caster;
             if (!caster) return;
@@ -88,21 +90,64 @@ export function getTypedPaths(collectionName) {
     return out;
 }
 
+function asBinary12(value) {
+    // BSON Binary subtype 0 holding exactly 12 bytes = a mangled ObjectId
+    // (e.g. written via $binary instead of $oid by a faulty sync path).
+    try {
+        if (!value || typeof value !== "object" || value instanceof Date) return null;
+        const bsontype = value._bsontype;
+        if (bsontype !== "Binary" && bsontype !== "BinData") return null;
+        if (value.sub_type !== 0 && value.subType !== 0) return null;
+        const buf = value.buffer;
+        const bytes = buf
+            ? Buffer.from(buf.buffer || buf, buf.byteOffset || 0, buf.byteLength ?? buf.length ?? 0)
+            : null;
+        if (!bytes || bytes.length !== 12) return null;
+        return new mongoose.Types.ObjectId(bytes);
+    } catch {
+        return null;
+    }
+}
+
 function convertLeaf(value, kind) {
     if (value === null || value === undefined) return { changed: false, value };
     if (kind === "objectId") {
-        if (typeof value !== "string") return { changed: false, value };
-        if (!isObjectIdString(value)) return { changed: false, value };
-        return { changed: true, value: toObjectId(value) };
+        if (typeof value === "string") {
+            if (!isObjectIdString(value)) return { changed: false, value };
+            return { changed: true, value: toObjectId(value) };
+        }
+        const recovered = asBinary12(value);
+        if (recovered) return { changed: true, value: recovered };
+        return { changed: false, value };
     }
+    if (kind === "number") return convertNumberLeaf(value);
     // date
     if (value instanceof Date) return { changed: false, value };
-    if (typeof value !== "string" && typeof value !== "number") return { changed: false, value };
+    if (typeof value === "number") {
+        // Only millisecond timestamps (>= 2001-09-09). Raw numbers below that are
+        // almost certainly unix SECONDS or sentinel values (e.g. 0) — converting
+        // them with new Date() would shift the instant (e.g. to 1970), so skip.
+        if (!Number.isFinite(value) || value < 1e12) return { changed: false, value };
+        return { changed: true, value: new Date(value) };
+    }
+    if (typeof value !== "string") return { changed: false, value };
     const d = toDate(value);
     if (d instanceof Date && !Number.isNaN(d.getTime())) {
         return { changed: true, value: d };
     }
     return { changed: false, value };
+}
+
+function convertNumberLeaf(value) {
+    if (value === null || value === undefined) return { changed: false, value };
+    if (typeof value === "number") return { changed: false, value };
+    // Strictly numeric strings only ("250", "-12.5") — never guess ("", "N/A", "12abc")
+    if (typeof value !== "string") return { changed: false, value };
+    const t = value.trim();
+    if (!/^-?\d+(\.\d+)?$/.test(t)) return { changed: false, value };
+    const n = Number(t);
+    if (!Number.isFinite(n)) return { changed: false, value };
+    return { changed: true, value: n };
 }
 
 // Apply one typed path to a document, tracking changed dotted paths for $set

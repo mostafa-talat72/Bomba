@@ -15,6 +15,7 @@ import {
 } from "../utils/exportUtils.js";
 import { getUserLocale } from "../utils/localeHelper.js";
 import { getReportEligibleOrderIds } from "../utils/reportOrderFilter.js";
+import { getOrganizationId } from "../utils/organization.js";
 
 // @desc    Get dashboard statistics
 // @route   GET /api/reports/dashboard
@@ -23,7 +24,7 @@ export const getDashboardStats = async (req, res) => {
     try {
         const filter = req.query;
         const { startDate, endDate } = getDateRange(filter);
-        const reportOrderIds = await getReportEligibleOrderIds(req.user.organization);
+        const reportOrderIds = await getReportEligibleOrderIds(req.user.organization, { startDate, endDate });
 
         // كل التجميعات متوازية بلا تسلسل — نفس البيانات الكاملة لكن 150ms بدل 800ms
         const [revenueData, ordersData, sessionsData] = await Promise.all([
@@ -32,7 +33,7 @@ export const getDashboardStats = async (req, res) => {
                     $match: {
                         createdAt: { $gte: startDate, $lte: endDate },
                         status: { $in: ["partial", "paid"] },
-                        organization: req.user.organization,
+                        organization: getOrganizationId(req.user),
                     },
                 },
                 {
@@ -49,7 +50,7 @@ export const getDashboardStats = async (req, res) => {
                     $match: {
                         createdAt: { $gte: startDate, $lte: endDate },
                         isDeleted: false,
-                        organization: req.user.organization,
+                        organization: getOrganizationId(req.user),
                         _id: { $in: reportOrderIds },
                     },
                 },
@@ -67,7 +68,7 @@ export const getDashboardStats = async (req, res) => {
                         endTime: { $gte: startDate, $lte: endDate },
                         status: "completed",
                         totalCost: { $gt: 0 },
-                        organization: req.user.organization,
+                        organization: getOrganizationId(req.user),
                 },
             },
             {
@@ -88,7 +89,7 @@ export const getDashboardStats = async (req, res) => {
             {
                 $match: {
                     date: { $gte: startDate, $lte: endDate },
-                    organization: req.user.organization,
+                    organization: getOrganizationId(req.user),
                 },
             },
             {
@@ -101,20 +102,20 @@ export const getDashboardStats = async (req, res) => {
             ]),
             Session.countDocuments({
                 status: "active",
-                organization: req.user.organization,
+                organization: getOrganizationId(req.user),
             }),
             InventoryItem.countDocuments({
                 isActive: true,
-                organization: req.user.organization,
+                organization: getOrganizationId(req.user),
                 $expr: { $lte: ["$currentStock", "$minStock"] },
             }),
             Bill.countDocuments({
                 createdAt: { $gte: startDate, $lte: endDate },
-                organization: req.user.organization,
+                organization: getOrganizationId(req.user),
             }),
             Order.countDocuments({
                 status: { $in: ["pending", "preparing", "ready"] },
-                organization: req.user.organization,
+                organization: getOrganizationId(req.user),
                 isDeleted: false,
                 _id: { $in: reportOrderIds },
             })
@@ -161,204 +162,36 @@ export const getSalesReport = async (req, res) => {
     try {
         const { groupBy = "day", ...filter } = req.query;
         const { startDate, endDate } = getDateRange(filter);
-        const reportOrderIds = await getReportEligibleOrderIds(req.user.organization);
         // Calculate previous period for comparison
         const periodDuration = endDate - startDate;
         const previousStartDate = new Date(startDate.getTime() - periodDuration);
         const previousEndDate = startDate;
-
-        let groupFormat;
-        switch (groupBy) {
-            case "hour":
-                groupFormat = {
-                    $dateToString: {
-                        format: "%Y-%m-%d %H:00",
-                        date: "$createdAt",
-                    },
-                };
-                break;
-            case "day":
-                groupFormat = {
-                    $dateToString: { format: "%Y-%m-%d", date: "$createdAt" },
-                };
-                break;
-            case "week":
-                groupFormat = { $week: "$createdAt" };
-                break;
-            case "month":
-                groupFormat = {
-                    $dateToString: { format: "%Y-%m", date: "$createdAt" },
-                };
-                break;
-            default:
-                groupFormat = {
-                    $dateToString: { format: "%Y-%m-%d", date: "$createdAt" },
-                };
-        }
-
-        // Sales by time period
-        const salesByPeriod = await Bill.aggregate([
-            {
-                $match: {
-                    createdAt: { $gte: startDate, $lte: endDate },
-                    status: { $in: ["partial", "paid"] },
-                    organization: req.user.organization,
-                },
-            },
-            {
-                $group: {
-                    _id: groupFormat,
-                    totalSales: { $sum: "$total" },
-                    billCount: { $sum: 1 },
-                    avgBillValue: { $avg: "$total" },
-                },
-            },
-            {
-                $sort: { _id: 1 },
-            },
+        // Both eligible-order scans resolve together (each scoped to its own period).
+        const [reportOrderIds, previousOrderIds] = await Promise.all([
+            getReportEligibleOrderIds(req.user.organization, { startDate, endDate }),
+            getReportEligibleOrderIds(req.user.organization, { startDate: previousStartDate, endDate: previousEndDate }),
         ]);
 
-        // Top selling items
-        const topItems = await Order.aggregate([
-            {
-                $match: {
-                    createdAt: { $gte: startDate, $lte: endDate },
-                    isDeleted: false,
-                    status: "delivered",
-                    organization: req.user.organization,
-                    _id: { $in: reportOrderIds },
-                },
-            },
-            {
-                $unwind: "$items",
-            },
-            {
-                $group: {
-                    _id: { name: "$items.name", variant: "$items.variant" },
-                    totalQuantity: { $sum: "$items.quantity" },
-                    totalRevenue: {
-                        $sum: {
-                            $multiply: ["$items.price", "$items.quantity"],
-                        },
-                    },
-                    orderCount: { $sum: 1 },
-                },
-            },
-            {
-                $project: {
-                    _id: 0,
-                    name: {
-                        $concat: [
-                            "$_id.name",
-                            {
-                                $cond: [
-                                    {
-                                        $and: [
-                                            { $ne: ["$_id.variant", null] },
-                                            { $ne: ["$_id.variant", ""] },
-                                            { $ne: ["$_id.variant", "عادي"] }
-                                        ]
-                                    },
-                                    { $concat: [" (", "$_id.variant", ")"] },
-                                    ""
-                                ]
-                            }
-                        ]
-                    },
-                    variant: "$_id.variant",
-                    totalQuantity: 1,
-                    totalRevenue: 1,
-                    orderCount: 1
-                }
-            },
-            {
-                $sort: { totalQuantity: -1 },
-            },
-            {
-                $limit: 10,
-            },
+        // NOTE: salesByPeriod / topItems / revenueBySource aggregates were removed —
+        // the frontend never reads them and revenueBySource's double-$lookup over
+        // all bills was one of the slowest stages. Keys are kept below as empty
+        // defaults for API compatibility.
+
+        // Helpers run in parallel. Each period uses its own eligible-order id set
+        // (scoped to that period's dates, resolved together above).
+        const [
+            currentData,
+            previousData,
+            topProductsBySection,
+            peakHours,
+            staffPerformance,
+        ] = await Promise.all([
+            getSalesReportData(req.user.organization, startDate, endDate, reportOrderIds),
+            getSalesReportData(req.user.organization, previousStartDate, previousEndDate, previousOrderIds),
+            getTopProductsBySection(req.user.organization, startDate, endDate, reportOrderIds),
+            getPeakHoursData(req.user.organization, startDate, endDate, reportOrderIds),
+            getStaffPerformanceData(req.user.organization, startDate, endDate, reportOrderIds),
         ]);
-
-        // Revenue by source
-        const revenueBySource = await Bill.aggregate([
-            {
-                $match: {
-                    createdAt: { $gte: startDate, $lte: endDate },
-                    status: { $in: ["partial", "paid"] },
-                    organization: req.user.organization,
-                },
-            },
-            {
-                $lookup: {
-                    from: "orders",
-                    localField: "orders",
-                    foreignField: "_id",
-                    as: "orderDetails",
-                },
-            },
-            {
-                $lookup: {
-                    from: "sessions",
-                    localField: "sessions",
-                    foreignField: "_id",
-                    as: "sessionDetails",
-                },
-            },
-            {
-                $project: {
-                    cafeRevenue: {
-                        $sum: "$orderDetails.finalAmount",
-                    },
-                    gamingRevenue: {
-                        $sum: "$sessionDetails.finalCost",
-                    },
-                    totalPaid: "$paid",
-                },
-            },
-            {
-                $group: {
-                    _id: null,
-                    totalCafeRevenue: { $sum: "$cafeRevenue" },
-                    totalGamingRevenue: { $sum: "$gamingRevenue" },
-                    totalRevenue: { $sum: "$totalPaid" },
-                },
-            },
-        ]);
-
-        // Get current period data for comparison
-        const currentData = await getSalesReportData(
-            req.user.organization,
-            startDate,
-            endDate
-        );
-
-        // Get previous period data for comparison
-        const previousData = await getSalesReportData(
-            req.user.organization,
-            previousStartDate,
-            previousEndDate
-        );
-
-        // Top products by menu section
-        const topProductsBySection = await getTopProductsBySection(
-            req.user.organization,
-            startDate,
-            endDate
-        );
-
-        // Peak hours analysis
-        const peakHours = await getPeakHoursData(
-            req.user.organization,
-            startDate,
-            endDate
-        );
-
-        // Staff performance
-        const staffPerformance = await getStaffPerformanceData(
-            req.user.organization,
-            startDate,
-            endDate
-        );
 
         // Calculate comparison metrics
         const comparison = calculateComparison(currentData, previousData);
@@ -388,12 +221,12 @@ export const getSalesReport = async (req, res) => {
                 // Additional detailed data
                 filter,
                 groupBy,
-                salesByPeriod,
+                salesByPeriod: [],
                 topItems: currentData.topProducts || [],
-                revenueBySource: revenueBySource[0] || {
-                    totalCafeRevenue: 0,
-                    totalGamingRevenue: 0,
-                    totalRevenue: 0,
+                revenueBySource: {
+                    totalCafeRevenue: currentData.revenueBreakdown?.cafe || 0,
+                    totalGamingRevenue: (currentData.revenueBreakdown?.playstation || 0) + (currentData.revenueBreakdown?.computer || 0),
+                    totalRevenue: currentData.totalRevenue || 0,
                 },
                 current: currentData,
                 previous: previousData,
@@ -418,8 +251,8 @@ export const getInventoryReport = async (req, res) => {
         const query = { isActive: true, organization: req.user.organization };
         if (category) query.category = category;
 
-        // Current inventory status
-        const inventoryStatus = await InventoryItem.aggregate([
+        // Current inventory status — the three aggregates resolve together below
+        const inventoryStatusPromise = InventoryItem.aggregate([
             { $match: query },
             {
                 $project: {
@@ -439,7 +272,7 @@ export const getInventoryReport = async (req, res) => {
         ]);
 
         // Inventory summary by category
-        const categoryStats = await InventoryItem.aggregate([
+        const categoryStatsPromise = InventoryItem.aggregate([
             { $match: query },
             {
                 $group: {
@@ -473,7 +306,7 @@ export const getInventoryReport = async (req, res) => {
         ]);
 
         // Recent stock movements
-        const recentMovements = await InventoryItem.aggregate([
+        const recentMovementsPromise = InventoryItem.aggregate([
             { $match: query },
             { $unwind: "$stockMovements" },
             {
@@ -497,6 +330,12 @@ export const getInventoryReport = async (req, res) => {
             {
                 $limit: 50,
             },
+        ]);
+
+        const [inventoryStatus, categoryStats, recentMovements] = await Promise.all([
+            inventoryStatusPromise,
+            categoryStatsPromise,
+            recentMovementsPromise,
         ]);
 
         res.json({
@@ -525,11 +364,11 @@ export const getFinancialReport = async (req, res) => {
         const { startDate, endDate } = getDateRange(filter);
         
         // Get organization ID correctly
-        const organizationId = req.user.organization._id || req.user.organization;
-        const reportOrderIds = await getReportEligibleOrderIds(organizationId);
+        const organizationId = getOrganizationId(req.user);
+        const reportOrderIds = await getReportEligibleOrderIds(organizationId, { startDate, endDate });
 
-        // Revenue from Bills (source of truth)
-        const billRevenue = await Bill.aggregate([
+        // Revenue from Bills (source of truth) — promises resolve together below
+        const billRevenuePromise = Bill.aggregate([
             {
                 $match: {
                     createdAt: { $gte: startDate, $lte: endDate },
@@ -547,11 +386,8 @@ export const getFinancialReport = async (req, res) => {
             },
         ]);
 
-        const totalRevenue = billRevenue[0]?.totalRevenue || 0;
-        const totalPaid = billRevenue[0]?.totalPaid || 0;
-
         // Costs - إضافة جميع التكاليف المدفوعة والمعلقة
-        const costs = await Cost.aggregate([
+        const costsPromise = Cost.aggregate([
             {
                 $match: {
                     date: { $gte: startDate, $lte: endDate },
@@ -568,6 +404,12 @@ export const getFinancialReport = async (req, res) => {
                 },
             },
         ]);
+
+        // All independent queries resolve together (were 5 sequential awaits).
+        const [billRevenue, costs] = await Promise.all([billRevenuePromise, costsPromise]);
+
+        const totalRevenue = billRevenue[0]?.totalRevenue || 0;
+        const totalPaid = billRevenue[0]?.totalPaid || 0;
 
         // حساب التكاليف الإجمالية (المدفوعة فقط)
         const totalCostsAmount = costs.reduce(
@@ -597,7 +439,7 @@ export const getFinancialReport = async (req, res) => {
             previousPeriod.endDate.getDate()
         );
 
-        const previousBillRevenue = await Bill.aggregate([
+        const previousBillRevenuePromise = Bill.aggregate([
             {
                 $match: {
                     createdAt: {
@@ -617,15 +459,8 @@ export const getFinancialReport = async (req, res) => {
             },
         ]);
 
-        const previousTotal = previousBillRevenue[0]?.totalPaid || 0;
-
-        const revenueGrowth =
-            previousTotal > 0
-                ? ((totalPaid - previousTotal) / previousTotal) * 100
-                : 0;
-
         // Count orders and sessions without summing revenue (just for counts)
-        const totalOrders = await Order.countDocuments({
+        const totalOrdersPromise = Order.countDocuments({
             createdAt: { $gte: startDate, $lte: endDate },
             status: { $ne: "cancelled" },
             organization: organizationId,
@@ -633,12 +468,25 @@ export const getFinancialReport = async (req, res) => {
             _id: { $in: reportOrderIds },
         });
 
-        const totalSessions = await Session.countDocuments({
+        const totalSessionsPromise = Session.countDocuments({
             endTime: { $gte: startDate, $lte: endDate },
             status: "completed",
             totalCost: { $gt: 0 },
             organization: organizationId,
         });
+
+        const [previousBillRevenue, totalOrders, totalSessions] = await Promise.all([
+            previousBillRevenuePromise,
+            totalOrdersPromise,
+            totalSessionsPromise,
+        ]);
+
+        const previousTotal = previousBillRevenue[0]?.totalPaid || 0;
+
+        const revenueGrowth =
+            previousTotal > 0
+                ? ((totalPaid - previousTotal) / previousTotal) * 100
+                : 0;
 
         const totalTransactions = totalOrders + totalSessions;
 
@@ -693,35 +541,39 @@ export const getSessionsReport = async (req, res) => {
         const previousStartDate = new Date(startDate.getTime() - periodDuration);
         const previousEndDate = startDate;
 
-        // Separate PlayStation and Computer sessions
-        const playstationData = await getSessionsDataByType(
-            req.user.organization,
-            startDate,
-            endDate,
-            'playstation'
-        );
-
-        const computerData = await getSessionsDataByType(
-            req.user.organization,
-            startDate,
-            endDate,
-            'computer'
-        );
-
-        // Previous period data for comparison
-        const prevPlaystationData = await getSessionsDataByType(
-            req.user.organization,
-            previousStartDate,
-            previousEndDate,
-            'playstation'
-        );
-
-        const prevComputerData = await getSessionsDataByType(
-            req.user.organization,
-            previousStartDate,
-            previousEndDate,
-            'computer'
-        );
+        // Separate PlayStation and Computer sessions — all four scans in parallel
+        // (were 4 sequential full-collection scans).
+        const [
+            playstationData,
+            computerData,
+            prevPlaystationData,
+            prevComputerData,
+        ] = await Promise.all([
+            getSessionsDataByType(
+                req.user.organization,
+                startDate,
+                endDate,
+                'playstation'
+            ),
+            getSessionsDataByType(
+                req.user.organization,
+                startDate,
+                endDate,
+                'computer'
+            ),
+            getSessionsDataByType(
+                req.user.organization,
+                previousStartDate,
+                previousEndDate,
+                'playstation'
+            ),
+            getSessionsDataByType(
+                req.user.organization,
+                previousStartDate,
+                previousEndDate,
+                'computer'
+            ),
+        ]);
 
         const currentTotal = (playstationData.totalSessions || 0) + (computerData.totalSessions || 0);
         const previousTotal = (prevPlaystationData.totalSessions || 0) + (prevComputerData.totalSessions || 0);
@@ -761,38 +613,76 @@ export const getSessionsReport = async (req, res) => {
 export const getRecentActivity = async (req, res) => {
     try {
         const { limit = 10 } = req.query;
-        const reportOrderIds = await getReportEligibleOrderIds(req.user.organization);
+        const perType = Math.max(1, Math.floor(parseInt(limit) / 2));
 
-        // Get recent sessions
-        const recentSessions = await Session.find({
-            organization: req.user.organization,
-        })
-            .sort({ createdAt: -1 })
-            .limit(parseInt(limit) / 2)
-            .populate("createdBy", "name")
-            .lean();
+        // The two small recent lists resolve together (were sequential awaits).
+        // Orders walk back in batches until `perType` bill-linked ones are found —
+        // same result as the old eligible-ids query, with NO hard truncation and
+        // NO 1.8s eligibility scan (one small batched Bill lookup per batch).
+        const [recentSessions, recentBills] = await Promise.all([
+            // Get recent sessions
+            Session.find({
+                organization: getOrganizationId(req.user),
+            })
+                .sort({ createdAt: -1 })
+                .limit(perType)
+                .populate("createdBy", "name")
+                .lean(),
+            // Get recent bills
+            Bill.find({
+                organization: getOrganizationId(req.user),
+            })
+                .sort({ createdAt: -1 })
+                .limit(perType)
+                .populate("createdBy", "name")
+                .populate("table", "number name")
+                .lean(),
+        ]);
 
-        // Get recent orders
-        const recentOrders = await Order.find({
-            organization: req.user.organization,
-            isDeleted: false,
-            _id: { $in: reportOrderIds },
-        })
-            .sort({ createdAt: -1 })
-            .limit(parseInt(limit) / 2)
-            .populate("createdBy", "name")
-            .populate("table", "number name")
-            .lean();
-
-        // Get recent bills
-        const recentBills = await Bill.find({
-            organization: req.user.organization,
-        })
-            .sort({ createdAt: -1 })
-            .limit(parseInt(limit) / 2)
-            .populate("createdBy", "name")
-            .populate("table", "number name")
-            .lean();
+        // Keep only orders still linked to a live bill that still contains them
+        // (same semantics as the eligibility filter, indexed queries only).
+        const recentOrders = [];
+        const LINK_BATCH = 50;
+        // Generous back-scan (up to 1000 recent orders ≈ weeks of volume): the loop
+        // stops as soon as enough linked orders are found (normally batch 1).
+        for (let page = 0; page < 20 && recentOrders.length < perType; page++) {
+            const batch = await Order.find({
+                organization: getOrganizationId(req.user),
+                isDeleted: false,
+            })
+                .sort({ createdAt: -1 })
+                .skip(page * LINK_BATCH)
+                .limit(LINK_BATCH)
+                .populate("createdBy", "name")
+                .populate("table", "number name")
+                .lean();
+            if (batch.length === 0) break;
+            const batchBillIds = [
+                ...new Set(
+                    batch
+                        .map((o) => String(o.bill?._id || o.bill || ""))
+                        .filter((id) => id && id !== "undefined" && id !== "null")
+                ),
+            ];
+            const batchBills = batchBillIds.length > 0
+                ? await Bill.find({
+                    _id: { $in: batchBillIds },
+                    organization: getOrganizationId(req.user),
+                    isDeleted: { $ne: true },
+                }).select("orders").lean()
+                : [];
+            const batchSets = new Map(
+                batchBills.map((b) => [
+                    String(b._id),
+                    new Set((b.orders || []).map((o) => String(o?._id || o))),
+                ])
+            );
+            for (const o of batch) {
+                if (recentOrders.length >= perType) break;
+                const set = batchSets.get(String(o.bill?._id || o.bill));
+                if (set && set.has(String(o._id))) recentOrders.push(o);
+            }
+        }
 
         // Combine and format activities
         const activities = [];
@@ -932,42 +822,22 @@ export const exportReportToExcel = async (req, res) => {
         switch (reportType) {
             case "sales":
             case "all":
-                // Get enhanced sales data with new features
-                const salesData = await getSalesReportData(
-                    req.user.organization,
-                    startDate,
-                    endDate
-                );
-                
-                // Get previous period for comparison
+                // One shared eligible-order scan + parallel helpers (was 6 scans sequentially).
                 const periodDuration = endDate - startDate;
                 const previousStartDate = new Date(startDate.getTime() - periodDuration);
                 const previousEndDate = startDate;
-                
-                const previousData = await getSalesReportData(
-                    req.user.organization,
-                    previousStartDate,
-                    previousEndDate
-                );
-                
-                // Get additional data
-                const topProductsBySection = await getTopProductsBySection(
-                    req.user.organization,
-                    startDate,
-                    endDate
-                );
-                
-                const peakHours = await getPeakHoursData(
-                    req.user.organization,
-                    startDate,
-                    endDate
-                );
-                
-                const staffPerformance = await getStaffPerformanceData(
-                    req.user.organization,
-                    startDate,
-                    endDate
-                );
+                const [exportOrderIds, exportPrevOrderIds] = await Promise.all([
+                    getReportEligibleOrderIds(getOrganizationId(req.user), { startDate, endDate }),
+                    getReportEligibleOrderIds(getOrganizationId(req.user), { startDate: previousStartDate, endDate: previousEndDate }),
+                ]);
+
+                const [salesData, previousData, topProductsBySection, peakHours, staffPerformance] = await Promise.all([
+                    getSalesReportData(req.user.organization, startDate, endDate, exportOrderIds),
+                    getSalesReportData(req.user.organization, previousStartDate, previousEndDate, exportPrevOrderIds),
+                    getTopProductsBySection(req.user.organization, startDate, endDate, exportOrderIds),
+                    getPeakHoursData(req.user.organization, startDate, endDate, exportOrderIds),
+                    getStaffPerformanceData(req.user.organization, startDate, endDate, exportOrderIds),
+                ]);
                 
                 reportData = {
                     ...salesData,
@@ -991,19 +861,20 @@ export const exportReportToExcel = async (req, res) => {
                 break;
             case "sessions":
                 // Get enhanced sessions data
-                const playstationData = await getSessionsDataByType(
-                    req.user.organization,
-                    startDate,
-                    endDate,
-                    'playstation'
-                );
-                
-                const computerData = await getSessionsDataByType(
-                    req.user.organization,
-                    startDate,
-                    endDate,
-                    'computer'
-                );
+                const [playstationData, computerData] = await Promise.all([
+                    getSessionsDataByType(
+                        req.user.organization,
+                        startDate,
+                        endDate,
+                        'playstation'
+                    ),
+                    getSessionsDataByType(
+                        req.user.organization,
+                        startDate,
+                        endDate,
+                        'computer'
+                    ),
+                ]);
                 
                 reportData = {
                     playstation: playstationData,
@@ -1078,42 +949,22 @@ export const exportReportToPDF = async (req, res) => {
         switch (reportType) {
             case "sales":
             case "all":
-                // Get enhanced sales data with new features
-                const salesData = await getSalesReportData(
-                    req.user.organization,
-                    startDate,
-                    endDate
-                );
-                
-                // Get previous period for comparison
+                // One shared eligible-order scan + parallel helpers (was 6 scans sequentially).
                 const periodDuration = endDate - startDate;
                 const previousStartDate = new Date(startDate.getTime() - periodDuration);
                 const previousEndDate = startDate;
-                
-                const previousData = await getSalesReportData(
-                    req.user.organization,
-                    previousStartDate,
-                    previousEndDate
-                );
-                
-                // Get additional data
-                const topProductsBySection = await getTopProductsBySection(
-                    req.user.organization,
-                    startDate,
-                    endDate
-                );
-                
-                const peakHours = await getPeakHoursData(
-                    req.user.organization,
-                    startDate,
-                    endDate
-                );
-                
-                const staffPerformance = await getStaffPerformanceData(
-                    req.user.organization,
-                    startDate,
-                    endDate
-                );
+                const [exportOrderIds, exportPrevOrderIds] = await Promise.all([
+                    getReportEligibleOrderIds(getOrganizationId(req.user), { startDate, endDate }),
+                    getReportEligibleOrderIds(getOrganizationId(req.user), { startDate: previousStartDate, endDate: previousEndDate }),
+                ]);
+
+                const [salesData, previousData, topProductsBySection, peakHours, staffPerformance] = await Promise.all([
+                    getSalesReportData(req.user.organization, startDate, endDate, exportOrderIds),
+                    getSalesReportData(req.user.organization, previousStartDate, previousEndDate, exportPrevOrderIds),
+                    getTopProductsBySection(req.user.organization, startDate, endDate, exportOrderIds),
+                    getPeakHoursData(req.user.organization, startDate, endDate, exportOrderIds),
+                    getStaffPerformanceData(req.user.organization, startDate, endDate, exportOrderIds),
+                ]);
                 
                 reportData = {
                     ...salesData,
@@ -1137,19 +988,20 @@ export const exportReportToPDF = async (req, res) => {
                 break;
             case "sessions":
                 // Get enhanced sessions data
-                const playstationData = await getSessionsDataByType(
-                    req.user.organization,
-                    startDate,
-                    endDate,
-                    'playstation'
-                );
-                
-                const computerData = await getSessionsDataByType(
-                    req.user.organization,
-                    startDate,
-                    endDate,
-                    'computer'
-                );
+                const [playstationData, computerData] = await Promise.all([
+                    getSessionsDataByType(
+                        req.user.organization,
+                        startDate,
+                        endDate,
+                        'playstation'
+                    ),
+                    getSessionsDataByType(
+                        req.user.organization,
+                        startDate,
+                        endDate,
+                        'computer'
+                    ),
+                ]);
                 
                 reportData = {
                     playstation: playstationData,
@@ -1206,18 +1058,19 @@ export const exportReportToPDF = async (req, res) => {
 };
 
 // Helper functions to get report data
-const getSalesReportData = async (organization, startDate, endDate) => {
+const getSalesReportData = async (organization, startDate, endDate, eligibleOrderIds = null) => {
     // Ensure organization is an ObjectId, not an object
-    const organizationId = organization._id || organization;
-    const reportOrderIds = await getReportEligibleOrderIds(organizationId);
+    const organizationId = getOrganizationId(organization);
+    const reportOrderIds = eligibleOrderIds || await getReportEligibleOrderIds(organizationId);
     
     // Get ALL orders using the same logic as ConsumptionReport
+    // Projection: only fields used below (items/finalAmount) — full docs are ~10x bigger.
     const orders = await Order.find({
         createdAt: { $gte: startDate, $lte: endDate },
         isDeleted: false,
         organization: organizationId,
         _id: { $in: reportOrderIds },
-    }).lean();
+    }).select('items finalAmount').lean();
 
     // Get completed sessions using endTime (same as ConsumptionReport and /api/sessions endpoint)
     const sessions = await Session.find({
@@ -1225,7 +1078,7 @@ const getSalesReportData = async (organization, startDate, endDate) => {
         status: "completed",
         totalCost: { $gt: 0 },
         organization: organizationId,
-    }).lean();
+    }).select('finalCost deviceType').lean();
 
     // Calculate cafe revenue from orders using finalAmount
     const cafeRevenue = orders.reduce((sum, order) => sum + (Number(order.finalAmount) || 0), 0);
@@ -1296,19 +1149,20 @@ const getSalesReportData = async (organization, startDate, endDate) => {
 
 const getFinancialReportData = async (organization, startDate, endDate) => {
     // Ensure organization is an ObjectId, not an object
-    const organizationId = organization._id || organization;
+    const organizationId = getOrganizationId(organization);
     
-    const bills = await Bill.find({
-        createdAt: { $gte: startDate, $lte: endDate },
-        status: { $in: ["paid", "partial"] },
-        organization: organizationId,
-    });
-
-    const costs = await Cost.find({
-        date: { $gte: startDate, $lte: endDate },
-        status: { $in: ["paid", "partially_paid", "pending"] }, // إضافة فلتر للحالة
-        organization: organizationId,
-    });
+    const [bills, costs] = await Promise.all([
+        Bill.find({
+            createdAt: { $gte: startDate, $lte: endDate },
+            status: { $in: ["paid", "partial"] },
+            organization: organizationId,
+        }).select('total paid').lean(),
+        Cost.find({
+            date: { $gte: startDate, $lte: endDate },
+            status: { $in: ["paid", "partially_paid", "pending"] }, // إضافة فلتر للحالة
+            organization: organizationId,
+        }).select('category amount paidAmount').lean(),
+    ]);
 
     const totalRevenue = bills.reduce((sum, bill) => sum + bill.total, 0);
     const totalPaid = bills.reduce((sum, bill) => sum + bill.paid, 0);
@@ -1393,9 +1247,9 @@ const getFinancialReportData = async (organization, startDate, endDate) => {
 
 const getInventoryReportData = async (organization) => {
     // Ensure organization is an ObjectId, not an object
-    const organizationId = organization._id || organization;
+    const organizationId = getOrganizationId(organization);
     
-    const items = await InventoryItem.find({ organization: organizationId });
+    const items = await InventoryItem.find({ organization: organizationId }).select('name category currentStock minStock price').lean();
 
     const totalItems = items.length;
     const totalValue = items.reduce(
@@ -1422,7 +1276,7 @@ const getInventoryReportData = async (organization) => {
 
 const getSessionsReportData = async (organization, startDate, endDate) => {
     // Ensure organization is an ObjectId, not an object
-    const organizationId = organization._id || organization;
+    const organizationId = getOrganizationId(organization);
     
     // Filter by endTime for completed sessions, only include completed sessions
     const sessions = await Session.find({
@@ -1430,7 +1284,7 @@ const getSessionsReportData = async (organization, startDate, endDate) => {
         status: "completed",
         totalCost: { $gt: 0 },
         organization: organizationId,
-    });
+    }).select('finalCost deviceType controllersHistory startTime endTime').lean();
 
     const totalSessions = sessions.length;
     // Use finalCost (after discount) instead of totalCost
@@ -1524,26 +1378,29 @@ const getPreviousPeriodString = (startDate, endDate) => {
  * @param {Date} endDate - End date
  * @returns {Array} Top products grouped by menu section
  */
-const getTopProductsBySection = async (organization, startDate, endDate) => {
+const getTopProductsBySection = async (organization, startDate, endDate, eligibleOrderIds = null) => {
     try {
         // Ensure organization is an ObjectId, not an object
-        const organizationId = organization._id || organization;
-        const reportOrderIds = await getReportEligibleOrderIds(organizationId);
+        const organizationId = getOrganizationId(organization);
+        const reportOrderIds = eligibleOrderIds || await getReportEligibleOrderIds(organizationId);
         
         // Get ALL orders in the date range (not just delivered)
+        // Projection: only items are consumed below.
         const orders = await Order.find({
             createdAt: { $gte: startDate, $lte: endDate },
             isDeleted: false,
             organization: organizationId,
             _id: { $in: reportOrderIds }
-        }).lean();
+        }).select('items').lean();
 
 
         // Get all menu items with their categories and sections
-        const menuItems = await MenuItem.find({ organization: organizationId }).populate({
+        const menuItems = await MenuItem.find({ organization: organizationId }).select('name category').populate({
             path: 'category',
+            select: 'name section sortOrder',
             populate: {
-                path: 'section'
+                path: 'section',
+                select: 'name sortOrder'
             }
         }).lean();
 
@@ -1650,15 +1507,15 @@ const getTopProductsBySection = async (organization, startDate, endDate) => {
 const getSessionsDataByType = async (organization, startDate, endDate, deviceType) => {
     try {
         // Ensure organization is an ObjectId, not an object
-        const organizationId = organization._id || organization;
-        // Filter by endTime for completed sessions
+        const organizationId = getOrganizationId(organization);
+        // Filter by endTime for completed sessions — only consumed fields.
         const sessions = await Session.find({
             endTime: { $gte: startDate, $lte: endDate },
             deviceType,
             status: 'completed',
             totalCost: { $gt: 0 },
                 organization: organizationId
-            }).lean();
+            }).select('finalCost deviceType deviceName deviceNumber controllers controllersHistory startTime endTime').lean();
 
         const totalSessions = sessions.length;
         const totalRevenue = sessions.reduce((sum, s) => sum + (Number(s.finalCost) || 0), 0);
@@ -1750,19 +1607,19 @@ const getSessionsDataByType = async (organization, startDate, endDate, deviceTyp
  * @param {Date} endDate - End date
  * @returns {Object} Peak hours analysis
  */
-const getPeakHoursData = async (organization, startDate, endDate) => {
+const getPeakHoursData = async (organization, startDate, endDate, eligibleOrderIds = null) => {
     try {
         // Ensure organization is an ObjectId, not an object
-        const organizationId = organization._id || organization;
-        const reportOrderIds = await getReportEligibleOrderIds(organizationId);
+        const organizationId = getOrganizationId(organization);
+        const reportOrderIds = eligibleOrderIds || await getReportEligibleOrderIds(organizationId);
         
-        // Get ALL orders (not just specific statuses)
+        // Get ALL orders (not just specific statuses) — only consumed fields.
         const orders = await Order.find({
             createdAt: { $gte: startDate, $lte: endDate },
             isDeleted: false,
             organization: organizationId,
             _id: { $in: reportOrderIds }
-        }).lean();
+        }).select('finalAmount createdAt').lean();
 
         // Get completed sessions - filter by endTime
         const sessions = await Session.find({
@@ -1770,7 +1627,7 @@ const getPeakHoursData = async (organization, startDate, endDate) => {
             status: 'completed',
             totalCost: { $gt: 0 },
             organization: organizationId
-        }).lean();
+        }).select('finalCost createdAt').lean();
 
 
         // Initialize hourly data (24 hours)
@@ -1818,19 +1675,19 @@ const getPeakHoursData = async (organization, startDate, endDate) => {
  * @param {Date} endDate - End date
  * @returns {Array} Staff performance statistics
  */
-const getStaffPerformanceData = async (organization, startDate, endDate) => {
+const getStaffPerformanceData = async (organization, startDate, endDate, eligibleOrderIds = null) => {
     try {
         // Ensure organization is an ObjectId, not an object
-        const organizationId = organization._id || organization;
-        const reportOrderIds = await getReportEligibleOrderIds(organizationId);
+        const organizationId = getOrganizationId(organization);
+        const reportOrderIds = eligibleOrderIds || await getReportEligibleOrderIds(organizationId);
         
-        // Get ALL orders (not just delivered)
+        // Get ALL orders (not just delivered) — only consumed fields.
         const orders = await Order.find({
             createdAt: { $gte: startDate, $lte: endDate },
             isDeleted: false,
             organization: organizationId,
             _id: { $in: reportOrderIds }
-        }).populate('createdBy', 'name').lean();
+        }).select('finalAmount createdBy').populate('createdBy', 'name').lean();
 
         // Get completed sessions - filter by endTime
         const sessions = await Session.find({
@@ -1838,7 +1695,7 @@ const getStaffPerformanceData = async (organization, startDate, endDate) => {
             status: 'completed',
             totalCost: { $gt: 0 },
             organization: organizationId
-        }).populate('createdBy', 'name').lean();
+        }).select('finalCost createdBy').populate('createdBy', 'name').lean();
 
 
         const staffStats = {};

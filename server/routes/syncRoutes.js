@@ -18,6 +18,7 @@ import {
     updateExcludedCollections,
     getMonitorStatus,
     controlMonitor,
+    runTypeAudit,
 } from "../controllers/syncController.js";
 import { protect, authorize } from "../middleware/auth.js";
 
@@ -62,5 +63,8 @@ router.put("/bidirectional/excluded-collections", updateExcludedCollections);
 // Monitor management
 router.get("/monitor", getMonitorStatus);
 router.post("/monitor/control", controlMonitor);
+
+// On-demand BSON type audit (same self-heal as startup). Body: { fix?: boolean }
+router.post("/type-audit", runTypeAudit);
 
 export default router;

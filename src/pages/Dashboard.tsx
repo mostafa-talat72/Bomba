@@ -118,8 +118,10 @@ const Dashboard = () => {
     try {
       setLoading(true);
 
-      // Dashboard فقط يحتاج bills, orders, sessions, tables — الباقي عند الطلب
-      await Promise.all([
+      // Dashboard فقط يحتاج bills, orders, sessions, tables — الباقي عند الطلب.
+      // القوائم الكاملة تُجلب في الخلفية ولا تحجب الرسم الأول: الإحصائيات
+      // والنشاط (السريعة) ترسم فور وصولها، والبطاقات التفصيلية تمتلئ بعدها.
+      void Promise.all([
         fetchBills(),
         fetchOrders(),
         fetchSessions(),

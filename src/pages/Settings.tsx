@@ -268,6 +268,8 @@ const Settings: FC = () => {
   });
   const [myPrintLoading, setMyPrintLoading] = useState(true);
   const [myPrintSaving, setMyPrintSaving] = useState(false);
+  const [typeAuditRunning, setTypeAuditRunning] = useState(false);
+  const [typeAuditResult, setTypeAuditResult] = useState<string | null>(null);
 
   // Payroll settings state
   const [payrollSettings, setPayrollSettings] = useState({
@@ -935,6 +937,31 @@ const Settings: FC = () => {
       settings: { ...defaults },
     }));
     showAlertMessage(t('settings.myPrint.imported'), 'success');
+  };
+
+  const handleTypeAuditRun = async () => {
+    setTypeAuditRunning(true);
+    setTypeAuditResult(null);
+    try {
+      const res = await api.runTypeAudit(true);
+      if (res.success && res.data) {
+        const docs = res.data.totalFixedDocs || 0;
+        const fields = res.data.totalFixedFields || 0;
+        const collections = new Set((res.data.collections || []).map((c: any) => c.collection)).size;
+        const msg = docs > 0
+          ? t('settings.maintenance.done', { docs, fields, collections })
+          : t('settings.maintenance.allOk', { collections });
+        setTypeAuditResult(msg);
+        showAlertMessage(msg, 'success');
+      } else {
+        showAlertMessage(res.message || t('settings.maintenance.failed'), 'error');
+      }
+    } catch (error) {
+      console.error('Error running type audit:', error);
+      showAlertMessage(t('settings.maintenance.failed'), 'error');
+    } finally {
+      setTypeAuditRunning(false);
+    }
   };
 
   const handleMyPrintTestDrawer = async () => {
@@ -1608,6 +1635,26 @@ const Settings: FC = () => {
                     </div>
                   )}
                 </div>
+
+                {/* Database maintenance (admin only) */}
+                {user?.role === 'admin' && (
+                  <div>
+                    <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">{t('settings.maintenance.title')}</h3>
+                    <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">{t('settings.maintenance.desc')}</p>
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={handleTypeAuditRun}
+                        disabled={typeAuditRunning}
+                        className="flex items-center space-x-2 bg-teal-600 hover:bg-teal-700 text-white px-4 py-2 rounded-md disabled:opacity-50 min-w-40 justify-center"
+                      >
+                        {typeAuditRunning ? <span>{t('settings.maintenance.running')}</span> : <span>{t('settings.maintenance.runAudit')}</span>}
+                      </button>
+                    </div>
+                    {typeAuditResult && (
+                      <p className="text-sm text-gray-600 dark:text-gray-300 mt-2">{typeAuditResult}</p>
+                    )}
+                  </div>
+                )}
               </div>
             )}
 

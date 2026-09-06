@@ -33,6 +33,7 @@ class AtlasChangeListener {
         this.batchTimer = null;
         this.batchTimeout = 1000; // Process batch after 1 second of inactivity
         this.isBatchProcessing = false;
+        this._reconnectHookArmed = false;
         
         // Statistics
         this.stats = {
@@ -137,6 +138,11 @@ class AtlasChangeListener {
             this.stats.startTime = new Date();
             this.reconnectAttempts = 0;
 
+            // Revive automatically on future Atlas reconnects: without this,
+            // a long outage exhausts maxReconnectAttempts and Atlas→Local
+            // stays deaf until the next server restart.
+            this.armAtlasReconnectHook();
+
             Logger.info('[AtlasChangeListener] ✅ Change Stream started successfully');
             Logger.info(`[AtlasChangeListener] Instance ID: ${this.instanceId}`);
             Logger.info(`[AtlasChangeListener] Batch size: ${this.batchSize}`);
@@ -174,6 +180,38 @@ class AtlasChangeListener {
             await this.scheduleReconnect();
             
             throw error;
+        }
+    }
+
+    /**
+     * Subscribe (once) to Atlas reconnect events so a dead listener revives
+     * itself when the connection comes back, instead of staying deaf until restart.
+     */
+    armAtlasReconnectHook() {
+        if (this._reconnectHookArmed) return;
+        try {
+            const onReconnect = this.databaseManager?.onAtlasReconnected;
+            if (typeof onReconnect !== 'function') return;
+            this._reconnectHookArmed = true;
+            onReconnect(async () => {
+                try {
+                    if (this.isRunning && this.changeStream) return;
+                    Logger.info('[AtlasChangeListener] Atlas reconnected — reviving Change Stream listener...');
+                    this.reconnectAttempts = 0;
+                    if (this.reconnectTimer) {
+                        clearTimeout(this.reconnectTimer);
+                        this.reconnectTimer = null;
+                    }
+                    this.isRunning = false;
+                    await this.start();
+                } catch (error) {
+                    Logger.warn('[AtlasChangeListener] Revive after Atlas reconnect failed:', error.message);
+                    await this.scheduleReconnect();
+                }
+            });
+            Logger.info('[AtlasChangeListener] Atlas-reconnect revive hook armed');
+        } catch (error) {
+            Logger.warn('[AtlasChangeListener] Could not arm reconnect hook:', error.message);
         }
     }
 

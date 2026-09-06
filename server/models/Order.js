@@ -282,6 +282,7 @@ orderSchema.index({ table: 1 }); // Index for table field query performance
 orderSchema.index({ organization: 1, status: 1, createdAt: -1 });
 orderSchema.index({ organization: 1, table: 1, createdAt: -1 });
 orderSchema.index({ organization: 1, createdAt: -1 });
+orderSchema.index({ organization: 1, isDeleted: 1, createdAt: -1 }); // للتقارير المؤهلة حسب النطاق الزمني
 orderSchema.index({ table: 1, status: 1 }); // Index for table-status queries
 
 // Soft delete fields - isDeleted, deletedAt, deletedBy

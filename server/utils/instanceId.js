@@ -19,8 +19,15 @@ export async function getInstanceId() {
   } catch (e) {
   }
   const instanceId = randomBytes(3).toString('hex').toUpperCase();
-  await fs.mkdir(path.dirname(INSTANCE_ID_FILE), { recursive: true });
-  await fs.writeFile(INSTANCE_ID_FILE, JSON.stringify({ instanceId, createdAt: new Date().toISOString() }));
+  try {
+    // Best-effort persistence only: a locked/redirected profile must NEVER
+    // break order/bill/session creation (called from pre-save hooks).
+    // Worst case this boot uses an in-memory id.
+    await fs.mkdir(path.dirname(INSTANCE_ID_FILE), { recursive: true });
+    await fs.writeFile(INSTANCE_ID_FILE, JSON.stringify({ instanceId, createdAt: new Date().toISOString() }));
+  } catch (e) {
+    console.warn('[instanceId] Could not persist instance-id.json, using in-memory id:', e.message);
+  }
   cached = instanceId;
   return cached;
 }

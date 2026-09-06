@@ -22,6 +22,7 @@ import { getUserLanguage } from "../utils/localeHelper.js";
 import { getTableName } from "../utils/translations.js";
 import { getInstanceId } from "../utils/instanceId.js";
 import { writeToAtlas } from "../utils/atlasWrite.js";
+import { getId, sameId } from "../utils/idUtils.js";
 import cache from "../utils/simpleCache.js";
 import MenuItem from "../models/MenuItem.js";
 import InventoryItem from "../models/InventoryItem.js";
@@ -1030,8 +1031,8 @@ export const updateBill = async (req, res) => {
         let movedFromTableId = null;
         // إذا تم تغيير الطاولة (باستخدام ID)
         if (table !== undefined) {
-            const oldTableId = bill.table ? bill.table.toString() : null;
-            const newTableId = table ? table.toString() : null;
+            const oldTableId = bill.table ? getId(bill.table) || null : null;
+            const newTableId = table ? getId(table) || null : null;
             movedFromTableId = oldTableId !== newTableId ? oldTableId : null;
             
             if (oldTableId !== newTableId && newTableId) {
@@ -3162,7 +3163,7 @@ export const payForItems = async (req, res) => {
         const invalidItems = [];
         for (const item of items) {
             const billItem = bill.itemPayments.find(
-                (bi) => bi._id.toString() === item.itemId.toString()
+                (bi) => sameId(bi._id, item.itemId)
             );
             
             if (!billItem) {
@@ -3181,7 +3182,7 @@ export const payForItems = async (req, res) => {
         // Validate quantities for each item (Requirements 4.1, 4.3)
         for (const item of items) {
             const billItem = bill.itemPayments.find(
-                (bi) => bi._id.toString() === item.itemId.toString()
+                (bi) => sameId(bi._id, item.itemId)
             );
 
             const remainingQuantity = (billItem.quantity || 0) - (billItem.paidQuantity || 0);

@@ -499,8 +499,13 @@ class LanSyncService {
             const filterObj = { _id: objectId };
             // Restore BSON types in payload (socket.io JSON degrades Dates/nested ObjectIds)
             rehydrateDocument(collectionName, data);
+            // Preserve the origin timestamp so last-write-wins stays correct
+            // across devices: stamping receipt time would let clock skew make
+            // this copy wrongly "newer" than a genuine newer edit elsewhere.
+            const incomingTs = data.updatedAt ? new Date(data.updatedAt) : null;
+            const effectiveTs = incomingTs && !Number.isNaN(incomingTs.getTime()) ? incomingTs : new Date();
             // Use $set for update
-            const updateDoc = { $set: { ...data, updatedAt: new Date() } };
+            const updateDoc = { $set: { ...data, updatedAt: effectiveTs } };
             // Remove _id from $set
             delete updateDoc.$set._id;
             await collection.updateOne(filterObj, updateDoc, { upsert: false });

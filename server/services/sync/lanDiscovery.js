@@ -9,6 +9,21 @@ const DEFAULT_PORT = 41234;
 
 function getLocalIP() {
     const ifaces = os.networkInterfaces();
+    // Pinned address (multi-NIC setups: force sync traffic over the wired
+    // interface). Validated against real local interfaces; falls back to
+    // auto-detect on misconfiguration instead of advertising a dead address.
+    const pinned = syncConfig.lanSync?.advertiseIp;
+    if (pinned) {
+        for (const name of Object.keys(ifaces)) {
+            for (const iface of ifaces[name] || []) {
+                if (iface.family === "IPv4" && !iface.internal && iface.address === pinned) {
+                    Logger.info(`[LanDiscovery] Using pinned advertise IP ${pinned}`);
+                    return pinned;
+                }
+            }
+        }
+        Logger.warn(`[LanDiscovery] LAN_ADVERTISE_IP=${pinned} not found on any local interface, falling back to auto-detect`);
+    }
     for (const name of Object.keys(ifaces)) {
         for (const iface of ifaces[name] || []) {
             if (iface.family === "IPv4" && !iface.internal) return iface.address;

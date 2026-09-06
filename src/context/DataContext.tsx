@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { API_BASE_URL } from '../utils/apiBase';
+import { getId, sameId } from '../utils/id';
 import api, { Session, Order, InventoryItem, WarehouseItem, Bill, Cost, Device, MenuItem, MenuSection, MenuCategory, BillItem, User, Table, TableSection } from '../services/api';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
@@ -350,7 +351,21 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   // Data fetching methods
-  const fetchSessions = async (): Promise<void> => {
+  // ── منع الطلبات المكررة المتزامنة: التنقل السريع بين الصفحات + أحداث السوكت
+  // كان يشغّل نفس الجلب عدة مرات بالتوازي (كل نسخة ~1 ثانية/1.6MB للطلبات) —
+  // المتزامنون الآن يتشاركون نفس الوعد بدل ضرب السيرفر.
+  const inFlightRef = useRef<Map<string, Promise<unknown>>>(new Map());
+  const withInFlight = <T,>(key: string, fn: () => Promise<T>): Promise<T> => {
+    const existing = inFlightRef.current.get(key);
+    if (existing) return existing as Promise<T>;
+    const p: Promise<T> = fn().finally(() => {
+      if (inFlightRef.current.get(key) === p) inFlightRef.current.delete(key);
+    });
+    inFlightRef.current.set(key, p);
+    return p;
+  };
+
+  const fetchSessionsInner = async (): Promise<void> => {
     if (!user) return;
 
     try {
@@ -364,8 +379,9 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setSessions([]);
     }
   };
+  const fetchSessions = (): Promise<void> => withInFlight("sessions", fetchSessionsInner);
 
-  const fetchOrders = async (): Promise<void> => {
+  const fetchOrdersInner = async (): Promise<void> => {
     if (!user) return;
 
     try {
@@ -391,6 +407,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
     }
   };
+  const fetchOrders = (): Promise<void> => withInFlight("orders", fetchOrdersInner);
 
   const fetchInventory = async (): Promise<void> => {
     try {
@@ -402,11 +419,14 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
-  const fetchBills = async (): Promise<void> => {
+  // الجلب الأساسي: الفواتير غير المدفوعة فقط (draft/partial/overdue) —
+  // بدون all/limit/_fresh. السيرفر يرجعها افتراضياً مع كاش 10 ثوانٍ (سريع).
+  // المدفوعة/الكل تُجلب عند الطلب فقط (فلتر النافذة، التقرير اليومي).
+  const fetchBillsInner = async (): Promise<void> => {
     if (!user) return;
 
     try {
-      const response = await api.getBills({ all: true, limit: 10000, fresh: true });
+      const response = await api.getBills({});
       if (response.success && response.data) {
         setBills(response.data);
       } else {
@@ -419,6 +439,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
     }
   };
+  const fetchBills = (): Promise<void> => withInFlight("bills", fetchBillsInner);
 
   const fetchCosts = async (): Promise<void> => {
     try {
@@ -973,6 +994,25 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     } catch (e: unknown) { setSessions(snapshot); const err = e as { message?: string }; showNotification(err.message || 'خطأ في تحديث التكلفة', 'error'); return null; }
   };
 
+  // ⚡ تحديث فاتورة واحدة بالضبط بدل fetchBills الكامل (10k) بعد عمليات الطلبات —
+  // إجماليات الكارت/النافذة تتحدث لحظياً من السيرفر دون انتظار السوكيت.
+  const refreshSingleBill = (billRef: any): void => {
+    try {
+      const bid = String(billRef?._id || billRef?.id || billRef || '');
+      if (!bid || bid.startsWith('temp-')) return;
+      api.getBill(bid).then((r: any) => {
+        if (r?.success && r.data) {
+          setBills(prev => {
+            const exists = prev.some((b: any) => String(b._id || b.id) === bid);
+            return exists
+              ? prev.map((b: any) => String(b._id || b.id) === bid ? r.data : b)
+              : [r.data, ...prev];
+          });
+        }
+      }).catch(() => {});
+    } catch {}
+  };
+
   const createOrder = async (orderData: any): Promise<Order | null> => {
     let optimisticId: string | null = null;
     let optimisticOrder: any = null;
@@ -1025,9 +1065,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           return [newOrder, ...withoutOptimistic];
         });
 
-        if (newOrder.bill) {
-          fetchBills().catch(() => {});
-        }
+        refreshSingleBill((orderData as any).bill || (newOrder as any).bill);
 
         showNotification(t('toast.order.created', { orderNumber: newOrder.orderNumber }), 'success');
         updateNotificationCount(1);
@@ -1126,6 +1164,8 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             return b;
           }));
         }
+        // إجماليات الفاتورة من السيرفر مباشرة (طلب واحد سريع بدل fetchBills الكامل).
+        refreshSingleBill((response.data as any).bill || (updates as any)?.bill);
         showNotification(t('toast.order.updated'), 'success');
         return response.data;
       }
@@ -1257,6 +1297,8 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (response && response.success === true) {
         // also remove from bills optimistically
         setBills(prev => prev.map((b: any) => ({ ...b, orders: (b.orders || []).filter((o: any) => String(o._id || o.id || o) !== String(id)) })));
+        // إجماليات الفاتورة من السيرفر مباشرة (طلب واحد سريع).
+        refreshSingleBill((deleted as any)?.bill);
         return true;
       }
       if (deleted) setOrders(snapshot);
@@ -2168,7 +2210,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
-  const fetchTables = async (sectionId?: string) => {
+  const fetchTablesInner = async (sectionId?: string) => {
     try {
       const response = await api.getTables(sectionId ? { section: sectionId } : undefined);
       if (response.success && response.data) {
@@ -2192,6 +2234,8 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       throw error;
     }
   };
+  const fetchTables = (sectionId?: string) =>
+    withInFlight(`tables:${sectionId || "all"}`, () => fetchTablesInner(sectionId));
 
   const getTableStatus = async (id: string): Promise<{ table: any; hasUnpaidOrders: boolean; orders: Order[]; bills?: Bill[] } | null> => {
     try {
@@ -2484,7 +2528,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       auth: { token },
       path: '/socket.io/',
       transports: ['websocket', 'polling'],
-      reconnection: true, reconnectionDelay: 1000, reconnectionAttempts: 5,
+      reconnection: true, reconnectionDelay: 1000, reconnectionAttempts: Infinity, reconnectionDelayMax: 10000,
     });
     globalSocketRef.current = socket;
 
@@ -2549,20 +2593,19 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       });
       // ── cross-collection instant sync: bills + tables ──
       try {
-        const billId = (order as any).bill?._id || (order as any).bill?.id || (order as any).bill;
+        const billId = getId((order as any).bill);
         if (billId) {
           setBills(prev => {
-            const bid = String(billId);
-            const idx = prev.findIndex((b: any) => String(b._id || b.id) === bid);
+            const idx = prev.findIndex((b: any) => sameId(b, billId));
             if (idx !== -1) {
               const copy = [...prev] as any[];
               const b: any = { ...copy[idx] };
               const ordersArr = Array.isArray(b.orders) ? [...b.orders] : [];
-              if (!ordersArr.some((o: any) => String(o._id || o.id || o) === String(oid))) {
+              if (!ordersArr.some((o: any) => sameId(o, oid))) {
                 ordersArr.push(order);
                 b.orders = ordersArr;
               } else {
-                b.orders = ordersArr.map((o: any) => String(o._id || o.id || o) === String(oid) ? order : o);
+                b.orders = ordersArr.map((o: any) => sameId(o, oid) ? order : o);
               }
               copy[idx] = b;
               return copy;
@@ -2572,8 +2615,8 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         }
       } catch {}
       try {
-        const tid = (order as any).table?._id || (order as any).table?.id || (order as any).table;
-        if (tid) setTables(prev => prev.map((t: any) => String(t._id || t.id) === String(tid) ? { ...t, status: 'occupied' } : t));
+        const tid = getId((order as any).table);
+        if (tid) setTables(prev => prev.map((t: any) => sameId(t, tid) ? { ...t, status: 'occupied' } : t));
       } catch {}
     };
     const onOrderUpdated = (order: any) => {
@@ -2582,28 +2625,27 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setOrders(prev => prev.map((o: any) => (normalizeId(o._id) === normalizeId(oid) || normalizeId(o.id) === normalizeId(oid)) ? { ...o, ...order, id: oid, _id: oid } : o));
       // cross-sync bill
       try {
-        const billId = (order as any).bill?._id || (order as any).bill?.id || (order as any).bill;
+        const billId = getId((order as any).bill);
         if (billId) {
           setBills(prev => prev.map((b: any) => {
-            const bid = String(billId);
-            if (String(b._id || b.id) !== bid) return b;
-            const ordersArr = Array.isArray(b.orders) ? b.orders.map((o: any) => String(o._id || o.id || o) === String(oid) ? order : o) : [order];
+            if (!sameId(b, billId)) return b;
+            const ordersArr = Array.isArray(b.orders) ? b.orders.map((o: any) => sameId(o, oid) ? order : o) : [order];
             return { ...b, orders: ordersArr };
           }));
         }
       } catch {}
       try {
-        const tid = (order as any).table?._id || (order as any).table?.id || (order as any).table;
-        if (tid) setTables(prev => prev.map((t: any) => String(t._id || t.id) === String(tid) ? { ...t, status: 'occupied' } : t));
+        const tid = getId((order as any).table);
+        if (tid) setTables(prev => prev.map((t: any) => sameId(t, tid) ? { ...t, status: 'occupied' } : t));
       } catch {}
     };
     const onOrderDeleted = (payload: any) => {
       const oid = payload?._id || payload?.id || payload;
       if (!oid) return;
-      setOrders(prev => prev.filter((o: any) => normalizeId(o._id) !== normalizeId(oid) && normalizeId(o.id) !== normalizeId(oid)));
+      setOrders(prev => prev.filter((o: any) => !sameId(o, oid)));
       // cross-sync bill + table
       try {
-        setBills(prev => prev.map((b: any) => ({ ...b, orders: (b.orders || []).filter((o: any) => String(o._id || o.id || o) !== String(oid)) })));
+        setBills(prev => prev.map((b: any) => ({ ...b, orders: (b.orders || []).filter((o: any) => !sameId(o, oid)) })));
       } catch {}
     };
     const onBillUpdated = (bill: any, eventType?: string) => {
@@ -2614,34 +2656,34 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         return;
       }
       if (eventType === 'deleted') {
-        setBills(prev => prev.filter((b: any) => normalizeId(b._id) !== normalizeId(bid) && normalizeId(b.id) !== normalizeId(bid)));
+        setBills(prev => prev.filter((b: any) => !sameId(b, bid)));
         // table status will be handled via table:statusChanged event; optimistic empty
         try {
-          const tbl = (bill as any).table?._id || (bill as any).table?.id || (bill as any).table;
-          if (tbl) setTables(prev => prev.map((t: any) => String(t._id || t.id) === String(tbl) ? { ...t, status: 'empty' } : t));
+          const tbl = getId((bill as any).table);
+          if (tbl) setTables(prev => prev.map((t: any) => sameId(t, tbl) ? { ...t, status: 'empty' } : t));
         } catch {}
         return;
       }
       setBills(prev => {
-        const exists = prev.some((b: any) => normalizeId(b._id) === normalizeId(bid) || normalizeId(b.id) === normalizeId(bid));
+        const exists = prev.some((b: any) => sameId(b, bid));
         const normalized = { ...bill, id: bid, _id: bid };
-        if (exists) return prev.map((b: any) => (normalizeId(b._id) === normalizeId(bid) || normalizeId(b.id) === normalizeId(bid)) ? { ...b, ...normalized } : b);
-        if (bill.status && ['paid','cancelled'].includes(bill.status)) return prev.filter((b: any) => normalizeId(b._id) !== normalizeId(bid));
+        if (exists) return prev.map((b: any) => sameId(b, bid) ? { ...b, ...normalized } : b);
+        if (bill.status && ['paid','cancelled'].includes(bill.status)) return prev.filter((b: any) => !sameId(b, bid));
         return [...prev, normalized];
       });
       // cross-sync tables instantly
       try {
-        const tbl = (bill as any).table?._id || (bill as any).table?.id || (bill as any).table;
+        const tbl = getId((bill as any).table);
         if (tbl) {
           const isPaid = bill.status === 'paid' || bill.status === 'cancelled';
-          setTables(prev => prev.map((t: any) => String(t._id || t.id) === String(tbl) ? { ...t, status: isPaid ? 'empty' : 'occupied' } : t));
+          setTables(prev => prev.map((t: any) => sameId(t, tbl) ? { ...t, status: isPaid ? 'empty' : 'occupied' } : t));
         }
       } catch {}
       // cross-sync orders that belong to this bill — update their bill reference status
       try {
         if (Array.isArray((bill as any).orders)) {
-          const orderIds = new Set((bill as any).orders.map((o: any) => String(o._id || o.id || o)));
-          setOrders(prev => prev.map((o: any) => orderIds.has(String(o._id || o.id)) ? { ...o, bill: { _id: bid, status: bill.status } } : o));
+          const orderIds = new Set((bill as any).orders.map((o: any) => getId(o)));
+          setOrders(prev => prev.map((o: any) => orderIds.has(getId(o)) ? { ...o, bill: { _id: bid, status: bill.status } } : o));
         }
       } catch {}
     };
@@ -2649,7 +2691,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const tid = payload?.tableId || payload?._id || payload?.id;
       const status = payload?.status;
       if (!tid || !status) return;
-      setTables(prev => prev.map((t: any) => (normalizeId(t._id) === normalizeId(tid) || normalizeId(t.id) === normalizeId(tid)) ? { ...t, status } : t));
+      setTables(prev => prev.map((t: any) => sameId(t, tid) ? { ...t, status } : t));
     };
     const getTableSectionIdForMatch = (sec: any): string => {
       if (!sec) return '';

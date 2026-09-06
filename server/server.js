@@ -209,6 +209,17 @@ mongoose.connection.once("open", async () => {
         Logger.error("❌ Error in automatic table status fix:", tableFixError.message);
     }
 
+    // Auto-repair bill ↔ order linkage (يصلح bill.orders المدمجة + الطلبات اليتيمة تلقائياً)
+    try {
+        Logger.info("🔧 Running automatic bill-orders linkage repair...");
+        const { runBillOrdersAutoRepair, scheduleBillOrdersRepair } = await import("./utils/billOrdersRepair.js");
+        const repairRes = await runBillOrdersAutoRepair({ silent: false });
+        if (repairRes) Logger.info(`✅ Bill-orders repair: linked ${repairRes.linked||0}, normalized ${repairRes.normalized||0}, deduped ${repairRes.deduped||0}`);
+        scheduleBillOrdersRepair(60 * 60 * 1000); // كل ساعة
+    } catch (billRepairError) {
+        Logger.error("❌ Error in bill-orders linkage repair:", billRepairError.message);
+    }
+
     // Auto-heal BSON types on startup: converts stringified Dates/ObjectIds
     // (left by JSON-crossed sync payloads) back to proper types, local + Atlas.
     // Uses raw collection ops (bypasses sync middleware); each node heals itself.

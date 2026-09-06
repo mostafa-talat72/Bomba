@@ -47,6 +47,10 @@ const syncConfig = {
         electionTimeout: parseInt(process.env.LAN_ELECTION_TIMEOUT || "10000", 10),
         syncPort: parseInt(process.env.PORT || "5000", 10),
         broadcastAddress: process.env.LAN_BROADCAST_ADDRESS || "255.255.255.255",
+        // Pinned address each device advertises to LAN peers (multi-NIC setups:
+        // force sync traffic over the wired interface, e.g. LAN_ADVERTISE_IP=192.168.5.1).
+        // Empty = auto-detect (previous behavior, unchanged).
+        advertiseIp: process.env.LAN_ADVERTISE_IP || "",
         persistQueue: process.env.LAN_SYNC_PERSIST_QUEUE !== "false",
         queuePath: process.env.LAN_SYNC_QUEUE_PATH || "./data/lan-queue.json",
     },

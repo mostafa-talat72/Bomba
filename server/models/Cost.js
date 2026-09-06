@@ -322,6 +322,7 @@ costSchema.index({ status: 1 });
 costSchema.index({ date: 1 });
 costSchema.index({ dueDate: 1 });
 costSchema.index({ createdBy: 1 });
+costSchema.index({ organization: 1, date: -1 }); // للتقارير المالية حسب النطاق الزمني
 
 // Soft delete fields - isDeleted, deletedAt, deletedBy
 costSchema.add({

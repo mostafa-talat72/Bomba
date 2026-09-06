@@ -14,6 +14,7 @@ import { getCustomerNameForDevice, getTableName, getSessionBillNote, getNewSessi
 import { getInstanceId } from "../utils/instanceId.js";
 import { writeToAtlas, writeBatchToAtlas } from "../utils/atlasWrite.js";
 import { updateTableStatusIfNeeded } from "../utils/tableUtils.js";
+import { getId, sameId } from "../utils/idUtils.js";
 
 // ── Helper: instant emit for session + bill + table, keeps DB writes immediate ──
 function emitSessionInstant(req, session, bill, type = "updated") {
@@ -155,7 +156,7 @@ const performCleanupHelper = async (organizationId) => {
         }
         
         // Handle both populated bill object and ObjectId reference
-        const correctBillId = session.bill?._id ? session.bill._id.toString() : session.bill.toString();
+        const correctBillId = getId(session.bill);
         Logger.info(`🔍 Checking session ${session._id} (${session.status}) - should be in bill ${correctBillId}`);
         
         // Find ALL bills that contain this session in their sessions array
@@ -319,7 +320,7 @@ const performSelectiveCleanup = async (sessionIds, organizationId) => {
             }
             
             // Handle both populated bill object and ObjectId reference
-            const correctBillId = session.bill?._id ? session.bill._id.toString() : session.bill.toString();
+            const correctBillId = getId(session.bill);
             Logger.info(`🔍 Cleaning session ${session._id} - should be in bill ${correctBillId}`);
             
             // Find ALL bills that contain this session
@@ -547,7 +548,7 @@ const sessionController = {
     // Get all sessions
     getSessions: async (req, res) => {
         try {
-            const { status, deviceType, page = 1, limit = 10, startDate, endDate } = req.query;
+            const { status, deviceType, page = 1, limit = 10, startDate, endDate, minimal } = req.query;
 
             const query = {};
             if (status) query.status = status;
@@ -577,21 +578,33 @@ const sessionController = {
                 }
             }
 
-            const sessions = await Session.find(query)
-                .populate("createdBy", "name")
-                .populate("updatedBy", "name")
-                .populate({
-                    path: "bill",
-                    populate: {
-                        path: "table",
-                        select: "number name"
-                    }
-                })
-                .sort({ startTime: -1 })
-                .limit(limit * 1)
-                .skip((page - 1) * limit);
+            // minimal=true (consumption-report caller): COMPLETE range data with NO
+            // limit/skip — reports must never silently truncate, even if a range
+            // ever exceeds any client-sent limit. Only consumed fields, no
+            // populates and no extra count. Normal callers keep pagination.
+            let sessionsQuery = Session.find(query)
+                .sort({ startTime: -1 });
+            if (minimal === "true") {
+                sessionsQuery = sessionsQuery.select(
+                    'deviceType deviceName deviceNumber status startTime endTime finalCost totalCost controllers controllersHistory'
+                ).lean();
+            } else {
+                sessionsQuery = sessionsQuery
+                    .limit(limit * 1)
+                    .skip((page - 1) * limit)
+                    .populate("createdBy", "name")
+                    .populate("updatedBy", "name")
+                    .populate({
+                        path: "bill",
+                        populate: {
+                            path: "table",
+                            select: "number name"
+                        }
+                    });
+            }
+            const sessions = await sessionsQuery;
 
-            const total = await Session.countDocuments(query);
+            const total = minimal === "true" ? sessions.length : await Session.countDocuments(query);
 
             res.json({
                 success: true,
@@ -2590,7 +2603,7 @@ const sessionController = {
             }
 
             // Check if session bill is already linked to this table
-            if (sessionBill.table && sessionBill.table.toString() === tableId.toString()) {
+            if (sessionBill.table && sameId(sessionBill.table, tableId)) {
                 return res.status(400).json({
                     success: false,
                     message: "الجلسة مرتبطة بالفعل بهذه الطاولة",
@@ -3038,7 +3051,7 @@ const sessionController = {
             }
 
             // Check if session is already on this table
-            if (currentBill.table && currentBill.table.toString() === newTableId.toString()) {
+            if (currentBill.table && sameId(currentBill.table, newTableId)) {
                 return res.status(400).json({
                     success: false,
                     message: "الجلسة موجودة بالفعل على هذه الطاولة",

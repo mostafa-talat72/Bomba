@@ -1,6 +1,43 @@
 import mongoose from "mongoose";
+import net from "node:net";
 import Logger from "../middleware/logger.js";
 import syncConfig from "./syncConfig.js";
+
+/**
+ * Fast reachability probe for the Atlas host (no credentials involved).
+ * Offline devices must skip Atlas in ~seconds, not hang for 35s+ per attempt.
+ * @returns {Promise<boolean>} true if TCP connects within timeoutMs
+ */
+function probeHostPort(host, port, timeoutMs = 4000) {
+    return new Promise((resolve) => {
+        if (!host) return resolve(false);
+        let done = false;
+        const finish = (ok) => {
+            if (done) return;
+            done = true;
+            try {
+                sock.destroy();
+            } catch {}
+            resolve(ok);
+        };
+        const sock = net.connect({ host, port: port || 27017 });
+        sock.setTimeout(timeoutMs);
+        sock.on("connect", () => finish(true));
+        sock.on("timeout", () => finish(false));
+        sock.on("error", () => finish(false));
+    });
+}
+
+function atlasHostPort(uri) {
+    try {
+        // Strip credentials before parsing — never log the full URI.
+        const m = String(uri).match(/^mongodb(?:\+srv)?:\/\/(?:[^@]+@)?([^/:?]+)(?::(\d+))?/);
+        if (!m) return null;
+        return { host: m[1], port: m[2] ? parseInt(m[2], 10) : 27017 };
+    } catch {
+        return null;
+    }
+}
 
 /**
  * DualDatabaseManager
@@ -17,6 +54,7 @@ class DualDatabaseManager {
         this.reconnectAttempts = 0;
         this.maxReconnectAttempts = 10;
         this.reconnectDelay = 5000; // 5 seconds
+        this.hourlyRetryScheduled = false;
         this.reconnectListeners = []; // Listeners for reconnection events
         this.disconnectListeners = []; // Listeners for disconnection events
         this.monitoringInterval = null;
@@ -84,6 +122,21 @@ class DualDatabaseManager {
             Logger.warn("⚠️ Atlas URI not provided, skipping Atlas connection");
             return null;
         }
+
+        // Fast offline skip: no internet (or blocked host) must not cost 35s.
+        // The background monitor keeps retrying, so Atlas attaches itself later.
+        try {
+            const hp = atlasHostPort(uri);
+            if (hp) {
+                const reachable = await probeHostPort(hp.host, hp.port, 4000);
+                if (!reachable) {
+                    Logger.warn(`⚠️ Atlas host unreachable (${hp.host}) — offline mode, Atlas deferred (local keeps working)`);
+                    this.isAtlasConnected = false;
+                    this.scheduleAtlasReconnect(uri);
+                    return null;
+                }
+            }
+        } catch {}
 
         try {
             Logger.info("🔄 Connecting to MongoDB Atlas (Backup)...");
@@ -215,9 +268,18 @@ class DualDatabaseManager {
      */
     scheduleAtlasReconnect(uri) {
         if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+            // Don't die silently: after the backoff cycle, keep one hourly
+            // retry forever so Atlas re-attaches whenever internet returns.
+            if (this.hourlyRetryScheduled) return;
+            this.hourlyRetryScheduled = true;
             Logger.error(
-                `❌ Max reconnection attempts (${this.maxReconnectAttempts}) reached for Atlas`
+                `❌ Max reconnection attempts (${this.maxReconnectAttempts}) reached for Atlas — switching to hourly retry`
             );
+            setTimeout(() => {
+                this.hourlyRetryScheduled = false;
+                this.reconnectAttempts = 0;
+                this.scheduleAtlasReconnect(uri);
+            }, 3600000);
             return;
         }
 

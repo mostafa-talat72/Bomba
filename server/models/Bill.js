@@ -1177,9 +1177,9 @@ billSchema.methods.addPartialPayment = function (
         );
 
         if (existingPayment) {
-            // Update existing payment
-            existingPayment.paidQuantity = (existingPayment.paidQuantity || 0) + item.quantity;
-            existingPayment.paidAmount = (existingPayment.paidAmount || 0) + (existingPayment.pricePerUnit * item.quantity);
+            // Update existing payment - add the partial amount being paid
+            existingPayment.paidQuantity = (existingPayment.paidQuantity || 0) + (item.paidQuantity || 0);
+            existingPayment.paidAmount = (existingPayment.paidAmount || 0) + (existingPayment.pricePerUnit * (item.paidQuantity || 0));
             existingPayment.isPaid = existingPayment.paidQuantity >= existingPayment.quantity;
             existingPayment.paidAt = new Date();
             existingPayment.paidBy = user._id;
@@ -1203,11 +1203,11 @@ billSchema.methods.addPartialPayment = function (
                 menuItemId: orderItem.menuItem?._id || orderItem.menuItem || null,
                 itemName: orderItem.name,
                 quantity: orderItem.quantity, // Total quantity of this item in the order
-                paidQuantity: item.quantity, // Quantity being paid for now
+                paidQuantity: item.paidQuantity, // Quantity being paid for now
                 pricePerUnit: orderItem.price,
                 totalPrice: orderItem.price * orderItem.quantity, // Total price for all quantity
-                paidAmount: orderItem.price * item.quantity, // Amount being paid now
-                isPaid: item.quantity >= orderItem.quantity, // True if paying for full quantity
+                paidAmount: orderItem.price * item.paidQuantity, // Amount being paid now
+                isPaid: item.paidQuantity >= orderItem.quantity, // True if paying for full quantity or more
                 paidAt: new Date(),
                 paidBy: user._id,
                 addons: orderItem.addons || []

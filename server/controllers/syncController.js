@@ -6,6 +6,7 @@ import syncConfig from "../config/syncConfig.js";
 import Logger from "../middleware/logger.js";
 import bidirectionalSyncMonitor from "../services/sync/bidirectionalSyncMonitor.js";
 import syncStatusMonitor from "../services/sync/syncStatusMonitor.js";
+import { runStartupTypeAudit } from "../utils/startupTypeAudit.js";
 
 /**
  * Get sync system metrics
@@ -686,6 +687,27 @@ export const controlMonitor = async (req, res) => {
     }
 };
 
+/**
+ * Run the BSON type audit on demand (same self-heal that runs on startup).
+ * @route POST /api/sync/type-audit
+ * @access Private (Admin only)
+ * @body { fix?: boolean } - default true; false = dry-run (report only)
+ */
+export const runTypeAudit = async (req, res) => {
+    try {
+        const fix = req.body?.fix !== false;
+        const stats = await runStartupTypeAudit({ fix });
+        res.json({ success: true, data: stats });
+    } catch (error) {
+        Logger.error("Error running type audit:", error);
+        res.status(500).json({
+            success: false,
+            message: "Failed to run type audit",
+            error: error.message,
+        });
+    }
+};
+
 export default {
     getMetrics,
     getHealth,
@@ -705,4 +727,5 @@ export default {
     updateExcludedCollections,
     getMonitorStatus,
     controlMonitor,
+    runTypeAudit,
 };

@@ -51,6 +51,7 @@ import { useRTL } from '../hooks/useRTL';
 import { Order, Session } from '../services/api';
 import api from '../services/api';
 import { formatDecimal, formatCurrency as formatCurrencyUtil, replaceAMPM } from '../utils/formatters';
+import { getId, sameId } from '../utils/id';
 import { getCachedDevicePrinter, printThroughLocalBridge } from '../utils/localPrintBridge';
 
 // Extend dayjs with plugins
@@ -74,6 +75,7 @@ interface ConsumptionItem {
   quantity: number;
   total: number;
   category: string;
+  key: string;
 }
 
 const OTHER_SECTION_KEY = '__OTHER__';
@@ -246,6 +248,19 @@ const ConsumptionReport = () => {
     itemsBySection['__PLAYSTATION__'] = [];
     itemsBySection['__COMPUTER__'] = [];
 
+    // فهارس O(1): صنف/قسم بالهوية القياسية (تتحمل ObjectId المدمج بدل مفتاح [object Object]).
+    const menuItemById = new Map<string, any>();
+    menuItems.forEach((m: any) => {
+      const mid = getId(m);
+      if (mid && !menuItemById.has(mid)) menuItemById.set(mid, m);
+    });
+    const sectionById = new Map<string, any>();
+    menuSections.forEach((s: any) => {
+      const sid = getId(s);
+      if (sid && !sectionById.has(sid)) sectionById.set(sid, s);
+    });
+    const rowByKey = new Map<string, { section: string; index: number }>();
+
     // Process cafe orders directly
     ordersToProcess.forEach((order) => {
       if (!order.items || !Array.isArray(order.items)) return;
@@ -257,22 +272,22 @@ const ConsumptionReport = () => {
         const itemQuantity = Number(item.quantity) || 0;
         if (itemQuantity <= 0 || itemPrice < 0) return;
 
-        const menuId = item.menuItemId || item.menuItem || null;
+        const menuId = getId(item.menuItemId || item.menuItem) || null;
         const variant = item.variant || 'default';
         const normalizedVariant = typeof variant === 'string' && variant.trim() ? variant : 'default';
-        const keyBase = menuId ? String(menuId) : String(item.name || 'unknown');
+        const keyBase = menuId || String(item.name || 'unknown');
         const key = `${keyBase}|${normalizedVariant}`;
 
         let sectionName = OTHER_SECTION_KEY;
         if (menuId) {
-          const menuItem = menuItems.find((m) => String(m._id) === String(menuId) || String((m as any).id) === String(menuId));
+          const menuItem = menuItemById.get(menuId);
           if (menuItem) {
             if (menuItem.category) {
               const categoryObj = typeof menuItem.category === 'string' ? null : menuItem.category;
 
               if (categoryObj && categoryObj.section) {
                 const sectionObj = typeof categoryObj.section === 'string'
-                  ? menuSections.find(s => String(s._id) === String(categoryObj.section) || String((s as any).id) === String(categoryObj.section))
+                  ? sectionById.get(getId(categoryObj.section))
                   : categoryObj.section;
 
                 if (sectionObj) {
@@ -287,15 +302,16 @@ const ConsumptionReport = () => {
           itemsBySection[sectionName] = [];
         }
 
-        const existingItem = itemsBySection[sectionName].find((i: any) => i.key === key);
-        if (existingItem) {
+        const hit = rowByKey.get(`${sectionName}||${key}`);
+        const existingItem = hit ? itemsBySection[hit.section]?.[hit.index] : undefined;
+        if (existingItem && existingItem.key === key) {
           existingItem.quantity += itemQuantity;
           existingItem.total += itemPrice * itemQuantity;
           existingItem.price = existingItem.total / existingItem.quantity;
         } else {
           const variantText = normalizedVariant && normalizedVariant !== 'default' ? ` (${normalizedVariant})` : '';
           itemsBySection[sectionName].push({
-            id: item._id || item.id || `${key}-${Math.random().toString(16).slice(2)}`,
+            id: getId(item) || `${key}-${Math.random().toString(16).slice(2)}`,
             name: `${item.name}${variantText}`,
             price: itemPrice,
             quantity: itemQuantity,
@@ -303,6 +319,7 @@ const ConsumptionReport = () => {
             category: sectionName,
             key
           } as any);
+          rowByKey.set(`${sectionName}||${key}`, { section: sectionName, index: itemsBySection[sectionName].length - 1 });
         }
       });
     });
@@ -361,7 +378,8 @@ const ConsumptionReport = () => {
           price: 0, // Will show as "-" in the table
           quantity: totalHours, // Total hours from controllersHistory
           total: sessionCost, // Total cost
-          category: sectionName
+          category: sectionName,
+          key: `${session._id || session.id || deviceName}|default`,
         });
       }
     });
@@ -408,17 +426,19 @@ const ConsumptionReport = () => {
       
       
       const [ordersResponse, sessionsResponse] = await Promise.all([
-        api.getOrders({ 
+        api.getOrders({
           limit: 10000,
           startDate: startDateISO,
           endDate: endDateISO,
-          reportEligible: true
+          reportEligible: true,
+          minimal: true
         }), // Fetch orders in date range
-        api.getSessions({ 
-          status: 'completed', 
+        api.getSessions({
+          status: 'completed',
           limit: 10000,
           startDate: startDateISO,
-          endDate: endDateISO
+          endDate: endDateISO,
+          minimal: true
         }) // Fetch completed sessions in date range
       ]);
       

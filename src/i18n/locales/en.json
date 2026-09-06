@@ -1888,6 +1888,15 @@
       "testDrawer": "Test cash drawer",
       "save": "Save my printer settings",
       "saved": "Your printer settings saved successfully"
+    },
+    "maintenance": {
+      "title": "Database maintenance",
+      "desc": "Check data types across all collections and fix corrupted values (runs automatically on every server start).",
+      "runAudit": "Run type check & fix now",
+      "running": "Checking...",
+      "done": "Check complete ({{collections}} collections): fixed {{docs}} documents ({{fields}} fields)",
+      "allOk": "Check complete ({{collections}} collections): all data is OK",
+      "failed": "Check failed"
     }
   },
   "gaming": {

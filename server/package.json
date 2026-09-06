@@ -17,6 +17,7 @@
     "generate:qrcodes": "node scripts/generateMissingQRCodes.js",
     "seed:admin": "node scripts/seedAdmin.js",
     "backup": "node scripts/backup.js",
+    "fix:types": "node scripts/fixBsonTypes.js",
     "restore": "node scripts/restore.js",
     "sync:initial": "node scripts/initialSync.js",
     "test:atlas": "node scripts/testAtlasConnection.js",

@@ -1,7 +1,7 @@
 import { apiClient } from './client';
 import type { ApiResponse, Order, OrderItem } from './types';
 
-async function getOrders(params?: { status?: string; customerName?: string; page?: number; limit?: number; startDate?: string; endDate?: string; reportEligible?: boolean }): Promise<ApiResponse<Order[]>> {
+async function getOrders(params?: { status?: string; customerName?: string; page?: number; limit?: number; startDate?: string; endDate?: string; reportEligible?: boolean; minimal?: boolean }): Promise<ApiResponse<Order[]>> {
   const searchParams = new URLSearchParams();
   if (params) {
     Object.entries(params).forEach(([key, value]) => {

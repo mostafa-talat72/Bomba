@@ -77,8 +77,12 @@ router.get("/sold-items", authorize("soldItems", "all"), async (req, res) => {
             };
         }
         
-        // Get all orders (excluding cancelled) with populated data - scoped to organization
-        const reportOrderIds = await getReportEligibleOrderIds(req.user.organization);
+        // Get all orders (excluding cancelled) with populated data - scoped to organization.
+        // Eligibility is scoped to the requested dates — an org-wide scan took ~35s.
+        const reportOrderIds = await getReportEligibleOrderIds(req.user.organization, {
+            startDate: dateQuery.createdAt?.$gte,
+            endDate: dateQuery.createdAt?.$lte,
+        });
         const orders = await Order.find({
             organization: req.user.organization,
             isDeleted: false,
@@ -87,6 +91,7 @@ router.get("/sold-items", authorize("soldItems", "all"), async (req, res) => {
             items: { $exists: true, $ne: [], $type: 'array' },
             ...dateQuery
         })
+        .select('items orderNumber bill table createdAt customerName')
         .populate({
             path: 'table',
             select: 'number section',
@@ -105,6 +110,7 @@ router.get("/sold-items", authorize("soldItems", "all"), async (req, res) => {
         // the order snapshot.
         const MenuItem = (await import('../models/MenuItem.js')).default;
         const menuItems = await MenuItem.find({ organization: req.user.organization })
+            .select('name category')
             .populate({
                 path: 'category',
                 select: 'name section sortOrder',

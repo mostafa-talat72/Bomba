@@ -12,6 +12,7 @@ import mongoose from "mongoose";
 import performanceMetrics from "../utils/performanceMetrics.js";
 import { getInstanceId } from "../utils/instanceId.js";
 import { writeToAtlas } from "../utils/atlasWrite.js";
+import { sameId } from "../utils/idUtils.js";
 import {
     convertQuantity,
     calculateTotalInventoryNeeded,
@@ -20,6 +21,13 @@ import {
     createOrderErrorMessages,
     createOrderSuccessMessages,
 } from "../utils/orderUtils.js";
+
+// Short-lived cache for the default-visibility bill set used by getOrders without
+// a status filter (dashboard mount + every socket-triggered fetchOrders call).
+// The distinct over all bills took ~1.6s; TTL 15s smooths bursts. This is a soft
+// UX visibility filter only — auth/org scoping is unchanged.
+const visibleBillsCache = new Map(); // orgKey -> { ids, at }
+const VISIBLE_BILLS_TTL_MS = 15000;
 
 // ==================== دوال مساعدة للأرقام ====================
 
@@ -221,14 +229,13 @@ export async function restoreInventoryForOrder(order, userId) {
 
             // البحث عن حركة الخصم الأصلية لهذا الطلب
             const deductMovement = inventoryItem.stockMovements
-                .filter(m => 
-                    m.type === 'out' && 
-                    m.reference && 
-                    m.reference.toString() === order._id.toString()
+                .filter(m =>
+                    m.type === 'out' &&
+                    sameId(m.reference, order._id)
                 )
                 .sort((a, b) => {
-                    const aTime = new Date(a.timestamp || a.date).getTime();
-                    const bTime = new Date(b.timestamp || b.date).getTime();
+                    const aTime = new Date(a.timestamp || a.date).getTime() || 0;
+                    const bTime = new Date(b.timestamp || b.date).getTime() || 0;
                     return bTime - aTime; // الأحدث أولاً
                 })[0];
             
@@ -407,14 +414,13 @@ async function adjustInventoryForOrderUpdate(oldOrder, newOrder, userId) {
             } else {
                 // نقصان في الكمية - إرجاع بنفس السعر من آخر حركة خصم
                 const lastDeductMovement = inventoryItem.stockMovements
-                    .filter(m => 
-                        m.type === 'out' && 
-                        m.reference && 
-                        m.reference.toString() === newOrder._id.toString()
+                    .filter(m =>
+                        m.type === 'out' &&
+                        sameId(m.reference, newOrder._id)
                     )
                     .sort((a, b) => {
-                        const aTime = new Date(a.timestamp || a.date).getTime();
-                        const bTime = new Date(b.timestamp || b.date).getTime();
+                        const aTime = new Date(a.timestamp || a.date).getTime() || 0;
+                        const bTime = new Date(b.timestamp || b.date).getTime() || 0;
                         return bTime - aTime;
                     })[0];
                 
@@ -458,7 +464,8 @@ export const getOrders = async (req, res) => {
             limit = 50, 
             startDate,  // NEW: Date range filtering
             endDate,    // NEW: Date range filtering
-            reportEligible
+            reportEligible,
+            minimal
         } = req.query;
 
         const query = {};
@@ -474,7 +481,10 @@ export const getOrders = async (req, res) => {
         Object.assign(query, organizationFilter(req.user));
         query.isDeleted = false;
         if (reportEligible === "true") {
-            const reportOrderIds = await getReportEligibleOrderIds(req.user.organization);
+            const reportOrderIds = await getReportEligibleOrderIds(req.user.organization, {
+                startDate: startDate || undefined,
+                endDate: endDate || undefined,
+            });
             query._id = { $in: reportOrderIds };
         }
 
@@ -514,13 +524,22 @@ export const getOrders = async (req, res) => {
         // display pending/preparing/ready) takes priority over the default.
         if (!status) {
             const fourMonthsAgo = new Date(Date.now() - 120 * 24 * 60 * 60 * 1000);
-            const visibleBillIds = await Bill.distinct("_id", {
-                ...organizationFilter(req.user),
-                $or: [
-                    { status: { $in: ["draft", "partial", "overdue"] } },
-                    { createdAt: { $gte: fourMonthsAgo } },
-                ],
-            });
+            const orgKey = String(getOrganizationId(req.user));
+            const cached = visibleBillsCache.get(orgKey);
+            let visibleBillIds;
+            if (cached && Date.now() - cached.at < VISIBLE_BILLS_TTL_MS) {
+                visibleBillIds = cached.ids;
+            } else {
+                visibleBillIds = await Bill.distinct("_id", {
+                    ...organizationFilter(req.user),
+                    $or: [
+                        { status: { $in: ["draft", "partial", "overdue"] } },
+                        { createdAt: { $gte: fourMonthsAgo } },
+                    ],
+                });
+                if (visibleBillsCache.size > 50) visibleBillsCache.clear();
+                visibleBillsCache.set(orgKey, { ids: visibleBillIds, at: Date.now() });
+            }
             query.bill = { $in: visibleBillIds };
         }
 
@@ -528,15 +547,24 @@ export const getOrders = async (req, res) => {
         // تم إزالة effectiveLimit لعرض جميع الطلبات القديمة والجديدة
 
         // Selective field projection - only essential fields + bill status + items
-        const orders = await Order.find(query)
-            .select('orderNumber table status total createdAt bill items organization')
-            .populate('table', 'number name')
-            .populate('bill', 'status') // إضافة populate للفاتورة لمعرفة حالتها
-            .populate('organization', 'name') // إضافة populate للمنشأة
+        // minimal=true (report/consumption callers): skip the 3 populates — they add
+        // extra queries per request and the caller only consumes items/totals.
+        let ordersQuery = Order.find(query)
+            .select('orderNumber table status total createdAt bill items organization finalAmount')
             .sort({ createdAt: -1 })
             .lean(); // Convert to plain JS objects for better performance - جلب جميع الطلبات بدون حد
+        if (minimal !== "true") {
+            ordersQuery = ordersQuery
+                .populate('table', 'number name')
+                .populate('bill', 'status') // إضافة populate للفاتورة لمعرفة حالتها
+                .populate('organization', 'name'); // إضافة populate للمنشأة
+        }
+        const orders = await ordersQuery;
 
-        const total = await Order.countDocuments(query);
+        // No countDocuments: no frontend caller consumes `total` (all use data only),
+        // and it rescanned the whole match on every call. `total` keeps its key
+        // for compatibility.
+        const total = orders.length;
 
         const queryExecutionTime = Date.now() - queryStartTime;
 
@@ -1939,7 +1967,7 @@ export const deleteOrder = async (req, res) => {
                 // التحقق من وجود دفعات جزئية لهذا الطلب
                 if (billDoc.itemPayments && billDoc.itemPayments.length > 0) {
                     const orderItemPayments = billDoc.itemPayments.filter(
-                        ip => ip.orderId.toString() === orderIdStr && ip.paidAmount > 0
+                        ip => sameId(ip.orderId, orderIdStr) && ip.paidAmount > 0
                     );
                     
                     if (orderItemPayments.length > 0) {
@@ -3088,7 +3116,7 @@ export const deliverOrderSection = async (req, res) => {
         let allItemsFullyDelivered = true;
 
         for (const item of order.items) {
-            if (item.section && item.section.toString() === sectionId) {
+            if (item.section && sameId(item.section, sectionId)) {
                 const deliveredHere = Math.min(
                     item.preparedCount || 0,
                     item.quantity || 0
@@ -3108,7 +3136,7 @@ export const deliverOrderSection = async (req, res) => {
 
         if (!anyItemDelivered) {
             const sectionItem = order.items.find(
-                (item) => item.section && item.section.toString() === sectionId
+                (item) => item.section && sameId(item.section, sectionId)
             );
             const reason = sectionItem
                 ? `أصناف القسم لم يتم تجهيزها بعد (preparedCount = ${sectionItem.preparedCount || 0}, quantity = ${sectionItem.quantity || 0})`

@@ -8,6 +8,7 @@ import { useApp } from '../context/AppContext';
 import api, { Device, Session } from '../services/api';
 import { SessionCostDisplay } from '../components/SessionCostDisplay';
 import { formatDecimal, formatCurrency, getCurrencySymbol } from '../utils/formatters';
+import { sameId } from '../utils/id';
 import { formatDateTime } from '../utils/timeFormat';
 import dayjs from 'dayjs';
 import 'dayjs/locale/ar';
@@ -649,7 +650,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
   // ????? ??????
   const handleEndSession = async (sessionId: string) => {
     // Find the session
-    const session = sessions.find(s => s.id === sessionId);
+    const session = sessions.find(s => sameId(s, sessionId));
     if (!session) {
       showNotification(t('gaming.sessionNotFound'), 'error');
       return;

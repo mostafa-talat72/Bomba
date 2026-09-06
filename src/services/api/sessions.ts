@@ -1,7 +1,7 @@
 import { apiClient } from './client';
 import type { ApiResponse, Bill, Session } from './types';
 
-async function getSessions(params?: { status?: string; device?: string; page?: number; limit?: number; startDate?: string; endDate?: string }): Promise<ApiResponse<Session[]>> {
+async function getSessions(params?: { status?: string; device?: string; page?: number; limit?: number; startDate?: string; endDate?: string; minimal?: boolean }): Promise<ApiResponse<Session[]>> {
   const searchParams = new URLSearchParams();
   if (params) {
     Object.entries(params).forEach(([key, value]) => {

@@ -15,6 +15,7 @@ import { useTablesHeader } from '../context/TablesHeaderContext';
 import { MenuItem, MenuSection, MenuCategory, TableSection, Table, Order, Bill, Session } from '../services/api';
 import { api } from '../services/api';
 import { formatCurrency as formatCurrencyUtil, formatDecimal } from '../utils/formatters';
+import { getId, sameId } from '../utils/id';
 import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
 import { printOrder } from '../utils/printOrder';
 import { preloadBillReceipt, printBill } from '../utils/printBill';
@@ -384,11 +385,24 @@ const loadInitialData = async () => {
 
     if (tables.length === 0) return { statusMap, billsMap };
 
+    // فهرس مساعد: orderId -> tableId من حالة الطلبات الكاملة.
+    const orderToTable = new Map<string, string>();
+    orders.forEach((o: any) => {
+      const oid = getId(o.table);
+      if (oid) orderToTable.set(getId(o), oid);
+    });
     // بناء index واحد: tableId -> bills (مرة واحدة فقط)
     const tidToBills = new Map<string, Bill[]>();
     bills.forEach((b: Bill) => {
-      if (!b.table) return;
-      const tid = ((b.table as any)._id || (b.table as any).id || b.table).toString();
+      let tid: string = getId((b as any).table);
+      if (!tid && Array.isArray((b as any).orders)) {
+        // ⚡ فاتورة بلا طاولة (مثلاً من جلسة): تُنسب لطاولة طلباتها.
+        for (const o of (b as any).orders) {
+          const t = orderToTable.get(getId(o));
+          if (t) { tid = t; break; }
+        }
+      }
+      if (!tid) return;
       if (!tidToBills.has(tid)) tidToBills.set(tid, []);
       tidToBills.get(tid)!.push(b);
     });
@@ -404,11 +418,42 @@ const loadInitialData = async () => {
     });
 
     return { statusMap, billsMap };
-  }, [bills, tables]);
+  }, [bills, tables, orders]);
 
   // نشر النتائج — فقط مرة واحدة لكل تغيير
   const tableStatuses = tableDataMap.statusMap;
   const tableBillsMap  = tableDataMap.billsMap;
+
+  // دمج فواتير مجلوبة عند الطلب (فلتر النافذة/التقرير) دون مسح الباقي.
+  const mergeFetchedBills = useCallback((fetched: Bill[]) => {
+    if (!Array.isArray(fetched) || fetched.length === 0) return;
+    setBills(prev => {
+      const map = new Map(prev.map((b: any) => [String(b._id || b.id), b]));
+      fetched.forEach((b: any) => { map.set(String(b._id || b.id), b); });
+      return Array.from(map.values()) as Bill[];
+    });
+  }, []);
+
+  // فلتر نافذة فواتير الطاولة: paid/all تُجلب من السيرفر لهذه الطاولة فقط وتُدمج.
+  // (unpaid/partial موجودة محلياً من الجلب الأساسي — بلا شبكة.)
+  useEffect(() => {
+    if (!showUnifiedTableModal || !selectedTable) return;
+    if (searchQuery) return;
+    if (tableBillsFilter === 'unpaid' || tableBillsFilter === 'partial') return;
+    const modalTableId = String((selectedTable as any)._id || (selectedTable as any).id || '');
+    if (!modalTableId) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const params: any = tableBillsFilter === 'all'
+          ? { all: true, limit: 500, table: modalTableId }
+          : { status: tableBillsFilter, limit: 500, table: modalTableId };
+        const r = await api.getBills(params);
+        if (!cancelled && r?.success && Array.isArray(r.data)) mergeFetchedBills(r.data as Bill[]);
+      } catch {}
+    })();
+    return () => { cancelled = true; };
+  }, [tableBillsFilter, showUnifiedTableModal, selectedTable, searchQuery, mergeFetchedBills]);
 
   // للتوافق مع الكود القديم الذي يستدعي fetchAllTableStatuses
   const fetchAllTableStatuses = useCallback(() => { /* no-op — tableDataMap يتحدث تلقائياً */ }, []);
@@ -525,12 +570,34 @@ const loadInitialData = async () => {
 
   // ── tick لحظي كل 10 ثوانٍ — يعمل فقط لو فيه جلسات نشطة (بلا fetch لتجنب الفيضان، السوكت هو المصدر الفوري)
   const [tick, setTick] = useState(0);
+  const billsRef = useRef<Bill[]>([]);
+  billsRef.current = bills as Bill[];
   useEffect(() => {
     if (!hasAnyActiveSession) return;
     const id = setInterval(() => {
       setTick(t => t + 1);
     }, 10000);
-    return () => clearInterval(id);
+    // فواتير الجلسات النشطة فقط كل 30 ثانية — إجماليات حية دقيقة من السيرفر
+    // (طلب واحد خفيف لكل فاتورة بدل fetchBills الكامل، وبدون double-count).
+    const liveId = setInterval(() => {
+      try {
+        const activeBillIds = new Set<string>();
+        (billsRef.current || []).forEach((b: any) => {
+          if (['paid', 'cancelled'].includes(b.status)) return;
+          if ((b.sessions || []).some((s: any) => s && s.status === 'active')) {
+            activeBillIds.add(String(b._id || b.id));
+          }
+        });
+        activeBillIds.forEach(bid => {
+          api.getBill(bid).then((r: any) => {
+            if (r?.success && r.data) {
+              setBills(prev => prev.map((b: any) => String(b._id || b.id) === bid ? r.data : b));
+            }
+          }).catch(() => {});
+        });
+      } catch {}
+    }, 30000);
+    return () => { clearInterval(id); clearInterval(liveId); };
   }, [hasAnyActiveSession]);
 
   // السيرفر يحسب الفاتورة حية — لا نضيف delta هنا
@@ -605,7 +672,7 @@ const loadInitialData = async () => {
     const socket: Socket = io(socketUrl, {
         auth: { token: localStorage.getItem('token') || undefined },
       path: '/socket.io/', transports: ['websocket', 'polling'],
-      reconnection: true, reconnectionDelay: 1000, reconnectionAttempts: 5,
+      reconnection: true, reconnectionDelay: 1000, reconnectionAttempts: Infinity, reconnectionDelayMax: 10000,
     });
     socketRef.current = socket;
 
@@ -1182,14 +1249,14 @@ const loadInitialData = async () => {
     // index: tableId -> active orders count (مرة واحدة)
     const tidToOrderCount = new Map<string, number>();
     orders.forEach((o: any) => {
-      const oid = (o.table?._id || o.table?.id || o.table)?.toString();
+      const oid = getId(o.table);
       if (!oid) return;
       if (['paid', 'cancelled'].includes((o.bill as any)?.status)) return;
       tidToOrderCount.set(oid, (tidToOrderCount.get(oid) || 0) + 1);
     });
 
     activeTables.forEach((table: Table) => {
-      const tid = (table._id || (table as any).id).toString();
+      const tid = getId(table);
       const tBills = tableBillsMap[tid]?.bills ?? EMPTY_BILLS;
       const tOrdersCount = tidToOrderCount.get(tid) ?? EMPTY_ORDERS_COUNT;
 
@@ -1605,7 +1672,18 @@ const loadInitialData = async () => {
     } catch {}
     const today = new Date();
     const todayStr = today.toLocaleDateString('ar-EG', { weekday:'long', year:'numeric', month:'long', day:'numeric' });
-    const todayBills = bills.filter(b => {
+    // التقرير يحتاج مدفوعة اليوم أيضاً: جلب عند الطلب فقط ودمجها (الجلب الأساسي غير مدفوعة).
+    let reportPool: Bill[] = bills;
+    try {
+      const paidRes = await api.getBills({ status: 'paid', limit: 500 });
+      if (paidRes?.success && Array.isArray(paidRes.data) && paidRes.data.length > 0) {
+        const map = new Map(bills.map((b: any) => [String(b._id || b.id), b]));
+        (paidRes.data as Bill[]).forEach((b: any) => { map.set(String(b._id || b.id), b); });
+        reportPool = Array.from(map.values()) as Bill[];
+        mergeFetchedBills(paidRes.data as Bill[]);
+      }
+    } catch {}
+    const todayBills = reportPool.filter(b => {
       const d = new Date(b.createdAt);
       return d.toDateString() === today.toDateString();
     });
@@ -1900,7 +1978,7 @@ const loadInitialData = async () => {
             await promptAndPrintOrder(updated, selectedTable);
           }, 0);
         }
-        if (selectedTable) setTableOrders(p => p.map(o => o.id === updated.id ? updated : o));
+        if (selectedTable) setTableOrders(p => p.map(o => String((o as any)._id || (o as any).id) === String((updated as any)._id || (updated as any).id) ? updated : o));
         scheduleBackgroundRefetch(true);
       }
     } catch (error: any) {
@@ -2084,12 +2162,12 @@ const loadInitialData = async () => {
     const result = await api.updatePayment(bill.id || bill._id, paymentData);
     if (!result?.data) throw new Error('payment failed');
     // تأكيد بالبيانات الراجعة من السيرفر + تحديث حالة الطاولة لحظياً من نفس البيانات (بدون fetch حاجب).
-    const paidTableId = String((bill.table as any)?._id || (bill.table as any)?.id || bill.table || '');
+    const paidTableId = getId((bill.table as any) ?? bill.table);
     setBills(prev => {
-      const next = prev.map(b => String(b._id || b.id) === String(bill._id || bill.id) ? result.data : b);
+      const next = prev.map(b => sameId(b, bill) ? result.data : b);
       if (paidTableId) {
-        const hasUnpaid = next.some((b: any) => String(b.table?._id || b.table) === paidTableId && ['draft', 'partial', 'overdue'].includes(b.status));
-        setTables(tprev => tprev.map((t: any) => String(t._id || t.id) === paidTableId ? { ...t, status: hasUnpaid ? 'occupied' : 'empty' } : t));
+        const hasUnpaid = next.some((b: any) => sameId((b as any).table, paidTableId) && ['draft', 'partial', 'overdue'].includes(b.status));
+        setTables(tprev => tprev.map((t: any) => sameId(t, paidTableId) ? { ...t, status: hasUnpaid ? 'occupied' : 'empty' } : t));
       }
       return next;
     });
@@ -2203,11 +2281,11 @@ const loadInitialData = async () => {
         const finalPaidBill = result.data;
         const tableId = String((finalPaidBill.table as any)?._id || finalPaidBill.table || '');
         setBills(prev => {
-          const next = prev.map(b => String(b._id || b.id) === String(billToPayFull._id || billToPayFull.id) ? finalPaidBill : b);
-          const hasUnpaid = tableId ? next.some((b: any) => String(b.table?._id || b.table) === tableId && ['draft','partial','overdue'].includes(b.status)) : true;
+          const next = prev.map(b => sameId(b, billToPayFull) ? finalPaidBill : b);
+          const hasUnpaid = tableId ? next.some((b: any) => sameId((b as any).table, tableId) && ['draft','partial','overdue'].includes(b.status)) : true;
           if (tableId) {
             // تحديث حالة الطاولة لحظياً من نفس البيانات (بدون fetch حاجب).
-            setTables(tprev => tprev.map((t: any) => String(t._id || t.id) === tableId ? { ...t, status: hasUnpaid ? 'occupied' : 'empty' } : t));
+            setTables(tprev => tprev.map((t: any) => sameId(t, tableId) ? { ...t, status: hasUnpaid ? 'occupied' : 'empty' } : t));
             if (!hasUnpaid) {
               setShowUnifiedTableModal(false);
               setSelectedTable(null);
@@ -2267,13 +2345,13 @@ const loadInitialData = async () => {
       } as any);
       if (result?.data) {
         const finalPaidBill = result.data;
-        const tableId = String((finalPaidBill.table as any)?._id || finalPaidBill.table || '');
+        const tableId = getId((finalPaidBill.table as any) ?? finalPaidBill.table);
         setBills(prev => {
-          const next = prev.map(b => String(b._id || (b as any).id) === String((bill as any)._id || (bill as any).id) ? finalPaidBill : b);
-          const hasUnpaid = tableId ? next.some((b: any) => String(b.table?._id || b.table) === tableId && ['draft','partial','overdue'].includes(b.status)) : true;
+          const next = prev.map(b => sameId(b, bill) ? finalPaidBill : b);
+          const hasUnpaid = tableId ? next.some((b: any) => sameId((b as any).table, tableId) && ['draft','partial','overdue'].includes(b.status)) : true;
           if (tableId) {
             // تحديث حالة الطاولة لحظياً من نفس البيانات (بدون fetch حاجب).
-            setTables(tprev => tprev.map((t: any) => String(t._id || t.id) === tableId ? { ...t, status: hasUnpaid ? 'occupied' : 'empty' } : t));
+            setTables(tprev => tprev.map((t: any) => sameId(t, tableId) ? { ...t, status: hasUnpaid ? 'occupied' : 'empty' } : t));
             if (!hasUnpaid) {
               setShowUnifiedTableModal(false);
               setSelectedTable(null);

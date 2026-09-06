@@ -1144,28 +1144,29 @@ const Reports = () => {
         }
       ];
 
-      // معالجة كل طلب على حدة مع تسجيل النتائج
+      // ⚡ كل الطلبات متوازية فعلاً (كانت تُعالج تسلسلياً رغم بدئها معاً).
       const errors: {key: keyof ReportData, reason: unknown}[] = [];
 
-      for (const {key, promise} of reportsPromises) {
-        try {
-          const value = await promise;
-          
-          if (key === 'sales') {
-            results[key] = value as SalesReportData;
-          
-          } else if (key === 'sessions') {
-            results[key] = value as SessionsReportData;
-          } else {
-            results[key] = value as Record<string, unknown>;
-          }
-          
-          // Log financial data for debugging
-          if (key === 'financial') {
-         }
-        } catch (error) {
-          console.error(`❌ Error loading ${key} report:`, error);
-          errors.push({ key, reason: error });
+      const settled = await Promise.all(reportsPromises.map(({ key, promise }) =>
+        promise.then(
+          (value) => ({ key, ok: true as const, value }),
+          (reason: unknown) => ({ key, ok: false as const, reason }),
+        )
+      ));
+
+      for (const entry of settled) {
+        if (entry.ok === false) {
+          console.error(`❌ Error loading ${entry.key} report:`, entry.reason);
+          errors.push({ key: entry.key, reason: (entry as { key: keyof ReportData; ok: false; reason: unknown }).reason });
+          continue;
+        }
+        const { key, value } = entry;
+        if (key === 'sales') {
+          results[key] = value as SalesReportData;
+        } else if (key === 'sessions') {
+          results[key] = value as SessionsReportData;
+        } else {
+          results[key] = value as Record<string, unknown>;
         }
       }
 
