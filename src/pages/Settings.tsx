@@ -150,6 +150,7 @@ const Settings: FC = () => {
   const [passwordSaving, setPasswordSaving] = useState(false);
   const [notificationsSaving, setNotificationsSaving] = useState(false);
   const [generalSaving, setGeneralSaving] = useState(false);
+  const [backupBusy, setBackupBusy] = useState(false);
   const [organizationSaving, setOrganizationSaving] = useState(false);
   const [permissionsSaving, setPermissionsSaving] = useState(false);
   
@@ -647,6 +648,21 @@ const Settings: FC = () => {
     }
   };
 
+  // اعرض المسار المحفوظ في السيرفر إن لم يوجد محلي (السيرفر مصدر الحقيقة للمجدول)
+  useEffect(() => {
+    (async () => {
+      try {
+        if (localStorage.getItem('backupPath')) return;
+        const res: any = await api.getBackupSettings();
+        const dir = res?.data?.dir;
+        if (res?.success && dir) {
+          setGeneralSettings(prev => ({ ...prev, backupPath: dir }));
+          localStorage.setItem('backupPath', dir);
+        }
+      } catch {}
+    })();
+  }, []);
+
   const handleBrowseBackupFolder = async () => {
     try {
       if ('showDirectoryPicker' in window) {
@@ -671,14 +687,42 @@ const Settings: FC = () => {
     }
   };
 
+  const handleBackupNow = async () => {
+    setBackupBusy(true);
+    try {
+      const path = (generalSettings.backupPath || '').trim();
+      const res: any = await api.createBackup(path || undefined);
+      if (res?.success) {
+        const d = res.data || {};
+        showAlertMessage(`تم إنشاء النسخة الاحتياطية بنجاح (${d.fileName || ''}${d.documents ? ` — ${d.documents} سجل` : ''})`);
+      } else {
+        showAlertMessage(res?.message || 'فشل إنشاء النسخة الاحتياطية', 'error');
+      }
+    } catch (error: any) {
+      showAlertMessage(error?.message || 'فشل إنشاء النسخة الاحتياطية', 'error');
+    } finally {
+      setBackupBusy(false);
+    }
+  };
+
   const handleGeneralSettingsUpdate = async () => {
     setGeneralSaving(true);
     try {
       const { backupPath, ...settingsToSend } = generalSettings;
-      
+
       // Save backupPath to localStorage (device-specific, not in DB)
       if (backupPath !== undefined) {
         localStorage.setItem('backupPath', backupPath);
+      }
+
+      // Persist the path on the server too — otherwise manual + scheduled
+      // backups never see it (server cannot read browser localStorage).
+      if (backupPath !== undefined && backupPath.trim()) {
+        try {
+          await api.saveBackupSettings(backupPath.trim());
+        } catch (e) {
+          console.warn('Server backup path save failed (local only):', e);
+        }
       }
       
       const success = await updateGeneralSettings(settingsToSend);
@@ -1521,6 +1565,14 @@ const Settings: FC = () => {
                       <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                         سيتم حفظ النسخ الاحتياطية في هذا المجلد على هذا الجهاز فقط
                       </p>
+                      <button
+                        type="button"
+                        onClick={handleBackupNow}
+                        disabled={backupBusy}
+                        className="mt-2 px-4 py-2 bg-green-600 hover:bg-green-700 dark:bg-green-500 dark:hover:bg-green-600 text-white rounded-md disabled:opacity-50 min-w-40"
+                      >
+                        {backupBusy ? 'جاري إنشاء النسخة...' : 'نسخ احتياطي الآن'}
+                      </button>
                     </div>
 
                     <div className="mt-6">

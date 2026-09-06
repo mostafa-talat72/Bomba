@@ -101,6 +101,8 @@ class LanSyncService {
         );
         this.stats = { sent: 0, received: 0, applied: 0, queued: 0, errors: 0 };
         this.applyInProgress = new Set(); // dedup by op id
+        this.resyncTimer = null;
+        this.lastResyncAt = null;
     }
 
     async start(httpServer, io) {
@@ -134,7 +136,45 @@ class LanSyncService {
         if (status.role === "primary") await this.onBecamePrimary();
         else if (status.role === "secondary" && status.primary) await this.onBecameSecondary(status.primary);
 
+        // Periodic full re-sync (both directions): heals anything the live
+        // stream or a single initial sync missed, so ALL tables stay synced.
+        // Idempotent LWW applies make overlapping runs harmless.
+        const resyncInterval = syncConfig.lanSync?.resyncInterval || 0;
+        if (resyncInterval > 0) {
+            if (this.resyncTimer) clearInterval(this.resyncTimer);
+            this.resyncTimer = setInterval(() => {
+                this.periodicResync().catch((e) =>
+                    Logger.warn("[LanSync] Periodic re-sync failed:", e.message)
+                );
+            }, resyncInterval);
+            Logger.info(`[LanSync] Periodic full re-sync every ${Math.round(resyncInterval / 1000)}s`);
+        }
+
         Logger.info("[LanSync] LAN sync service started");
+    }
+
+    // Fire-and-forget full history exchange in both directions.
+    // No ack waiting (big DBs stream longer than any sane ack timeout);
+    // incoming chunks apply idempotently via handleInitialSyncData.
+    async periodicResync() {
+        if (!this.isRunning || !syncConfig.lanSync?.enabled) return;
+        try {
+            if (!this.isPrimary && this.clientSocket?.connected) {
+                Logger.info("[LanSync] Periodic re-sync: requesting history from primary...");
+                this.clientSocket.emit("lan:initial-sync-request", { deviceId: this.deviceId, periodic: true });
+                this.lastResyncAt = new Date();
+            } else if (this.isPrimary && this.connectedPeers.size > 0) {
+                Logger.info(`[LanSync] Periodic re-sync: requesting history from ${this.connectedPeers.size} peer(s)...`);
+                for (const [, peer] of this.connectedPeers) {
+                    try {
+                        peer.socket.emit("lan:initial-sync-request", { deviceId: this.deviceId, reverse: true, periodic: true });
+                    } catch {}
+                }
+                this.lastResyncAt = new Date();
+            }
+        } catch (e) {
+            Logger.warn("[LanSync] Periodic re-sync failed:", e.message);
+        }
     }
 
     setupNamespace() {
@@ -188,6 +228,34 @@ class LanSyncService {
                     if (ack) ack({ success: false, error: e.message });
                 }
             });
+
+            // Reverse history: a newly-connected secondary may hold OLD docs
+            // (organizations, subscriptions, ...) that we as primary never had.
+            // Live ops flow both ways, but history was only ever pulled BY the
+            // secondary — so pull it from the newcomer too (idempotent LWW).
+            socket.on("lan:initial-sync-data", async (payload) => {
+                try {
+                    await this.handleInitialSyncData(payload);
+                } catch (e) {
+                    Logger.error("[LanSync] Error handling reverse initial sync data:", e.message);
+                }
+            });
+
+            socket.on("lan:initial-sync-complete", (info) => {
+                Logger.info(`[LanSync] Reverse initial sync complete from ${deviceId}:`, info?.collections ?? "");
+            });
+
+            try {
+                socket.emit("lan:initial-sync-request", { deviceId: this.deviceId, reverse: true }, (res) => {
+                    if (res?.success) {
+                        Logger.info(`[LanSync] Reverse initial sync accepted by ${deviceId}`);
+                    } else {
+                        Logger.warn(`[LanSync] Reverse initial sync not accepted by ${deviceId}:`, res?.error || "no ack");
+                    }
+                });
+            } catch (e) {
+                Logger.warn("[LanSync] Failed to request reverse initial sync:", e.message);
+            }
 
             socket.on("disconnect", (reason) => {
                 Logger.info(`[LanSync] Peer disconnected: ${deviceId} reason=${reason}`);
@@ -294,6 +362,19 @@ class LanSyncService {
                     await this.handleInitialSyncData(payload);
                 } catch (e) {
                     Logger.error("[LanSync] Error handling initial sync data:", e.message);
+                }
+            });
+
+            // Serve our history back when the primary asks (reverse initial
+            // sync). Same sender both sides already use — idempotent LWW.
+            this.clientSocket.on("lan:initial-sync-request", async (data, ack) => {
+                try {
+                    Logger.info("[LanSync] Primary requested our history (reverse initial sync)");
+                    const result = await this.handleInitialSyncRequest(this.clientSocket, data);
+                    if (ack) ack({ success: true, ...result });
+                } catch (e) {
+                    Logger.error("[LanSync] Reverse initial sync serve failed:", e.message);
+                    if (ack) ack({ success: false, error: e.message });
                 }
             });
 
@@ -651,12 +732,14 @@ class LanSyncService {
             connectedPeers: this.isPrimary ? [...this.connectedPeers.values()].map(p => ({ deviceId: p.deviceId, connectedAt: p.connectedAt })) : [],
             clientConnected: !!this.clientSocket?.connected,
             queueSize: this.queueManager.size(),
+            lastResyncAt: this.lastResyncAt,
             stats: { ...this.stats },
         };
     }
 
     async stop() {
         this.isRunning = false;
+        if (this.resyncTimer) { clearInterval(this.resyncTimer); this.resyncTimer = null; }
         if (this.reconnectTimer) { clearTimeout(this.reconnectTimer); this.reconnectTimer = null; }
         if (this.clientSocket) { try { this.clientSocket.disconnect(); } catch {} this.clientSocket = null; }
         for (const peer of this.connectedPeers.values()) {

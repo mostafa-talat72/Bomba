@@ -53,6 +53,9 @@ const syncConfig = {
         advertiseIp: process.env.LAN_ADVERTISE_IP || "",
         persistQueue: process.env.LAN_SYNC_PERSIST_QUEUE !== "false",
         queuePath: process.env.LAN_SYNC_QUEUE_PATH || "./data/lan-queue.json",
+        // Periodic full history re-sync (both directions) so ALL tables stay
+        // synced even if something was missed. ms; 0 disables. Default 5 min.
+        resyncInterval: parseInt(process.env.LAN_RESYNC_INTERVAL || "300000", 10),
     },
 
     // Bidirectional sync configuration

@@ -57,8 +57,8 @@ const OrderModal: React.FC<OrderModalProps> = ({
     orderItems.forEach(i => {
       const v = i.variant || '';
       if (!map[i.menuItem]) map[i.menuItem] = {};
+      // إضافة واحدة فقط — السطر الثاني المكرر كان يجمع الكمية مرتين (1 تظهر 2)
       map[i.menuItem][v] = (map[i.menuItem][v] || 0) + i.quantity;
-      if (i.variant) map[i.menuItem][i.variant] = (map[i.menuItem][i.variant] || 0) + i.quantity;
     });
     return map;
   }, [orderItems]);

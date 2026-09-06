@@ -61,6 +61,9 @@ const recentDrawerOpens = new Map<string, number>();
 // طلبات درج جارية حسب المفتاح: طلب ثانٍ بنفس المفتاح أثناء سير الأول
 // ينتظر نتيجته بدل إرسال نبضة ثانية (منع الفتح المزدوج).
 const pendingDrawerOpens = new Map<string, Promise<boolean>>();
+// حماية عامة: أي فتح ناجح يمنع أي فتح آخر لمدة 3 ثوانٍ مهما كان المفتاح
+// (يمنع النبضة المكررة fireInstantDrawer+printBill التي تظهر كفتحتين خلال ثانية).
+let lastAnyDrawerOpenAt = 0;
 
 // ⚡ كاش قصير لطابعة الجهاز: الطباعة المتكررة لا تدفع ثمن roundtrip للسيرفر كل مرة.
 let cachedDevicePrinter: { data: any; expiresAt: number } | null = null;
@@ -83,11 +86,30 @@ export const getCachedDevicePrinter = async (): Promise<any> => {
 
 export const openCashDrawerThroughAgent = async (printerName?: string, requestKey?: string): Promise<boolean> => {
   const now = Date.now();
+  // حماية عامة أولاً: أي فتح خلال 3 ثوانٍ الماضية يُكتم (مهما كان المفتاح)
+  if (now - lastAnyDrawerOpenAt < 3000) {
+    // لكن الطلب الجاري بنفس المفتاح ننتظره بدل كتمه فوراً
+    if (requestKey) {
+      const inFlight = pendingDrawerOpens.get(requestKey);
+      if (inFlight) {
+        try { await inFlight; } catch {}
+        return true;
+      }
+    } else {
+      return true;
+    }
+    // مفاتيح مختلفة خلال النافذة تُكتم أيضاً — المطلوب منع النبضة المكررة خلال ثانية
+    return true;
+  }
   if (requestKey) {
     const previousOpen = recentDrawerOpens.get(requestKey);
     if (previousOpen && now - previousOpen < 3000) return true;
     const inFlight = pendingDrawerOpens.get(requestKey);
-    if (inFlight) return inFlight;
+    if (inFlight) {
+      try { await inFlight; } catch {}
+      const after = recentDrawerOpens.get(requestKey);
+      if (after && Date.now() - after < 3000) return true;
+    }
     for (const [key, timestamp] of recentDrawerOpens) {
       if (now - timestamp >= 3000) recentDrawerOpens.delete(key);
     }
@@ -105,7 +127,10 @@ export const openCashDrawerThroughAgent = async (printerName?: string, requestKe
     const opened = result?.success === true;
     // Record only successful opens: a failed attempt must not suppress the retry
     // (e.g. optimistic fire on click, then the post-payment call 1s later).
-    if (opened && requestKey) recentDrawerOpens.set(requestKey, Date.now());
+    if (opened) {
+      lastAnyDrawerOpenAt = Date.now();
+      if (requestKey) recentDrawerOpens.set(requestKey, lastAnyDrawerOpenAt);
+    }
     return opened;
   })();
   if (requestKey) {

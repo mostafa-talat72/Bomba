@@ -2376,7 +2376,8 @@ const loadInitialData = async () => {
   };
 
   // ⚡ فتح فوري للدرج لحظة الضغط على زر الدفع (قبل انتظار السيرفر).
-  // يستخدم نفس مفتاح printBill (`bill:<id>:payment`) فيُفتح الدرج مرة واحدة فقط.
+  // مفتاح `bill:<id>:payment` يوحد نبضة زر الدفع + نبضة printBill في وعد واحد
+  // بدل نبضتين، لكن الضغطات المنفصلة (F12، ثم دفع، ثم طباعة) تظل منفصلة.
   const fireInstantDrawer = (bill: Bill, drawerMode: 'bill' | 'payment' = 'payment') => {
     try {
       const settings = resolveEffectivePrintSettings(user, user?.organization);

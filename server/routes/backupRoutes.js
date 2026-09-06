@@ -4,6 +4,8 @@ import {
     getBackups,
     restoreBackup,
     removeBackup,
+    getBackupSettings,
+    saveBackupSettings,
 } from "../controllers/backupController.js";
 import { authorize } from "../middleware/auth.js";
 
@@ -14,6 +16,8 @@ router.use(authorize("settings", "all"));
 
 router.post("/create", createBackup);
 router.get("/", getBackups);
+router.get("/settings", getBackupSettings);
+router.put("/settings", saveBackupSettings);
 router.post("/restore/:fileName", restoreBackup);
 router.delete("/:fileName", removeBackup);
 

@@ -180,6 +180,7 @@ interface RevenueBreakdown {
 }
 
 import { useApp } from '../context/AppContext';
+import { useAuth } from '../context/AuthContext';
 
 // TopProductsBySection Component
 const TopProductsBySection = ({ data, t, i18n, formatCurrency }: { data: ProductSalesBySection[], t: any, i18n: any, formatCurrency: (amount: number) => string }) => {
@@ -925,23 +926,41 @@ const Reports = () => {
     dayjs.locale(i18n.language);
   }, [i18n.language]);
 
+  // تعديل الفلاتر للمدير/المالك فقط — نفس منطق تقرير الاستهلاك
+  const { user } = useAuth();
+  const canEditFilters = (() => {
+    const u: any = user;
+    if (!u) return false;
+    if (u.role === 'admin' || u.role === 'owner') return true;
+    const owner = (u as any).organization?.owner;
+    const ownerId = typeof owner === 'object' && owner !== null ? String((owner as any)._id || (owner as any).id || owner) : String(owner || '');
+    const uid = String((u as any)._id || (u as any).id || '');
+    return !!ownerId && !!uid && ownerId === uid;
+  })();
+
+  // لغير المصرح: فلتر مخصص فقط بتاريخ/وقت 07:00 مثل تقرير الاستهلاك
+  const defaultCustomRange: [Dayjs, Dayjs] = (() => {
+    const now = dayjs();
+    const start = now.hour() < 7 ? now.subtract(1, 'day').hour(7).minute(0).second(0).millisecond(0) : now.hour(7).minute(0).second(0).millisecond(0);
+    const end = start.add(1, 'day').subtract(1, 'second');
+    return [start, end];
+  })();
+
   // أنواع الفلاتر وحالاتها
-  const [filterType, setFilterType] = useState<'period' | 'daily' | 'monthly' | 'yearly' | 'custom'>('period');
+  const [filterType, setFilterType] = useState<'period' | 'daily' | 'monthly' | 'yearly' | 'custom'>(() => (canEditFilters ? 'period' : 'custom'));
   const [selectedPeriod, setSelectedPeriod] = useState('today');
   const [customDay, setCustomDay] = useState(() => format(new Date(), 'yyyy-MM-dd'));
   const [customMonth, setCustomMonth] = useState(() => format(new Date(), 'yyyy-MM'));
   const [customYear, setCustomYear] = useState(() => new Date().getFullYear().toString());
   
-  // Custom date and time filter states
-  const [dateRange, setDateRange] = useState<[Dayjs, Dayjs]>([
-    dayjs().set('hour', 0).set('minute', 0).set('second', 0),
-    dayjs().set('hour', 23).set('minute', 59).set('second', 59)
-  ]);
-  
-  const [timeRange, setTimeRange] = useState<[Dayjs, Dayjs]>([
-    dayjs().set('hour', 0).set('minute', 0),
-    dayjs().set('hour', 23).set('minute', 59)
-  ]);
+  // Custom date and time filter states — لغير المصرح مثبتة 07:00→07:00 مثل الاستهلاك
+  const [dateRange, setDateRange] = useState<[Dayjs, Dayjs]>(() => canEditFilters
+    ? [dayjs().set('hour', 0).set('minute', 0).set('second', 0), dayjs().set('hour', 23).set('minute', 59).set('second', 59)]
+    : defaultCustomRange);
+
+  const [timeRange, setTimeRange] = useState<[Dayjs, Dayjs]>(() => canEditFilters
+    ? [dayjs().set('hour', 0).set('minute', 0), dayjs().set('hour', 23).set('minute', 59)]
+    : [defaultCustomRange[0], defaultCustomRange[0]]);
 
   // Show/hide states for amounts
   const [showRevenue, setShowRevenue] = useState(true);
@@ -955,8 +974,9 @@ const Reports = () => {
     return new Date(now.getTime() + (now.getTimezoneOffset() * 60 * 1000) + egyptOffset);
   }, []);
 
-  // Handle date change while preserving time
+  // Handle date change while preserving time — محمي لغير المصرح
   const handleDateChange = useCallback((date: Dayjs | null, type: 'start' | 'end') => {
+    if (!canEditFilters) return;
     if (!date) return;
 
     if (type === 'start') {
@@ -974,8 +994,9 @@ const Reports = () => {
     }
   }, [dateRange, timeRange]);
 
-  // Handle time change while preserving date
+  // Handle time change while preserving date — محمي لغير المصرح
   const handleTimeChange = useCallback((time: Dayjs | null, type: 'start' | 'end') => {
+    if (!canEditFilters) return;
     if (!time) return;
 
     if (type === 'start') {
@@ -1326,18 +1347,22 @@ const Reports = () => {
   const renderFilterControls = () => {
     return (
       <div className="space-y-4">
-        {/* شريط التبويب لنوع الفلتر */}
+        {/* شريط التبويب لنوع الفلتر — لغير المصرح: مخصص فقط ومقفل */}
         <div className="flex flex-wrap gap-2 border-b border-gray-200 dark:border-gray-700 pb-2">
-          {[
-            { value: 'period', label: t('reports.filterTypes.period') },
-            { value: 'custom', label: t('reports.filterTypes.custom') },
-            { value: 'daily', label: t('reports.filterTypes.daily') },
-            { value: 'monthly', label: t('reports.filterTypes.monthly') },
-            { value: 'yearly', label: t('reports.filterTypes.yearly') }
-          ].map((tab) => (
+          {(canEditFilters
+            ? [
+                { value: 'period', label: t('reports.filterTypes.period') },
+                { value: 'custom', label: t('reports.filterTypes.custom') },
+                { value: 'daily', label: t('reports.filterTypes.daily') },
+                { value: 'monthly', label: t('reports.filterTypes.monthly') },
+                { value: 'yearly', label: t('reports.filterTypes.yearly') },
+              ]
+            : [{ value: 'custom', label: t('reports.filterTypes.custom') }]
+          ).map((tab) => (
             <button
               key={tab.value}
-              onClick={() => setFilterType(tab.value as 'period' | 'custom' | 'daily' | 'monthly' | 'yearly')}
+              onClick={() => { if (!canEditFilters) return; setFilterType(tab.value as 'period' | 'custom' | 'daily' | 'monthly' | 'yearly'); }}
+              disabled={!canEditFilters && tab.value !== 'custom'}
               className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${
                 filterType === tab.value
                   ? 'bg-orange-600 text-white'
@@ -1363,8 +1388,9 @@ const Reports = () => {
               ].map((period) => (
                 <button
                   key={period.value}
-                  onClick={() => setSelectedPeriod(period.value)}
-                  className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
+                  onClick={() => { if (!canEditFilters) return; setSelectedPeriod(period.value); }}
+                  disabled={!canEditFilters}
+                  className={`px-3 py-1.5 text-sm rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
                     selectedPeriod === period.value
                       ? 'bg-orange-600 text-white'
                       : 'bg-white text-gray-700 hover:bg-gray-100 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600'
@@ -1393,6 +1419,7 @@ const Reports = () => {
                     allowClear={false}
                     placeholder={t('reports.placeholders.startDate')}
                     size="large"
+                    disabled={!canEditFilters}
                   />
                   <LocalizedTimePicker
                     value={timeRange[0]}
@@ -1401,6 +1428,7 @@ const Reports = () => {
                     minuteStep={15}
                     placeholder={t('reports.placeholders.startTime')}
                     size="large"
+                    disabled={!canEditFilters}
                   />
                 </div>
               </div>
@@ -1420,6 +1448,7 @@ const Reports = () => {
                     allowClear={false}
                     placeholder={t('reports.placeholders.endDate')}
                     size="large"
+                    disabled={!canEditFilters}
                   />
                   <LocalizedTimePicker
                     value={timeRange[1]}
@@ -1428,6 +1457,7 @@ const Reports = () => {
                     minuteStep={15}
                     placeholder={t('reports.placeholders.endTime')}
                     size="large"
+                    disabled={!canEditFilters}
                   />
                 </div>
               </div>
@@ -1460,6 +1490,7 @@ const Reports = () => {
               <DatePicker
                 value={dayjs(customDay)}
                 onChange={(date) => {
+                  if (!canEditFilters) return;
                   if (date) {
                     setCustomDay(date.format('YYYY-MM-DD'));
                   }
@@ -1469,6 +1500,7 @@ const Reports = () => {
                 allowClear={false}
                 placeholder={t('reports.selectDate')}
                 size="large"
+                disabled={!canEditFilters}
               />
             </div>
           )}
@@ -1481,6 +1513,7 @@ const Reports = () => {
               <DatePicker
                 value={dayjs(customMonth + '-01')}
                 onChange={(date) => {
+                  if (!canEditFilters) return;
                   if (date) {
                     setCustomMonth(date.format('YYYY-MM'));
                   }
@@ -1491,6 +1524,7 @@ const Reports = () => {
                 allowClear={false}
                 placeholder={t('reports.selectMonth')}
                 size="large"
+                disabled={!canEditFilters}
               />
             </div>
           )}
@@ -1503,6 +1537,7 @@ const Reports = () => {
               <DatePicker
                 value={dayjs(customYear + '-01-01')}
                 onChange={(date) => {
+                  if (!canEditFilters) return;
                   if (date) {
                     setCustomYear(date.format('YYYY'));
                   }
@@ -1513,6 +1548,7 @@ const Reports = () => {
                 allowClear={false}
                 placeholder={t('reports.selectYear')}
                 size="large"
+                disabled={!canEditFilters}
               />
             </div>
           )}

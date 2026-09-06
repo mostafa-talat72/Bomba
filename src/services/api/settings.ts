@@ -129,6 +129,19 @@ async function deleteBackup(fileName: string): Promise<ApiResponse<any>> {
 }
 
 
+async function getBackupSettings(): Promise<ApiResponse<any>> {
+  return apiClient.request('/backup/settings');
+}
+
+
+async function saveBackupSettings(dir: string): Promise<ApiResponse<any>> {
+  return apiClient.request('/backup/settings', {
+    method: 'PUT',
+    body: JSON.stringify({ dir }),
+  });
+}
+
+
 export const settingsApi = {
   getSettings,
   updateSettings,
@@ -147,4 +160,6 @@ export const settingsApi = {
   getBackups,
   restoreBackup,
   deleteBackup,
+  getBackupSettings,
+  saveBackupSettings,
 };

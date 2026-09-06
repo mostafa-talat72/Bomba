@@ -684,7 +684,18 @@ function loadOrCreateConfig() {
     try {
       config = JSON.parse(fs.readFileSync(configPath, "utf8"));
     } catch (err) {
-      console.error("Failed to read config.json, using defaults:", err.message);
+      // NEVER silently wipe a hand-edited config (e.g. a missing comma would
+      // otherwise delete keys like LAN_ADVERTISE_IP on the next write-back).
+      // Back it up and start from defaults instead.
+      try {
+        const backup = `${configPath}.corrupt-${Date.now()}.bak`;
+        fs.copyFileSync(configPath, backup);
+        const msg = `config.json is not valid JSON (${err.message}) - backed up to ${backup}, starting from defaults. Fix the JSON to restore your settings.`;
+        console.error(msg);
+        try {
+          fs.appendFileSync(logPath, `[config] ${msg}\n`);
+        } catch {}
+      } catch {}
       config = {};
     }
   }
@@ -799,6 +810,9 @@ function buildServerEnv(config, secrets, distDir) {
     SKIP_ATLAS_WHEN_OFFLINE: "true",
     // LAN sync (B+C) - enabled by default for desktop, works with or without Atlas
     LAN_SYNC_ENABLED: String(config.lanSyncEnabled !== false ? "true" : "false"),
+    // Pinned LAN IP (multi-NIC machines): honored from config.json so the key
+    // users actually edit is the one the server reads.
+    LAN_ADVERTISE_IP: config.LAN_ADVERTISE_IP || config.advertiseIp || process.env.LAN_ADVERTISE_IP || "",
     LAN_DISCOVERY_PORT: String(config.lanDiscoveryPort || 41234),
     LAN_HEARTBEAT_INTERVAL: String(config.lanHeartbeatInterval || 3000),
     LAN_ELECTION_TIMEOUT: String(config.lanElectionTimeout || 10000),
@@ -1057,25 +1071,135 @@ async function ensureReplicaSet() {
 let activeMongoPort = 27017;
 // In-memory handle on the loaded config (kept in sync when we auto-switch ports).
 let appConfig = null;
+// Set when the user cancels boot from a prompt (foreign-port dialog).
+let bootCancelled = false;
 
-async function occupantIsOurReplicaSet(port) {
+// Frees a local TCP port by stopping its LISTENING owners.
+// ONLY called after the user's explicit approval in a dialog — never automatic.
+async function freeLocalPort(port) {
+  try {
+    const { execFile } = await import("child_process");
+    const run = (file, args) =>
+      new Promise((res) =>
+        execFile(file, args, { windowsHide: true, timeout: 10000 }, (_err, stdout) =>
+          res(String(stdout || ""))
+        )
+      );
+    const out = await run("netstat", ["-ano"]);
+    const pids = new Set();
+    const re = new RegExp(`TCP\\s+\\S+:${port}\\s+\\S+\\s+LISTENING\\s+(\\d+)`, "gi");
+    let m;
+    while ((m = re.exec(out))) {
+      const pid = parseInt(m[1], 10);
+      if (pid && pid !== process.pid) pids.add(pid);
+    }
+    try {
+      if (mongoProcess && mongoProcess.pid) pids.delete(mongoProcess.pid);
+    } catch {}
+    if (pids.size === 0) {
+      mongoLogLine(`free port ${port}: no LISTENING owner found (already free or TIME_WAIT)`);
+      return !(await probePort(port, 3000));
+    }
+    for (const pid of pids) {
+      mongoLogLine(`freeing port ${port}: stopping PID ${pid} (user approved)`);
+      await run("taskkill", ["/F", "/PID", String(pid)]);
+    }
+    await new Promise((r) => setTimeout(r, 1500));
+    const free = !(await probePort(port, 3000));
+    mongoLogLine(free ? `port ${port} is now free` : `port ${port} still busy after kill attempt`);
+    return free;
+  } catch (e) {
+    mongoLogLine(`free port ${port} failed: ${e.message}`);
+    return false;
+  }
+}
+
+// Asks what to do when 27017 is held by a foreign MongoDB.
+// Returns 'auto27018' | 'free27017' | 'quit'. Remembers a checked choice.
+async function askForeignPortChoice() {
+  try {
+    const remembered = appConfig && appConfig.mongoPortMode;
+    if (remembered === "auto27018" || remembered === "free27017") {
+      mongoLogLine(`foreign 27017 occupant: using remembered choice (${remembered})`);
+      return remembered;
+    }
+  } catch {}
+  try {
+    if (splashWindow && !splashWindow.isDestroyed()) splashWindow.setAlwaysOnTop(false);
+  } catch {}
+  let response = 0;
+  let checkboxChecked = false;
+  try {
+    const r = await dialog.showMessageBox({
+      type: "question",
+      title: "MTE Systems",
+      message: "منفذ قاعدة البيانات 27017 مشغول ببرنامج MongoDB آخر (ليس الخاص بنا).",
+      detail:
+        "الاختيار الآمن: المتابعة على 27018 مع نقل بياناتك تلقائياً.\n\n" +
+        "أو: تحرير 27017 (إيقاف البرنامج الآخر) والمتابعة عليه.\n\n" +
+        "يدوياً:\nnetstat -ano | findstr :27017\ntaskkill /F /PID <الرقم>",
+      buttons: ["المتابعة على 27018 (موصى به)", "تحرير 27017 والمتابعة عليه", "إلغاء التشغيل"],
+      defaultId: 0,
+      cancelId: 2,
+      checkboxLabel: "تذكر اختياري ولا تسألني مجدداً",
+      checkboxChecked: false,
+    });
+    response = r.response;
+    checkboxChecked = !!r.checkboxChecked;
+  } catch {
+    response = 0;
+  }
+  try {
+    if (splashWindow && !splashWindow.isDestroyed()) splashWindow.setAlwaysOnTop(true);
+  } catch {}
+  if (response === 2) return "quit";
+  const mode = response === 1 ? "free27017" : "auto27018";
+  if (checkboxChecked) {
+    try {
+      appConfig.mongoPortMode = mode;
+      fs.writeFileSync(configPath, JSON.stringify(appConfig, null, 2), "utf8");
+      mongoLogLine(`remembered foreign-port choice: ${mode}`);
+    } catch (e) {
+      mongoLogLine(`could not persist port choice: ${e.message}`);
+    }
+  }
+  return mode;
+}
+
+// Classify whoever owns a busy Mongo port:
+//   'exact'   - our own dbpath serving rs0 (e.g. orphaned previous run) -> reuse
+//   'shared'  - a different dbpath but healthy rs0 primary (e.g. system MongoDB
+//               on a dev machine) -> reuse so the app and `npm run dev` see ONE database
+//   'foreign' - anything else (no rs, wrong set, unreachable) -> run ours elsewhere
+async function classifyMongoOccupant(port, ourDbPath) {
   const { MongoClient } = await loadMongoDriver();
-  if (!MongoClient) return false;
+  if (!MongoClient) return "foreign";
+  const norm = (p) => String(p || "").toLowerCase().replace(/\//g, "\\");
   const client = new MongoClient(`mongodb://127.0.0.1:${port}/?directConnection=true`, {
     serverSelectionTimeoutMS: 3000,
     connectTimeoutMS: 3000,
   });
   try {
     await client.connect();
-    const status = await client.db("admin").command({ replSetGetStatus: 1 });
-    return status && status.set === "rs0";
+    const status = await client.db("admin").command({ replSetGetStatus: 1 }).catch(() => null);
+    if (!status || status.set !== "rs0" || status.myState !== 1) return "foreign";
+    try {
+      const opts = await client.db("admin").command({ getCmdLineOpts: 1 });
+      const dbPath = opts?.parsed?.storage?.dbPath || "";
+      if (dbPath && ourDbPath && norm(dbPath) === norm(ourDbPath)) return "exact";
+    } catch {}
+    return "shared";
   } catch {
-    return false;
+    return "foreign";
   } finally {
     try {
       await client.close();
     } catch {}
   }
+}
+
+async function occupantIsOurReplicaSet(port) {
+  return (await classifyMongoOccupant(port)) !== "foreign";
 }
 
 async function loadMongoDriver() {
@@ -1102,26 +1226,52 @@ async function ensureBundledMongo() {
     mongoLogLine("no bundled mongod - relying on system MongoDB");
     return;
   }
+  const mongoDbPath = path.join(userDataDir, "mongo-data");
   if (await probePort(27017, 1500)) {
-    if (await occupantIsOurReplicaSet(27017)) {
-      mongoLogLine("MongoDB already listening on 27017 (our rs0) - reusing it");
+    const kind = await classifyMongoOccupant(27017, mongoDbPath);
+    if (kind !== "foreign") {
+      mongoLogLine(
+        kind === "exact"
+          ? "MongoDB already listening on 27017 (our data, rs0) - reusing it"
+          : "MongoDB already listening on 27017 (healthy rs0 primary, shared system DB) - reusing it so app and dev see one database"
+      );
       activeMongoPort = 27017;
+      persistDatabaseUriForPort(27017);
       await ensureReplicaSet();
       return;
     }
     // Foreign mongod (e.g. a system MongoDB without rs0) owns 27017.
-    // Don't fight it and don't ask the user: run ours on 27018 instead.
-    mongoLogLine("Port 27017 is held by a foreign MongoDB (not rs0) - switching bundled mongod to 27018 automatically");
-    activeMongoPort = 27018;
-    persistDatabaseUriForPort(27018);
+    // Ask once: auto-switch to 27018 (safe default), free 27017 with the
+    // user's explicit approval, or cancel boot. Remembered when checked.
+    const choice = await askForeignPortChoice();
+    if (choice === "quit") {
+      mongoLogLine("boot cancelled by user at foreign-port prompt");
+      bootCancelled = true;
+      return;
+    }
+    if (choice === "free27017") {
+      setSplashStatus("تحرير منفذ قاعدة البيانات...");
+      if (await freeLocalPort(27017)) {
+        mongoLogLine("port 27017 freed by user choice - using it");
+        activeMongoPort = 27017;
+        persistDatabaseUriForPort(27017);
+      } else {
+        mongoLogLine("could not free 27017 - falling back to 27018");
+        activeMongoPort = 27018;
+        persistDatabaseUriForPort(27018);
+      }
+    } else {
+      mongoLogLine("Port 27017 is held by a foreign MongoDB (not rs0) - switching bundled mongod to 27018 automatically");
+      activeMongoPort = 27018;
+      persistDatabaseUriForPort(27018);
+    }
   }
-  const mongoDbPath = path.join(userDataDir, "mongo-data");
   fs.mkdirSync(mongoDbPath, { recursive: true });
   const mongoLog = fs.openSync(path.join(userDataDir, "mongod.log"), "a");
   const child = spawn(
     mongodPath,
     ["--dbpath", mongoDbPath, "--port", String(activeMongoPort), "--bind_ip", "127.0.0.1", "--replSet", "rs0", "--quiet"],
-    { stdio: ["ignore", mongoLog, mongoLog] }
+    { stdio: ["ignore", mongoLog, mongoLog], windowsHide: true }
   );
   mongoProcess = child;
   child.on("exit", () => {
@@ -1135,8 +1285,133 @@ async function ensureBundledMongo() {
     mongoLogLine(`mongod did not open port ${activeMongoPort} within 60s`);
     return;
   }
+  // Fresh spawn on our own port: make sure the backend URI points here
+  // (converges back to 27017 if a previous boot had failed over to 27018).
+  persistDatabaseUriForPort(activeMongoPort);
+  // Emergency failover just happened: pull our data along so the user still
+  // sees their bills (runs once — skipped whenever our DB already has data).
+  if (activeMongoPort !== 27017) {
+    try {
+      const dbName = dbNameFromUri(appConfig && appConfig.databaseUri);
+      await migrateForeignDbToBundled(27017, activeMongoPort, dbName);
+    } catch (e) {
+      mongoLogLine(`failover migration error (non-fatal): ${e.message}`);
+    }
+  }
   mongoLogLine("mongod is up - ensuring replica set");
   await ensureReplicaSet();
+}
+
+function dbNameFromUri(uri) {
+  try {
+    const m = String(uri || "").match(/^mongodb(?:\+srv)?:\/\/[^/]*\/([^?]*)/);
+    const name = decodeURIComponent((m && m[1]) || "");
+    return name || "bomba";
+  } catch {
+    return "bomba";
+  }
+}
+
+// One-time emergency migration: copy db `bomba` from the foreign mongod
+// (read-only) into our bundled DB, preserving _ids and indexes, so the user
+// keeps seeing their data after a 27018 failover.
+// Runs ONLY when our home DB is empty — never merges over existing data.
+async function migrateForeignDbToBundled(sourcePort, targetPort, dbName) {
+  const { MongoClient } = await loadMongoDriver();
+  if (!MongoClient) {
+    mongoLogLine("failover migration skipped: no mongo driver");
+    return;
+  }
+  const opts = { serverSelectionTimeoutMS: 8000, connectTimeoutMS: 8000 };
+  const src = new MongoClient(`mongodb://127.0.0.1:${sourcePort}/?directConnection=true`, opts);
+  const dst = new MongoClient(`mongodb://127.0.0.1:${targetPort}/?directConnection=true`, opts);
+  try {
+    await src.connect();
+    await dst.connect();
+    const sdb = src.db(dbName);
+    const ddb = dst.db(dbName);
+    let homeDocs = 0;
+    try {
+      const homeCols = await ddb.listCollections().toArray();
+      for (const c of homeCols) {
+        if (!c || !c.name || c.name.startsWith("system.")) continue;
+        try {
+          homeDocs += await ddb.collection(c.name).estimatedDocumentCount();
+        } catch {}
+        if (homeDocs > 0) break;
+      }
+    } catch {}
+    if (homeDocs > 0) {
+      mongoLogLine("failover migration skipped: bundled DB already has data (keeping it, no merge)");
+      return;
+    }
+    setSplashStatus("نقل بيانات...");
+    let total = 0;
+    let cols = [];
+    try {
+      cols = await sdb.listCollections().toArray();
+    } catch (e) {
+      mongoLogLine(`failover migration: cannot list source collections: ${e.message}`);
+      return;
+    }
+    for (const c of cols) {
+      const name = c && c.name;
+      if (!name || name.startsWith("system.")) continue;
+      let count = 0;
+      try {
+        count = await sdb.collection(name).estimatedDocumentCount();
+      } catch {
+        continue;
+      }
+      if (!count) continue;
+      mongoLogLine(`migrating ${count} docs: ${dbName}.${name} (${sourcePort} -> bundled) ...`);
+      try {
+        const srcIdx = await sdb.collection(name).listIndexes().toArray().catch(() => []);
+        for (const ix of srcIdx) {
+          if (!ix || ix.name === "_id_" || !ix.key) continue;
+          try {
+            const ixOpts = {};
+            if (ix.unique) ixOpts.unique = true;
+            if (ix.sparse) ixOpts.sparse = true;
+            if (ix.expireAfterSeconds !== undefined) ixOpts.expireAfterSeconds = ix.expireAfterSeconds;
+            if (ix.partialFilterExpression) ixOpts.partialFilterExpression = ix.partialFilterExpression;
+            await ddb.collection(name).createIndex(ix.key, ixOpts);
+          } catch {}
+        }
+      } catch {}
+      try {
+        const cursor = sdb.collection(name).find({});
+        let batch = [];
+        const flush = async () => {
+          if (!batch.length) return;
+          try {
+            const r = await ddb.collection(name).insertMany(batch, { ordered: false });
+            total += r.insertedCount || 0;
+          } catch (e) {
+            mongoLogLine(`migration insert warning ${name}: ${String((e && e.message) || e).slice(0, 160)}`);
+          }
+          batch = [];
+        };
+        for await (const doc of cursor) {
+          batch.push(doc);
+          if (batch.length >= 1000) await flush();
+        }
+        await flush();
+      } catch (e) {
+        mongoLogLine(`migration read failed ${name} (non-fatal, continuing): ${e.message}`);
+      }
+    }
+    mongoLogLine(`failover migration done: ${total} docs copied into bundled DB`);
+  } catch (e) {
+    mongoLogLine(`failover migration skipped/failed (non-fatal, booting anyway): ${e.message}`);
+  } finally {
+    try {
+      await src.close();
+    } catch {}
+    try {
+      await dst.close();
+    } catch {}
+  }
 }
 
 // Persist an auto-switched local Mongo port so the backend URI follows it
@@ -1462,6 +1737,13 @@ if (!gotLock) {
     showSplash();
     setSplashStatus("تشغيل قاعدة البيانات...");
     await ensureBundledMongo();
+    if (bootCancelled) {
+      try {
+        closeSplash();
+      } catch {}
+      app.quit();
+      return;
+    }
     // Orphaned healthy server from a force-killed run? Attach instead of
     // spawning a second one (which would die on EADDRINUSE).
     let skipSpawn = false;
