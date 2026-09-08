@@ -5,6 +5,7 @@ import {
     getInventoryReport,
     getFinancialReport,
     getSessionsReport,
+    getConsumptionReport,
     getRecentActivity,
     exportReportToExcel,
     exportReportToPDF,
@@ -55,6 +56,11 @@ router.get("/inventory", getInventoryReport);
 // @route   GET /api/reports/financial
 // @access  Private (Reports permission)
 router.get("/financial", getFinancialReport);
+
+// @desc    Get consumption report (unified server-side aggregation)
+// @route   GET /api/reports/consumption
+// @access  Private (Reports permission)
+router.get("/consumption", getConsumptionReport);
 
 // @desc    Get sold items report (hierarchical: section -> category -> item)
 // @route   GET /api/reports/sold-items

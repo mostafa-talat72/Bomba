@@ -607,6 +607,233 @@ export const getSessionsReport = async (req, res) => {
     }
 };
 
+// @desc    Get consumption report (single server-side aggregation for the
+//          Consumption page and the Reports page — same shape the frontend
+//          used to build locally with processOrdersAndSessions)
+// @route   GET /api/reports/consumption?startDate&endDate
+// @access  Private
+export const getConsumptionReport = async (req, res) => {
+    try {
+        const organization = getOrganizationId(req.user);
+        const { startDate: rawStart, endDate: rawEnd } = req.query;
+        if (!rawStart || !rawEnd) {
+            return res.status(400).json({
+                success: false,
+                message: "startDate و endDate مطلوبان",
+            });
+        }
+        const startDate = new Date(rawStart);
+        const endDate = new Date(rawEnd);
+        if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) {
+            return res.status(400).json({
+                success: false,
+                message: "صيغة التاريخ غير صالحة",
+            });
+        }
+
+        // Server-side mirror of the client's getId() (src/utils/id.ts):
+        // canonical string for _id / id / ObjectId / populated-object refs.
+        const toIdString = (v) => {
+            if (v === null || v === undefined) return "";
+            if (typeof v === "string") return v;
+            if (typeof v === "number") return String(v);
+            if (typeof v === "object") {
+                const inner = v._id ?? v.id;
+                if (inner !== null && inner !== undefined && typeof inner === "object") {
+                    try {
+                        const s = String(inner.toString?.() ?? "");
+                        if (s && s !== "[object Object]") return s;
+                    } catch { /* fall through */ }
+                    return "";
+                }
+                if (typeof inner === "string" || typeof inner === "number") return String(inner);
+                try {
+                    const s = String(v.toString?.() ?? "");
+                    if (s && s !== "[object Object]") return s;
+                } catch { /* fall through */ }
+                return "";
+            }
+            try {
+                return String(v);
+            } catch {
+                return "";
+            }
+        };
+
+        const OTHER_SECTION_KEY = "__OTHER__";
+        const PLAYSTATION_SECTION_KEY = "__PLAYSTATION__";
+        const COMPUTER_SECTION_KEY = "__COMPUTER__";
+
+        const ids = await getReportEligibleOrderIds(organization, { startDate, endDate });
+        const [orders, sessions, menuItems, menuSections] = await Promise.all([
+            Order.find({
+                createdAt: { $gte: startDate, $lte: endDate },
+                isDeleted: false,
+                organization,
+                _id: { $in: ids },
+            }).select("items").lean(),
+            Session.find({
+                endTime: { $gte: startDate, $lte: endDate },
+                status: "completed",
+                organization,
+            }).select("deviceId deviceName deviceNumber deviceType status startTime endTime finalCost controllersHistory").lean(),
+            MenuItem.find({ organization }).select("name category").populate({
+                path: "category",
+                select: "name section",
+                populate: { path: "section", select: "name" },
+            }).lean(),
+            MenuSection.find({ organization }).select("name").lean(),
+        ]);
+
+        // O(1) lookups: menu item by id (+by name, kept for parity), section by id.
+        const menuItemById = new Map();
+        const menuItemByName = new Map();
+        menuItems.forEach((m) => {
+            const mid = toIdString(m._id);
+            if (mid && !menuItemById.has(mid)) menuItemById.set(mid, m);
+            if (m.name && !menuItemByName.has(m.name)) menuItemByName.set(m.name, m);
+        });
+        const sectionById = new Map();
+        menuSections.forEach((s) => {
+            const sid = toIdString(s._id);
+            if (sid && !sectionById.has(sid)) sectionById.set(sid, s);
+        });
+
+        const itemsBySection = {};
+        const rowByKey = new Map();
+
+        // ---- Items: same rules as the former client aggregation ----
+        orders.forEach((order) => {
+            if (!order.items || !Array.isArray(order.items)) return;
+
+            order.items.forEach((item) => {
+                if (!item?.name) return;
+
+                const itemQuantity = Number(item.quantity) || 0;
+                const itemPrice = Number(item.price ?? ((Number(item.itemTotal) || 0) / (Number(item.quantity) || 1))) || 0;
+                if (itemQuantity <= 0 || itemPrice < 0) return;
+
+                const menuId = toIdString(item.menuItem?._id || item.menuItemId || item.menuItem) || null;
+                const rawVariant = item.variant || "default";
+                const normalizedVariant = typeof rawVariant === "string" && rawVariant.trim() ? rawVariant : "default";
+                const keyBase = menuId || String(item.name || "unknown");
+                const key = `${keyBase}|${normalizedVariant}`;
+
+                // Ids are authoritative: resolve the section via the menu item id
+                // only (no name fallback), then the saved snapshot section.
+                let sectionName = OTHER_SECTION_KEY;
+                if (menuId) {
+                    const menuItem = menuItemById.get(menuId);
+                    if (menuItem?.category && typeof menuItem.category === "object" && menuItem.category !== null) {
+                        const sectionRef = menuItem.category.section;
+                        let sectionObj = null;
+                        if (typeof sectionRef === "string") {
+                            sectionObj = sectionById.get(sectionRef) || null;
+                        } else if (sectionRef && typeof sectionRef === "object") {
+                            sectionObj = sectionRef.name
+                                ? sectionRef
+                                : (sectionById.get(toIdString(sectionRef)) || null);
+                        }
+                        if (sectionObj?.name) sectionName = sectionObj.name;
+                    }
+                }
+                if (sectionName === OTHER_SECTION_KEY && item.section) {
+                    const snapId = toIdString(item.section);
+                    const snapSection = (snapId && sectionById.get(snapId))
+                        || (typeof item.section === "object" && item.section !== null ? item.section : null);
+                    if (snapSection?.name) sectionName = snapSection.name;
+                }
+
+                if (!itemsBySection[sectionName]) itemsBySection[sectionName] = [];
+
+                const hit = rowByKey.get(`${sectionName}||${key}`);
+                const existingItem = hit ? itemsBySection[hit.section]?.[hit.index] : undefined;
+                if (existingItem && existingItem.key === key) {
+                    existingItem.quantity += itemQuantity;
+                    existingItem.total += itemPrice * itemQuantity;
+                    existingItem.price = existingItem.total / existingItem.quantity;
+                } else {
+                    const variantText = normalizedVariant && normalizedVariant !== "default" && normalizedVariant !== "عادي"
+                        ? ` (${normalizedVariant})`
+                        : "";
+                    itemsBySection[sectionName].push({
+                        id: toIdString(item._id) || `${key}-${Math.random().toString(16).slice(2)}`,
+                        name: `${item.name}${variantText}`,
+                        price: itemPrice,
+                        quantity: itemQuantity,
+                        total: itemPrice * itemQuantity,
+                        category: sectionName,
+                        key,
+                    });
+                    rowByKey.set(`${sectionName}||${key}`, { section: sectionName, index: itemsBySection[sectionName].length - 1 });
+                }
+            });
+        });
+
+        // ---- Sessions: playstation/computer, completed, with endTime ----
+        sessions.forEach((session) => {
+            if (session.deviceType !== "playstation" && session.deviceType !== "computer") return;
+            if (session.status !== "completed") return;
+            if (!session.endTime) return;
+
+            const deviceName = session.deviceName || `جهاز ${session.deviceNumber}`;
+            const sessionCost = Number(session.finalCost) || 0;
+
+            let totalHours = 0;
+            if (session.controllersHistory && Array.isArray(session.controllersHistory) && session.controllersHistory.length > 0) {
+                session.controllersHistory.forEach((period) => {
+                    const periodStart = new Date(period.from).getTime();
+                    const periodEnd = period.to
+                        ? new Date(period.to).getTime()
+                        : (session.endTime ? new Date(session.endTime).getTime() : Date.now());
+                    totalHours += (periodEnd - periodStart) / (1000 * 60 * 60);
+                });
+            } else {
+                const startTime = new Date(session.startTime).getTime();
+                const endTime = new Date(session.endTime).getTime();
+                totalHours = (endTime - startTime) / (1000 * 60 * 60);
+            }
+
+            const sectionName = session.deviceType === "computer" ? COMPUTER_SECTION_KEY : PLAYSTATION_SECTION_KEY;
+            const deviceKey = toIdString(session.deviceId?._id ?? session.deviceId)
+                || String(session.deviceNumber || deviceName || "");
+
+            if (!itemsBySection[sectionName]) itemsBySection[sectionName] = [];
+            const existingItem = itemsBySection[sectionName].find((i) => i.key === deviceKey);
+            if (existingItem) {
+                existingItem.quantity += totalHours;
+                existingItem.total += sessionCost;
+            } else {
+                itemsBySection[sectionName].push({
+                    id: String(session._id || session.id || Math.random().toString()),
+                    name: deviceName,
+                    price: 0,
+                    quantity: totalHours,
+                    total: sessionCost,
+                    category: sectionName,
+                    key: deviceKey,
+                });
+            }
+        });
+
+        // Sort each section by total desc; drop empty sections.
+        Object.values(itemsBySection).forEach((rows) => {
+            rows.sort((a, b) => b.total - a.total);
+        });
+        Object.keys(itemsBySection).forEach((section) => {
+            if (itemsBySection[section].length === 0) delete itemsBySection[section];
+        });
+
+        res.json({ success: true, data: itemsBySection });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: "خطأ في جلب تقرير الاستهلاك",
+            error: error.message,
+        });
+    }
+};
+
 // @desc    Get recent activity
 // @route   GET /api/reports/recent-activity
 // @access  Private

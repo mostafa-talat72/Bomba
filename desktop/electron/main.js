@@ -21,9 +21,6 @@ const isDev = process.argv.includes("--dev");
 const isPrintAgent = process.argv.includes("--print-agent");
 const CASH_DRAWER_PULSES = [
   [0x1b, 0x70, 0x00, 0x19, 0xfa],
-  [0x1b, 0x70, 0x00, 0x32, 0xfa],
-  [0x1b, 0x70, 0x01, 0x19, 0xfa],
-  [0x1b, 0x70, 0x01, 0x32, 0xfa],
 ];
 
 // Keep userData at a stable location across branding changes so all
@@ -47,6 +44,92 @@ const userDataDir = app.getPath("userData");
 const dataDir = path.join(userDataDir, "data");
 const configPath = path.join(userDataDir, "config.json");
 const logPath = path.join(userDataDir, "server.log");
+
+// ---- Global crash guard (covers failures BEFORE splash) ----
+function showFatalAndQuit(title, message) {
+  try {
+    // Ensure splash doesn't hide the dialog
+    try { if (splashWindow && !splashWindow.isDestroyed()) splashWindow.close(); } catch {}
+    splashWindow = null;
+  } catch {}
+  try {
+    dialog.showMessageBoxSync({
+      type: "error",
+      title,
+      message: title,
+      detail: `${message}\n\nالسجل: ${logPath}`,
+      buttons: ["إعادة المحاولة", "فتح السجل", "إغلاق"],
+      defaultId: 0,
+      cancelId: 2,
+      noLink: true,
+    });
+  } catch {
+    try { dialog.showErrorBox(title, `${message}\n\nالسجل: ${logPath}`); } catch {}
+  }
+  // Offer to open log and/or relaunch
+  try {
+    const choice = dialog.showMessageBoxSync({
+      type: "question",
+      title: "MTE Systems",
+      message: "هل تريد فتح السجل أو إعادة المحاولة؟",
+      detail: logPath,
+      buttons: ["إعادة المحاولة", "فتح السجل", "إغلاق"],
+      defaultId: 0,
+      cancelId: 2,
+    });
+    // Note: showMessageBoxSync is sync, we handle after first dialog
+  } catch {}
+}
+
+function handleStartupError(title, detail) {
+  try { if (splashWindow && !splashWindow.isDestroyed()) splashWindow.close(); } catch {}
+  splashWindow = null;
+  try {
+    const res = dialog.showMessageBoxSync({
+      type: "error",
+      title,
+      message: title,
+      detail: `${detail}\n\nالسجل: ${logPath}`,
+      buttons: ["إعادة المحاولة", "فتح السجل", "إغلاق"],
+      defaultId: 0,
+      cancelId: 2,
+      noLink: true,
+    });
+    if (res === 0) {
+      app.relaunch();
+      app.quit();
+      return true; // handled
+    }
+    if (res === 1) {
+      try { require("electron").shell.openPath(logPath); } catch {}
+      // After showing log, offer relaunch again
+      const r2 = dialog.showMessageBoxSync({
+        type: "question",
+        title: "MTE Systems",
+        message: "إعادة المحاولة؟",
+        buttons: ["إعادة المحاولة", "إغلاق"],
+        defaultId: 0,
+        cancelId: 1,
+      });
+      if (r2 === 0) { app.relaunch(); app.quit(); return true; }
+    }
+  } catch {
+    try { dialog.showErrorBox(title, `${detail}\n\nالسجل: ${logPath}`); } catch {}
+  }
+  try { app.quit(); } catch {}
+  return true;
+}
+
+process.on("uncaughtException", (err) => {
+  try { require("fs").appendFileSync(logPath, `\n[uncaughtException] ${new Date().toISOString()} ${err?.stack || err?.message || String(err)}\n`); } catch {}
+  handleStartupError("MTE Systems — خطأ غير متوقع", String(err?.stack || err?.message || err));
+});
+
+process.on("unhandledRejection", (reason) => {
+  const msg = reason instanceof Error ? reason.stack || reason.message : String(reason);
+  try { require("fs").appendFileSync(logPath, `\n[unhandledRejection] ${new Date().toISOString()} ${msg}\n`); } catch {}
+  handleStartupError("MTE Systems — خطأ غير متوقع", msg);
+});
 
 async function waitForPrintResources(printWindow) {
   // Fast path: wait for fonts/images only, measure height via scrollHeight.
@@ -258,11 +341,17 @@ function daemonSend(printerName, bytes, doc) {
   return startRawPrintDaemon().then((daemon) => {
     if (!daemon || daemon.dead) throw new Error("daemon unavailable");
     const run = () => new Promise((resolve, reject) => {
+      let flushed = false;
       const timer = setTimeout(() => {
         try { daemon.child.kill(); } catch {}
         daemon.dead = true;
         if (rawPrintDaemon === daemon) rawPrintDaemon = null;
-        reject(new Error("Raw printer command timed out"));
+        const err = new Error("Raw printer command timed out");
+        // Bytes already flushed to the daemon almost certainly reached the
+        // printer (it forwards immediately). Re-sending would kick the
+        // drawer / reprint a SECOND time for one user tap.
+        err.transmitted = flushed;
+        reject(err);
       }, 3000);
       const job = {
         resolve: (v) => { clearTimeout(timer); resolve(v); },
@@ -276,7 +365,10 @@ function daemonSend(printerName, bytes, doc) {
       daemon.pending.push(job);
       daemon.child.stdin.write(
         `${printerName}|${Buffer.from(bytes).toString("base64")}|${doc || "Bomba printer command"}\n`,
-        (err) => { if (err) job.reject(err); }
+        (err) => {
+          if (err) job.reject(err);
+          else flushed = true;
+        }
       );
     });
     daemon.queue = daemon.queue.then(run, run);
@@ -292,6 +384,12 @@ async function sendWindowsRawCommand(printerName, bytes) {
     await daemonSend(String(printerName), bytes, "Bomba printer command");
     return { success: true };
   } catch (daemonError) {
+    // Timeout AFTER flush almost certainly already kicked/printed: reporting
+    // failure here would make the caller re-send -> visible double-kick.
+    if (daemonError && daemonError.transmitted) {
+      console.log(`[raw-print] ${printerName}: no daemon ack but bytes were flushed - treating as sent (no resend)`);
+      return { success: true };
+    }
     try {
     // Fast path: bytes go as base64 CLI arg — no temp file, no disk read.
     const payload = Buffer.from(bytes).toString("base64");
@@ -326,6 +424,13 @@ async function sendWindowsRawCommands(printerName, jobs) {
     }
     return { success: true };
   } catch (daemonError) {
+    // Same rule as single commands: never re-send bytes that were already
+    // flushed (that would reprint / re-kick). Only fall through when the
+    // daemon never took the bytes.
+    if (daemonError && daemonError.transmitted) {
+      console.log(`[raw-print] ${printerName}: batch flushed without ack - treating as sent (no resend)`);
+      return { success: true };
+    }
     // Fall through to the one-shot PowerShell fallback below.
   }
   try {
@@ -925,6 +1030,111 @@ async function healthyOwnServer(port) {
 
 // Immediate splash so a slow cold boot (mongod + replica election + server)
 // never looks like a hang. Shown before any heavy work.
+// ---- Orphan cleanup (PIDs of OUR processes from the previous run) ----
+function pidFilePath() {
+  try {
+    return path.join(userDataDir, "app.pids.json");
+  } catch {
+    return null;
+  }
+}
+
+function writePidFile() {
+  try {
+    const p = pidFilePath();
+    if (!p) return;
+    fs.writeFileSync(
+      p,
+      JSON.stringify(
+        {
+          serverPid: serverProcess && !serverProcess.killed ? serverProcess.pid : null,
+          mongoPid: mongoProcess && mongoProcess.exitCode === null ? mongoProcess.pid : null,
+          backendPort: localBackendPort || null,
+          mongoPort: activeMongoPort,
+          updatedAt: new Date().toISOString(),
+        },
+        null,
+        2
+      ),
+      "utf8"
+    );
+  } catch {}
+}
+
+function clearPidFile() {
+  try {
+    const p = pidFilePath();
+    if (p && fs.existsSync(p)) fs.unlinkSync(p);
+  } catch {}
+}
+
+function processAlive(pid) {
+  if (!pid) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function processCommandLine(pid) {
+  try {
+    const { execFile } = await import("child_process");
+    const out = await new Promise((res) =>
+      execFile(
+        "powershell.exe",
+        ["-NoProfile", "-Command", `(Get-CimInstance Win32_Process -Filter 'ProcessId = ${pid}').CommandLine`],
+        { windowsHide: true, timeout: 10000 },
+        (_e, stdout) => res(String(stdout || ""))
+      )
+    );
+    return out;
+  } catch {
+    return "";
+  }
+}
+
+// Kill OUR orphaned backend (force-killed previous run) so its port frees up.
+// Verifies identity via command line first — NEVER touches foreign processes.
+// Returns true if the port is free afterwards.
+async function killOwnOrphanServer(port, serverDir) {
+  try {
+    const p = pidFilePath();
+    if (!p || !fs.existsSync(p)) return false;
+    let info = null;
+    try {
+      info = JSON.parse(fs.readFileSync(p, "utf8") || "{}");
+    } catch {
+      return false;
+    }
+    const pid = info && info.serverPid;
+    if (!pid || !processAlive(pid)) return false;
+    const norm = (s) => String(s || "").toLowerCase().replace(/\//g, "\\");
+    const cmd = await processCommandLine(pid);
+    if (!cmd || !(norm(cmd).includes("server.js") && norm(cmd).includes(norm(serverDir)))) {
+      mongoLogLine(`port ${port} occupant PID ${pid} is not our server - leaving it alone`);
+      return false;
+    }
+    mongoLogLine(`stopping our orphaned server (PID ${pid}) to free port ${port}...`);
+    try {
+      process.kill(pid);
+    } catch {}
+    for (let i = 0; i < 10; i++) {
+      await new Promise((r) => setTimeout(r, 500));
+      if (!(await probePort(port, 500))) {
+        mongoLogLine(`port ${port} freed`);
+        return true;
+      }
+    }
+    mongoLogLine(`port ${port} still busy after stopping orphan`);
+    return !(await probePort(port, 1000));
+  } catch (e) {
+    mongoLogLine(`orphan cleanup failed: ${e.message}`);
+    return false;
+  }
+}
+
 function showSplash() {
   try {
     if (splashWindow && !splashWindow.isDestroyed()) return;
@@ -1676,6 +1886,7 @@ if (!gotLock) {
   });
 
   app.whenReady().then(async () => {
+    try { showSplash(); setSplashStatus("جاري التحضير..."); } catch {}
     ensureDirs();
     // Zero-config LAN: silently open firewall for TCP 5000 + UDP 41234 so a
     // direct Ethernet cable just works (APIPA, no manual IP). Fire-and-forget.
@@ -1709,6 +1920,7 @@ if (!gotLock) {
       const devUrl = "http://localhost:3000";
       try {
         await waitForHealth(devUrl, 30000);
+        closeSplash();
         createWindow(devUrl);
       } catch (err) {
         dialog.showErrorBox(
@@ -1734,7 +1946,6 @@ if (!gotLock) {
       return;
     }
 
-    showSplash();
     setSplashStatus("تشغيل قاعدة البيانات...");
     await ensureBundledMongo();
     if (bootCancelled) {
@@ -1744,19 +1955,35 @@ if (!gotLock) {
       app.quit();
       return;
     }
-    // Orphaned healthy server from a force-killed run? Attach instead of
-    // spawning a second one (which would die on EADDRINUSE).
+    // Port busy? Either attach to our own healthy orphan, or clean up our
+    // dead orphan so we can bind. A foreign occupant gets a clear dialog.
     let skipSpawn = false;
     if (await probePort(port, 1500)) {
       if (await healthyOwnServer(port)) {
         mongoLogLine(`backend already healthy on ${port} - attaching window instead of spawning`);
         skipSpawn = true;
+      } else {
+        setSplashStatus("تنظيف تشغيل سابق...");
+        if (await killOwnOrphanServer(port, serverDir)) {
+          mongoLogLine("orphan cleaned - proceeding to spawn fresh server");
+        } else {
+          closeSplash();
+          dialog.showErrorBox(
+            "MTE Systems",
+            `المنفذ ${port} مشغول ببرنامج آخر (ليس الخادم الخاص بنا).\n\n` +
+              `أغلق البرنامج الذي يستخدمه، أو اعرف رقمه بالأمر:\nnetstat -ano | findstr :${port}\n\n` +
+              `السجل: ${logPath}`
+          );
+          app.quit();
+          return;
+        }
       }
     }
     if (!skipSpawn) {
       setSplashStatus("تشغيل الخادم الداخلي...");
       const env = buildServerEnv(config, secrets, distDir);
       serverProcess = spawnServer(serverDir, env);
+      writePidFile();
     }
 
     try {
@@ -1765,11 +1992,8 @@ if (!gotLock) {
         closeSplash();
         createWindow(`http://127.0.0.1:${port}`);
       } catch (err) {
-        dialog.showErrorBox(
-        "MTE Systems",
-        `فشل الاتصال بالخادم الداخلي.\n\n1. تأكد أن MongoDB شغال محليًا (mongod)\n2. راجع السجل: ${logPath}\n\n${err.message}`
-      );
-      app.quit();
+        handleStartupError("MTE Systems — فشل الاتصال بالخادم الداخلي", `تأكد أن MongoDB شغال محليًا (mongod)\nالسجل: ${logPath}\n\n${err?.message || String(err)}`);
+        return;
     }
   });
 
@@ -1804,5 +2028,6 @@ if (!gotLock) {
       console.error("Failed to stop mongod process:", err.message);
     }
     mongoProcess = null;
+    clearPidFile();
   });
 }

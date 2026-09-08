@@ -55,6 +55,7 @@ const PageLoader = () => (
 
 // ⚡ كاش إعدادات F12: أول ضغطة تجهزه، وبعده الدرج يفتح لحظياً بدون أي fetch.
 let f12OrgCache: { data: any; expiresAt: number } | null = null;
+let f12LastAt = 0;
 const getF12Organization = async (): Promise<any> => {
   if (f12OrgCache && f12OrgCache.expiresAt > Date.now()) return f12OrgCache.data;
   const organizationResponse = await api.getOrganization();
@@ -71,6 +72,9 @@ const CashDrawerShortcut = () => {
       const isF12 = event.key === 'F12' || event.code === 'F12' || (event as any).keyCode === 123;
       if (!isF12) return;
       if (event.repeat) return;
+      const now = Date.now();
+      if (now - f12LastAt < 3000) return;
+      f12LastAt = now;
       event.preventDefault();
       event.stopPropagation();
 
@@ -81,12 +85,9 @@ const CashDrawerShortcut = () => {
           if (!organization || organization.printSettings?.openCashDrawerShortcut === false) return;
 
           // 1) Try local print agent first (USB printer attached to this PC).
-          // Fixed key collapses key-bounce double events into a single kick.
           try {
-            const printers = (organization as any)?.printSettings?.printers;
-            const billPrinterId = (organization as any)?.printSettings?.documentPrinterMap?.bill;
-            const printer = printers?.find((item: any) => item.id === billPrinterId) || printers?.[0];
-            const opened = await openCashDrawerThroughAgent(printer?.printerName || printer?.name, 'f12-drawer');
+            const { requestDrawerOpen } = await import('./utils/drawer');
+            const opened = await requestDrawerOpen('f12', undefined, { organization } as any);
             if (opened) return;
           } catch {}
 

@@ -2375,21 +2375,14 @@ const loadInitialData = async () => {
     } catch { showNotification(t('billing.notifications.payFullBillError'), 'error'); setIsProcessingPayment(false); }
   };
 
-  // ⚡ فتح فوري للدرج لحظة الضغط على زر الدفع (قبل انتظار السيرفر).
-  // مفتاح `bill:<id>:payment` يوحد نبضة زر الدفع + نبضة printBill في وعد واحد
-  // بدل نبضتين، لكن الضغطات المنفصلة (F12، ثم دفع، ثم طباعة) تظل منفصلة.
+  // دالة موحدة لفتح الدرج — نادِها whenever الدرج مطلوب.
   const fireInstantDrawer = (bill: Bill, drawerMode: 'bill' | 'payment' = 'payment') => {
-    try {
-      const settings = resolveEffectivePrintSettings(user, user?.organization);
-      const settingName = drawerMode === 'payment' ? 'openCashDrawerOnPayment' : 'openCashDrawer';
-      if (settings?.[settingName] === false) return;
-      const billPrinterId = settings?.documentPrinterMap?.bill;
-      const printer = settings?.printers?.find((item: any) => item.id === billPrinterId)
-        || settings?.printers?.[0];
-      const billId = String((bill as any)._id || (bill as any).id || '');
-      const key = `bill:${billId || (bill as any).billNumber || ''}:${drawerMode}`;
-      void openCashDrawerThroughAgent(printer?.printerName || printer?.name, key).catch(() => {});
-    } catch {}
+    void (async () => {
+      try {
+        const { requestDrawerOpen } = await import('../utils/drawer');
+        await requestDrawerOpen(drawerMode as any, bill as any, user as any);
+      } catch {}
+    })();
   };
 
   const handleOpenCashDrawer = async () => {

@@ -53,7 +53,34 @@ function buildFrontend() {
 
 function cleanPrepared() {
   if (fs.existsSync(prepared)) {
-    fs.rmSync(prepared, { recursive: true, force: true });
+    try {
+      fs.rmSync(prepared, { recursive: true, force: true, maxRetries: 5, retryDelay: 300 });
+    } catch (e) {
+      if (e.code === 'EPERM' || e.code === 'EBUSY' || e.code === 'ENOTEMPTY') {
+        log(`cleanPrepared EPERM/EBUSY, retrying after killing mongod if running...`);
+        try { execSync('taskkill /F /IM mongod.exe 2>nul', { stdio: 'ignore' }); } catch {}
+        // Brief wait for handle release (Windows file lock)
+        const start = Date.now();
+        while (Date.now() - start < 1500) {}
+        try {
+          fs.rmSync(prepared, { recursive: true, force: true, maxRetries: 5, retryDelay: 300 });
+        } catch (e2) {
+          // Last resort: rename away then recreate (old folder will be cleaned next boot)
+          try {
+            const tmp = prepared + '.old.' + Date.now();
+            fs.renameSync(prepared, tmp);
+            // Try async cleanup in background, ignore errors
+            setTimeout(() => { try { fs.rmSync(tmp, { recursive: true, force: true }); } catch {} }, 1000);
+            fs.mkdirSync(prepared, { recursive: true });
+            log(`cleanPrepared: renamed locked folder to ${path.basename(tmp)} and recreated`);
+            return;
+          } catch {}
+          throw e2;
+        }
+      } else {
+        throw e;
+      }
+    }
   }
   fs.mkdirSync(prepared, { recursive: true });
 }

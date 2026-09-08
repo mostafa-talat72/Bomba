@@ -1897,6 +1897,15 @@
       "done": "Check complete ({{collections}} collections): fixed {{docs}} documents ({{fields}} fields)",
       "allOk": "Check complete ({{collections}} collections): all data is OK",
       "failed": "Check failed"
+    },
+    "mobile": {
+      "title": "Connect a phone over Wi-Fi",
+      "desc": "Scan this code with the phone camera (same Wi-Fi as this device) to open the system directly on mobile. Printing from the phone runs on this main device.",
+      "scanHint": "Point the phone camera at the code to open the app",
+      "copy": "Copy link",
+      "copied": "Copied!",
+      "refresh": "Refresh",
+      "noLan": "No LAN address detected. Make sure this device is connected to the shop Wi-Fi, then refresh."
     }
   },
   "gaming": {
@@ -4308,5 +4317,18 @@
       "totalQuantity": "Total Quantity",
       "totalRevenue": "Total Revenue"
     }
+  },
+  "serverConnection": {
+    "title": "Server connection",
+    "desc": "Where should the app connect? Use the shop server address on the same Wi-Fi.",
+    "current": "Current server",
+    "newUrl": "Server address",
+    "test": "Test",
+    "testing": "Testing...",
+    "testOk": "Server reachable",
+    "testTimeout": "No response (check address and Wi-Fi)",
+    "testFail": "Cannot reach server",
+    "save": "Save & reload",
+    "reset": "Back to automatic"
   }
 }

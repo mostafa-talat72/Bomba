@@ -64,6 +64,7 @@ const pendingDrawerOpens = new Map<string, Promise<boolean>>();
 // حماية عامة: أي فتح ناجح يمنع أي فتح آخر لمدة 3 ثوانٍ مهما كان المفتاح
 // (يمنع النبضة المكررة fireInstantDrawer+printBill التي تظهر كفتحتين خلال ثانية).
 let lastAnyDrawerOpenAt = 0;
+let globalDrawerPending: Promise<boolean> | null = null;
 
 // ⚡ كاش قصير لطابعة الجهاز: الطباعة المتكررة لا تدفع ثمن roundtrip للسيرفر كل مرة.
 let cachedDevicePrinter: { data: any; expiresAt: number } | null = null;
@@ -86,21 +87,14 @@ export const getCachedDevicePrinter = async (): Promise<any> => {
 
 export const openCashDrawerThroughAgent = async (printerName?: string, requestKey?: string): Promise<boolean> => {
   const now = Date.now();
-  // حماية عامة أولاً: أي فتح خلال 3 ثوانٍ الماضية يُكتم (مهما كان المفتاح)
-  if (now - lastAnyDrawerOpenAt < 3000) {
-    // لكن الطلب الجاري بنفس المفتاح ننتظره بدل كتمه فوراً
-    if (requestKey) {
-      const inFlight = pendingDrawerOpens.get(requestKey);
-      if (inFlight) {
-        try { await inFlight; } catch {}
-        return true;
-      }
-    } else {
-      return true;
-    }
-    // مفاتيح مختلفة خلال النافذة تُكتم أيضاً — المطلوب منع النبضة المكررة خلال ثانية
-    return true;
+  // أي فتح جارٍ حالياً — انتظره: لو نجح نكتم الثانية، لو فشل نسمح لها كإعادة محاولة.
+  if (globalDrawerPending) {
+    let firstOk = false;
+    try { firstOk = await globalDrawerPending; } catch { firstOk = false; }
+    if (firstOk) return true;
   }
+  // حماية عامة: أي فتح ناجح خلال 3 ثوانٍ يُكتم
+  if (now - lastAnyDrawerOpenAt < 3000) return true;
   if (requestKey) {
     const previousOpen = recentDrawerOpens.get(requestKey);
     if (previousOpen && now - previousOpen < 3000) return true;
@@ -114,6 +108,7 @@ export const openCashDrawerThroughAgent = async (printerName?: string, requestKe
       if (now - timestamp >= 3000) recentDrawerOpens.delete(key);
     }
   }
+  console.log(`[drawer-agent] sending key=${requestKey} printer=${printerName || 'default'}`);
   const job = (async (): Promise<boolean> => {
     const response = await fetch(LOCAL_DRAWER_URL, {
       method: 'POST',
@@ -133,6 +128,8 @@ export const openCashDrawerThroughAgent = async (printerName?: string, requestKe
     }
     return opened;
   })();
+  globalDrawerPending = job;
+  job.then(() => { if (globalDrawerPending === job) globalDrawerPending = null; }, () => { if (globalDrawerPending === job) globalDrawerPending = null; });
   if (requestKey) {
     pendingDrawerOpens.set(requestKey, job);
     const clear = () => {

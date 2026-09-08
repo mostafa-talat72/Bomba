@@ -48,16 +48,29 @@ export const getReportEligibleOrderIds = async (organization, { startDate, endDa
                                         $gt: [
                                             {
                                                 $size: {
+                                                    // NOTE: strict ObjectId comparison. Sync payloads
+                                                    // (JSON-crossed LAN/Atlas) may store bill.orders ids
+                                                    // as strings — $convert normalizes them to ObjectId
+                                                    // (invalid values become null and never match), so
+                                                    // valid orders are never randomly excluded depending
+                                                    // on which device copy arrived last.
                                                     $filter: {
                                                         input: {
                                                             $map: {
                                                                 input: { $ifNull: ["$orders", []] },
                                                                 as: "o",
                                                                 in: {
-                                                                    $cond: {
-                                                                        if: { $eq: [{ $type: "$$o" }, "object"] },
-                                                                        then: "$$o._id",
-                                                                        else: "$$o",
+                                                                    $convert: {
+                                                                        input: {
+                                                                            $cond: {
+                                                                                if: { $eq: [{ $type: "$$o" }, "object"] },
+                                                                                then: { $ifNull: ["$$o._id", null] },
+                                                                                else: "$$o",
+                                                                            },
+                                                                        },
+                                                                        to: "objectId",
+                                                                        onError: null,
+                                                                        onNull: null,
                                                                     },
                                                                 },
                                                             },

@@ -8,6 +8,7 @@ import type { TFunction } from 'i18next';
 import { getCachedDevicePrinter, openCashDrawerThroughAgent, printThroughLocalBridge } from './localPrintBridge';
 import { resolveUserPrintSettings } from './resolvePrintSettings';
 import { getCurrentUserCache } from './currentUser';
+import { isMobileDevice } from './deviceDetect';
 
 let cachedOrganizationResponse: { data: any; expiresAt: number } | null = null;
 const qrCodeCache = new Map<string, string>();
@@ -905,6 +906,35 @@ export const printBill = async (
     printKey: `bill:${billId || bill.billNumber || ''}:${drawerMode}`,
   });
   if (bridgePrinted) return;
+  if (isMobileDevice()) {
+    // Phones have no local print agent: execute the job on the MAIN device,
+    // which prints on its own printers (and kicks the drawer per settings).
+    try {
+      const notify = (msg: string, type: string) => {
+        try {
+          if (typeof window !== 'undefined' && (window as any).showNotification) (window as any).showNotification(msg, type);
+        } catch {}
+      };
+      const res: any = await api.printBill({
+        bill: billForPrint,
+        organization: settingsResponse?.data || (billForPrint as any).organization,
+        language,
+        tableSectionName,
+        drawerMode,
+      });
+      if (res?.success) {
+        notify(
+          language === 'ar' ? 'تم إرسال الفاتورة للطباعة على الجهاز الرئيسي' : language === 'fr' ? 'Facture envoyée à l’imprimante principale' : 'Bill sent to the main device printer',
+          'success'
+        );
+      } else {
+        notify(res?.message || (language === 'ar' ? 'فشلت الطباعة على الجهاز الرئيسي' : 'Server print failed'), 'error');
+      }
+    } catch {
+      // silent — user still has the on-screen bill
+    }
+    return;
+  }
   return;
 };
 

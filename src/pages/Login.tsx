@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useApp } from '../context/AppContext';
 import LanguageSwitcherAuth from '../components/LanguageSwitcherAuth';
+import ServerConnectionModal from '../components/ServerConnectionModal';
 import { useLanguage } from '../context/LanguageContext';
 import { AUTH_ERROR_CODES, isValidErrorCode, getErrorMessageKey } from '../constants/errorCodes';
 
@@ -35,6 +36,7 @@ const Login: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showResendLink, setShowResendLink] = useState(false);
+  const [showServerModal, setShowServerModal] = useState(false);
 
   // Refs
   const identifierInputRef = useRef<HTMLInputElement>(null);
@@ -287,9 +289,22 @@ const Login: React.FC = () => {
                 {t('auth.noAccount')}
               </button>
             </div>
+
+            {/* Server connection (LAN/mobile) */}
+            <div className="text-center mt-2">
+              <button
+                type="button"
+                onClick={() => setShowServerModal(true)}
+                disabled={isSubmitting}
+                className="text-white/40 hover:text-white/80 text-xs transition-colors disabled:opacity-50"
+              >
+                {t('serverConnection.title')}
+              </button>
+            </div>
           </div>
         </div>
       </div>
+      <ServerConnectionModal isOpen={showServerModal} onClose={() => setShowServerModal(false)} />
     </div>
   );
 };

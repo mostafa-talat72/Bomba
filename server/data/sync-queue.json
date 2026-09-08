@@ -1,0 +1,201 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-09-08T06:14:32.009Z",
+  "queueSize": 3,
+  "operations": [
+    {
+      "id": "1549a306-7720-439c-9969-0729f19cfe9c",
+      "type": "update",
+      "collection": "users",
+      "data": {
+        "updatedAt": {
+          "$date": "2026-09-08T06:13:04.464Z"
+        }
+      },
+      "filter": {
+        "$and": [
+          {
+            "permissions": {
+              "$in": [
+                "cafe",
+                "billing"
+              ]
+            }
+          },
+          {
+            "permissions": {
+              "$ne": "tables"
+            }
+          }
+        ]
+      },
+      "timestamp": {
+        "$date": "2026-09-08T06:13:04.683Z"
+      },
+      "retryCount": 0,
+      "maxRetries": 10
+    },
+    {
+      "id": "ab629200-5cc7-46be-8ebc-8f8a4a34c96a",
+      "type": "update",
+      "collection": "bills",
+      "data": [
+        {
+          "$set": {
+            "paid": "$total",
+            "remaining": 0
+          }
+        },
+        {
+          "$set": {
+            "updatedAt": {
+              "$date": "2026-09-08T06:13:08.434Z"
+            }
+          }
+        }
+      ],
+      "filter": {
+        "$and": [
+          {
+            "status": "paid"
+          },
+          {
+            "$expr": {
+              "$or": [
+                {
+                  "$ne": [
+                    "$paid",
+                    "$total"
+                  ]
+                },
+                {
+                  "$gt": [
+                    "$remaining",
+                    0.01
+                  ]
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "timestamp": {
+        "$date": "2026-09-08T06:13:08.650Z"
+      },
+      "retryCount": 0,
+      "maxRetries": 10
+    },
+    {
+      "id": "b36377c9-1a72-402c-830e-aea0e860b403",
+      "type": "insert",
+      "collection": "users",
+      "data": {
+        "preferences": {
+          "language": "ar",
+          "theme": "light",
+          "backupPath": ""
+        },
+        "_id": {
+          "$oid": "6918b5863d4fd00d17bd018d"
+        },
+        "deletedAt": null,
+        "deletedBy": null,
+        "department": "",
+        "position": "",
+        "hireDate": null,
+        "salary": null,
+        "notes": "",
+        "profileImage": null,
+        "resetPasswordToken": null,
+        "resetPasswordExpire": null,
+        "verificationToken": null,
+        "name": "Mostafa Taalat",
+        "email": "tafa192002@gmail.com",
+        "username": "mostafa",
+        "role": "admin",
+        "permissions": [
+          "all"
+        ],
+        "status": "active",
+        "lastLogin": {
+          "$date": "2026-09-08T06:13:08.636Z"
+        },
+        "avatar": null,
+        "phone": "01116626164",
+        "address": "الفليو",
+        "createdAt": {
+          "$date": "2025-11-15T17:16:54.609Z"
+        },
+        "updatedAt": {
+          "$date": "2026-09-08T06:13:08.841Z"
+        },
+        "__v": 0,
+        "organization": {
+          "$oid": "6918b5873d4fd00d17bd018f"
+        },
+        "isActive": true,
+        "password": "$2a$12$XtnCelbMM37BmxIbCuL0quKZRDFWyBSRG5aGXyNgnP6MzibdQ6Ze2",
+        "isDeleted": false,
+        "useCustomPrintSettings": true,
+        "printSettings": {
+          "printerType": "usb",
+          "printerDevice": "USB001",
+          "printerIP": "",
+          "printerPort": 9100,
+          "printerName": "XP-80C",
+          "openCashDrawer": false,
+          "openCashDrawerOnPayment": false,
+          "openCashDrawerShortcut": true,
+          "autoPrintOnPayment": false,
+          "promptOrderPrintSections": false,
+          "defaultOrderPrintSections": [
+            "69191ff431046c3b5480e423",
+            "6a98f819d3eaa175364e7715"
+          ],
+          "autoPrintOrderSections": true,
+          "printers": [
+            {
+              "id": "USB001",
+              "name": "XP-80C",
+              "printerName": "XP-80C",
+              "printerPath": "USB001",
+              "paperWidthMm": 80
+            },
+            {
+              "id": "USB003",
+              "name": "XP-80C (copy 4)",
+              "printerName": "XP-80C (copy 4)",
+              "printerPath": "USB003",
+              "paperWidthMm": 80
+            }
+          ],
+          "sectionPrinterMap": {
+            "69191feb31046c3b5480e410": "USB001",
+            "69191ff431046c3b5480e423": "USB001",
+            "691b52a6de524824a66e7fcc": "USB001",
+            "69212370fca149529c1a958e": "USB001",
+            "6a09a8f60712327fd044a7c2": "USB001",
+            "6a98f819d3eaa175364e7715": "USB001"
+          },
+          "documentPrinterMap": {
+            "bill": "USB003",
+            "consumptionReport": "USB001",
+            "dailyReport": "USB001"
+          },
+          "charactersPerLine": 48,
+          "printHeader": true,
+          "printFooter": true,
+          "autoCut": false,
+          "printQRCode": false
+        },
+        "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjY5MThiNTg2M2Q0ZmQwMGQxN2JkMDE4ZCIsImlhdCI6MTc4ODg0Nzk4OCwiZXhwIjoxNzkxNDM5OTg4fQ.ZM6-3DALrMR4z2RvLGeLdOMkX4t0WXBUUWPW_nYtrQo"
+      },
+      "filter": null,
+      "timestamp": {
+        "$date": "2026-09-08T06:13:08.818Z"
+      },
+      "retryCount": 0,
+      "maxRetries": 10
+    }
+  ]
+}

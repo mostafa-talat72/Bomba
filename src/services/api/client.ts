@@ -38,6 +38,16 @@ class ApiClient {
     this.token = localStorage.getItem('token');
   }
 
+  /** Switch API server at runtime (mobile/LAN server picker). Persists. */
+  setBaseURL(baseURL: string) {
+    const clean = String(baseURL || '').trim().replace(/\/+$/, '');
+    if (!clean) return;
+    this.baseURL = `${clean}/api`;
+    try {
+      window.localStorage.setItem('bomba_server_url', clean);
+    } catch {}
+  }
+
   async request<T>(
     endpoint: string,
     options: RequestInit = {},

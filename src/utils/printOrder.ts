@@ -2,6 +2,7 @@ import api from '../services/api';
 import { formatDecimal, getCurrencySymbol, getDisplayNumber } from './formatters';
 import type { TFunction } from 'i18next';
 import { getCachedDevicePrinter, printThroughLocalBridge } from './localPrintBridge';
+import { isMobileDevice } from './deviceDetect';
 
 interface OrderItem {
   _id?: string;
@@ -561,6 +562,30 @@ export const printOrder = async (
     const startingMsg = language === 'ar' ? 'جارٍ طباعة الطلب...' : language === 'fr' ? 'Impression en cours...' : 'Printing order...';
     if (typeof window !== 'undefined' && (window as any).showNotification) (window as any).showNotification(startingMsg, 'info');
   } catch {}
+  if (isMobileDevice()) {
+    // Phones have no local print agent: execute on the MAIN device instead.
+    try {
+      const notify = (msg: string, type: string) => {
+        try {
+          if (typeof window !== 'undefined' && (window as any).showNotification) (window as any).showNotification(msg, type);
+        } catch {}
+      };
+      const orgRes: any = await api.getOrganization().catch(() => null);
+      const org = orgRes?.success ? orgRes.data : null;
+      if (!org) {
+        notify(language === 'ar' ? 'تعذر الوصول لبيانات المنشأة للطباعة' : 'Organization unavailable for printing', 'error');
+        return;
+      }
+      const res: any = await api.printOrder({ order, organization: org, language });
+      notify(
+        res?.success
+          ? (language === 'ar' ? 'تم إرسال الطلب للطباعة على الجهاز الرئيسي' : language === 'fr' ? 'Commande envoyée à l’imprimante principale' : 'Order sent to the main device printer')
+          : (res?.message || (language === 'ar' ? 'فشلت الطباعة على الجهاز الرئيسي' : 'Server print failed')),
+        res?.success ? 'success' : 'error'
+      );
+    } catch {}
+    return;
+  }
   const savedPrinter = printerName ? null : await getCachedDevicePrinter();
   const selectedPrinterName = printerName || savedPrinter?.data?.printerName || savedPrinter?.data?.name;
   const sectionsToPrint = selectedSectionIds && selectedSectionIds.length > 1

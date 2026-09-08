@@ -586,7 +586,7 @@ const sessionController = {
                 .sort({ startTime: -1 });
             if (minimal === "true") {
                 sessionsQuery = sessionsQuery.select(
-                    'deviceType deviceName deviceNumber status startTime endTime finalCost totalCost controllers controllersHistory'
+                    'deviceType deviceName deviceNumber deviceId status startTime endTime finalCost totalCost controllers controllersHistory'
                 ).lean();
             } else {
                 sessionsQuery = sessionsQuery

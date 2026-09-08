@@ -1698,8 +1698,14 @@ export const addPayment = async (req, res) => {
                 const protocol = req.get('x-forwarded-proto') || req.protocol || 'http';
                 const host = req.get('x-forwarded-host') || req.get('host') || 'localhost:5000';
                 let frontendHost = host;
-                if (host.includes(':5000')) frontendHost = host.replace(':5000', ':3000');
-                else if (host.includes('5000')) frontendHost = host.replace('5000', '3000');
+                // Dev-vite rewrite (:5000 -> :3000) applies ONLY to localhost.
+                // LAN phones reach the API directly on :5000 (or served dist),
+                // so a LAN IP must be kept as-is or QR links would break.
+                const isLocalHost = host.startsWith('localhost') || host.startsWith('127.0.0.1');
+                if (isLocalHost) {
+                  if (host.includes(':5000')) frontendHost = host.replace(':5000', ':3000');
+                  else if (host.includes('5000')) frontendHost = host.replace('5000', '3000');
+                }
                 const baseUrl = process.env.FRONTEND_URL || `${protocol}://${frontendHost}`;
                 await bill.generateQRCode(baseUrl, true);
                 await Bill.updateOne({ _id: bill._id }, { $set: { qrCode: bill.qrCode, qrCodeUrl: bill.qrCodeUrl } }, { timestamps: false });

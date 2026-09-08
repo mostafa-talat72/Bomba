@@ -8,12 +8,15 @@ import { useOrganization } from '../context/OrganizationContext';
 import { ReportSettingsSection } from '../components/ReportSettingsSection';
 import { PayrollPermissionsSection } from '../components/PayrollPermissionsSection';
 import PrinterSettingsForm from '../components/settings/PrinterSettingsForm';
+import MobileConnectCard from '../components/MobileConnectCard';
 import { WORLD_TIMEZONES } from '../../shared/timezones';
 import { getCurrencyName } from '../../shared/currencyNames';
 import { CURRENCY_SYMBOLS } from '../../shared/currencySymbols';
 import { getTimezoneName } from '../../shared/timezoneNames';
 import { WORLD_LANGUAGES } from '../../shared/languages';
 import api from '../services/api';
+import { apiClient } from '../services/api/client';
+import ServerConnectionModal from '../components/ServerConnectionModal';
 import { openCashDrawerThroughAgent } from '../utils/localPrintBridge';
 
 // Type for alert messages
@@ -150,6 +153,8 @@ const Settings: FC = () => {
   const [passwordSaving, setPasswordSaving] = useState(false);
   const [notificationsSaving, setNotificationsSaving] = useState(false);
   const [generalSaving, setGeneralSaving] = useState(false);
+  const [showServerModal, setShowServerModal] = useState(false);
+  const serverUrlDisplay = apiClient.baseURL.replace(/\/api$/, '');
   const [backupBusy, setBackupBusy] = useState(false);
   const [organizationSaving, setOrganizationSaving] = useState(false);
   const [permissionsSaving, setPermissionsSaving] = useState(false);
@@ -1575,6 +1580,31 @@ const Settings: FC = () => {
                       </button>
                     </div>
 
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        {t('serverConnection.title')}
+                      </label>
+                      <div className="flex space-x-2 space-x-reverse">
+                        <input
+                          type="text"
+                          value={serverUrlDisplay}
+                          readOnly
+                          dir="ltr"
+                          className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-300 font-mono text-sm"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowServerModal(true)}
+                          className="px-3 py-2 bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300"
+                        >
+                          {t('serverConnection.newUrl')}
+                        </button>
+                      </div>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                        {t('serverConnection.desc')}
+                      </p>
+                    </div>
+
                     <div className="mt-6">
                       <button
                         onClick={handleGeneralSettingsUpdate}
@@ -1707,6 +1737,11 @@ const Settings: FC = () => {
                     )}
                   </div>
                 )}
+
+                {/* Connect mobile over LAN */}
+                <div>
+                  <MobileConnectCard />
+                </div>
               </div>
             )}
 
@@ -2574,6 +2609,7 @@ const Settings: FC = () => {
           </div>
         </div>
       )}
+      <ServerConnectionModal isOpen={showServerModal} onClose={() => setShowServerModal(false)} />
     {/* Developer Fingerprint */}
       <div className="mt-8 pt-6 border-t border-gray-200 dark:border-gray-800">
         <div className="text-center">

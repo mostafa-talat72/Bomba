@@ -48,10 +48,8 @@ import { useTranslation } from 'react-i18next';
 import { toast } from 'react-toastify';
 import { useApp } from '../context/AppContext';
 import { useRTL } from '../hooks/useRTL';
-import { Order, Session } from '../services/api';
 import api from '../services/api';
 import { formatDecimal, formatCurrency as formatCurrencyUtil, replaceAMPM } from '../utils/formatters';
-import { getId, sameId } from '../utils/id';
 import { getCachedDevicePrinter, printThroughLocalBridge } from '../utils/localPrintBridge';
 
 // Extend dayjs with plugins
@@ -83,7 +81,7 @@ const OTHER_SECTION_KEY = '__OTHER__';
 const ConsumptionReport = () => {
   const { t, i18n } = useTranslation();
   const rtl = useRTL();
-  const { menuItems, fetchMenuItems, menuSections, fetchMenuSections, user, logout } = useApp();
+  const { menuSections, fetchMenuSections, user, logout } = useApp();
   const location = useLocation();
   const logoutPrintHandled = useRef(false);
   
@@ -246,172 +244,6 @@ const ConsumptionReport = () => {
     },
   ], [t, rtl.isRTL, i18n.language]);
 
-  const processOrdersAndSessions = useCallback((ordersToProcess: Order[], sessionsToProcess: Session[]) => {
-    const itemsBySection: Record<string, ConsumptionItem[]> = {};
-
-    // Initialize all menu sections with empty arrays
-    menuSections.forEach(section => {
-      if (section.name !== 'أخرى') {
-        itemsBySection[section.name] = [];
-      }
-    });
-    itemsBySection[OTHER_SECTION_KEY] = [];
-
-    // Add separate sections for PlayStation and Computer using keys
-    itemsBySection['__PLAYSTATION__'] = [];
-    itemsBySection['__COMPUTER__'] = [];
-
-    // فهارس O(1): صنف/قسم بالهوية القياسية (تتحمل ObjectId المدمج بدل مفتاح [object Object]).
-    const menuItemById = new Map<string, any>();
-    menuItems.forEach((m: any) => {
-      const mid = getId(m);
-      if (mid && !menuItemById.has(mid)) menuItemById.set(mid, m);
-    });
-    const sectionById = new Map<string, any>();
-    menuSections.forEach((s: any) => {
-      const sid = getId(s);
-      if (sid && !sectionById.has(sid)) sectionById.set(sid, s);
-    });
-    const rowByKey = new Map<string, { section: string; index: number }>();
-
-    // Process cafe orders directly
-    ordersToProcess.forEach((order) => {
-      if (!order.items || !Array.isArray(order.items)) return;
-
-      order.items.forEach((item: any) => {
-        if (!item?.name) return;
-
-        const itemPrice = Number(item.price ?? ((Number(item.itemTotal) || 0) / (Number(item.quantity) || 1))) || 0;
-        const itemQuantity = Number(item.quantity) || 0;
-        if (itemQuantity <= 0 || itemPrice < 0) return;
-
-        const menuId = getId(item.menuItemId || item.menuItem) || null;
-        const variant = item.variant || 'default';
-        const normalizedVariant = typeof variant === 'string' && variant.trim() ? variant : 'default';
-        const keyBase = menuId || String(item.name || 'unknown');
-        const key = `${keyBase}|${normalizedVariant}`;
-
-        let sectionName = OTHER_SECTION_KEY;
-        if (menuId) {
-          const menuItem = menuItemById.get(menuId);
-          if (menuItem) {
-            if (menuItem.category) {
-              const categoryObj = typeof menuItem.category === 'string' ? null : menuItem.category;
-
-              if (categoryObj && categoryObj.section) {
-                const sectionObj = typeof categoryObj.section === 'string'
-                  ? sectionById.get(getId(categoryObj.section))
-                  : categoryObj.section;
-
-                if (sectionObj) {
-                  sectionName = sectionObj.name;
-                }
-              }
-            }
-          }
-        }
-
-        if (!itemsBySection[sectionName]) {
-          itemsBySection[sectionName] = [];
-        }
-
-        const hit = rowByKey.get(`${sectionName}||${key}`);
-        const existingItem = hit ? itemsBySection[hit.section]?.[hit.index] : undefined;
-        if (existingItem && existingItem.key === key) {
-          existingItem.quantity += itemQuantity;
-          existingItem.total += itemPrice * itemQuantity;
-          existingItem.price = existingItem.total / existingItem.quantity;
-        } else {
-          const variantText = normalizedVariant && normalizedVariant !== 'default' ? ` (${normalizedVariant})` : '';
-          itemsBySection[sectionName].push({
-            id: getId(item) || `${key}-${Math.random().toString(16).slice(2)}`,
-            name: `${item.name}${variantText}`,
-            price: itemPrice,
-            quantity: itemQuantity,
-            total: itemPrice * itemQuantity,
-            category: sectionName,
-            key
-          } as any);
-          rowByKey.set(`${sectionName}||${key}`, { section: sectionName, index: itemsBySection[sectionName].length - 1 });
-        }
-      });
-    });
-
-   
-    sessionsToProcess.forEach((session) => {
-      // Process both PlayStation and Computer sessions
-      if (session.deviceType !== 'playstation' && session.deviceType !== 'computer') return;
-      
-      // Only include completed sessions
-      if (session.status !== 'completed') return;
-
-      // Skip sessions without endTime
-      if (!session.endTime) return;
-
-      const deviceName = session.deviceName || `جهاز ${session.deviceNumber}`;
-      
-      // Use finalCost (after discount) as the session cost
-      // finalCost = totalCost - discount
-      const sessionCost = Number(session.finalCost) || 0;
-      
-      // Calculate total hours from controllersHistory if available
-      let totalHours = 0;
-      
-      if (session.controllersHistory && Array.isArray(session.controllersHistory) && session.controllersHistory.length > 0) {
-        // Use controllersHistory for accurate hour calculation
-        session.controllersHistory.forEach((period: any) => {
-          const periodStart = new Date(period.from).getTime();
-          const periodEnd = period.to ? new Date(period.to).getTime() : (session.endTime ? new Date(session.endTime).getTime() : Date.now());
-          const periodDurationMs = periodEnd - periodStart;
-          const periodHours = periodDurationMs / (1000 * 60 * 60);
-          totalHours += periodHours;
-        });
-      } else {
-        // Fallback: Calculate from startTime and endTime
-        const startTime = new Date(session.startTime).getTime();
-        const endTime = new Date(session.endTime).getTime();
-        const durationMs = endTime - startTime;
-        totalHours = durationMs / (1000 * 60 * 60);
-      }
-
-
-      // Determine which section to add to based on device type
-      const sectionName = session.deviceType === 'computer' ? '__COMPUTER__' : '__PLAYSTATION__';
-      
-      // Group by device name - sum hours and costs for each device
-      const existingItem = itemsBySection[sectionName].find(i => i.name === deviceName);
-      
-      if (existingItem) {
-        existingItem.quantity += totalHours; // Add hours
-        existingItem.total += sessionCost; // Add total cost
-      } else {
-        itemsBySection[sectionName].push({
-          id: session._id || session.id || Math.random().toString(),
-          name: deviceName,
-          price: 0, // Will show as "-" in the table
-          quantity: totalHours, // Total hours from controllersHistory
-          total: sessionCost, // Total cost
-          category: sectionName,
-          key: `${session._id || session.id || deviceName}|default`,
-        });
-      }
-    });
-
-    // Sort items by total (descending) within each section
-    Object.values(itemsBySection).forEach(items => {
-      items.sort((a, b) => b.total - a.total);
-    });
-
-    // Remove empty sections
-    Object.keys(itemsBySection).forEach(section => {
-      if (itemsBySection[section].length === 0) {
-        delete itemsBySection[section];
-      }
-    });
-
-    return itemsBySection;
-  }, [menuItems, menuSections]);
-
   const fetchData = useCallback(async (forceRefresh = false) => {
     if (!dateRange[0] || !dateRange[1]) return;
 
@@ -420,63 +252,33 @@ const ConsumptionReport = () => {
       setDataReady(false);
       setError(null);
 
-      // Fetch basic data (menu items, sections)
+      // Tabs still need the section list; the aggregated rows themselves come
+      // from the server (single implementation shared with the Reports page).
       if (!hasLoadedInitialData.current || forceRefresh) {
-        
-        await Promise.all([
-          menuItems.length === 0 ? fetchMenuItems() : Promise.resolve(),
-          menuSections.length === 0 ? fetchMenuSections() : Promise.resolve(),
-        ]);
-        
+        if (menuSections.length === 0) {
+          await fetchMenuSections();
+        }
+
         hasLoadedInitialData.current = true;
       }
 
-      // Fetch orders and sessions directly from API with date filtering
       // Convert dayjs to Date object to preserve local timezone, then to ISO string
       // This ensures the backend receives the correct local time
       const startDateISO = dateRange[0].toDate().toISOString();
       const endDateISO = dateRange[1].toDate().toISOString();
-      
-      
-      const [ordersResponse, sessionsResponse] = await Promise.all([
-        api.getOrders({
-          limit: 10000,
-          startDate: startDateISO,
-          endDate: endDateISO,
-          reportEligible: true,
-          minimal: true
-        }), // Fetch orders in date range
-        api.getSessions({
-          status: 'completed',
-          limit: 10000,
-          startDate: startDateISO,
-          endDate: endDateISO,
-          minimal: true
-        }) // Fetch completed sessions in date range
-      ]);
-      
-      if (ordersResponse.success && ordersResponse.data && sessionsResponse.success && sessionsResponse.data) {
-        // Data is already filtered by backend based on date range
-        const filteredOrders = ordersResponse.data;
-        const allSessions = sessionsResponse.data;
-        
-        // Filter gaming sessions (PlayStation & Computer) only (backend already filtered by date and status)
-        const filteredSessions = allSessions.filter((session) => {
-          return (session.deviceType === 'playstation' || session.deviceType === 'computer') && session.endTime;
-        });
-        
-        
-      
-        const processedData = processOrdersAndSessions(filteredOrders, filteredSessions);
-        setConsumptionData(processedData);
+
+      const response = await api.getConsumptionReport({
+        startDate: startDateISO,
+        endDate: endDateISO,
+      });
+
+      if (response.success && response.data) {
+        setConsumptionData(response.data);
         setDataReady(true);
         // ⚡ سخّن كاش الطابعة في الخلفية: زر الطباعة يجد كل شيء جاهزاً.
         try { void getCachedDevicePrinter(); } catch {}
       } else {
-        console.error('❌ Failed to fetch data:', {
-          orders: ordersResponse.message,
-          sessions: sessionsResponse.message
-        });
+        console.error('❌ Failed to fetch data:', response.message);
         toast.error(t('consumptionReport.messages.loadError'));
         setDataReady(false);
         setLogoutPrintLoading(false);
@@ -492,7 +294,7 @@ const ConsumptionReport = () => {
     } finally {
       setLoading(false);
     }
-  }, [dateRange, fetchMenuItems, fetchMenuSections, menuItems, menuSections, processOrdersAndSessions, t]);
+  }, [dateRange, fetchMenuSections, menuSections, t]);
 
 
   const calculateTotal = (items: ConsumptionItem[]): number => {

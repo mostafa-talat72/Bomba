@@ -166,9 +166,19 @@ async function getSoldItems(dateFilter?: string, startDate?: string, endDate?: s
 }
 
 
+async function getConsumptionReport(filter: { startDate: string; endDate: string }): Promise<ApiResponse<Record<string, any[]>>> {
+  const searchParams = new URLSearchParams();
+  if (filter.startDate) searchParams.append('startDate', filter.startDate);
+  if (filter.endDate) searchParams.append('endDate', filter.endDate);
+
+  return apiClient.request(`/reports/consumption?${searchParams.toString()}`);
+}
+
+
 export const reportsApi = {
   getDashboardStats,
   getSalesReport,
+  getConsumptionReport,
   getInventoryReport,
   getFinancialReport,
   exportReportToExcel,
