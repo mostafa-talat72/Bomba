@@ -257,6 +257,15 @@ export interface Bill {
   status: 'draft' | 'partial' | 'paid' | 'cancelled' | 'overdue';
   paymentMethod: 'cash' | 'card' | 'transfer' | 'mixed';
   billType: 'cafe' | 'playstation' | 'computer';
+  fulfillmentType?: 'dine_in' | 'takeaway' | 'delivery';
+  deliveryInfo?: {
+    customerName?: string | null;
+    phone?: string | null;
+    address?: string | null;
+    deliveryFee?: number;
+    driver?: string | null;
+    status?: 'preparing' | 'out_for_delivery' | 'delivered';
+  } | null;
   payments: Payment[];
   itemPayments?: ItemPayment[];
   sessionPayments?: SessionPayment[];

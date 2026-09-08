@@ -2,6 +2,7 @@ import i18n from 'i18next';
 import { initReactI18next } from 'react-i18next';
 import LanguageDetector from 'i18next-browser-languagedetector';
 import { WORLD_LANGUAGES } from '../../shared/languages';
+import { safeGet, safeSet } from '../utils/safeStorage';
 
 // Dynamically import all translation files (non-eager - lazy loaded)
 const localeModules = import.meta.glob('./locales/*.json');
@@ -22,15 +23,18 @@ const loadLocaleResources = async (lng: string) => {
  * Detect user's preferred language based on browser locale and timezone
  */
 const detectUserLanguage = (): string => {
-  const savedLanguage = localStorage.getItem('language');
+  const savedLanguage = safeGet('language');
   if (savedLanguage) {
     return savedLanguage;
   }
 
-  const browserLang = navigator.language || (navigator as any).userLanguage;
-  const primaryLang = browserLang.split('-')[0];
-
-  return primaryLang || 'en';
+  try {
+    const browserLang = navigator.language || (navigator as any).userLanguage;
+    const primaryLang = browserLang.split('-')[0];
+    return primaryLang || 'en';
+  } catch {
+    return 'en';
+  }
 };
 
 // Supported languages configuration - use all world languages
@@ -86,7 +90,7 @@ i18n.on('languageChanged', (lng) => {
       document.documentElement.lang = lng;
       document.documentElement.dir = language.dir;
       
-      const token = localStorage.getItem('token');
+      const token = safeGet('token');
       const isAuthPage = window.location.pathname.match(/^\/(login|register|verify-email|reset-password|email-actions)/);
       
       if (token && !isAuthPage) {
@@ -95,7 +99,7 @@ i18n.on('languageChanged', (lng) => {
         document.body.dir = 'ltr';
       }
       
-      localStorage.setItem('language', lng);
+      safeSet('language', lng);
     }
 });
 

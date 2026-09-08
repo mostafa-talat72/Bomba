@@ -761,8 +761,16 @@ export const createBill = async (req, res) => {
             tax,
             notes,
             billType,
+            fulfillmentType,
+            deliveryInfo,
             dueDate,
         } = req.body;
+        const normalizedFulfillmentType = (() => {
+            const v = String(fulfillmentType || billType || 'dine_in').trim();
+            if (v === 'cafe') return 'dine_in';
+            if (['dine_in', 'takeaway', 'delivery'].includes(v)) return v;
+            return 'dine_in';
+        })();
 
         // Validate required fields
         if (!req.user || !req.user._id) {
@@ -870,7 +878,16 @@ export const createBill = async (req, res) => {
                     discountPercentage: discountPercentage || 0,
                     tax: tax || 0,
                     notes,
-                    billType: billType || "cafe",
+                    billType: billType && ['cafe','playstation','computer'].includes(String(billType)) ? billType : 'cafe',
+                    fulfillmentType: normalizedFulfillmentType,
+                    deliveryInfo: normalizedFulfillmentType !== 'dine_in' ? {
+                        customerName: deliveryInfo?.customerName || customerName || null,
+                        phone: deliveryInfo?.phone || customerPhone || null,
+                        address: deliveryInfo?.address || null,
+                        deliveryFee: Number(deliveryInfo?.deliveryFee) || 0,
+                        driver: deliveryInfo?.driver || null,
+                        status: 'preparing',
+                    } : undefined,
                     dueDate,
                     createdBy: req.user._id,
                     organization: getOrganizationId(req.user),

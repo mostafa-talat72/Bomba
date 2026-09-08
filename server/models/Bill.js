@@ -61,6 +61,20 @@ const billSchema = new mongoose.Schema(
             type: String,
             default: null,
         },
+        fulfillmentType: {
+            type: String,
+            enum: ["dine_in", "takeaway", "delivery"],
+            default: "dine_in",
+            index: true,
+        },
+        deliveryInfo: {
+            customerName: { type: String, default: null },
+            phone: { type: String, default: null },
+            address: { type: String, default: null },
+            deliveryFee: { type: Number, default: 0, min: 0 },
+            driver: { type: String, default: null },
+            status: { type: String, enum: ["preparing", "out_for_delivery", "delivered"], default: "preparing" },
+        },
         table: {
             type: mongoose.Schema.Types.ObjectId,
             ref: "Table",
@@ -1785,6 +1799,10 @@ billSchema.methods.calculateSubtotal = async function () {
                     sessionPayment.remainingAmount = Math.max(0, sessionCost - paidAmount);
                 }
             }
+        }
+        // أضف رسوم التوصيل للدليفري
+        if (this.fulfillmentType === 'delivery' && this.deliveryInfo?.deliveryFee) {
+            subtotal += Number(this.deliveryInfo.deliveryFee) || 0;
         }
     }
 

@@ -1,4 +1,26 @@
+import { safeGet, safeSet } from './safeStorage';
+
 let instanceIdCache: string | null = null;
+
+function randomHex(bytes: number): string {
+  try {
+    if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
+      const array = new Uint8Array(bytes);
+      crypto.getRandomValues(array);
+      return Array.from(array)
+        .map(b => b.toString(16).padStart(2, '0'))
+        .join('')
+        .toUpperCase();
+    }
+  } catch {
+    // fall through to Math.random fallback
+  }
+  let out = '';
+  for (let i = 0; i < bytes; i++) {
+    out += Math.floor(Math.random() * 256).toString(16).padStart(2, '0');
+  }
+  return out.toUpperCase();
+}
 
 export function getInstanceId(): string {
   if (instanceIdCache) {
@@ -9,15 +31,10 @@ export function getInstanceId(): string {
     return 'UNKNOWN';
   }
 
-  let id = localStorage.getItem('bomba_instance_id');
+  let id = safeGet('bomba_instance_id');
   if (!id) {
-    const array = new Uint8Array(3);
-    crypto.getRandomValues(array);
-    id = Array.from(array)
-      .map(b => b.toString(16).padStart(2, '0'))
-      .join('')
-      .toUpperCase();
-    localStorage.setItem('bomba_instance_id', id);
+    id = randomHex(3);
+    safeSet('bomba_instance_id', id);
   }
   
   instanceIdCache = id;

@@ -156,6 +156,40 @@ const Tables: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<Bill[] | null>(null);
   const [billTypeFilter] = useState<'all' | 'cafe' | 'playstation' | 'computer'>('all');
+  const [fulfillmentFilter, setFulfillmentFilter] = useState<'all' | 'dine_in' | 'takeaway' | 'delivery'>('all');
+  const handleCreateFulfillment = useCallback(async (type: 'takeaway' | 'delivery') => {
+    try {
+      let deliveryInfo: any = undefined;
+      if (type === 'delivery') {
+        const phone = window.prompt('رقم هاتف العميل:') || '';
+        if (!phone.trim()) { showNotification('رقم الهاتف مطلوب للدليفري', 'error'); return; }
+        const address = window.prompt('عنوان العميل:') || '';
+        if (!address.trim()) { showNotification('العنوان مطلوب للدليفري', 'error'); return; }
+        const customerName = window.prompt('اسم العميل (اختياري):') || 'عميل دليفري';
+        deliveryInfo = { phone: phone.trim(), address: address.trim(), customerName: customerName.trim() };
+      }
+      const res: any = await (api as any).createBill?.({ fulfillmentType: type, deliveryInfo, billType: 'cafe' }) || await (api as any).request('/bills', { method: 'POST', body: JSON.stringify({ fulfillmentType: type, deliveryInfo }) });
+      const bill = res?.data || res;
+      if (bill?._id || bill?.id) {
+        showNotification(type === 'delivery' ? 'تم إنشاء طلب دليفري' : 'تم إنشاء طلب تيك أوي', 'success');
+        await fetchBills();
+        // فتح الطلب للإضافة
+        const fullBill = bill._id ? bill : { ...bill, _id: bill.id };
+        // استخدام نفس تدفق الطاولة: فتح نافذة الطلب
+        (window as any).__openFulfillmentBill?.(fullBill);
+      }
+    } catch (e: any) { showNotification(e?.message || 'فشل إنشاء الطلب', 'error'); }
+  }, [fetchBills]);
+  // expose for header buttons
+  useEffect(() => { (window as any).__fulfillmentCreate = handleCreateFulfillment; return () => { delete (window as any).__fulfillmentCreate; }; }, [handleCreateFulfillment]);
+  useEffect(() => {
+    (window as any).__openFulfillmentBill = (bill: any) => {
+      setSelectedBill(bill);
+      setSelectedTable({ _id: 'fulfillment', id: 'fulfillment', number: bill.fulfillmentType === 'delivery' ? 'دليفري' : 'تيك أوي' } as any);
+      setShowOrderModal(true);
+    };
+    return () => { delete (window as any).__openFulfillmentBill; };
+  }, []);
   const [playstationSearchQuery, setPlaystationSearchQuery] = useState('');
   const [gamingDeviceTypeFilter, setGamingDeviceTypeFilter] = useState<'all' | 'playstation' | 'computer'>('all');
   const [isPlaystationSectionCollapsed, setIsPlaystationSectionCollapsed] = useState(false);
@@ -3010,6 +3044,25 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
               />
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* ── Fulfillment Filter: صالة / تيك أوي / دليفري ── */}
+      <div className="px-4 sm:px-6 py-2 bg-gradient-to-r from-orange-50 to-amber-50 dark:from-gray-800 dark:to-gray-800 border-b border-orange-100 dark:border-gray-700 flex flex-wrap items-center gap-2">
+        {[
+          { id: 'all', label: 'الكل', icon: '🗂️' },
+          { id: 'dine_in', label: 'صالة', icon: '🪑' },
+          { id: 'takeaway', label: 'تيك أوي', icon: '🥡' },
+          { id: 'delivery', label: 'دليفري', icon: '🛵' },
+        ].map(f => (
+          <button key={f.id} onClick={() => setFulfillmentFilter(f.id as any)}
+            className={"px-3 py-1.5 rounded-full border text-sm font-bold flex items-center gap-1.5 " + (fulfillmentFilter === f.id ? 'bg-orange-600 border-orange-700 text-white shadow' : 'bg-white dark:bg-gray-700 border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:border-orange-300')}>
+            <span>{f.icon}</span><span>{f.label}</span>
+          </button>
+        ))}
+        <div className="ml-auto flex gap-2">
+          <button onClick={() => { (window as any).__fulfillmentCreate?.('takeaway'); }} className="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-bold flex items-center gap-1">🥡 تيك أوي جديد</button>
+          <button onClick={() => { (window as any).__fulfillmentCreate?.('delivery'); }} className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-bold flex items-center gap-1">🛵 دليفري جديد</button>
         </div>
       </div>
 

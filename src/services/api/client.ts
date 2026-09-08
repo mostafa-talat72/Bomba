@@ -1,5 +1,6 @@
 import { API_BASE_URL as RESOLVED_API_BASE_URL, isDesktopApp } from '../../utils/apiBase';
 import { getInstanceId } from '../../utils/instanceId';
+import { safeGet } from '../../utils/safeStorage';
 
 // Desktop app: use the page origin (127.0.0.1) - Chromium cannot reach
 // 'localhost' (resolves to ::1) when the server binds 127.0.0.1
@@ -35,11 +36,13 @@ class ApiClient {
 
   constructor(baseURL: string) {
     this.baseURL = `${baseURL}/api`;
-    this.token = localStorage.getItem('token');
+    this.token = safeGet('token');
   }
 
-  /** Switch API server at runtime (mobile/LAN server picker). Persists. */
+  /** Switch API server at runtime (mobile/LAN server picker). Persists.
+   *  Ignored in the desktop app — desktop always uses its bundled server. */
   setBaseURL(baseURL: string) {
+    if (isDesktopApp) return;
     const clean = String(baseURL || '').trim().replace(/\/+$/, '');
     if (!clean) return;
     this.baseURL = `${clean}/api`;

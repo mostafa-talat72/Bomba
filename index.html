@@ -19,24 +19,100 @@
   <!-- Apply language direction IMMEDIATELY before any rendering -->
   <script>
     (function() {
-      // Get saved language from localStorage (default to Arabic)
-      var savedLanguage = localStorage.getItem('language') || 'ar';
-      
-      // List of RTL languages (from shared/languages.js)
-      // ar, he, fa, ur, ps, yi, sd, ug, dv, ku
-      var rtlLanguages = ['ar', 'he', 'fa', 'ur', 'ps', 'yi', 'sd', 'ug', 'dv', 'ku'];
-      var isRTL = rtlLanguages.indexOf(savedLanguage) !== -1;
-      
-      // Apply direction to html element immediately
-      document.documentElement.dir = isRTL ? 'rtl' : 'ltr';
-      document.documentElement.lang = savedLanguage;
-      
-      // Apply direction to body when it's available
-      if (document.body) {
-        var token = localStorage.getItem('token');
-        var isAuthPage = /^\/(login|register|verify-email|reset-password|email-actions)/.test(window.location.pathname);
-        document.body.dir = (token && !isAuthPage) ? (isRTL ? 'rtl' : 'ltr') : 'ltr';
+      try {
+        // Get saved language from localStorage (default to Arabic)
+        var savedLanguage = 'ar';
+        try { savedLanguage = localStorage.getItem('language') || 'ar'; } catch (e) { /* storage blocked (some mobile WebViews) */ }
+
+        // List of RTL languages (from shared/languages.js)
+        // ar, he, fa, ur, ps, yi, sd, ug, dv, ku
+        var rtlLanguages = ['ar', 'he', 'fa', 'ur', 'ps', 'yi', 'sd', 'ug', 'dv', 'ku'];
+        var isRTL = rtlLanguages.indexOf(savedLanguage) !== -1;
+
+        // Apply direction to html element immediately
+        document.documentElement.dir = isRTL ? 'rtl' : 'ltr';
+        document.documentElement.lang = savedLanguage;
+
+        // Apply direction to body when it's available
+        if (document.body) {
+          var token = null;
+          try { token = localStorage.getItem('token'); } catch (e) {}
+          var isAuthPage = /^\/(login|register|verify-email|reset-password|email-actions)/.test(window.location.pathname);
+          document.body.dir = (token && !isAuthPage) ? (isRTL ? 'rtl' : 'ltr') : 'ltr';
+        }
+      } catch (e) { /* never block boot */ }
+    })();
+  </script>
+
+  <!-- Boot watchdog: if the app fails to render (e.g. blocked storage or JS
+       error on a mobile/in-app browser), show guidance instead of a white screen -->
+  <script>
+    (function() {
+      function showBootHelp(reason) {
+        if (document.getElementById('boot-help')) return;
+        var isAndroid = /Android/i.test(navigator.userAgent || '');
+        var chromeBtn = '';
+        if (isAndroid) {
+          try {
+            var u = new URL(window.location.href);
+            var scheme = u.protocol.replace(':', '');
+            var intent = 'intent://' + u.host + '/#Intent;scheme=' + scheme
+              + ';package=com.android.chrome;S.browser_fallback_url=' + encodeURIComponent(window.location.href) + ';end';
+            chromeBtn = '<a href="' + intent + '" style="display:inline-block;background:#16a34a;color:#fff;font-weight:700;font-size:16px;border-radius:10px;padding:12px 28px;text-decoration:none;margin-bottom:12px">فتح في Chrome</a>';
+          } catch (e) { chromeBtn = ''; }
+        }
+        var div = document.createElement('div');
+        div.id = 'boot-help';
+        div.setAttribute('dir', 'rtl');
+        div.style.cssText = 'position:fixed;inset:0;background:#fff;color:#111;display:flex;align-items:center;justify-content:center;padding:24px;font-family:sans-serif;z-index:99999;text-align:center;';
+        div.innerHTML = '<div style="max-width:420px">'
+          + '<div style="font-size:20px;font-weight:700;margin-bottom:12px">تعذر فتح التطبيق</div>'
+          + '<div style="font-size:15px;line-height:1.9;margin-bottom:12px">افتح هذا الرابط في متصفح <b>Chrome</b> (انسخ الرابط والصقه فيه)، وتأكد أن الهاتف على نفس شبكة الواي فاي.</div>'
+          + chromeBtn
+          + '<div dir="ltr" style="font-size:13px;background:#f3f4f6;border-radius:8px;padding:8px;word-break:break-all;margin-bottom:12px">' + window.location.href + '</div>'
+          + '<div dir="ltr" style="font-size:12px;color:#6b7280">' + (reason || '') + '</div>'
+          + '</div>';
+        document.body.appendChild(div);
       }
+      window.addEventListener('error', function(e) {
+        window.__bootError = (e && e.message) || 'script error';
+      }, true);
+      window.addEventListener('unhandledrejection', function(e) {
+        window.__bootError = (e && e.reason && (e.reason.message || String(e.reason))) || 'load error';
+      });
+      // If the app renders (even late, e.g. slow dev cold-boot), remove the help.
+      function watchRoot() {
+        var root = document.getElementById('root');
+        if (!root) return;
+        if (root.childNodes.length > 0) {
+          var help = document.getElementById('boot-help');
+          if (help) help.remove();
+          return;
+        }
+        try {
+          var obs = new MutationObserver(function() {
+            if (root.childNodes.length > 0) {
+              var h = document.getElementById('boot-help');
+              if (h) h.remove();
+              obs.disconnect();
+            }
+          });
+          obs.observe(root, { childList: true });
+        } catch (e) { /* observer unavailable — leave the help visible */ }
+      }
+      watchRoot();
+      // NOTE: dev cold-boot (vite transform) can take a while — give it time.
+      // Also require document fully loaded before judging (never on prod either way).
+      function checkBoot() {
+        var root = document.getElementById('root');
+        if (root && root.childNodes.length === 0 && document.readyState === 'complete') {
+          showBootHelp(window.__bootError || '');
+          watchRoot();
+        } else if (root && root.childNodes.length === 0) {
+          setTimeout(checkBoot, 5000);
+        }
+      }
+      setTimeout(checkBoot, 20000);
     })();
   </script>
   

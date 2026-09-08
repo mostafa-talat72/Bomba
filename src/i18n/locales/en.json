@@ -1902,6 +1902,8 @@
       "title": "Connect a phone over Wi-Fi",
       "desc": "Scan this code with the phone camera (same Wi-Fi as this device) to open the system directly on mobile. Printing from the phone runs on this main device.",
       "scanHint": "Point the phone camera at the code to open the app",
+      "chromeOnly": "Open in Chrome only (Android)",
+      "chromeHint": "The code opens Chrome directly on Android. On iPhone, copy the link and paste it in Chrome.",
       "copy": "Copy link",
       "copied": "Copied!",
       "refresh": "Refresh",

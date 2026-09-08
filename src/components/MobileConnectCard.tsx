@@ -26,6 +26,23 @@ function buildAppUrl(lanIp: string): string | null {
   }
 }
 
+// Chrome-only deep link (Android): forces the scan to open in Chrome instead
+// of the QR scanner's internal browser (which shows a white screen).
+// Format: intent://HOST:PORT/#Intent;scheme=http;package=com.android.chrome;S.browser_fallback_url=<http url>;end
+// iPhones ignore it — they use the plain link copied below.
+function buildChromeIntentUrl(httpUrl: string): string | null {
+  try {
+    const u = new URL(httpUrl);
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') return null;
+    const scheme = u.protocol.replace(':', '');
+    const hostPort = u.host; // hostname:port
+    const fallback = encodeURIComponent(httpUrl);
+    return `intent://${hostPort}/#Intent;scheme=${scheme};package=com.android.chrome;S.browser_fallback_url=${fallback};end`;
+  } catch {
+    return null;
+  }
+}
+
 const MobileConnectCard: React.FC = () => {
   const { t } = useTranslation();
   const [loading, setLoading] = useState(true);
@@ -33,6 +50,28 @@ const MobileConnectCard: React.FC = () => {
   const [appUrl, setAppUrl] = useState<string | null>(null);
   const [qr, setQr] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [chromeOnly, setChromeOnly] = useState(false);
+
+  const qrPayload = chromeOnly && appUrl ? (buildChromeIntentUrl(appUrl) || appUrl) : appUrl;
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (!qrPayload) {
+        setQr(null);
+        return;
+      }
+      try {
+        const img = await QRCode.toDataURL(qrPayload, { width: 220, margin: 1 });
+        if (!cancelled) setQr(img);
+      } catch {
+        if (!cancelled) setQr(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [qrPayload]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -54,13 +93,6 @@ const MobileConnectCard: React.FC = () => {
       setLanIp(ip);
       const url = buildAppUrl(ip);
       setAppUrl(url);
-      if (url) {
-        try {
-          setQr(await QRCode.toDataURL(url, { width: 220, margin: 1 }));
-        } catch {
-          setQr(null);
-        }
-      }
     } catch {
       setLanIp(null);
     } finally {
@@ -116,6 +148,18 @@ const MobileConnectCard: React.FC = () => {
           )}
           <div className="flex-1 min-w-0 text-center sm:text-right">
             <p className="text-sm text-gray-600 dark:text-gray-300 mb-2">{t('settings.mobile.scanHint')}</p>
+            <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-200 mb-2 justify-center sm:justify-start cursor-pointer">
+              <input
+                type="checkbox"
+                checked={chromeOnly}
+                onChange={(e) => setChromeOnly(e.target.checked)}
+                className="w-4 h-4 accent-blue-600"
+              />
+              {t('settings.mobile.chromeOnly')}
+            </label>
+            {chromeOnly && (
+              <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">{t('settings.mobile.chromeHint')}</p>
+            )}
             <p className="text-sm font-mono bg-white dark:bg-gray-800 rounded-lg px-3 py-2 mb-3 break-all" dir="ltr">
               {appUrl}
             </p>

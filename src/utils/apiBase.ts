@@ -3,6 +3,8 @@
 // ::1) when the bundled server binds 127.0.0.1 - so we use the page origin.
 // The desktop build is produced WITHOUT VITE_API_URL (see desktop/scripts/prepare.js).
 
+import { safeGet } from './safeStorage';
+
 export const isDesktopApp =
   typeof window !== 'undefined' &&
   (window as any).bombaDesktop?.isDesktop === true;
@@ -31,16 +33,13 @@ const servedFromLocalHost =
 // Manual override (Capacitor builds where origin is capacitor://, or any
 // custom server). Set from the connection settings screen.
 export function getServerUrlOverride(): string | null {
-  try {
-    const v = typeof window !== 'undefined' ? window.localStorage.getItem('bomba_server_url') : null;
-    return v && v.trim() ? v.trim().replace(/\/+$/, '') : null;
-  } catch {
-    return null;
-  }
+  const v = safeGet('bomba_server_url');
+  return v && v.trim() ? v.trim().replace(/\/+$/, '') : null;
 }
 
 export const API_BASE_URL =
-  getServerUrlOverride() ||
-  (isDesktopApp || servedFromLocalHost
+  // Desktop app: ALWAYS its own bundled server. A previously saved remote
+  // link must never turn the desktop into a linked (phone-like) client.
+  (isDesktopApp || servedFromLocalHost)
     ? window.location.origin
-    : import.meta.env.VITE_API_URL || 'http://localhost:5000');
+    : getServerUrlOverride() || import.meta.env.VITE_API_URL || 'http://localhost:5000';
