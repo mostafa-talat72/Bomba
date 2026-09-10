@@ -9,6 +9,7 @@ import { useOrganization } from '../../context/OrganizationContext';
 import { formatDecimal } from '../../utils/formatters';
 import { printBill } from '../../utils/printBill';
 import { resolveEffectivePrintSettings } from '../../utils/resolvePrintSettings';
+import { getPrintFlagFresh } from '../../utils/freshPrintSettings';
 import { aggregateItemsWithPayments } from '../../utils/billAggregation';
 import { canPayFullBill, canDeleteBill, canEditPartialPayment } from '../../utils/permissionHelper';
 import { getTableDisplay } from './tableHelpers';
@@ -111,7 +112,20 @@ const PaymentManagementModal: React.FC<PaymentManagementModalProps> = ({
 
   // الدفع بالكامل عند الطباعة — إعداد ثابت من الإعدادات (printMarksPaid) يطبق
   // على جميع الفواتير، بلا خيار لكل فاتورة.
-  const shouldPayOnPrint = resolveEffectivePrintSettings(user, (user as any)?.organization)?.printMarksPaid === true;
+  // ملاحظة: user.organization لقطة من تسجيل الدخول وقد تكون قديمة بعد حفظ
+  // الإعدادات — فنقرأ القيمة الطازجة من السيرفر عند فتح النافذة (مع الذاكرة كبديل فوري).
+  const memoryPayOnPrint = resolveEffectivePrintSettings(user, (user as any)?.organization)?.printMarksPaid === true;
+  const [payOnPrintFresh, setPayOnPrintFresh] = React.useState<boolean | null>(null);
+  React.useEffect(() => {
+    if (!isOpen) return;
+    let cancelled = false;
+    setPayOnPrintFresh(null);
+    getPrintFlagFresh(user, 'printMarksPaid')
+      .then((v) => { if (!cancelled) setPayOnPrintFresh(v); })
+      .catch(() => { if (!cancelled) setPayOnPrintFresh(false); });
+    return () => { cancelled = true; };
+  }, [isOpen, (selectedBill as any)?._id || (selectedBill as any)?.id]);
+  const shouldPayOnPrint = (payOnPrintFresh ?? memoryPayOnPrint) === true;
   const [printing, setPrinting] = React.useState(false);
   const handlePrintClick = async () => {
     if (!selectedBill) return;
@@ -123,7 +137,14 @@ const PaymentManagementModal: React.FC<PaymentManagementModalProps> = ({
       finally { setPrinting(false); }
       return;
     }
-    printBill(selectedBill, user?.organizationName, i18n.language, t).catch(console.error);
+    setPrinting(true);
+    try {
+      const ok = await printBill(selectedBill, user?.organizationName, i18n.language, t);
+      if (!ok) showNotification(i18n.language === 'ar' ? 'فشلت طباعة الفاتورة' : 'Bill print failed', 'error');
+    } catch (e) {
+      console.error(e);
+      showNotification(i18n.language === 'ar' ? 'فشلت طباعة الفاتورة' : 'Bill print failed', 'error');
+    } finally { setPrinting(false); }
   };
 
   const roundFn = applyRounding || ((v: number) => v);

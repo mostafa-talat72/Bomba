@@ -111,12 +111,12 @@ class PrinterService {
    * Print one job: serialized behind other jobs, warm connection reused.
    * Never throws — always resolves { success, ... }.
    */
-  async printJob(printSettings, { content, openDrawer = false, autoCut = false } = {}) {
+  async printJob(printSettings, { content, openDrawer = false, autoCut = false, docName } = {}) {
     const run = async () => {
       try {
         const ok = await this.ensureConnected(printSettings);
         if (!ok) return { success: false, error: 'Failed to connect to printer' };
-        const result = await this.printDocument(content, openDrawer, autoCut);
+        const result = await this.printDocument(content, openDrawer, autoCut, docName);
         if (!result.success) {
           // Stale handle (e.g. printer was unplugged): force a fresh
           // handshake on the next job instead of reusing a dead connection.
@@ -267,6 +267,66 @@ class PrinterService {
     return this.encodePrinterText(text, language);
   }
 
+  /**
+   * إرسال buffer جاهز إلى طابعة ويندوز عبر winspool RAW (PowerShell)، مع
+   * تجربة كل الأسماء المرشحة بالترتيب. تُستخدم للطباعة وفتح الدرج معاً.
+   */
+  async _sendBufferViaWindowsRaw(buffer, docName = 'MTE Receipt') {
+    const filePath = path.join(os.tmpdir(), `mte-print-${Date.now()}.bin`);
+    fs.writeFileSync(filePath, buffer);
+    try {
+      const escapedPath = filePath.replace(/'/g, "''");
+      // اسم المهمة في قائمة طابعة ويندوز — ديناميكي حسب نوع المستند.
+      // هروب لمصفوفة C# بين علامتي تنصيص.
+      const escapedDocName = String(docName || 'MTE Receipt').replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+      const nameList = (Array.isArray(this.winPrinterNames) && this.winPrinterNames.length
+        ? this.winPrinterNames
+        : [this.winPrinterName]).filter(Boolean);
+      const escapedNames = nameList.map((n) => `'${String(n).replace(/'/g, "''")}'`).join(', ');
+      const rawPrintScript = `
+$bytes = [System.IO.File]::ReadAllBytes('${escapedPath}')
+Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+public static class RawPrint {
+  [StructLayout(LayoutKind.Sequential, CharSet=CharSet.Unicode)]
+  public class DocInfo { public string DocName; public string OutputFile; public string DataType; }
+  [DllImport("winspool.drv", CharSet=CharSet.Unicode, SetLastError=true)]
+  static extern bool OpenPrinter(string name, out IntPtr handle, IntPtr defaults);
+  [DllImport("winspool.drv", SetLastError=true)] static extern bool ClosePrinter(IntPtr handle);
+  [DllImport("winspool.drv", CharSet=CharSet.Unicode, SetLastError=true)]
+  static extern int StartDocPrinter(IntPtr handle, int level, DocInfo info);
+  [DllImport("winspool.drv", SetLastError=true)] static extern bool EndDocPrinter(IntPtr handle);
+  [DllImport("winspool.drv", SetLastError=true)] static extern bool StartPagePrinter(IntPtr handle);
+  [DllImport("winspool.drv", SetLastError=true)] static extern bool EndPagePrinter(IntPtr handle);
+  [DllImport("winspool.drv", SetLastError=true)]
+  static extern bool WritePrinter(IntPtr handle, byte[] bytes, int count, out int written);
+  public static bool Send(string name, byte[] bytes) {
+    IntPtr handle;
+    if (!OpenPrinter(name, out handle, IntPtr.Zero)) return false;
+    try {
+      var info = new DocInfo { DocName = "${escapedDocName}", DataType = "RAW" };
+      if (StartDocPrinter(handle, 1, info) == 0 || !StartPagePrinter(handle)) return false;
+      int written;
+      var ok = WritePrinter(handle, bytes, bytes.Length, out written);
+      EndPagePrinter(handle); EndDocPrinter(handle);
+      return ok && written == bytes.Length;
+    } finally { ClosePrinter(handle); }
+  }
+}
+"@
+$names = @(${escapedNames})
+$sent = $false
+foreach ($n in $names) { if ([RawPrint]::Send($n, $bytes)) { $sent = $true; break } }
+if (-not $sent) { throw 'Raw print failed' }
+`;
+      const encodedScript = Buffer.from(rawPrintScript, 'utf16le').toString('base64');
+      await execPromise(`powershell -NoProfile -EncodedCommand ${encodedScript}`, { timeout: 10000 });
+    } finally {
+      try { fs.unlinkSync(filePath); } catch {}
+    }
+  }
+
   async printText(text, options = {}) {
     if (!this.isConnected || !this.printer) {
       console.log('Printer not connected');
@@ -389,6 +449,18 @@ class PrinterService {
       console.log('Printer not connected, cannot open cash drawer');
       return false;
     }
+    // وضع RAW الاحتياطي (بدون حزمة printer الأصلية): نبضة درج عبر winspool مباشرة.
+    if (this.winUseRawFallback) {
+      try {
+        const drawerBuffer = this.buildWindowsRawPrintBuffer('', { openDrawer: true, autoCut: false, language: 'ar' });
+        await this._sendBufferViaWindowsRaw(drawerBuffer, 'Cash Drawer');
+        console.log('Cash drawer opened successfully (Windows raw fallback)');
+        return true;
+      } catch (error) {
+        console.error('Error opening cash drawer (Windows raw fallback):', error.message);
+        return false;
+      }
+    }
     try {
       this.printer.raw(Buffer.from([
         0x1B, 0x70, 0x00, 0x19, 0xFA,
@@ -442,7 +514,7 @@ class PrinterService {
   /**
    * طباعة مستند كامل
    */
-  async printDocument(content, openDrawer = false, autoCut = false) {
+  async printDocument(content, openDrawer = false, autoCut = false, docName = 'MTE Receipt') {
     if (!this.isConnected || !this.printer) {
       console.log('Printer not connected');
       return { success: false, error: 'Printer not connected' };
@@ -451,65 +523,14 @@ class PrinterService {
       const printLanguage = typeof content === 'string' && /[\u0600-\u06FF]/.test(content) ? 'ar' : 'en';
 
       if (this.winUseRawFallback) {
-        const filePath = this.printer?.interface || this.printer?.Interface?.path;
-        if (!filePath) {
-          throw new Error('Windows raw fallback file path missing');
-        }
-
         const rawBuffer = this.buildWindowsRawPrintBuffer(content, {
           openDrawer,
           autoCut,
           language: printLanguage
         });
 
-        fs.writeFileSync(filePath, rawBuffer);
+        await this._sendBufferViaWindowsRaw(rawBuffer, docName);
 
-        const escapedPath = filePath.replace(/'/g, "''");
-        const nameList = (Array.isArray(this.winPrinterNames) && this.winPrinterNames.length
-          ? this.winPrinterNames
-          : [this.winPrinterName]).filter(Boolean);
-        const escapedNames = nameList.map((n) => `'${String(n).replace(/'/g, "''")}'`).join(', ');
-        const rawPrintScript = `
-$bytes = [System.IO.File]::ReadAllBytes('${escapedPath}')
-Add-Type -TypeDefinition @"
-using System;
-using System.Runtime.InteropServices;
-public static class RawPrint {
-  [StructLayout(LayoutKind.Sequential, CharSet=CharSet.Unicode)]
-  public class DocInfo { public string DocName; public string OutputFile; public string DataType; }
-  [DllImport("winspool.drv", CharSet=CharSet.Unicode, SetLastError=true)]
-  static extern bool OpenPrinter(string name, out IntPtr handle, IntPtr defaults);
-  [DllImport("winspool.drv", SetLastError=true)] static extern bool ClosePrinter(IntPtr handle);
-  [DllImport("winspool.drv", CharSet=CharSet.Unicode, SetLastError=true)]
-  static extern int StartDocPrinter(IntPtr handle, int level, DocInfo info);
-  [DllImport("winspool.drv", SetLastError=true)] static extern bool EndDocPrinter(IntPtr handle);
-  [DllImport("winspool.drv", SetLastError=true)] static extern bool StartPagePrinter(IntPtr handle);
-  [DllImport("winspool.drv", SetLastError=true)] static extern bool EndPagePrinter(IntPtr handle);
-  [DllImport("winspool.drv", SetLastError=true)]
-  static extern bool WritePrinter(IntPtr handle, byte[] bytes, int count, out int written);
-  public static bool Send(string name, byte[] bytes) {
-    IntPtr handle;
-    if (!OpenPrinter(name, out handle, IntPtr.Zero)) return false;
-    try {
-      var info = new DocInfo { DocName = "MTE Receipt", DataType = "RAW" };
-      if (StartDocPrinter(handle, 1, info) == 0 || !StartPagePrinter(handle)) return false;
-      int written;
-      var ok = WritePrinter(handle, bytes, bytes.Length, out written);
-      EndPagePrinter(handle); EndDocPrinter(handle);
-      return ok && written == bytes.Length;
-    } finally { ClosePrinter(handle); }
-  }
-}
-"@
-$names = @(${escapedNames})
-$sent = $false
-foreach ($n in $names) { if ([RawPrint]::Send($n, $bytes)) { $sent = $true; break } }
-if (-not $sent) { throw 'Raw print failed' }
-`;
-        const encodedScript = Buffer.from(rawPrintScript, 'utf16le').toString('base64');
-        await execPromise(`powershell -NoProfile -EncodedCommand ${encodedScript}`, { timeout: 10000 });
-
-        try { fs.unlinkSync(filePath); } catch {}
         if (openDrawer) console.log('Cash drawer opened successfully');
         console.log('Document printed successfully');
         return { success: true, cashDrawerTried: openDrawer };

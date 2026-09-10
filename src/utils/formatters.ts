@@ -30,9 +30,10 @@ export const replaceAMPM = (formattedTime: string): string => {
         .replace(/PM/gi, labels.pm);
 };
 
-/** عرض رقم الفاتورة/الطلب بدون التاريخ للطباعة (BILL-260709-1 → BILL-1) */
+/** عرض الرقم بدون مقطع التاريخ للطباعة فقط (BILL-426D13-260909-001 → BILL-426D13-001).
+ *  مثبّت بنهاية السلسلة حتى لا يحذف معرّفاً رقمياً بالخطأ. التخزين لا يتغير. */
 export const getDisplayNumber = (num: string): string => {
-    return num?.replace(/-\d{6}-/, '-') || num;
+    return num?.replace(/-\d{6}(-\d+)$/, '$1') || num;
 };
 
 /**

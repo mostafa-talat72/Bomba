@@ -1,6 +1,8 @@
 ﻿import { useState, useEffect, FC, useRef } from 'react';
 import { Settings as SettingsIcon, Save, Bell, User, Lock, Eye, EyeOff, Building2, LucideIcon, Facebook, Instagram, Twitter, Linkedin, Youtube, MessageCircle, Send, Globe, Phone, Mail, MapPin, Users, Check, X, Clock, Search } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import { useAuth } from '../context/AuthContext';
+import { clearFreshPrintSettingsCache } from '../utils/freshPrintSettings';
 import { useTranslation } from 'react-i18next';
 import { useLanguage } from '../context/LanguageContext';
 import { useTheme } from '../context/ThemeContext';
@@ -147,6 +149,7 @@ const Settings: FC = () => {
   const folderInputRef = useRef<HTMLInputElement>(null);
 
   const { user, updateUserProfile, updateMyPrintSettings, changePassword, updateNotificationSettings, updateGeneralSettings, getNotificationSettings, getGeneralSettings, getOrganization, updateOrganization, updateOrganizationPermissions, canEditOrganization, getAvailableManagers, getReportSettings, updateReportSettings, canManageReports, sendReportNow, canManagePayroll, updatePayrollPermissions } = useApp();
+  const { setUser } = useAuth();
 
   // UI State
   const [activeTab, setActiveTab] = useState('profile');
@@ -939,7 +942,19 @@ const Settings: FC = () => {
         
         // Refresh organization settings in OrganizationContext
         await refreshOrganizationSettings();
-        
+
+        // الجذر: user.organization لقطة من تسجيل الدخول — حدّثها بالقيم الطازجة
+        // حتى ترى كل الشاشات (الدفع/الطباعة) التفعيل الجديد فوراً بلا إعادة دخول.
+        try {
+          const fresh: any = await getOrganization().catch(() => null);
+          if (fresh?.success && fresh.data) {
+            setUser((prev: any) => (prev && prev.organization && typeof prev.organization === 'object')
+              ? { ...prev, organization: { ...prev.organization, ...fresh.data, printSettings: fresh.data.printSettings ?? (prev.organization as any).printSettings } }
+              : prev);
+          }
+        } catch {}
+        clearFreshPrintSettingsCache();
+
         showAlertMessage(t('settings.organization.success'));
         
         // Changes are now applied immediately without reload

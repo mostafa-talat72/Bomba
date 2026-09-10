@@ -19,7 +19,8 @@ import { getId, sameId } from '../utils/id';
 import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
 import { printOrder } from '../utils/printOrder';
 import { preloadBillReceipt, printBill } from '../utils/printBill';
-import { getCachedDevicePrinter, openCashDrawerThroughAgent, printThroughLocalBridge } from '../utils/localPrintBridge';
+import { getCachedDevicePrinter, printThroughLocalBridge } from '../utils/localPrintBridge';
+import { getPrintFlagFresh } from '../utils/freshPrintSettings';
 import { useBillAggregation } from '../hooks/useBillAggregation';
 import {
   canAddOrder, canEditOrder, canDeleteOrder,
@@ -41,7 +42,6 @@ import ModalPortal from '../components/ModalPortal';
 import UndoBar, { UndoRequest } from '../components/UndoBar';
 import { playWarnBeep, playDangerBeep, isSoundEnabled } from '../utils/sound';
 import BillItemsEditModal from '../components/tables/BillItemsEditModal';
-import { resolveEffectivePrintSettings } from '../utils/resolvePrintSettings';
 import QuickAddModal from '../components/tables/QuickAddModal';
 import DailyReportModal from '../components/tables/DailyReportModal';
 import OrderModal from '../components/tables/OrderModal';
@@ -375,6 +375,30 @@ const loadInitialData = async () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('online', handleOnline);
     };
+  }, []);
+
+  // ── دفع فوري من أي زر طباعة (printMarksPaid): لحظة بث bomba:bill-paid
+  // تُدمج الفاتورة المدفوعة وتُحدث حالة الطاولة مباشرة بلا انتظار المزامنة.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const paid: any = (e as CustomEvent)?.detail?.bill;
+      if (!paid || (!paid._id && !paid.id)) return;
+      const tableId = getId((paid.table as any) ?? paid.table);
+      setBills(prev => {
+        const exists = prev.some(b => sameId(b, paid));
+        const next = exists ? prev.map(b => (sameId(b, paid) ? { ...b, ...paid } : b)) : [...prev, paid];
+        const hasUnpaid = tableId
+          ? next.some((b: any) => String((b.table as any)?._id || b.table) === tableId && ['draft', 'partial', 'overdue'].includes(b.status))
+          : true;
+        if (tableId) {
+          setTables(tprev => tprev.map((t: any) => String(t._id || t.id) === tableId ? { ...t, status: hasUnpaid ? 'occupied' : 'empty' } : t));
+          if (!hasUnpaid) { setShowUnifiedTableModal(false); setSelectedTable(null); }
+        }
+        return next;
+      });
+    };
+    window.addEventListener('bomba:bill-paid', handler);
+    return () => window.removeEventListener('bomba:bill-paid', handler);
   }, []);
 
 
@@ -2299,7 +2323,8 @@ const loadInitialData = async () => {
         setTimeout(() => setShowPaymentSuccessAnim(false), 2500);
         showNotification(t('billing.notifications.payFullBillSuccess'), 'success');
 
-        if (user?.organization?.printSettings?.autoPrintOnPayment === true) {
+        // إعداد طازج من السيرفر: لقطة تسجيل الدخول قد لا ترى التفعيل الجديد.
+        if (await getPrintFlagFresh(user, 'autoPrintOnPayment')) {
           try { await printBill(finalPaidBill, user?.organizationName, i18n.language, t, getTableSectionName(finalPaidBill.table), 'payment'); } catch {}
         }
         // مزامنة خلفية غير حاجبة بدل fetchTables/fetchBills المتزامنين.
@@ -2365,7 +2390,8 @@ const loadInitialData = async () => {
         setTimeout(() => setShowPaymentSuccessAnim(false), 2500);
         showNotification(t('billing.notifications.payFullBillSuccess'), 'success');
 
-        if (user?.organization?.printSettings?.autoPrintOnPayment === true) {
+        // إعداد طازج من السيرفر: لقطة تسجيل الدخول قد لا ترى التفعيل الجديد.
+        if (await getPrintFlagFresh(user, 'autoPrintOnPayment')) {
           await printBill(finalPaidBill, user?.organizationName, i18n.language, t, getTableSectionName(finalPaidBill.table), 'payment');
         }
         // مزامنة خلفية غير حاجبة بدل fetchTables/fetchBills المتزامنين.
@@ -2412,8 +2438,14 @@ const loadInitialData = async () => {
         setShowPaymentSuccessAnim(true);
         setTimeout(() => setShowPaymentSuccessAnim(false), 2500);
         showNotification(t('billing.notifications.payFullBillSuccess'), 'success');
-        // طباعة واحدة مؤكدة (الزر نفسه هو أمر الطباعة — لا نعتمد على الإعداد التلقائي هنا)
-        await printBill(finalPaidBill, user?.organizationName, i18n.language, t, getTableSectionName(finalPaidBill.table), 'payment');
+        // طباعة واحدة مؤكدة (الزر نفسه هو أمر الطباعة — لا نعتمد على الإعداد التلقائي هنا).
+        // خطأ الطباعة منفصل عن خطأ الدفع: الدفع تم بنجاح أعلاه، فلا نعرض رسالة دفع خاطئة.
+        try {
+          const printed = await printBill(finalPaidBill, user?.organizationName, i18n.language, t, getTableSectionName(finalPaidBill.table), 'payment');
+          if (!printed) showNotification(i18n.language === 'ar' ? 'تم الدفع بنجاح لكن فشلت طباعة الفاتورة' : 'Paid successfully but the bill failed to print', 'error');
+        } catch {
+          showNotification(i18n.language === 'ar' ? 'تم الدفع بنجاح لكن فشلت طباعة الفاتورة' : 'Paid successfully but the bill failed to print', 'error');
+        }
         scheduleBackgroundRefetch(true);
       }
     } catch { showNotification(t('billing.notifications.payFullBillError'), 'error'); }
@@ -2432,11 +2464,9 @@ const loadInitialData = async () => {
 
   const handleOpenCashDrawer = async () => {
     try {
-      const printSettings = resolveEffectivePrintSettings(user, user?.organization);
-      const billPrinterId = printSettings?.documentPrinterMap?.bill;
-      const printer = printSettings?.printers?.find((item: any) => item.id === billPrinterId)
-        || printSettings?.printers?.[0];
-      const opened = await openCashDrawerThroughAgent(printer?.printerName || printer?.name);
+      // requestDrawerOpen: الوكيل أولاً ثم ترحيل السيرفر تلقائياً (يعمل من الهاتف).
+      const { requestDrawerOpen } = await import('../utils/drawer');
+      const opened = await requestDrawerOpen('f12', undefined, user as any);
       if (opened) {
         showNotification(t('settings.organization.printSettings.cashDrawerOpened'), 'success');
       } else {
@@ -4619,7 +4649,7 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
         menuCategories={menuCategories}
         getCategoriesForSection={getCategoriesForSection}
         getItemsForCategory={getItemsForCategory}
-        onSuccess={(updatedBill) => {
+          onSuccess={async (updatedBill) => {
           // تحديث لحظي من البيانات الراجعة + مزامنة خلفية (بدون fetch حاجب).
           scheduleBackgroundRefetch(true);
           // update selectedBill if open
@@ -4636,7 +4666,8 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
               }
               return next;
             });
-              if (user?.organization?.printSettings?.autoPrintOnPayment === true) {
+              // إعداد طازج من السيرفر: لقطة تسجيل الدخول قد لا ترى التفعيل الجديد.
+              if (await getPrintFlagFresh(user, 'autoPrintOnPayment')) {
                 printBill(updatedBill, user?.organizationName, i18n.language, t, getTableSectionName((updatedBill as any).table), 'payment').catch(() => {});
               }
           }

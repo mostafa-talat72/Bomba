@@ -144,12 +144,6 @@ sessionSchema.pre("save", function (next) {
 sessionSchema.pre("save", async function (next) {
     if (this.isNew && !this.sessionNumber) {
         try {
-            const now = new Date();
-            const year = now.getFullYear().toString().slice(-2);
-            const month = String(now.getMonth() + 1).padStart(2, "0");
-            const day = String(now.getDate()).padStart(2, "0");
-            const dateStr = `${year}${month}${day}`;
-
             // Always use instanceId (set by controller) or call getInstanceId() directly
             let identifier = this.instanceId;
             if (!identifier) {
@@ -158,11 +152,12 @@ sessionSchema.pre("save", async function (next) {
             if (!identifier) {
                 identifier = 'UNKNOWN';
             }
-            const prefix = `SES-${identifier}-${dateStr}-`;
+            // Short format SES-{instanceId}-{seq} (no date segment, global sequence).
+            const prefix = `SES-${identifier}-`;
 
             const result = await this.constructor.aggregate([
-                { $match: { sessionNumber: { $regex: `^${prefix}` } } },
-                { $addFields: { seq: { $toInt: { $arrayElemAt: [{ $split: ["$sessionNumber", "-"] }, 3] } } } },
+                { $match: { sessionNumber: { $regex: `^${prefix}\\d+$` } } },
+                { $addFields: { seq: { $toInt: { $arrayElemAt: [{ $split: ["$sessionNumber", "-"] }, 2] } } } },
                 { $group: { _id: null, maxSeq: { $max: "$seq" } } }
             ]);
             const nextSeq = (result[0]?.maxSeq || 0) + 1;

@@ -201,12 +201,6 @@ orderSchema.pre("save", async function (next) {
     try {
         // Generate order number for new orders that don't have one yet
         if (this.isNew && (!this.orderNumber || this.orderNumber === "TEMP")) {
-            const now = new Date();
-            const year = now.getFullYear().toString().slice(-2);
-            const month = String(now.getMonth() + 1).padStart(2, "0");
-            const day = String(now.getDate()).padStart(2, "0");
-            const dateStr = `${year}${month}${day}`;
-
             // Always use instanceId (set by controller) or call getInstanceId() directly
             let identifier = this.instanceId;
             if (!identifier) {
@@ -215,12 +209,14 @@ orderSchema.pre("save", async function (next) {
             if (!identifier) {
                 identifier = 'UNKNOWN';
             }
-            const prefix = `ORD-${identifier}-${dateStr}-`;
+            // Short format ORD-{instanceId}-{seq} (no date segment, global sequence).
+            // Short-only match so legacy dated numbers are never counted.
+            const prefix = `ORD-${identifier}-`;
 
-            // Find max sequence for this identifier and date using aggregation
+            // Find max sequence for this identifier using aggregation
             const result = await this.constructor.aggregate([
-                { $match: { orderNumber: { $regex: `^${prefix}` } } },
-                { $addFields: { seq: { $toInt: { $arrayElemAt: [{ $split: ["$orderNumber", "-"] }, 3] } } } },
+                { $match: { orderNumber: { $regex: `^${prefix}\\d+$` } } },
+                { $addFields: { seq: { $toInt: { $arrayElemAt: [{ $split: ["$orderNumber", "-"] }, 2] } } } },
                 { $group: { _id: null, maxSeq: { $max: "$seq" } } }
             ]);
             const nextSeq = (result[0]?.maxSeq || 0) + 1;

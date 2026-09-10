@@ -71,7 +71,7 @@ async function autoDetectAndPrintOrder(data: {
 }
 
 
-async function autoDetectAndOpenCashDrawer(mode: 'bill' | 'payment' = 'payment', organization?: any): Promise<ApiResponse<any>> {
+async function autoDetectAndOpenCashDrawer(mode: 'bill' | 'payment' | 'f12' = 'payment', organization?: any): Promise<ApiResponse<any>> {
   return apiClient.request('/print/cash-drawer/auto-detect', {
     method: 'POST',
     body: JSON.stringify({ mode, organization }),

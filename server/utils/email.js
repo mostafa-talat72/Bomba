@@ -413,7 +413,7 @@ export const emailTemplates = {
                                     <div class="stat-label">${t.stats.totalSessions}</div>
                                 </div>
                             </div>
-                            
+
                             <h2 class="section-title">${t.topProductsTitle}</h2>
                             <div class="products-list">
                                 ${data.topProducts && data.topProducts.length > 0
@@ -524,7 +524,7 @@ export const emailTemplates = {
                                     <div class="stat-label">${t.stats.avgDailyRevenue}</div>
                                 </div>
                             </div>
-                            
+
                             ${data.bestDay ? `
                                 <div style="background: #fff3cd; padding: 15px; border-radius: 8px; border-${dir === 'rtl' ? 'right' : 'left'}: 4px solid #ffc107; margin: 20px 0;">
                                     <div style="font-weight: bold; color: #856404; margin-bottom: 10px;">${t.bestDayTitle}</div>

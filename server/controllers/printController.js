@@ -6,6 +6,27 @@ import { relayHtmlToLocalAgent } from '../utils/localAgentRelay.js';
 import { resolvePrintSettingsForUser } from '../utils/organization.js';
 import { organizationFilter, resolvePrintSettings } from '../utils/organization.js';
 
+// نفس getDisplayNumber في الواجهة: إخفاء مقطع التاريخ من العرض/الطباعة فقط
+// (BILL-426D13-260909-001 → BILL-426D13-001). التخزين لا يتغير أبداً.
+function formatDisplayNumber(num) {
+  return String(num || '').replace(/-\d{6}(-\d+)$/, '$1') || num;
+}
+
+// آخر طابعة نجحت فعلاً — تُفضّل في الاختيار التالي لثبات الطابعة بين المهام
+// (ترتيب تعداد USB يتغير بين الاستدعاءات: RONGTA مرة وcopy1 مرة).
+let lastSuccessfulPrinterName = null;
+function orderPrintersStably(detected) {
+  const sorted = [...(detected || [])].sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
+  if (lastSuccessfulPrinterName) {
+    const idx = sorted.findIndex((d) => d.name === lastSuccessfulPrinterName);
+    if (idx > 0) {
+      const [prev] = sorted.splice(idx, 1);
+      sorted.unshift(prev);
+    }
+  }
+  return sorted;
+}
+
 async function loadPrintSettings(organization, user) {
   if (organization && typeof organization === 'object' && organization.printSettings) {
     return resolvePrintSettingsForUser(user, organization);
@@ -52,14 +73,17 @@ class PrintController {
     try {
       const detected = await printerDetectionService.detectUSBPrinters();
       if (detected && detected.length > 0) {
-        const sel = detected[0];
+        // ترتيب ثابت + تفضيل آخر طابعة نجحت فعلاً — نفس الطابعة لكل المهام
+        // (ترتيب تعداد USB يتغير بين الاستدعاءات: RONGTA مرة وcopy1 مرة).
+        const ordered = orderPrintersStably(detected);
+        const sel = ordered[0];
         const auto = {
           ...(printSettings || {}),
           printerType: 'usb',
           printerDevice: sel.path,
           // winspool يتعرف باسم الطابعة في النظام (RONGTA) لا باسم التعريف (XP-80C)
           printerName: sel.name || sel.driver,
-          printerNameCandidates: detected.map((d) => d.name).filter(Boolean),
+          printerNameCandidates: ordered.map((d) => d.name).filter(Boolean),
           printerModel: 'epson',
         };
         // ensureConnected حتى لا تعيد printJob التهيئة مرة ثانية.
@@ -113,15 +137,19 @@ class PrintController {
       // الهاتف يرسل نفس HTML المصمم للديسكتوب: رحّله للوكيل المحلي أولاً
       // (Chromium على الجهاز الرئيسي = نفس الشكل 100%). عند غياب الوكيل
       // نسقط على مسار RAW النصي أدناه.
+      let relayError = null;
       if (typeof relayHtml === 'string' && relayHtml.length > 0) {
         const relay = await relayHtmlToLocalAgent({
           html: relayHtml,
-          printerName: relayPrinterName,
+          // الاسم المحلول الثابت أولاً حتى لا يختار الوكيل طابعة مختلفة كل مرة
+          printerName: relayPrinterName || printSettings.printerName,
           openDrawer,
           paperWidthMm: relayPaperWidth,
           printKey: relayPrintKey,
         });
         if (relay.ok) {
+          if (relay.printerName) lastSuccessfulPrinterName = relay.printerName;
+          else if (printSettings.printerName) lastSuccessfulPrinterName = printSettings.printerName;
           return res.json({
             success: true,
             message: 'Bill printed successfully',
@@ -130,16 +158,19 @@ class PrintController {
             printerUsed: relay.printerName,
           });
         }
+        relayError = relay.message;
         console.warn('Local agent relay failed, RAW fallback:', relay.message);
       }
 
-      const result = await printerService.printJob(printSettings, { content, openDrawer, autoCut });
+      const result = await printerService.printJob(printSettings, { content, openDrawer, autoCut, docName: `طباعة #${formatDisplayNumber(bill.billNumber)}` });
 
       if (result.success) {
+        if (printSettings.printerName) lastSuccessfulPrinterName = printSettings.printerName;
         return res.json({
           success: true,
           message: 'Bill printed successfully',
-          cashDrawerOpened: openDrawer
+          cashDrawerOpened: openDrawer,
+          relayError
         });
       } else {
         return res.status(500).json({
@@ -189,21 +220,25 @@ class PrintController {
       if (typeof relayHtml === 'string' && relayHtml.length > 0) {
         const relay = await relayHtmlToLocalAgent({
           html: relayHtml,
-          printerName: relayPrinterName,
+          // اسم صريح ثابت (المكتشفة/المثبتة) — لا نترك الوكيل يخمن أول طابعة.
+          printerName: relayPrinterName || printSettings.printerName,
           openDrawer: false,
           paperWidthMm: relayPaperWidth,
           printKey: relayPrintKey,
         });
         if (relay.ok) {
+          if (relay.printerName) lastSuccessfulPrinterName = relay.printerName;
+          else if (printSettings.printerName) lastSuccessfulPrinterName = printSettings.printerName;
           return res.json({ success: true, message: 'Order printed successfully', relayed: true, printerUsed: relay.printerName });
         }
         console.warn('Local agent relay failed, RAW fallback:', relay.message);
       }
 
       // طباعة الطلب بدون فتح درج الكاشير (اتصال دافئ + تسلسل)
-      const result = await printerService.printJob(printSettings, { content, openDrawer: false, autoCut: printSettings.autoCut !== false });
+      const result = await printerService.printJob(printSettings, { content, openDrawer: false, autoCut: printSettings.autoCut !== false, docName: `طباعة #${formatDisplayNumber(order.orderNumber)}` });
 
       if (result.success) {
+        if (printSettings.printerName) lastSuccessfulPrinterName = printSettings.printerName;
         return res.json({ success: true, message: 'Order printed successfully' });
       } else {
         return res.status(500).json({
@@ -252,21 +287,25 @@ class PrintController {
       if (typeof relayHtml === 'string' && relayHtml.length > 0) {
         const relay = await relayHtmlToLocalAgent({
           html: relayHtml,
-          printerName: relayPrinterName,
+          // اسم صريح ثابت (المكتشفة/المثبتة) — لا نترك الوكيل يخمن أول طابعة.
+          printerName: relayPrinterName || printSettings.printerName,
           openDrawer: false,
           paperWidthMm: relayPaperWidth,
           printKey: relayPrintKey,
         });
         if (relay.ok) {
+          if (relay.printerName) lastSuccessfulPrinterName = relay.printerName;
+          else if (printSettings.printerName) lastSuccessfulPrinterName = printSettings.printerName;
           return res.json({ success: true, message: 'Report printed successfully', relayed: true, printerUsed: relay.printerName });
         }
         console.warn('Local agent relay failed, RAW fallback:', relay.message);
       }
 
       // طباعة التقرير بدون فتح درج الكاشير (اتصال دافئ + تسلسل)
-      const result = await printerService.printJob(printSettings, { content, openDrawer: false, autoCut: printSettings.autoCut !== false });
+      const result = await printerService.printJob(printSettings, { content, openDrawer: false, autoCut: printSettings.autoCut !== false, docName: 'تقرير الاستهلاك' });
 
       if (result.success) {
+        if (printSettings.printerName) lastSuccessfulPrinterName = printSettings.printerName;
         return res.json({ success: true, message: 'Report printed successfully' });
       } else {
         return res.status(500).json({
@@ -298,7 +337,7 @@ class PrintController {
     // الرأس
     if (printSettings.printHeader !== false) {
       content += this.centerText(orgName, charsPerLine) + '\n';
-      content += this.centerText(bill.billNumber || '', charsPerLine) + '\n';
+      content += this.centerText(formatDisplayNumber(bill.billNumber) || '', charsPerLine) + '\n';
       content += this.centerText(new Date(bill.createdAt || new Date()).toLocaleString(language), charsPerLine) + '\n';
       
       if (bill.table?.number) {
@@ -398,7 +437,7 @@ class PrintController {
     let content = '';
 
     content += this.centerText(orgName, charsPerLine) + '\n';
-    content += this.centerText(`Order #${order.orderNumber || ''}`, charsPerLine) + '\n';
+    content += this.centerText(`Order #${formatDisplayNumber(order.orderNumber) || ''}`, charsPerLine) + '\n';
     content += this.centerText(new Date(order.createdAt || new Date()).toLocaleString(language), charsPerLine) + '\n';
     
     if (order.table?.number) {
@@ -696,7 +735,8 @@ class PrintController {
    */
   async autoDetectAndPrintBill(req, res) {
     try {
-      const { bill, organization, language = 'ar', tableSectionName, drawerMode = 'bill' } = req.body;
+      const { bill, organization, language = 'ar', tableSectionName, drawerMode = 'bill',
+        html: relayHtml, printerName: relayPrinterName, paperWidthMm: relayPaperWidth, printKey: relayPrintKey } = req.body;
 
       if (!bill) {
         return res.status(400).json({ success: false, message: 'Bill data is required' });
@@ -704,8 +744,8 @@ class PrintController {
 
       // 1. كشف الطابعات المتصلة
       console.log('Auto-detecting thermal printer...');
-      const detectedPrinters = await printerDetectionService.detectUSBPrinters();
-      
+      const detectedPrinters = orderPrintersStably(await printerDetectionService.detectUSBPrinters());
+
       if (!detectedPrinters || detectedPrinters.length === 0) {
         return res.status(400).json({ 
           success: false, 
@@ -741,12 +781,35 @@ class PrintController {
       // 5. توليد محتوى الفاتورة للطباعة
       const content = await this.generateBillContent(bill, organization, language, tableSectionName, autoDetectedSettings);
 
+      // 5ب. ترحيل HTML المصمم أولاً (نفس شكل الديسكتوب 100%) إن وُجد.
+      if (typeof relayHtml === 'string' && relayHtml.length > 0) {
+        const relay = await relayHtmlToLocalAgent({
+          html: relayHtml,
+          printerName: relayPrinterName || autoDetectedSettings.printerName,
+          openDrawer,
+          paperWidthMm: relayPaperWidth,
+          printKey: relayPrintKey,
+        });
+        if (relay.ok) {
+          lastSuccessfulPrinterName = relay.printerName || autoDetectedSettings.printerName;
+          return res.json({
+            success: true,
+            message: 'Bill printed successfully',
+            cashDrawerOpened: openDrawer,
+            relayed: true,
+            printerUsed: relay.printerName || selectedPrinter.name,
+          });
+        }
+        console.warn('Local agent relay failed, RAW fallback:', relay.message);
+      }
+
       // 6. طباعة الفاتورة مع فتح درج الكاشير (اتصال دافئ + تسلسل)
-      const result = await printerService.printJob(autoDetectedSettings, { content, openDrawer, autoCut: true });
+      const result = await printerService.printJob(autoDetectedSettings, { content, openDrawer, autoCut: true, docName: `طباعة #${formatDisplayNumber(bill.billNumber)}` });
 
       if (result.success) {
-        return res.json({ 
-          success: true, 
+        lastSuccessfulPrinterName = autoDetectedSettings.printerName;
+        return res.json({
+          success: true,
           message: 'Bill printed successfully',
           cashDrawerOpened: openDrawer,
           printerUsed: selectedPrinter.name
@@ -774,7 +837,8 @@ class PrintController {
    */
   async autoDetectAndPrintOrder(req, res) {
     try {
-      const { order, organization, language = 'ar' } = req.body;
+      const { order, organization, language = 'ar',
+        html: relayHtml, printerName: relayPrinterName, paperWidthMm: relayPaperWidth, printKey: relayPrintKey } = req.body;
 
       if (!order) {
         return res.status(400).json({ success: false, message: 'Order data is required' });
@@ -782,8 +846,8 @@ class PrintController {
 
       // 1. كشف الطابعات المتصلة
       console.log('Auto-detecting thermal printer for order...');
-      const detectedPrinters = await printerDetectionService.detectUSBPrinters();
-      
+      const detectedPrinters = orderPrintersStably(await printerDetectionService.detectUSBPrinters());
+
       if (!detectedPrinters || detectedPrinters.length === 0) {
         return res.status(400).json({ 
           success: false, 
@@ -814,12 +878,34 @@ class PrintController {
       // 5. توليد محتوى الطلب للطباعة
       const content = await this.generateOrderContent(order, organization, language, autoDetectedSettings);
 
+      // 5ب. ترحيل HTML المصمم أولاً (نفس شكل الديسكتوب 100%) إن وُجد.
+      if (typeof relayHtml === 'string' && relayHtml.length > 0) {
+        const relay = await relayHtmlToLocalAgent({
+          html: relayHtml,
+          printerName: relayPrinterName || autoDetectedSettings.printerName,
+          openDrawer: false,
+          paperWidthMm: relayPaperWidth,
+          printKey: relayPrintKey,
+        });
+        if (relay.ok) {
+          lastSuccessfulPrinterName = relay.printerName || autoDetectedSettings.printerName;
+          return res.json({
+            success: true,
+            message: 'Order printed successfully',
+            relayed: true,
+            printerUsed: relay.printerName || selectedPrinter.name,
+          });
+        }
+        console.warn('Local agent relay failed, RAW fallback:', relay.message);
+      }
+
       // 6. طباعة الطلب بدون فتح درج الكاشير (اتصال دافئ + تسلسل)
-      const result = await printerService.printJob(autoDetectedSettings, { content, openDrawer: false, autoCut: true });
+      const result = await printerService.printJob(autoDetectedSettings, { content, openDrawer: false, autoCut: true, docName: `طباعة #${formatDisplayNumber(order.orderNumber)}` });
 
       if (result.success) {
-        return res.json({ 
-          success: true, 
+        lastSuccessfulPrinterName = autoDetectedSettings.printerName;
+        return res.json({
+          success: true,
           message: 'Order printed successfully',
           printerUsed: selectedPrinter.name
         });
@@ -843,13 +929,14 @@ class PrintController {
   async autoDetectAndOpenCashDrawer(req, res) {
       try {
         const { mode = 'payment', organization } = req.body || {};
-        const settingName = mode === 'bill' ? 'openCashDrawer' : 'openCashDrawerOnPayment';
+        const settingName = mode === 'bill' ? 'openCashDrawer' : mode === 'f12' ? 'openCashDrawerShortcut' : 'openCashDrawerOnPayment';
           const printSettings = await loadPrintSettings(organization, req.user);
         if (printSettings?.[settingName] === false) {
           return res.json({ success: false, disabled: true, message: 'Cash drawer opening is disabled in settings' });
         }
 
-        const detectedPrinters = await printerDetectionService.detectUSBPrinters();
+        // نفس الطابعة الثابتة المستخدمة في الطباعة (ترتيب ثابت + آخر ناجحة).
+        const detectedPrinters = orderPrintersStably(await printerDetectionService.detectUSBPrinters());
         if (!detectedPrinters || detectedPrinters.length === 0) {
           return res.status(400).json({ success: false, message: 'No thermal printer detected' });
         }
@@ -858,15 +945,17 @@ class PrintController {
         const settings = {
           printerType: 'usb',
           printerDevice: selectedPrinter.path,
-          printerName: selectedPrinter.name,
+          printerName: selectedPrinter.name || selectedPrinter.driver,
+          printerNameCandidates: detectedPrinters.map((d) => d.name).filter(Boolean),
           printerModel: 'epson'
         };
-        if (!await printerService.initializePrinter(settings)) {
+        if (!await printerService.ensureConnected(settings)) {
           return res.status(500).json({ success: false, message: 'Failed to connect to detected printer' });
         }
 
         const opened = await printerService.openCashDrawer();
         await printerService.disconnect();
+        if (opened) lastSuccessfulPrinterName = settings.printerName;
         return opened
           ? res.json({ success: true, printerUsed: selectedPrinter.name })
           : res.status(500).json({ success: false, message: 'Failed to open cash drawer' });

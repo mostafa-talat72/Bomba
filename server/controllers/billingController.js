@@ -281,7 +281,7 @@ export const getBills = async (req, res) => {
         const shouldPaginate = isAll;
 
         let billQuery = Bill.find(query)
-            .select('billNumber table status total remaining paid subtotal billType fulfillmentType deliveryInfo customerName customerPhone sessions orders itemPayments sessionPayments createdAt updatedAt createdBy updatedBy')
+            .select('billNumber table status total remaining paid subtotal discount discountPercentage tax billType fulfillmentType deliveryInfo customerName customerPhone sessions orders itemPayments sessionPayments createdAt updatedAt createdBy updatedBy')
             .populate({
                 path: "table",
                 select: "number name",
@@ -3833,7 +3833,7 @@ export const updateBillAggregatedItems = async (req, res) => {
         const menuItemIds = finalRaw.filter((it) => it.menuItem && !it.isService).map((it) => it.menuItem);
         const menuItemsMap = new Map();
         if (menuItemIds.length > 0) {
-            const menuItems = await MenuItem.find({ _id: { $in: menuItemIds }, ...organizationFilter(req.user) }).lean();
+            const menuItems = await MenuItem.find({ _id: { $in: menuItemIds }, ...organizationFilter(req.user) }).populate({ path: 'category', select: 'section' }).lean();
             menuItems.forEach((mi) => menuItemsMap.set(mi._id.toString(), mi));
         }
 
@@ -3879,6 +3879,8 @@ export const updateBillAggregatedItems = async (req, res) => {
                 }
                 const itemTotal = price * qty;
                 subtotal += itemTotal;
+                // Preserve section snapshot (drives section discounts) — was always null before
+                const secRef = mi.category ? mi.category.section : null;
                 processedItems.push({
                     menuItem: mi._id,
                     name: mi.name,
@@ -3891,7 +3893,7 @@ export const updateBillAggregatedItems = async (req, res) => {
                     preparationTime: mi.preparationTime || 5,
                     isService: false,
                     showInPrint: raw.showInPrint !== false,
-                    section: mi.category ? null : null,
+                    section: secRef ? (secRef._id || secRef) : null,
                 });
             } else {
                 if (!raw.name || raw.price === undefined || raw.price === null) {

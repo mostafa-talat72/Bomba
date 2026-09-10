@@ -596,7 +596,10 @@ export const printOrder = async (
           tableSectionName,
           selectedSectionIds,
         );
-      } catch {}
+      } catch (e) {
+        // تشخيص: بدون HTML يسقط السيرفر على RAW النصي.
+        console.warn('[printOrder] relay HTML build failed, server will use RAW fallback:', e);
+      }
       const payload = {
         order,
         organization: orgHint,

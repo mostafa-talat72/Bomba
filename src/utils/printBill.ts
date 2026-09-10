@@ -10,6 +10,8 @@ import { getCachedDevicePrinter, openCashDrawerThroughAgent, printInBrowser, pri
 import { resolveUserPrintSettings } from './resolvePrintSettings';
 import { getCurrentUserCache } from './currentUser';
 import { isMobileDevice } from './deviceDetect';
+import { getPrintFlagFresh } from './freshPrintSettings';
+import { canPayFullBill } from './permissionHelper';
 
 let cachedOrganizationResponse: { data: any; expiresAt: number } | null = null;
 const qrCodeCache = new Map<string, string>();
@@ -827,9 +829,40 @@ export const printBill = async (
   tableSectionName?: string,
   drawerMode: 'bill' | 'payment' = 'bill',
   printerName?: string
-) => {
+): Promise<boolean> => {
   let billForPrint = bill;
   const billId = String((bill as any)._id || (bill as any).id || '');
+  // ── الطباعة تدفع الفاتورة (printMarksPaid): نفس زر الطباعة الموجود في كل
+  // مكان يدفع الفاتورة بالكامل أولاً (لا زر جديد). القيمة طازجة من السيرفر،
+  // والصلاحية والجلسات النشطة تُحترم. المدفوعة مسبقاً تُطبع فقط (لا دفع مكرر).
+  let effectiveDrawerMode = drawerMode;
+  if (billId && (billForPrint as any)?.status !== 'paid') {
+    try {
+      const me: any = getCurrentUserCache();
+      const payOnPrint = await getPrintFlagFresh(me, 'printMarksPaid');
+      if (payOnPrint && canPayFullBill(me)) {
+        const b: any = billForPrint;
+        const hasActive = Array.isArray(b.sessions) && b.sessions.some((s: any) => (typeof s === 'object' ? s?.status : null) === 'active');
+        const remaining = Number(b.remaining || 0);
+        if (!hasActive && remaining > 0) {
+          const payRes: any = await api.updatePayment(billId, {
+            paid: (Number(b.paid) || 0) + remaining, remaining: 0, status: 'paid',
+            paymentAmount: remaining, method: 'cash', reference: '',
+          } as any).catch(() => null);
+          // فقط التأكيد من السيرفر يُعتمد — لا دفع متفائل حتى لا يُطبع إيصال مدفوع لفاتورة غير مدفوعة.
+          if (payRes?.success && payRes.data) {
+            billForPrint = payRes.data;
+            effectiveDrawerMode = 'payment';
+            try { toast.success(language === 'ar' ? 'تم دفع الفاتورة بالكامل' : 'Bill paid in full'); } catch {}
+            // بث فوري: أي شاشة (الطاولات) تحدث نفسها لحظياً بلا انتظار المزامنة.
+            try { window.dispatchEvent(new CustomEvent('bomba:bill-paid', { detail: { bill: billForPrint } })); } catch {}
+          } else {
+            try { toast.warn(language === 'ar' ? 'تعذر الدفع التلقائي — ستُطبع الفاتورة غير مدفوعة' : 'Auto-payment failed — printing as unpaid'); } catch {}
+          }
+        }
+      }
+    } catch {}
+  }
   // ⚡ إشعار فوري: الطباعة بدأت لحظة الضغط.
   try {
     const startingMsg = language === 'ar' ? 'جارٍ طباعة الفاتورة...' : language === 'fr' ? 'Impression en cours...' : 'Printing bill...';
@@ -845,7 +878,7 @@ export const printBill = async (
   // ⚡ فتح فوري للدرج من البيانات المتزامنة (بدون انتظار أي fetch).
   // نفس مفتاح الاستدعاء اللاحق فيُفتح الدرج مرة واحدة فقط.
   {
-    const printKey = `bill:${billId || (bill as any).billNumber || ''}:${drawerMode}`;
+    const printKey = `bill:${billId || (billForPrint as any).billNumber || ''}:${effectiveDrawerMode}`;
     const syncSettings = organizationFromBill
       ? (billForPrint.organization as any).printSettings
       : (cachedOrganizationResponse && cachedOrganizationResponse.expiresAt > Date.now()
@@ -854,7 +887,7 @@ export const printBill = async (
     const instantOverride = resolveUserPrintSettings(getCurrentUserCache());
     const effectiveInstant = instantOverride ? { ...syncSettings, ...instantOverride } : syncSettings;
     if (effectiveInstant) {
-      const instantSetting = drawerMode === 'payment' ? 'openCashDrawerOnPayment' : 'openCashDrawer';
+      const instantSetting = effectiveDrawerMode === 'payment' ? 'openCashDrawerOnPayment' : 'openCashDrawer';
       if (effectiveInstant[instantSetting] !== false) {
         const instantProfile = effectiveInstant.printers?.find((item: any) => item.id === effectiveInstant.documentPrinterMap?.bill);
         void openCashDrawerThroughAgent(printerName || instantProfile?.printerName, printKey).catch(() => {});
@@ -872,7 +905,7 @@ export const printBill = async (
     const tSuccess = (msg: string) => { try { toast.success(msg); } catch {} };
     try {
       try { toast.info(language === 'ar' ? 'جارٍ إرسال الفاتورة للجهاز الرئيسي...' : 'Sending bill to the main device...'); } catch {}
-      let full: any = bill;
+      let full: any = billForPrint;
       if (billId && !hasOrderDetails) {
         try {
           const r: any = await api.getBill(billId);
@@ -884,15 +917,18 @@ export const printBill = async (
       let receiptHtmlForRelay: string | undefined;
       try {
         receiptHtmlForRelay = await getCachedReceiptHTML(full, fallbackOrganizationName, language, t, tableSectionName);
-      } catch {}
+      } catch (e) {
+        // تشخيص: بدون HTML يسقط السيرفر على RAW النصي (اسم MTE Receipt في القائمة).
+        console.warn('[printBill] relay HTML build failed, server will use RAW fallback:', e);
+      }
       const payload = {
         bill: full,
         organization: (full as any).organization,
         language,
         tableSectionName,
-        drawerMode,
+        drawerMode: effectiveDrawerMode,
         html: receiptHtmlForRelay,
-        printKey: `bill:${billId || (full as any)?.billNumber || ''}:${drawerMode}`,
+        printKey: `bill:${billId || (full as any)?.billNumber || ''}:${effectiveDrawerMode}`,
       };
       let res: any = await api.printBill(payload);
       if (!res?.success) {
@@ -905,7 +941,7 @@ export const printBill = async (
         tSuccess(
           language === 'ar' ? 'تم إرسال الفاتورة للطباعة على الجهاز الرئيسي' : language === 'fr' ? 'Facture envoyée à l’imprimante principale' : 'Bill sent to the main device printer'
         );
-        return;
+        return true;
       }
       tError(res?.message || (language === 'ar' ? 'فشلت الطباعة على الجهاز الرئيسي — جارٍ الطباعة من الهاتف' : 'Server print failed — printing from phone instead'));
     } catch {
@@ -914,9 +950,10 @@ export const printBill = async (
     // Last resort only: the phone's own printers.
     try {
       const receiptHTML = await getCachedReceiptHTML(billForPrint, fallbackOrganizationName, language, t, tableSectionName);
-      printInBrowser(receiptHTML);
-    } catch {}
-    return;
+      return printInBrowser(receiptHTML);
+    } catch {
+      return false;
+    }
   }
   const settingsPromise = organizationFromBill
     ? Promise.resolve(organizationFromBill)
@@ -960,12 +997,14 @@ export const printBill = async (
   const bridgePrinted = await printThroughLocalBridge(receiptHTML, selectedPrinterName, {
     paperWidthMm,
     openDrawer: false,
-    drawerMode,
+    drawerMode: effectiveDrawerMode,
     organization: settingsResponse?.data,
-    printKey: `bill:${billId || bill.billNumber || ''}:${drawerMode}`,
+    printKey: `bill:${billId || bill.billNumber || ''}:${effectiveDrawerMode}`,
   });
-  if (bridgePrinted) return;
-  return;
+  // كان الفشل هنا صامتاً تماماً: الدفع يتم ولا شيء يُطبع ولا رسالة — فيظن المستخدم أن الزر لا يعمل.
+  if (bridgePrinted) return true;
+  try { toast.error(language === 'ar' ? 'فشلت طباعة الفاتورة — تأكد من تشغيل برنامج الكاشير (وكيل الطباعة)' : 'Bill print failed — make sure the cashier app (print agent) is running'); } catch {}
+  return false;
 };
 
 export default printBill;

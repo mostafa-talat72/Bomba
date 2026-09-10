@@ -114,6 +114,7 @@ const billSchema = new mongoose.Schema(
             min: 0,
             max: 100,
         },
+
         tax: {
             type: Number,
             default: 0,
@@ -528,14 +529,6 @@ billSchema.pre("validate", function (next) {
 billSchema.pre("save", async function (next) {
     if (this.isNew && !this.billNumber) {
         try {
-            const now = new Date();
-
-            // Format date YYMMDD
-            const year = now.getFullYear().toString().slice(-2);
-            const month = String(now.getMonth() + 1).padStart(2, "0");
-            const day = String(now.getDate()).padStart(2, "0");
-            const dateStr = `${year}${month}${day}`;
-
             // Always use instanceId (set by controller) or call getInstanceId() directly
             let identifier = this.instanceId;
             if (!identifier) {
@@ -544,17 +537,20 @@ billSchema.pre("save", async function (next) {
             if (!identifier) {
                 identifier = 'UNKNOWN';
             }
-            const todayPrefix = `BILL-${identifier}-${dateStr}-`;
+            // Short format BILL-{instanceId}-{seq} (no date segment).
+            // Global per-instance sequence (never resets) + short-only match
+            // so legacy dated numbers (BILL-id-YYMMDD-seq) are never counted.
+            const shortPrefix = `BILL-${identifier}-`;
 
-            // Find the highest sequence number for this identifier and date
+            // Find the highest sequence number for this identifier
             const result = await this.constructor.aggregate([
-                { $match: { billNumber: { $regex: `^${todayPrefix}` } } },
-                { $addFields: { seq: { $toInt: { $arrayElemAt: [{ $split: ["$billNumber", "-"] }, 3] } } } },
+                { $match: { billNumber: { $regex: `^${shortPrefix}\\d+$` } } },
+                { $addFields: { seq: { $toInt: { $arrayElemAt: [{ $split: ["$billNumber", "-"] }, 2] } } } },
                 { $group: { _id: null, maxSeq: { $max: "$seq" } } }
             ]);
             let nextSeq = (result[0]?.maxSeq || 0) + 1;
 
-            this.billNumber = `${todayPrefix}${String(nextSeq).padStart(3, '0')}`;
+            this.billNumber = `${shortPrefix}${String(nextSeq).padStart(3, '0')}`;
         } catch (error) {
             // Fallback bill number
             this.billNumber = `INV-${Date.now()}`;

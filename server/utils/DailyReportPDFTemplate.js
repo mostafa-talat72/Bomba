@@ -259,7 +259,6 @@ export const DailyReportPDFDocument = ({ reportData, t, currentLanguage, isRTL, 
           ])
         ])
       ]),
-      
       // ملخص العمليات - 3 كروت بجانب بعضهم
       h(View, { key: 'operations', style: styles.section }, [
         h(Text, { key: 'ops-title', style: styles.sectionTitle }, cleanText(safeT.dailyReport?.operationsSummary || 'ملخص العمليات')),
