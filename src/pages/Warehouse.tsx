@@ -595,17 +595,17 @@ const Warehouse = () => {
       )}
 
       {/* Header */}
-      <div className="flex items-center justify-between flex-wrap xs:flex-col xs:items-start xs:gap-2 xs:space-y-2 xs:w-full">
-        <div className="flex items-center xs:w-full xs:justify-between">
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 flex items-center xs:text-base xs:w-full xs:text-center">
-            <Package className={`h-6 w-6 text-orange-600 dark:text-orange-400 ${isRTL ? 'ml-2' : 'mr-2'}`} />
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <div className="flex items-center flex-wrap gap-x-2 min-w-0">
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100 flex items-center">
+            <Package className={`h-5 w-5 sm:h-6 sm:w-6 text-orange-600 dark:text-orange-400 ${isRTL ? 'ml-2' : 'mr-2'}`} />
             {t('warehouse.title')}
           </h1>
-          <p className={`text-gray-600 dark:text-gray-300 ${isRTL ? 'mr-4' : 'ml-4'} xs:mr-0 xs:w-full xs:text-center`}>{t('warehouse.subtitle')}</p>
+          <p className={`text-sm sm:text-base text-gray-600 dark:text-gray-300 ${isRTL ? 'mr-2 sm:mr-4' : 'ml-2 sm:ml-4'}`}>{t('warehouse.subtitle')}</p>
         </div>
         <PermissionGuard requiredPermissions={['canAddWarehouseItem', 'all']}>
           <button onClick={() => openAddModal()}
-            className="bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 text-white px-4 py-2 rounded-lg flex items-center transition-colors duration-200 xs:w-full xs:justify-center xs:mt-2">
+            className="bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 text-white px-4 py-2 rounded-lg flex items-center transition-colors duration-200 w-full sm:w-auto justify-center">
             <Plus className={`h-5 w-5 ${isRTL ? 'ml-2' : 'mr-2'}`} />
             {t('inventory.addStock')}
           </button>
@@ -613,8 +613,8 @@ const Warehouse = () => {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-6">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4 sm:p-6">
           <div className="flex items-center">
             <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900 rounded-lg flex items-center justify-center">
               <Package className="h-6 w-6 text-blue-600 dark:text-blue-400" />
@@ -625,7 +625,7 @@ const Warehouse = () => {
             </div>
           </div>
         </div>
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4 sm:p-6">
           <div className="flex items-center">
             <div className="w-12 h-12 bg-red-100 dark:bg-red-900 rounded-lg flex items-center justify-center">
               <AlertTriangle className="h-6 w-6 text-red-600 dark:text-red-400" />
@@ -636,7 +636,7 @@ const Warehouse = () => {
             </div>
           </div>
         </div>
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4 sm:p-6">
           <div className="flex items-center">
             <div className="w-12 h-12 bg-green-100 dark:bg-green-900 rounded-lg flex items-center justify-center">
               <Package className="h-6 w-6 text-green-600 dark:text-green-400" />
@@ -647,7 +647,7 @@ const Warehouse = () => {
             </div>
           </div>
         </div>
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4 sm:p-6">
           <div className="flex items-center">
             <div className="w-12 h-12 bg-purple-100 dark:bg-purple-900 rounded-lg flex items-center justify-center">
               <Package className="h-6 w-6 text-purple-600 dark:text-purple-400" />
@@ -658,7 +658,7 @@ const Warehouse = () => {
             </div>
           </div>
         </div>
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4 sm:p-6">
           <div className="flex items-center">
             <div className="w-12 h-12 bg-orange-100 dark:bg-orange-900 rounded-lg flex items-center justify-center">
               <Package className="h-6 w-6 text-orange-600 dark:text-orange-400" />
@@ -678,7 +678,7 @@ const Warehouse = () => {
             <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400 ml-2" />
             <h3 className="text-lg font-semibold text-red-800 dark:text-red-200">{t('inventory.alerts.lowStockTitle')}</h3>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {lowStockItems.map(item => (
               <div key={item.id || item._id} className="bg-white dark:bg-gray-800 rounded-lg p-3 border border-red-200 dark:border-red-600">
                 <p className="font-medium text-gray-900 dark:text-gray-100">{item.name}</p>
@@ -878,7 +878,7 @@ const Warehouse = () => {
           }}
         >
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-5xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-600 px-6 py-4 rounded-t-lg z-10">
+            <div className="sticky top-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-600 px-4 py-3 sm:px-6 sm:py-4 rounded-t-lg z-10">
               <div className="flex items-center justify-between">
                 <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">{t('inventory.addModal.title')}</h2>
                 <button
@@ -887,7 +887,7 @@ const Warehouse = () => {
                 >×</button>
               </div>
             </div>
-            <div className="p-6">
+            <div className="p-4 sm:p-6">
             <form onSubmit={handleAddSubmit} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('inventory.addModal.addType')}</label>
@@ -921,7 +921,7 @@ const Warehouse = () => {
                     </div>
                   </div>
                   
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
                   <div className="md:col-span-2 lg:col-span-3">
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{t('inventory.addModal.selectProduct')}</label>
                     <div className="relative product-dropdown-container">
@@ -1046,7 +1046,7 @@ const Warehouse = () => {
                   {addForm.price && addForm.quantity && (
                     <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 border border-gray-200 dark:border-gray-600">
                       <div className="text-base font-semibold text-gray-800 dark:text-gray-200 mb-3">{t('inventory.addModal.costSummary')}</div>
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 text-sm">
                         <div>
                           <span className="text-gray-600 dark:text-gray-400">{t('inventory.addModal.totalCost')}:</span>
                           <div className="text-lg font-bold text-gray-900 dark:text-gray-100">{formatCurrency(parseFloat(addForm.price || '0') * parseFloat(addForm.quantity || '0'))}</div>
@@ -1256,10 +1256,10 @@ const Warehouse = () => {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
           onClick={(e) => { if (e.target === e.currentTarget) setShowEditModal(false); }}>
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-2xl w-full" onClick={e => e.stopPropagation()}>
-            <div className="p-6">
+            <div className="p-4 sm:p-6">
               <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">{t('inventory.editModal.title')}</h3>
               <form onSubmit={handleEditSubmit} className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('inventory.addModal.productName')}</label>
                     <input type="text" name="name" value={addForm.name} onChange={handleFormChange}
@@ -1334,7 +1334,7 @@ const Warehouse = () => {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
           onClick={(e) => { if (e.target === e.currentTarget) setShowDeleteModal(false); }}>
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full" onClick={e => e.stopPropagation()}>
-            <div className="p-6">
+            <div className="p-4 sm:p-6">
               <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">{t('inventory.deleteModal.title')}</h3>
               <p className="text-gray-600 dark:text-gray-300 mb-6">{t('inventory.deleteModal.confirmMessage')}</p>
               {error && <p className="text-red-600 text-sm bg-red-50 dark:bg-red-900/20 p-3 rounded-lg mb-4">{error}</p>}
@@ -1363,7 +1363,7 @@ const Warehouse = () => {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
           onClick={(e) => { if (e.target === e.currentTarget) setShowDeductModal(false); }}>
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full" onClick={e => e.stopPropagation()}>
-            <div className="p-6">
+            <div className="p-4 sm:p-6">
               <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">{deductForm.type === 'out' ? t('inventory.deductModal.title') : t('inventory.deductModal.adjustStock')}</h3>
               <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
                 {t('inventory.deductModal.currentStock')}: <span className="font-semibold">{formatQuantity(selectedItem.currentStock, translateUnit(selectedItem.unit), i18n.language)}</span>
@@ -1483,7 +1483,7 @@ const Warehouse = () => {
                   <p className="text-gray-500 dark:text-gray-400">{t('inventory.movementsModal.noMovements')}</p>
                 </div>
               ) : (
-                <div className="p-6">
+                <div className="p-4 sm:p-6">
                   <div className="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-600">
                     <table className="min-w-full">
                       <thead>
@@ -1584,7 +1584,7 @@ const Warehouse = () => {
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
               </button>
             </div>
-            <div className="p-6">
+            <div className="p-4 sm:p-6">
               <div className={`mb-5 p-4 rounded-xl border ${
                 editingMovement.type === 'in' || editingMovement.type === 'transfer_in'
                   ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-700/50'

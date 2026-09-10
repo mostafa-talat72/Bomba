@@ -81,6 +81,7 @@ interface DataContextType {
 
   refreshData: () => Promise<void>;
   forceRefreshData: () => Promise<void>;
+  refreshSingleBill: (billRef: any) => void;
 
   createSession: (sessionData: any) => Promise<Session | null>;
   updateSession: (id: string, updates: any) => Promise<Session | null>;
@@ -2886,6 +2887,59 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (data?.session) onSessionUpdated(data.session);
       else if (data?._id) onSessionUpdated(data);
     });
+    // LAN mesh: doc arrives WITH the event — apply instantly, zero refetch.
+    // Main collections are already handled by the specific events above;
+    // this covers the rest + session deletes (nested cleanup included).
+    const LAN_SPECIFIC = new Set(['orders', 'bills', 'tables', 'tablesections']);
+    const onLanRemoteChange = (evt: any) => {
+      try {
+        const { collection, operation, doc, _id } = evt || {};
+        if (!collection || typeof collection !== 'string') return;
+        const id = getId(doc) || (_id ? String(_id) : '');
+        if (!id) return;
+        if (operation === 'delete') {
+          if (collection === 'sessions') {
+            setSessions((prev: any[]) => prev.filter((s: any) => !sameId(s, id)));
+            setBills((prev: any[]) => prev.map((b: any) => ({ ...b, sessions: (b.sessions || []).filter((s: any) => !sameId(s == null ? null : (s._id ?? s.id ?? s), id)) })));
+            return;
+          }
+          if (LAN_SPECIFIC.has(collection)) return; // specific delete handler already ran
+          const removers: Record<string, (fn: (prev: any[]) => any[]) => void> = {
+            devices: setDevices, menuitems: setMenuItems, menucategories: setMenuCategories,
+            menusections: setMenuSections, inventoryitems: setInventoryItems,
+            warehouseitems: setWarehouseItems, costs: setCosts, users: setUsers,
+            notifications: setNotifications,
+          };
+          const rm = removers[collection];
+          if (rm) rm((prev: any[]) => (Array.isArray(prev) ? prev.filter((d: any) => !sameId(d, id)) : prev));
+          return;
+        }
+        if (LAN_SPECIFIC.has(collection)) return; // specific upsert handler already ran
+        if (!doc || typeof doc !== 'object') return;
+        if (collection === 'settings') {
+          setSettings((prev: any) => ({ ...(prev || {}), ...doc }));
+          return;
+        }
+        const updaters: Record<string, (fn: (prev: any[]) => any[]) => void> = {
+          devices: setDevices, menuitems: setMenuItems, menucategories: setMenuCategories,
+          menusections: setMenuSections, inventoryitems: setInventoryItems,
+          warehouseitems: setWarehouseItems, costs: setCosts, users: setUsers,
+          notifications: setNotifications,
+        };
+        const up = updaters[collection];
+        if (!up) return;
+        up((prev: any[]) => {
+          if (!Array.isArray(prev)) return prev;
+          const normalized = { ...doc, _id: (doc as any)._id ?? (doc as any).id ?? id, id: (doc as any).id ?? (doc as any)._id ?? id };
+          const idx = prev.findIndex((d: any) => sameId(d, id));
+          if (idx === -1) return [normalized, ...prev];
+          const copy = [...prev];
+          copy[idx] = { ...copy[idx], ...normalized };
+          return copy;
+        });
+      } catch {}
+    };
+    socket.on('lan:remote-change', onLanRemoteChange);
 
     // fallback polling every 30s if socket disconnected
     const fallbackInterval = setInterval(() => {
@@ -2924,6 +2978,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       socket.off('tableSection:created', onTableSectionCreated); socket.off('tableSection:updated', onTableSectionUpdated); socket.off('tableSection:deleted', onTableSectionDeleted);
       socket.off('tableSections:created', onTableSectionCreated); socket.off('tableSections:updated', onTableSectionUpdated);
       socket.off('session:updated', onSessionUpdated); socket.off('session:created', onSessionUpdated); socket.off('session:ended', onSessionUpdated);
+      socket.off('lan:remote-change', onLanRemoteChange);
       socket.off('reconnect');
       socket.disconnect();
       globalSocketRef.current = null;
@@ -3510,6 +3565,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setOrders,
     setTables,
     setTableSections,
+    refreshSingleBill,
 
     refreshData,
     forceRefreshData,

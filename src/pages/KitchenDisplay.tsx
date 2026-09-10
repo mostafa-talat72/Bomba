@@ -4,7 +4,8 @@ import { useLanguage } from '../context/LanguageContext';
 import { api, Order } from '../services/api';
 import { io, Socket } from 'socket.io-client';
 import { API_BASE_URL } from '../utils/apiBase';
-import { Clock, ChefHat, Bell, RefreshCw, AlertCircle, Layers, Check } from 'lucide-react';
+import { getOrderCreatorName, getUpdaterName } from '../components/tables/tableHelpers';
+import { Clock, ChefHat, Bell, RefreshCw, AlertCircle, Layers, Check, User as UserIcon } from 'lucide-react';
 
 const SOUND_URL = '/sounds/new-order.mp3';
 const STATUS_COLUMNS = ['pending', 'preparing', 'ready'] as const;
@@ -337,14 +338,14 @@ export function KitchenDisplay() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-4" dir={isRTL ? 'rtl' : 'ltr'}>
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-2 sm:p-4" dir={isRTL ? 'rtl' : 'ltr'}>
       <audio ref={audioRef} src={SOUND_URL} preload="none" />
 
       {/* Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-6">
-        <div className="flex items-center gap-3">
-          <ChefHat className="h-7 w-7 text-orange-600" />
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">{t('kitchenDisplay.title')}</h1>
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-3 mb-4 sm:mb-6">
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+          <ChefHat className="h-6 w-6 sm:h-7 sm:w-7 text-orange-600 flex-shrink-0" />
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100 truncate">{t('kitchenDisplay.title')}</h1>
           {newOrderAlert && (
             <span className="flex items-center gap-1 text-sm bg-red-500 text-white px-3 py-1 rounded-full animate-pulse">
               <Bell className="h-4 w-4" /> {t('kitchenDisplay.newOrder')}
@@ -415,6 +416,7 @@ export function KitchenDisplay() {
                         <span className="font-extrabold text-base text-gray-900 dark:text-gray-100 tracking-tight">
                           #{order.orderNumber || order._id.slice(-6)}
                         </span>
+                        {(order as any).fulfillmentType === 'delivery' ? <span className="inline-flex items-center bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 text-xs font-bold px-2 h-7 rounded-md">🛵 دليفري</span> : (order as any).fulfillmentType === 'takeaway' ? <span className="inline-flex items-center bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 text-xs font-bold px-2 h-7 rounded-md">🥡 تيك أوي</span> : null}
                         {order.table && (
                           <span className="inline-flex items-center justify-center bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 text-sm font-bold px-2.5 h-7 rounded-md">
                             {(() => {
@@ -433,6 +435,17 @@ export function KitchenDisplay() {
                         <Clock className="h-3.5 w-3.5" />
                         {getElapsed(order.createdAt)}
                       </span>
+                      {getOrderCreatorName(order) && (
+                        <span className="flex items-center gap-1 text-xs text-violet-600 dark:text-violet-400 font-semibold whitespace-nowrap">
+                          <UserIcon className="h-3.5 w-3.5" />
+                          {getOrderCreatorName(order)}
+                        </span>
+                      )}
+                      {getUpdaterName(order) && getUpdaterName(order) !== getOrderCreatorName(order) && (
+                        <span className="flex items-center gap-1 text-xs text-teal-600 dark:text-teal-400 font-semibold whitespace-nowrap">
+                          ✎ {getUpdaterName(order)}
+                        </span>
+                      )}
                     </div>
 
                     {selectedSection === 'all' ? (

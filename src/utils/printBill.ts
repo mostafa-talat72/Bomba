@@ -3,9 +3,10 @@ import { aggregateItemsWithPayments, AggregatedItem } from './billAggregation';
 import { formatDecimal, getCurrencySymbol, getDisplayNumber } from './formatters';
 import QRCode from 'qrcode';
 import { api } from '../services/api';
+import { toast } from 'react-toastify';
 import { getLocaleFromLanguage } from './localeMapper';
 import type { TFunction } from 'i18next';
-import { getCachedDevicePrinter, openCashDrawerThroughAgent, printThroughLocalBridge } from './localPrintBridge';
+import { getCachedDevicePrinter, openCashDrawerThroughAgent, printInBrowser, printThroughLocalBridge } from './localPrintBridge';
 import { resolveUserPrintSettings } from './resolvePrintSettings';
 import { getCurrentUserCache } from './currentUser';
 import { isMobileDevice } from './deviceDetect';
@@ -772,8 +773,8 @@ export const buildBillPrintHTML = async (
           : ''}
         <div class="title" style="font-weight: 900; font-size: 22px;">${getDisplayNumber(bill.billNumber) || ''}</div>
         <div class="info" style="font-weight: 900; font-size: 1.15em;">${formatDate(bill.createdAt || new Date())}</div>
-        ${bill.table?.number ? `<div class="info" style="font-weight: 900; font-size: 1.25em; color: #000; margin: 8px 0;"><span style="background: #000; color: #fff; padding: 2px 8px; border-radius: 3px;">${t('billPrint.table')}</span> <strong style="font-size: 1.5em;">${bill.table.number}${tableSectionName ? ` — (${tableSectionName})` : ''}</strong></div>` : (bill.customerName ? `<div class="info" style="font-weight: 900; font-size: 1.15em;">${t('billPrint.customer')}: ${bill.customerName}</div>` : '')}
-        ${bill.customerPhone ? `<div class="info" style="font-weight: 900; font-size: 1.15em;">${t('billPrint.phone')}: ${bill.customerPhone}</div>` : ''}
+        ${bill.table?.number ? `<div class="info" style="font-weight: 900; font-size: 1.25em; color: #000; margin: 8px 0;"><span style="background: #000; color: #fff; padding: 2px 8px; border-radius: 3px;">${t('billPrint.table')}</span> <strong style="font-size: 1.5em;">${bill.table.number}${tableSectionName ? ` — (${tableSectionName})` : ''}</strong></div>` : ((bill.customerName || bill.deliveryInfo?.customerName) ? `<div class="info" style="font-weight: 900; font-size: 1.15em;">${t('billPrint.customer')}: ${bill.customerName || bill.deliveryInfo?.customerName}</div>` : '')}
+        ${(bill.customerPhone || bill.deliveryInfo?.phone) ? `<div class="info" style="font-weight: 900; font-size: 1.15em;">${t('billPrint.phone')}: ${bill.customerPhone || bill.deliveryInfo?.phone}</div>` : ''}
         ${bill.fulfillmentType && bill.fulfillmentType !== 'dine_in' ? `<div class="info" style="font-weight: 900; font-size: 1.2em; background:#f97316; color:#fff; padding:4px 8px; border-radius:4px; display:inline-block; margin:4px 0;">${bill.fulfillmentType === 'delivery' ? '🛵 دليفري' : '🥡 تيك أوي'}${bill.deliveryInfo?.phone ? ` — ${bill.deliveryInfo.phone}` : ''}</div>${bill.deliveryInfo?.address ? `<div class="info" style="font-weight: 900; font-size: 1em;">📍 ${bill.deliveryInfo.address}${bill.deliveryInfo?.deliveryFee ? ` — رسوم: ${formatNumber(bill.deliveryInfo.deliveryFee)} ${currencySymbol}` : ''}</div>` : ''}` : ''}
       </div>
 
@@ -860,6 +861,63 @@ export const printBill = async (
       }
     }
   }
+  // ── Mobile fast path: send straight to the server with ZERO pre-fetches.
+  // (No device-printer lookup — no agent on phones; no org fetch — the server
+  // resolves settings itself.) Only the full bill is fetched when order
+  // details are missing, because the server generates content from it.
+  // NOTE: (window as any).showNotification is never assigned anywhere, so use
+  // real toasts here — otherwise failures are completely silent.
+  if (isMobileDevice()) {
+    const tError = (msg: string) => { try { toast.error(msg); } catch {} };
+    const tSuccess = (msg: string) => { try { toast.success(msg); } catch {} };
+    try {
+      try { toast.info(language === 'ar' ? 'جارٍ إرسال الفاتورة للجهاز الرئيسي...' : 'Sending bill to the main device...'); } catch {}
+      let full: any = bill;
+      if (billId && !hasOrderDetails) {
+        try {
+          const r: any = await api.getBill(billId);
+          if (r?.success && r.data) full = r.data;
+        } catch {}
+      }
+      // نفس HTML المصمم للديسكتوب — يرحّله السيرفر للوكيل المحلي (نفس الشكل 100%).
+      // الفشل هنا لا يكسر المسار السريع: السيرفر يسقط على RAW النصي.
+      let receiptHtmlForRelay: string | undefined;
+      try {
+        receiptHtmlForRelay = await getCachedReceiptHTML(full, fallbackOrganizationName, language, t, tableSectionName);
+      } catch {}
+      const payload = {
+        bill: full,
+        organization: (full as any).organization,
+        language,
+        tableSectionName,
+        drawerMode,
+        html: receiptHtmlForRelay,
+        printKey: `bill:${billId || (full as any)?.billNumber || ''}:${drawerMode}`,
+      };
+      let res: any = await api.printBill(payload);
+      if (!res?.success) {
+        // No printer configured on the server? Try zero-config USB auto-detect.
+        try {
+          res = await api.autoDetectAndPrintBill(payload);
+        } catch {}
+      }
+      if (res?.success) {
+        tSuccess(
+          language === 'ar' ? 'تم إرسال الفاتورة للطباعة على الجهاز الرئيسي' : language === 'fr' ? 'Facture envoyée à l’imprimante principale' : 'Bill sent to the main device printer'
+        );
+        return;
+      }
+      tError(res?.message || (language === 'ar' ? 'فشلت الطباعة على الجهاز الرئيسي — جارٍ الطباعة من الهاتف' : 'Server print failed — printing from phone instead'));
+    } catch {
+      tError(language === 'ar' ? 'تعذر الوصول للجهاز الرئيسي — جارٍ الطباعة من الهاتف' : 'Main device unreachable — printing from phone instead');
+    }
+    // Last resort only: the phone's own printers.
+    try {
+      const receiptHTML = await getCachedReceiptHTML(billForPrint, fallbackOrganizationName, language, t, tableSectionName);
+      printInBrowser(receiptHTML);
+    } catch {}
+    return;
+  }
   const settingsPromise = organizationFromBill
     ? Promise.resolve(organizationFromBill)
     : cachedOrganizationResponse && cachedOrganizationResponse.expiresAt > Date.now()
@@ -907,35 +965,6 @@ export const printBill = async (
     printKey: `bill:${billId || bill.billNumber || ''}:${drawerMode}`,
   });
   if (bridgePrinted) return;
-  if (isMobileDevice()) {
-    // Phones have no local print agent: execute the job on the MAIN device,
-    // which prints on its own printers (and kicks the drawer per settings).
-    try {
-      const notify = (msg: string, type: string) => {
-        try {
-          if (typeof window !== 'undefined' && (window as any).showNotification) (window as any).showNotification(msg, type);
-        } catch {}
-      };
-      const res: any = await api.printBill({
-        bill: billForPrint,
-        organization: settingsResponse?.data || (billForPrint as any).organization,
-        language,
-        tableSectionName,
-        drawerMode,
-      });
-      if (res?.success) {
-        notify(
-          language === 'ar' ? 'تم إرسال الفاتورة للطباعة على الجهاز الرئيسي' : language === 'fr' ? 'Facture envoyée à l’imprimante principale' : 'Bill sent to the main device printer',
-          'success'
-        );
-      } else {
-        notify(res?.message || (language === 'ar' ? 'فشلت الطباعة على الجهاز الرئيسي' : 'Server print failed'), 'error');
-      }
-    } catch {
-      // silent — user still has the on-screen bill
-    }
-    return;
-  }
   return;
 };
 

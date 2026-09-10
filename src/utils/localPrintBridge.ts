@@ -1,7 +1,7 @@
 const LOCAL_PRINT_URL = 'http://127.0.0.1:9100/print';
 const LOCAL_DRAWER_URL = 'http://127.0.0.1:9100/cash-drawer';
 
-const printInBrowser = (html: string): boolean => {
+export const printInBrowser = (html: string): boolean => {
   if (typeof window === 'undefined' || typeof document === 'undefined' || !document.body) return false;
 
   const frame = document.createElement('iframe');

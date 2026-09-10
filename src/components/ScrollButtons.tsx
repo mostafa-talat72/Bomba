@@ -103,36 +103,36 @@ const ScrollButtons: React.FC<ScrollButtonsProps> = ({ mainContentRef, hideButto
 
   return (
     <>
-      {/* زر الصعود للأعلى */}
-      {showTopButton && isPageVisible && (
+      {/* حبة تنقل واحدة مدمجة (صعود/نزول) — متناسقة على كل الشاشات */}
+      {(showTopButton || showBottomButton) && isPageVisible && (
+        <div
+          className={`fixed z-40 flex flex-col gap-1 rounded-full p-1 bg-white/90 dark:bg-gray-800/90 shadow-lg border border-gray-200 dark:border-gray-700 backdrop-blur-sm bottom-[max(1rem,env(safe-area-inset-bottom))] lg:bottom-6 ${
+            isRTL
+              ? 'left-3 lg:left-6'
+              : 'right-3 lg:right-6'
+          }`}
+        >
+      {showTopButton && (
         <button
           onClick={scrollToTop}
-          className={`fixed bottom-20 z-40 p-3 bg-orange-600 dark:bg-orange-700 text-white rounded-full shadow-lg hover:bg-orange-700 dark:hover:bg-orange-800 transition-all duration-200 hover:scale-110 lg:bottom-6 ${
-            isRTL 
-              ? 'left-4 lg:left-6' 
-              : 'right-4 lg:right-6'
-          }`}
+          className="w-10 h-10 flex items-center justify-center bg-orange-600 dark:bg-orange-700 text-white rounded-full hover:bg-orange-700 dark:hover:bg-orange-800 transition-all duration-200 sm:hover:scale-105 active:scale-95"
           title={t('common.scrollToTop')}
           aria-label={t('common.scrollToTop')}
         >
           <ChevronUp className="h-5 w-5" />
         </button>
       )}
-
-      {/* زر النزول للأسفل */}
-      {showBottomButton && isPageVisible && (
+      {showBottomButton && (
         <button
           onClick={scrollToBottom}
-          className={`fixed bottom-4 z-40 p-3 bg-gray-600 dark:bg-gray-700 text-white rounded-full shadow-lg hover:bg-gray-700 dark:hover:bg-gray-800 transition-all duration-200 hover:scale-110 lg:bottom-6 ${
-            isRTL 
-              ? 'left-20 lg:left-20' 
-              : 'right-20 lg:right-20'
-          }`}
+          className="w-10 h-10 flex items-center justify-center bg-gray-600 dark:bg-gray-700 text-white rounded-full hover:bg-gray-700 dark:hover:bg-gray-800 transition-all duration-200 sm:hover:scale-105 active:scale-95"
           title={t('common.scrollToBottom')}
           aria-label={t('common.scrollToBottom')}
         >
           <ChevronDown className="h-5 w-5" />
         </button>
+      )}
+        </div>
       )}
     </>
   );

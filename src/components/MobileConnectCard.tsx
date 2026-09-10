@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import QRCode from 'qrcode';
 import { apiClient } from '../services/api';
+import { isDesktopApp } from '../utils/apiBase';
 
 function apiBase(): string {
   try {
@@ -12,17 +13,35 @@ function apiBase(): string {
 }
 
 // App URL for phones: same origin, hostname swapped to the server LAN IP.
-function buildAppUrl(lanIp: string): string | null {
+// Phones ALWAYS use the frontend port :3000 (installed builds serve a
+// dedicated frontend entry there; dev uses vite :3000). Only when NOT in the
+// desktop app do we probe first and fall back to the current port.
+function buildAppUrl(lanIp: string, port: string): string | null {
   try {
     if (typeof window === 'undefined' || !lanIp) return null;
     const u = new URL(window.location.href);
     u.hostname = lanIp;
+    if (port) u.port = port;
     u.pathname = '/';
     u.search = '';
     u.hash = '';
     return u.toString().replace(/\/+$/, '');
   } catch {
     return null;
+  }
+}
+
+// Reachability probe for the phone's exact path (LAN IP + port).
+// no-cors: an opaque response still proves something is listening.
+async function isPortReachable(lanIp: string, port: string, timeoutMs = 3000): Promise<boolean> {
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+    await fetch(`http://${lanIp}:${port}/`, { mode: 'no-cors', signal: ctrl.signal });
+    clearTimeout(timer);
+    return true;
+  } catch {
+    return false;
   }
 }
 
@@ -51,6 +70,7 @@ const MobileConnectCard: React.FC = () => {
   const [qr, setQr] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [chromeOnly, setChromeOnly] = useState(false);
+  const [port, setPort] = useState<string | null>(null);
 
   const qrPayload = chromeOnly && appUrl ? (buildChromeIntentUrl(appUrl) || appUrl) : appUrl;
 
@@ -91,7 +111,19 @@ const MobileConnectCard: React.FC = () => {
         return;
       }
       setLanIp(ip);
-      const url = buildAppUrl(ip);
+      // Desktop/installed: :3000 is guaranteed (same-process frontend entry).
+      // Browser/dev: probe :3000, fall back to the serving port if silent.
+      let usePort = '3000';
+      try {
+        const currentPort = new URL(window.location.href).port || '5000';
+        if (!isDesktopApp && currentPort !== '3000' && !(await isPortReachable(ip, '3000'))) {
+          usePort = currentPort;
+        }
+      } catch {
+        usePort = '3000';
+      }
+      setPort(usePort);
+      const url = buildAppUrl(ip, usePort);
       setAppUrl(url);
     } catch {
       setLanIp(null);
@@ -160,9 +192,14 @@ const MobileConnectCard: React.FC = () => {
             {chromeOnly && (
               <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">{t('settings.mobile.chromeHint')}</p>
             )}
-            <p className="text-sm font-mono bg-white dark:bg-gray-800 rounded-lg px-3 py-2 mb-3 break-all" dir="ltr">
+            <p className="text-sm font-mono bg-white dark:bg-gray-800 rounded-lg px-3 py-2 mb-1 break-all" dir="ltr">
               {appUrl}
             </p>
+            {port && (
+              <p className="text-xs text-gray-500 dark:text-gray-400 mb-3" dir="ltr">
+                port: {port}
+              </p>
+            )}
             <div className="flex gap-2 justify-center sm:justify-start">
               <button
                 type="button"

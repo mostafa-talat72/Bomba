@@ -311,6 +311,12 @@ export const login = async (req, res) => {
         const refreshToken = generateRefreshToken(user._id);
         user.refreshToken = refreshToken;
         await user.save({ validateBeforeSave: false });
+        // Backup on login — fire-and-forget, never blocks the response.
+        setImmediate(() => {
+            import("../utils/backup.js")
+                .then((m) => m.createDatabaseBackup().catch(() => {}))
+                .catch(() => {});
+        });
         res.json({
             success: true,
             message: "تم تسجيل الدخول بنجاح",
@@ -406,6 +412,13 @@ export const logout = async (req, res) => {
         // Clear refresh token
         req.user.refreshToken = null;
         await req.user.save({ validateBeforeSave: false });
+
+        // Backup on logout — fire-and-forget, never blocks the response.
+        setImmediate(() => {
+            import("../utils/backup.js")
+                .then((m) => m.createDatabaseBackup().catch(() => {}))
+                .catch(() => {});
+        });
 
         res.json({
             success: true,

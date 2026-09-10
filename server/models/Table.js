@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import { applySyncMiddleware } from "../middleware/sync/syncMiddleware.js";
+import { auditPlugin } from "../utils/audit.js";
 
 const tableSchema = new mongoose.Schema(
     {
@@ -56,5 +57,6 @@ tableSchema.add({
 });
 // Apply sync middleware
 applySyncMiddleware(tableSchema, 'Table');
+auditPlugin(tableSchema, 'tables');
 
 export default mongoose.model("Table", tableSchema);

@@ -116,6 +116,10 @@ const [formData, setFormData] = useState({
     { id: 'canPayFullBill', name: t('users.permissions.canPayFullBill'), description: t('users.permissions.canPayFullBillDesc') },
     { id: 'canDeleteBill', name: t('users.permissions.canDeleteBill'), description: t('users.permissions.canDeleteBillDesc') },
     { id: 'canEditPartialPayment', name: t('users.permissions.canEditPartialPayment'), description: t('users.permissions.canEditPartialPaymentDesc') },
+    { id: 'shifts', name: t('users.permissions.shifts'), description: t('users.permissions.shiftsDesc') },
+    { id: 'auditLog', name: t('users.permissions.auditLog'), description: t('users.permissions.auditLogDesc') },
+    { id: 'syncStatus', name: t('users.permissions.syncStatus'), description: t('users.permissions.syncStatusDesc') },
+    { id: 'viewCustomerContacts', name: t('users.permissions.viewCustomerContacts'), description: t('users.permissions.viewCustomerContactsDesc') },
   ];
 
   const businessTypes = [
@@ -141,6 +145,9 @@ const [formData, setFormData] = useState({
       costs: ['costs'],
       users: ['users'],
       settings: ['settings'],
+      shifts: ['shifts'],
+      auditLog: ['auditLog'],
+      syncStatus: ['syncStatus'],
       notifications: ['dashboard', 'playstation', 'computer', 'cafe', 'menu', 'billing', 'reports', 'consumption', 'soldItems', 'inventory', 'warehouse', 'costs', 'users', 'settings']
     };
 
@@ -170,6 +177,9 @@ const [formData, setFormData] = useState({
       costs: t('nav.costs'),
       users: t('nav.users'),
       settings: t('nav.settings'),
+      shifts: t('nav.shifts'),
+      auditLog: t('nav.auditLog'),
+      syncStatus: t('nav.syncStatus'),
       notifications: t('nav.notifications')
     };
     return pageNames[page] || page;
@@ -597,32 +607,32 @@ const [formData, setFormData] = useState({
 
 
   return (
-    <div className="space-y-6" dir={isRTL ? 'rtl' : 'ltr'}>
+    <div className="space-y-4 sm:space-y-6" dir={isRTL ? 'rtl' : 'ltr'}>
       {/* Header */}
-      <div className="bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-xl shadow-lg border-2 border-gray-200 dark:border-gray-700 p-6">
-        <div className="flex items-center justify-between flex-wrap gap-4">
-          <div className="flex items-center gap-4">
-            <div className="p-4 rounded-2xl bg-gradient-to-br from-orange-500 to-red-600 shadow-lg">
-              <UsersIcon className="h-8 w-8 text-white" />
+      <div className="bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-xl shadow-lg border-2 border-gray-200 dark:border-gray-700 p-4 sm:p-6">
+        <div className="flex items-center justify-between flex-wrap gap-3 sm:gap-4">
+          <div className="flex items-center gap-2.5 sm:gap-4 min-w-0">
+            <div className="p-2.5 sm:p-4 rounded-2xl bg-gradient-to-br from-orange-500 to-red-600 shadow-lg flex-shrink-0">
+              <UsersIcon className="h-6 w-6 sm:h-8 sm:w-8 text-white" />
             </div>
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+            <div className="min-w-0">
+              <h1 className="text-xl sm:text-2xl sm:text-3xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
                 {t('users.title')}
               </h1>
-              <p className="text-gray-600 dark:text-gray-400 mt-1">{t('users.subtitle')}</p>
+              <p className="text-xs sm:text-base text-gray-600 dark:text-gray-400 mt-0.5 sm:mt-1">{t('users.subtitle')}</p>
             </div>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto">
             <button
               onClick={loadUsers}
               disabled={loading}
-              className="group relative overflow-hidden px-5 py-3 bg-gradient-to-r from-gray-500 to-gray-600 hover:from-gray-600 hover:to-gray-700 text-white rounded-xl flex items-center gap-2 transition-all duration-300 shadow-md hover:shadow-lg hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 font-bold"
+              className="flex-1 sm:flex-none group relative overflow-hidden px-4 sm:px-5 py-2.5 sm:py-3 bg-gradient-to-r from-gray-500 to-gray-600 hover:from-gray-600 hover:to-gray-700 text-white rounded-xl flex items-center justify-center gap-2 transition-all duration-300 shadow-md hover:shadow-lg hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 font-bold text-sm sm:text-base"
             >
               <div className="absolute inset-0 bg-white opacity-0 group-hover:opacity-20 transition-opacity"></div>
               <RefreshCw className={`h-5 w-5 relative ${loading ? 'animate-spin' : ''}`} />
               <span className="relative">{t('users.refresh')}</span>
             </button>
-            
+
             {/* Quick Actions */}
             <div className="hidden md:flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 border-2 border-blue-200 dark:border-blue-800 rounded-xl">
               <Crown className="w-4 h-4 text-blue-600 dark:text-blue-400" />
@@ -630,13 +640,13 @@ const [formData, setFormData] = useState({
                 {t('users.advancedManagement')}
               </span>
             </div>
-            
+
             <button
               onClick={() => {
                 resetForm();
                 setShowAddUser(true);
               }}
-              className="group relative overflow-hidden px-6 py-3 bg-gradient-to-r from-orange-500 to-red-600 hover:from-orange-600 hover:to-red-700 text-white rounded-xl flex items-center gap-2 transition-all duration-300 shadow-lg hover:shadow-xl hover:scale-105 font-bold"
+              className="flex-1 sm:flex-none group relative overflow-hidden px-4 sm:px-6 py-2.5 sm:py-3 bg-gradient-to-r from-orange-500 to-red-600 hover:from-orange-600 hover:to-red-700 text-white rounded-xl flex items-center justify-center gap-2 transition-all duration-300 shadow-lg hover:shadow-xl hover:scale-105 font-bold text-sm sm:text-base"
             >
               <div className="absolute inset-0 bg-white opacity-0 group-hover:opacity-20 transition-opacity"></div>
               <Plus className="h-5 w-5 relative" />
@@ -647,77 +657,77 @@ const [formData, setFormData] = useState({
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-6">
-        <div className="bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-xl shadow-lg border-2 border-gray-200 dark:border-gray-700 p-6 hover:shadow-xl hover:scale-105 transition-all duration-200">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-6">
+        <div className="bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-xl shadow-lg border-2 border-gray-200 dark:border-gray-700 p-4 sm:p-6 hover:shadow-xl hover:scale-105 transition-all duration-200">
           <div className="flex items-center">
-            <div className="w-14 h-14 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg">
-              <UsersIcon className="h-7 w-7 text-white" />
+            <div className="w-11 h-11 sm:w-14 sm:h-14 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg flex-shrink-0">
+              <UsersIcon className="h-5 w-5 sm:h-7 sm:w-7 text-white" />
             </div>
-            <div className="mr-4">
-              <p className="text-sm font-bold text-gray-600 dark:text-gray-300">{t('users.totalUsers')}</p>
-              <p className="text-3xl font-bold text-blue-600 dark:text-blue-400">{formatDecimal(stats.totalUsers, currentLanguage)}</p>
+            <div className="mr-2.5 sm:mr-4 min-w-0">
+              <p className="text-xs sm:text-sm font-bold text-gray-600 dark:text-gray-300 truncate">{t('users.totalUsers')}</p>
+              <p className="text-2xl sm:text-2xl sm:text-3xl font-bold text-blue-600 dark:text-blue-400">{formatDecimal(stats.totalUsers, currentLanguage)}</p>
             </div>
           </div>
         </div>
 
-        <div className="bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-xl shadow-lg border-2 border-gray-200 dark:border-gray-700 p-6 hover:shadow-xl hover:scale-105 transition-all duration-200">
+        <div className="bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-xl shadow-lg border-2 border-gray-200 dark:border-gray-700 p-4 sm:p-6 hover:shadow-xl hover:scale-105 transition-all duration-200">
           <div className="flex items-center">
-            <div className="w-14 h-14 bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl flex items-center justify-center shadow-lg">
-              <Shield className="h-7 w-7 text-white" />
+            <div className="w-11 h-11 sm:w-14 sm:h-14 bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl flex items-center justify-center shadow-lg">
+              <Shield className="h-5 w-5 sm:h-7 sm:w-7 text-white" />
             </div>
             <div className="mr-4">
               <p className="text-sm font-bold text-gray-600 dark:text-gray-300">{t('users.activeUsers')}</p>
-              <p className="text-3xl font-bold text-green-600 dark:text-green-400">{formatDecimal(stats.activeUsers, currentLanguage)}</p>
+              <p className="text-2xl sm:text-3xl font-bold text-green-600 dark:text-green-400">{formatDecimal(stats.activeUsers, currentLanguage)}</p>
             </div>
           </div>
         </div>
 
-        <div className="bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-xl shadow-lg border-2 border-gray-200 dark:border-gray-700 p-6 hover:shadow-xl hover:scale-105 transition-all duration-200">
+        <div className="bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-xl shadow-lg border-2 border-gray-200 dark:border-gray-700 p-4 sm:p-6 hover:shadow-xl hover:scale-105 transition-all duration-200">
           <div className="flex items-center">
-            <div className="w-14 h-14 bg-gradient-to-br from-red-500 to-rose-600 rounded-xl flex items-center justify-center shadow-lg">
-              <Lock className="h-7 w-7 text-white" />
+            <div className="w-11 h-11 sm:w-14 sm:h-14 bg-gradient-to-br from-red-500 to-rose-600 rounded-xl flex items-center justify-center shadow-lg">
+              <Lock className="h-5 w-5 sm:h-7 sm:w-7 text-white" />
             </div>
             <div className="mr-4">
               <p className="text-sm font-bold text-gray-600 dark:text-gray-300">{t('users.inactiveUsers')}</p>
-              <p className="text-3xl font-bold text-red-600 dark:text-red-400">{formatDecimal(stats.inactiveUsers, currentLanguage)}</p>
+              <p className="text-2xl sm:text-3xl font-bold text-red-600 dark:text-red-400">{formatDecimal(stats.inactiveUsers, currentLanguage)}</p>
             </div>
           </div>
         </div>
 
-        <div className="bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-xl shadow-lg border-2 border-gray-200 dark:border-gray-700 p-6 hover:shadow-xl hover:scale-105 transition-all duration-200">
+        <div className="bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-xl shadow-lg border-2 border-gray-200 dark:border-gray-700 p-4 sm:p-6 hover:shadow-xl hover:scale-105 transition-all duration-200">
           <div className="flex items-center">
-            <div className="w-14 h-14 bg-gradient-to-br from-yellow-500 to-amber-600 rounded-xl flex items-center justify-center shadow-lg">
-              <Unlock className="h-7 w-7 text-white" />
+            <div className="w-11 h-11 sm:w-14 sm:h-14 bg-gradient-to-br from-yellow-500 to-amber-600 rounded-xl flex items-center justify-center shadow-lg">
+              <Unlock className="h-5 w-5 sm:h-7 sm:w-7 text-white" />
             </div>
             <div className="mr-4">
               <p className="text-sm font-bold text-gray-600 dark:text-gray-300">{t('users.suspendedUsers')}</p>
-              <p className="text-3xl font-bold text-yellow-600 dark:text-yellow-400">{formatDecimal(stats.suspendedUsers, currentLanguage)}</p>
+              <p className="text-2xl sm:text-3xl font-bold text-yellow-600 dark:text-yellow-400">{formatDecimal(stats.suspendedUsers, currentLanguage)}</p>
             </div>
           </div>
         </div>
 
-        <div className="bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-xl shadow-lg border-2 border-gray-200 dark:border-gray-700 p-6 hover:shadow-xl hover:scale-105 transition-all duration-200">
+        <div className="bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-xl shadow-lg border-2 border-gray-200 dark:border-gray-700 p-4 sm:p-6 hover:shadow-xl hover:scale-105 transition-all duration-200">
           <div className="flex items-center">
-            <div className="w-14 h-14 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg">
-              <Crown className="h-7 w-7 text-white" />
+            <div className="w-11 h-11 sm:w-14 sm:h-14 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg">
+              <Crown className="h-5 w-5 sm:h-7 sm:w-7 text-white" />
             </div>
             <div className="mr-4">
               <p className="text-sm font-bold text-gray-600 dark:text-gray-300">{t('users.admins')}</p>
-              <p className="text-3xl font-bold text-purple-600 dark:text-purple-400">
+              <p className="text-2xl sm:text-3xl font-bold text-purple-600 dark:text-purple-400">
                 {formatDecimal(stats.roleStats.find(r => r.id === 'admin')?.count || 0, currentLanguage)}
               </p>
             </div>
           </div>
         </div>
 
-        <div className="bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-xl shadow-lg border-2 border-gray-200 dark:border-gray-700 p-6 hover:shadow-xl hover:scale-105 transition-all duration-200">
+        <div className="bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-xl shadow-lg border-2 border-gray-200 dark:border-gray-700 p-4 sm:p-6 hover:shadow-xl hover:scale-105 transition-all duration-200">
           <div className="flex items-center">
-            <div className="w-14 h-14 bg-gradient-to-br from-orange-500 to-red-600 rounded-xl flex items-center justify-center shadow-lg">
-              <Crown className="h-7 w-7 text-white" />
+            <div className="w-11 h-11 sm:w-14 sm:h-14 bg-gradient-to-br from-orange-500 to-red-600 rounded-xl flex items-center justify-center shadow-lg">
+              <Crown className="h-5 w-5 sm:h-7 sm:w-7 text-white" />
             </div>
             <div className="mr-4">
               <p className="text-sm font-bold text-gray-600 dark:text-gray-300">{t('users.fullPermissions')}</p>
-              <p className="text-3xl font-bold text-orange-600 dark:text-orange-400">
+              <p className="text-2xl sm:text-3xl font-bold text-orange-600 dark:text-orange-400">
                 {formatDecimal(users?.filter(u => u.permissions?.includes('all')).length || 0, currentLanguage)}
               </p>
             </div>
@@ -736,7 +746,7 @@ const [formData, setFormData] = useState({
             {t('users.advancedFilter')}
           </span>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-5">
           <div>
             <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
               <Search className="w-4 h-4 text-blue-600" />

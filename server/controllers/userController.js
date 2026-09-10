@@ -170,6 +170,17 @@ export const createUser = async (req, res) => {
         // Remove password from response
         user.password = undefined;
 
+        // Audit (fire-and-forget)
+        import("../utils/auditHelper.js").then((m) => {
+            m.logAudit({
+                action: "user.created", collection: "users",
+                documentId: user._id, documentNumber: user.username || user.email,
+                user: req.user, organization: getOrganizationId(req.user),
+                deviceId: req.headers?.["x-instance-id"] || null,
+                details: { role: user.role, name: user.name },
+            }).catch(() => {});
+        }).catch(() => {});
+
         res.status(201).json({
             success: true,
             message: "تم إنشاء المستخدم بنجاح",
@@ -329,6 +340,17 @@ export const updateUser = async (req, res) => {
         // Remove password from response
         user.password = undefined;
 
+        // Audit (fire-and-forget)
+        import("../utils/auditHelper.js").then((m) => {
+            m.logAudit({
+                action: "user.updated", collection: "users",
+                documentId: user._id, documentNumber: user.username || user.email,
+                user: req.user, organization: getOrganizationId(req.user),
+                deviceId: req.headers?.["x-instance-id"] || null,
+                details: { fields: Object.keys(req.body || {}) },
+            }).catch(() => {});
+        }).catch(() => {});
+
         res.json({
             success: true,
             message: "تم تحديث المستخدم بنجاح",
@@ -418,6 +440,18 @@ export const deleteUser = async (req, res) => {
         if (deletedUser) {
             try { await createTombstone('users', deletedUser._id, getOrganizationId(req.user), req.user._id); } catch (e) {}
         }
+
+        // Audit (fire-and-forget)
+        import("../utils/auditHelper.js").then((m) => {
+            m.logAudit({
+                action: "user.deleted", collection: "users",
+                documentId: req.params.id,
+                documentNumber: deletedUser?.username || deletedUser?.email || null,
+                user: req.user, organization: getOrganizationId(req.user),
+                deviceId: req.headers?.["x-instance-id"] || null,
+                details: { name: deletedUser?.name || null, role: deletedUser?.role || null },
+            }).catch(() => {});
+        }).catch(() => {});
 
         res.json({
             success: true,
@@ -612,6 +646,17 @@ export const updateUserPermissions = async (req, res) => {
 
         // Remove password from response
         user.password = undefined;
+
+        // Audit (fire-and-forget)
+        import("../utils/auditHelper.js").then((m) => {
+            m.logAudit({
+                action: "permissions.changed", collection: "users",
+                documentId: user._id, documentNumber: user.username || user.email,
+                user: req.user, organization: getOrganizationId(req.user),
+                deviceId: req.headers?.["x-instance-id"] || null,
+                details: { permissions },
+            }).catch(() => {});
+        }).catch(() => {});
 
         res.json({
             success: true,

@@ -1,5 +1,7 @@
 import React, { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import Takeaway from './pages/Takeaway';
+import Delivery from './pages/Delivery';
 import { useTranslation } from 'react-i18next';
 import { ConfigProvider } from 'antd';
 import arEG from 'antd/locale/ar_EG';
@@ -42,6 +44,9 @@ const SoldItems = lazy(() => import('./pages/SoldItems'));
 const Warehouse = lazy(() => import('./pages/Warehouse'));
 const KitchenDisplay = lazy(() => import('./pages/KitchenDisplay'));
 const CustomerMenu = lazy(() => import('./pages/CustomerMenu'));
+const SyncStatus = lazy(() => import('./pages/SyncStatus'));
+const AuditLogPage = lazy(() => import('./pages/AuditLog'));
+const Shifts = lazy(() => import('./pages/Shifts'));
 
 // شاشة تحميل أثناء تقسيم الحزم
 const PageLoader = () => (
@@ -262,6 +267,9 @@ const ProtectedRoute = ({ children, requiredPermissions = [], requiredRole }: {
         { path: '/costs', permission: 'costs' },
         { path: '/users', permission: 'users' },
         { path: '/settings', permission: 'settings' },
+        { path: '/shifts', permission: 'shifts' },
+        { path: '/audit-log', permission: 'auditLog' },
+        { path: '/sync-status', permission: 'syncStatus' },
       ];
 
       const accessiblePage = pagePriority.find(page =>
@@ -386,6 +394,16 @@ const RouteHandler = () => {
               <Tables />
             </ProtectedRoute>
           } />
+          <Route path="takeaway" element={
+            <ProtectedRoute requiredPermissions={['tables', 'cafe', 'billing']}>
+              <Takeaway />
+            </ProtectedRoute>
+          } />
+          <Route path="delivery" element={
+            <ProtectedRoute requiredPermissions={['tables', 'cafe', 'billing']}>
+              <Delivery />
+            </ProtectedRoute>
+          } />
           <Route path="menu" element={
             <ProtectedRoute requiredPermissions={['menu']}>
               <Menu />
@@ -439,6 +457,21 @@ const RouteHandler = () => {
           <Route path="settings" element={
             <ProtectedRoute requiredPermissions={[]}>
               <Settings />
+            </ProtectedRoute>
+          } />
+          <Route path="sync-status" element={
+            <ProtectedRoute requiredPermissions={['syncStatus']}>
+              <SyncStatus />
+            </ProtectedRoute>
+          } />
+          <Route path="audit-log" element={
+            <ProtectedRoute requiredPermissions={['auditLog']}>
+              <AuditLogPage />
+            </ProtectedRoute>
+          } />
+          <Route path="shifts" element={
+            <ProtectedRoute requiredPermissions={['shifts']}>
+              <Shifts />
             </ProtectedRoute>
           } />
           <Route path="notifications" element={

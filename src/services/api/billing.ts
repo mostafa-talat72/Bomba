@@ -101,7 +101,7 @@ async function recalculateBillTotals(id: string): Promise<ApiResponse<{
 
 async function addPayment(id: string, paymentData: {
   amount: number;
-  method: 'cash' | 'card' | 'transfer';
+  method: 'cash' | 'card' | 'transfer' | 'e_wallet';
   reference?: string;
 }): Promise<ApiResponse<Bill>> {
   const response = await apiClient.request<Bill>(`/billing/${id}/payment`, {

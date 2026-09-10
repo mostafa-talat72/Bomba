@@ -686,21 +686,21 @@ const Menu: React.FC = () => {
 	};
 
 	return (
-		<div className={`space-y-6 p-4 ${selectedMergeIds.length > 0 ? 'pb-24' : ''}`}>
+		<div className={`space-y-4 sm:space-y-6 p-2 sm:p-4 ${selectedMergeIds.length > 0 ? 'pb-24' : ''}`}>
 			{/* Header */}
-			<div className="bg-gradient-to-r from-orange-50 via-white to-orange-50 dark:from-gray-800 dark:via-gray-800 dark:to-gray-800 rounded-2xl shadow-lg border border-orange-100 dark:border-gray-700 p-6">
-				<div className="flex items-center justify-between flex-wrap gap-4">
-					<div className="flex flex-col">
-						<div className="flex items-center gap-3 mb-2">
-							<div className="p-3 bg-gradient-to-br from-orange-500 to-orange-600 rounded-xl shadow-lg">
-								<Utensils className="h-7 w-7 text-white" />
+			<div className="bg-gradient-to-r from-orange-50 via-white to-orange-50 dark:from-gray-800 dark:via-gray-800 dark:to-gray-800 rounded-2xl shadow-lg border border-orange-100 dark:border-gray-700 p-4 sm:p-6">
+				<div className="flex items-center justify-between flex-wrap gap-3 sm:gap-4">
+					<div className="flex flex-col min-w-0">
+						<div className="flex items-center gap-2 sm:gap-3 mb-1.5 sm:mb-2">
+							<div className="p-2 sm:p-3 bg-gradient-to-br from-orange-500 to-orange-600 rounded-xl shadow-lg flex-shrink-0">
+								<Utensils className="h-5 w-5 sm:h-7 sm:w-7 text-white" />
 							</div>
-							<div>
-								<h1 className="text-3xl font-bold bg-gradient-to-r from-orange-600 to-orange-500 bg-clip-text text-transparent dark:from-orange-400 dark:to-orange-300">
+							<div className="min-w-0">
+								<h1 className="text-xl sm:text-3xl font-bold bg-gradient-to-r from-orange-600 to-orange-500 bg-clip-text text-transparent dark:from-orange-400 dark:to-orange-300">
 									{t('menu.pageTitle')}
 								</h1>
-								<p className="text-sm text-gray-600 dark:text-gray-400 flex items-center gap-1">
-									<Sparkles className="h-4 w-4" />
+								<p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 flex items-center gap-1">
+									<Sparkles className="h-3.5 w-3.5 sm:h-4 sm:w-4 flex-shrink-0" />
 									{t('menu.pageSubtitle')}
 								</p>
 							</div>
@@ -1070,7 +1070,7 @@ const Menu: React.FC = () => {
 														<p className="text-xs text-gray-400 dark:text-gray-500 italic">{t('menu.noItemsInCategory')}</p>
 													</div>
 												) : (
-													<div className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+													<div className="p-2.5 sm:p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 sm:gap-3">
 														{categoryItems.map(item => {
 															const isSelected = selectedMergeIds.includes(item.id) || selectedMergeIds.includes((item as any)._id);
 															const itemCatId = getItemCategoryId(item);

@@ -89,3 +89,19 @@ export const getAgeLabel = (bills: Bill[]): string => {
   const remainingDays = totalDays % 30;
   return remainingDays > 0 ? `${totalMonths}ش ${remainingDays}ي` : `${totalMonths}ش`;
 };
+
+/** Creator display name of an order (populated createdBy {name} or snapshot). Empty when unknown. */
+export const getOrderCreatorName = (order: any): string => {
+  const c = order?.createdBy;
+  if (!c) return '';
+  if (typeof c === 'string') return '';
+  return String(c.name || c.username || '').trim();
+};
+
+/** Last-updater display name (populated updatedBy {name}). Empty when unknown/never updated. */
+export const getUpdaterName = (doc: any): string => {
+  const u = doc?.updatedBy;
+  if (!u) return '';
+  if (typeof u === 'string') return '';
+  return String(u.name || u.username || '').trim();
+};

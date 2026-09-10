@@ -1871,7 +1871,11 @@ mainWindow.webContents.setWindowOpenHandler(({ url: targetUrl }) => {
 
 // ---- App lifecycle ----
 
-const gotLock = app.requestSingleInstanceLock();
+// Agent mode never takes the Electron single-instance lock: it must coexist
+// with the main app (bridge exclusivity is enforced via port 9100 instead,
+// so a boot-time agent can never block the main window from opening).
+// Main mode keeps the lock so double-clicks focus instead of duplicating.
+const gotLock = isPrintAgent ? true : app.requestSingleInstanceLock();
 if (!gotLock) {
   app.quit();
 } else {
@@ -1888,6 +1892,7 @@ if (!gotLock) {
   app.whenReady().then(async () => {
     try { showSplash(); setSplashStatus("جاري التحضير..."); } catch {}
     ensureDirs();
+
     // Zero-config LAN: silently open firewall for TCP 5000 + UDP 41234 so a
     // direct Ethernet cable just works (APIPA, no manual IP). Fire-and-forget.
     try {
@@ -1899,8 +1904,26 @@ if (!gotLock) {
       }
     } catch {}
     if (isPrintAgent) {
+      // Boot-time agent: Mongo isn't up yet, so start/wait for it first
+      // instead of erroring (then quit quietly if a bridge already runs).
+      try { setSplashStatus("تشغيل قاعدة البيانات..."); } catch {}
+      await ensureBundledMongo();
+      if (bootCancelled) {
+        try { closeSplash(); } catch {}
+        app.quit();
+        return;
+      }
+      try { setSplashStatus("انتظار جاهزية قاعدة البيانات..."); } catch {}
+      await ensureReplicaSet();
+      if (await probePort(9100, 1500)) {
+        console.log("Print bridge already running elsewhere - agent exiting quietly");
+        try { closeSplash(); } catch {}
+        app.quit();
+        return;
+      }
       await createPrintAgentWindow();
       startLocalPrintServer();
+      try { closeSplash(); } catch {}
       console.log("Bomba Print Agent listening on http://127.0.0.1:9100");
       return;
     }
@@ -1908,7 +1931,14 @@ if (!gotLock) {
     appConfig = config;
     const port = config.port || 5000;
     localBackendPort = port;
-    startLocalPrintServer();
+    // Print bridge: reuse the boot-time agent's bridge if it's already up,
+    // otherwise run it in-process. Either way printing works from app start.
+    if (await probePort(9100, 1500)) {
+      console.log("Print bridge already running (agent) - reusing it");
+    } else {
+      startLocalPrintServer();
+      console.log("Print bridge listening on http://127.0.0.1:9100 (in-process)");
+    }
     // Pre-warm the persistent raw-print PowerShell so the FIRST drawer kick
     // is already fast (~100ms) instead of paying the C# compile cost on click.
     setTimeout(() => {

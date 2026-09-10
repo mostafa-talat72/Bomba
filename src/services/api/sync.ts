@@ -12,6 +12,24 @@ async function runTypeAudit(fix: boolean = true): Promise<ApiResponse<{
   });
 }
 
+async function getSyncOverview(): Promise<ApiResponse<any>> {
+  return apiClient.request('/sync/overview');
+}
+
+async function syncLanTime(): Promise<ApiResponse<any>> {
+  return apiClient.request('/lan/time-sync', { method: 'POST' });
+}
+
+async function setLanTimeSource(enabled: boolean): Promise<ApiResponse<any>> {
+  return apiClient.request('/lan/time-source', {
+    method: 'POST',
+    body: JSON.stringify({ enabled }),
+  });
+}
+
 export const syncApi = {
   runTypeAudit,
+  getSyncOverview,
+  syncLanTime,
+  setLanTimeSource,
 };

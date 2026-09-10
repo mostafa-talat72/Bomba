@@ -967,28 +967,28 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* Header */}
-      <div className={`bg-gradient-to-r ${config.colors.primary} dark:${config.colors.primaryDark} rounded-2xl shadow-xl p-6 border-2 ${config.colors.headerBorder}`}>
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <div className="w-14 h-14 bg-white dark:bg-gray-800 rounded-xl flex items-center justify-center shadow-lg">
-              <Icon className="h-8 w-8 text-current" style={{ color: deviceType === 'playstation' ? '#2563eb' : '#ea580c' }} />
+      <div className={`bg-gradient-to-r ${config.colors.primary} dark:${config.colors.primaryDark} rounded-2xl shadow-xl p-4 sm:p-6 border-2 ${config.colors.headerBorder}`}>
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
+          <div className="flex items-center gap-3 sm:gap-4">
+            <div className="w-11 h-11 sm:w-14 sm:h-14 bg-white dark:bg-gray-800 rounded-xl flex items-center justify-center shadow-lg flex-shrink-0">
+              <Icon className="h-6 w-6 sm:h-8 sm:w-8 text-current" style={{ color: deviceType === 'playstation' ? '#2563eb' : '#ea580c' }} />
             </div>
-            <div>
-              <h1 className="text-2xl md:text-3xl font-bold text-white flex items-center gap-2">
+            <div className="min-w-0">
+              <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-white flex items-center gap-2">
                 {config.title}
               </h1>
-              <p className="text-sm md:text-base text-white/90 mt-1">
+              <p className="text-xs sm:text-sm md:text-base text-white/90 mt-0.5 sm:mt-1">
                 {config.subtitle}
               </p>
             </div>
           </div>
-          <div className="flex gap-3">
+          <div className="flex gap-3 w-full sm:w-auto">
             {user?.role === 'admin' && (
               <button
                 onClick={() => setShowAddDevice(true)}
-                className="bg-white hover:bg-gray-100 dark:bg-gray-800 dark:hover:bg-gray-700 px-6 py-3 rounded-xl flex items-center justify-center transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-105 font-bold"
+                className="flex-1 sm:flex-none bg-white hover:bg-gray-100 dark:bg-gray-800 dark:hover:bg-gray-700 px-4 py-2.5 sm:px-6 sm:py-3 rounded-xl flex items-center justify-center transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-105 font-bold"
                 style={{ color: deviceType === 'playstation' ? '#2563eb' : '#ea580c' }}
               >
                 <Plus className={`h-5 w-5 ${isRTL ? 'mr-2' : 'ml-2'}`} />
@@ -1049,14 +1049,14 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
       {!isInitialLoading && !loadingError && (
         <>
           {/* Devices Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-6">
             {devices.filter(d => d.type === deviceType).map((device) => {
               const activeSession = sessions.find(s => s.deviceNumber === device.number && s.status === 'active');
               const isActive = device.status === 'active';
 
               return (
                 <div key={device.id} className={`
-                  rounded-2xl shadow-lg border-2 p-6 flex flex-col h-full transition-all duration-300 transform hover:scale-105 hover:shadow-2xl
+                  relative rounded-2xl shadow-lg border-2 p-3 sm:p-6 flex flex-col h-full transition-all duration-300 sm:transform sm:hover:scale-105 hover:shadow-2xl
                   ${isActive
                     ? `bg-gradient-to-br ${config.colors.card} dark:${config.colors.cardDark} ${config.colors.border} hover:shadow-green-300 dark:hover:shadow-green-900/70`
                     : 'bg-gradient-to-br from-gray-50 via-slate-50 to-gray-100 dark:from-gray-800 dark:via-slate-800 dark:to-gray-900 border-gray-300 dark:border-gray-700 hover:shadow-gray-300 dark:hover:shadow-gray-900/70'
@@ -1065,50 +1065,50 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
                   {/* Status Badge */}
                   <div className="absolute -top-2 -right-2">
                     {isActive ? (
-                      <span className="flex items-center justify-center w-16 h-16 bg-gradient-to-br from-green-500 to-emerald-500 text-white text-xs font-bold rounded-full animate-pulse shadow-lg border-4 border-white dark:border-gray-800">
+                      <span className="flex items-center justify-center w-12 h-12 sm:w-16 sm:h-16 bg-gradient-to-br from-green-500 to-emerald-500 text-white text-[10px] sm:text-xs font-bold rounded-full animate-pulse shadow-lg border-4 border-white dark:border-gray-800">
                         {t('gaming.active')}
                       </span>
                     ) : (
-                      <span className="flex items-center justify-center w-16 h-16 bg-gradient-to-br from-gray-500 to-slate-500 text-white text-xs font-bold rounded-full shadow-lg border-4 border-white dark:border-gray-800">
+                      <span className="flex items-center justify-center w-12 h-12 sm:w-16 sm:h-16 bg-gradient-to-br from-gray-500 to-slate-500 text-white text-[10px] sm:text-xs font-bold rounded-full shadow-lg border-4 border-white dark:border-gray-800">
                         {t('gaming.available')}
                       </span>
                     )}
                   </div>
 
-                  <div className="flex items-center justify-between mb-4 pt-4">
-                    <h3 className="text-lg md:text-xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-3">
+                  <div className="flex items-center justify-between mb-2.5 sm:mb-4 pt-3 sm:pt-4">
+                    <h3 className="text-base sm:text-lg md:text-xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2 sm:gap-3 min-w-0">
                       <div className={`
-                        w-12 h-12 rounded-xl flex items-center justify-center shadow-md
+                        w-9 h-9 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center shadow-md flex-shrink-0
                         ${isActive
                           ? 'bg-gradient-to-br from-green-400 to-emerald-500'
                           : 'bg-gradient-to-br from-gray-400 to-slate-500'
                         }
                       `}>
-                        <Icon className="h-6 w-6 text-white" />
+                        <Icon className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
                       </div>
-                      {device.name}
+                      <span className="truncate">{device.name}</span>
                     </h3>
                   </div>
 
                   <div className="flex-1">
                     {activeSession ? (
-                      <div className="space-y-4">
+                      <div className="space-y-2.5 sm:space-y-4">
                         {/* Real-time cost display */}
-                        <div className="bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/30 dark:to-emerald-900/30 p-4 rounded-xl border-2 border-green-300 dark:border-green-700 shadow-sm">
+                        <div className="bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/30 dark:to-emerald-900/30 p-2.5 sm:p-4 rounded-xl border-2 border-green-300 dark:border-green-700 shadow-sm">
                           <SessionCostDisplay session={activeSession} device={device} />
                         </div>
 
                         {deviceType === 'playstation' && (
                           <>
-                            <div className="flex items-center justify-center gap-2 bg-blue-50 dark:bg-blue-900/30 p-3 rounded-lg border border-blue-200 dark:border-blue-700">
-                              <Users className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                            <div className="flex items-center justify-center gap-2 bg-blue-50 dark:bg-blue-900/30 p-2 sm:p-3 rounded-lg border border-blue-200 dark:border-blue-700">
+                              <Users className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600 dark:text-blue-400" />
                               <span className="text-sm font-bold text-blue-900 dark:text-blue-100">{formatDecimal(activeSession.controllers ?? 1, i18n.language)} {t('gaming.controllers')}</span>
                             </div>
 
                             {/* ????? ???????? */}
                             {activeSession.controllersHistory && activeSession.controllersHistory.length > 0 && (
-                              <div className="bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-900/30 dark:to-pink-900/30 p-4 rounded-xl border-2 border-purple-300 dark:border-purple-700 shadow-sm">
-                                <h4 className="text-sm font-bold text-purple-900 dark:text-purple-100 mb-3 flex items-center gap-2">
+                              <div className="bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-900/30 dark:to-pink-900/30 p-2.5 sm:p-4 rounded-xl border-2 border-purple-300 dark:border-purple-700 shadow-sm">
+                                <h4 className="text-sm font-bold text-purple-900 dark:text-purple-100 mb-2 sm:mb-3 flex items-center gap-2">
                                   <Users className="h-4 w-4" />
                                   {t('gaming.controllersHistory')}
                                 </h4>
@@ -1333,7 +1333,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
                         <button
                           onClick={() => handleEndSession(activeSession.id)}
                           disabled={endingSessions[activeSession.id]}
-                          className={`w-full ${endingSessions[activeSession.id] ? 'bg-red-700 dark:bg-red-800' : 'bg-gradient-to-r from-red-600 to-pink-600 hover:from-red-700 hover:to-pink-700'} text-white py-3 px-4 rounded-xl flex items-center justify-center transition-all duration-200 font-bold shadow-lg hover:shadow-xl transform hover:scale-105`}
+                          className={`w-full ${endingSessions[activeSession.id] ? 'bg-red-700 dark:bg-red-800' : 'bg-gradient-to-r from-red-600 to-pink-600 hover:from-red-700 hover:to-pink-700'} text-white py-2.5 sm:py-3 px-4 rounded-xl flex items-center justify-center transition-all duration-200 font-bold shadow-lg hover:shadow-xl transform hover:scale-105`}
                         >
                           {endingSessions[activeSession.id] ? (
                             <>
@@ -1354,13 +1354,13 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
                     ) : device.status === 'available' ? (
                       <button
                         onClick={() => openSessionModal(device)}
-                        className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white py-3 px-4 rounded-xl flex items-center justify-center transition-all duration-200 font-bold shadow-lg hover:shadow-xl transform hover:scale-105"
+                        className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white py-2.5 sm:py-3 px-4 rounded-xl flex items-center justify-center transition-all duration-200 font-bold shadow-lg hover:shadow-xl transform hover:scale-105"
                       >
                         <Play className={`h-5 w-5 ${isRTL ? 'mr-2' : 'ml-2'}`} />
                         {t('gaming.startSession')}
                       </button>
                     ) : (
-                      <div className="w-full py-3 px-4 rounded-xl bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 text-center text-sm font-semibold">
+                      <div className="w-full py-2.5 sm:py-3 px-4 rounded-xl bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 text-center text-sm font-semibold">
                         {t('gaming.unavailable')}
                       </div>
                     )}
@@ -1368,7 +1368,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
 
                   {/* ????? ??????? ?????? - ?????? ??? */}
                   {user?.role === 'admin' && (
-                    <div className="flex gap-2 mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                    <div className="flex gap-2 mt-3 pt-3 sm:mt-4 sm:pt-4 border-t border-gray-200 dark:border-gray-700">
                       <button
                         onClick={() => handleEditDevice(device)}
                         disabled={isActive}
@@ -1407,7 +1407,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
       {/* ????? ????? ???? ???? */}
       {showAddDevice && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className={`bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-2xl shadow-2xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto border-2 ${config.colors.headerBorder}`}>
+          <div className={`bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-2xl shadow-2xl p-4 sm:p-6 w-full max-w-md max-h-[90vh] overflow-y-auto border-2 ${config.colors.headerBorder}`}>
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">{t('gaming.addNewDevice')}</h2>
               <button
@@ -1563,7 +1563,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
       {/* ????? ????? ???? */}
       {showEditDevice && editingDevice && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className={`bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-2xl shadow-2xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto border-2 ${config.colors.headerBorder}`}>
+          <div className={`bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-2xl shadow-2xl p-4 sm:p-6 w-full max-w-md max-h-[90vh] overflow-y-auto border-2 ${config.colors.headerBorder}`}>
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">{t('gaming.editDevice')}</h2>
               <button
@@ -1703,7 +1703,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
       {/* ????? ????? ??? ?????? */}
       {showDeleteConfirm && deviceToDelete && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-6 w-full max-w-md">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-4 sm:p-6 w-full max-w-md">
             <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-4">{t('gaming.confirmDeleteDevice')}</h2>
             <p className="text-gray-600 dark:text-gray-400 mb-6">
               {t('gaming.confirmDeleteDevice')} "{deviceToDelete.name}"? {t('common.cannotUndo')}.
@@ -1738,7 +1738,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
       {/* ????? ??? ???? ????? */}
       {showNewSession && selectedDevice && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
-          <div className={`bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-2xl shadow-2xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto border-2 ${config.colors.headerBorder} animate-bounce-in`}>
+          <div className={`bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-2xl shadow-2xl p-4 sm:p-6 w-full max-w-md max-h-[90vh] overflow-y-auto border-2 ${config.colors.headerBorder} animate-bounce-in`}>
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-3">
                 <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-emerald-500 rounded-xl flex items-center justify-center shadow-lg">
@@ -1936,7 +1936,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
       {/* ????? ??? ?????? ?????? */}
       {showLinkTableModal && selectedSessionForLink && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
-          <div className="bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-2xl shadow-2xl p-6 w-full max-w-md border-2 border-purple-200 dark:border-purple-800 animate-bounce-in">
+          <div className="bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-2xl shadow-2xl p-4 sm:p-6 w-full max-w-md border-2 border-purple-200 dark:border-purple-800 animate-bounce-in">
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-3">
                 <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-pink-500 rounded-xl flex items-center justify-center shadow-lg">
@@ -2267,7 +2267,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
       {/* ????? ????? ????? ??? ?????? */}
       {showControllersConfirm && controllersChangeData && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
-          <div className="bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-2xl shadow-2xl p-6 w-full max-w-md border-2 border-orange-200 dark:border-orange-800 animate-bounce-in">
+          <div className="bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-2xl shadow-2xl p-4 sm:p-6 w-full max-w-md border-2 border-orange-200 dark:border-orange-800 animate-bounce-in">
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-3">
                 <div className="w-12 h-12 bg-gradient-to-br from-orange-500 to-red-500 rounded-xl flex items-center justify-center shadow-lg">
@@ -2304,8 +2304,8 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
 
               {/* ?????? ??? ?????? */}
               <div className="bg-gradient-to-r from-orange-50 to-red-50 dark:from-orange-900/30 dark:to-red-900/30 border-2 border-orange-300 dark:border-orange-700 rounded-xl p-4 shadow-sm">
-                <p className="text-orange-900 dark:text-orange-100 font-bold mb-3 text-center">{t('gaming.selectNewCount')}</p>
-                <div className="grid grid-cols-4 gap-3">
+                <p className="text-orange-900 dark:text-orange-100 font-bold mb-2.5 sm:mb-3 text-center text-sm sm:text-base">{t('gaming.selectNewCount')}</p>
+                <div className="grid grid-cols-4 gap-2 sm:gap-3">
                   {[1, 2, 3, 4].map((count) => {
                     const isSelected = count === controllersChangeData.newCount;
                     const isOriginal = count === controllersChangeData.oldCount;
@@ -2392,7 +2392,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
       {/* ????? ????? ??? ???? ???????? */}
       {showEditPeriodTimeModal && selectedSessionForPeriodEdit && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
-          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto border border-gray-200 dark:border-gray-700">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-4 sm:p-6 w-full max-w-md max-h-[90vh] overflow-y-auto border border-gray-200 dark:border-gray-700">
             
             {/* Header */}
             <div className="flex items-center justify-between mb-6">
@@ -2604,7 +2604,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
       {/* ????? ????? ????? ?????? */}
       {showEndSessionConfirm && sessionToEnd && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
-          <div className="bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-2xl shadow-2xl p-6 w-full max-w-md border-2 border-red-200 dark:border-red-800 animate-bounce-in">
+          <div className="bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-2xl shadow-2xl p-4 sm:p-6 w-full max-w-md border-2 border-red-200 dark:border-red-800 animate-bounce-in">
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-3">
                 <div className="w-12 h-12 bg-gradient-to-br from-red-500 to-pink-500 rounded-xl flex items-center justify-center shadow-lg">

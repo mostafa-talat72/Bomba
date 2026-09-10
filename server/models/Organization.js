@@ -128,6 +128,7 @@ const OrganizationSchema = new mongoose.Schema({
         openCashDrawerOnPayment: { type: Boolean, default: true }, // فتح درج الكاشير عند الدفع الكامل
         openCashDrawerShortcut: { type: Boolean, default: true }, // فتح درج الكاشير باختصار F12
         autoPrintOnPayment: { type: Boolean, default: true }, // طباعة الفاتورة تلقائياً عند الدفع الكامل
+        printMarksPaid: { type: Boolean, default: false }, // عند الطباعة من نافذة الدفع: ادفع الفاتورة بالكامل أولاً (اختياري لكل طباعة)
         promptOrderPrintSections: { type: Boolean, default: false }, // اختيار أقسام الطلب قبل الطباعة
         defaultOrderPrintSections: { type: [String], default: [] }, // الأقسام الافتراضية للطباعة
         autoPrintOrderSections: { type: Boolean, default: false }, // الطباعة المباشرة بالأقسام الافتراضية

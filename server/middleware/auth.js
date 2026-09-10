@@ -1,5 +1,7 @@
 import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
+import { touchDevice } from './deviceTracker.js';
+import { runWithAuditUser } from './auditStamping.js';
 
 export const authenticateToken = async (req, res, next) => {
   try {
@@ -47,7 +49,10 @@ export const authenticateToken = async (req, res, next) => {
     }
     
     req.user = user;
-    next();
+    // Track connected device (fire-and-forget, never blocks).
+    touchDevice(req);
+    // Carry the actor for audit stamping (Order/Bill updatedBy hooks).
+    return runWithAuditUser(user._id, () => next());
   } catch (error) {
     return res.status(401).json({
       success: false,

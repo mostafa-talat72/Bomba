@@ -10,7 +10,7 @@ Unicode true
 !define MUI_UNICON "H:/My Work/Naruto/New folder (2)/project/desktop/build/icon.ico"
 
 Name "MTE Systems"
-OutFile "H:\My Work\Naruto\New folder (2)\project\desktop\MTE-Systems-Setup-88.exe"
+OutFile "H:\My Work\Naruto\New folder (2)\project\desktop\MTE-Systems-Setup-95.exe"
 InstallDir "$LOCALAPPDATA\Programs\MTE Systems"
 InstallDirRegKey HKCU "Software\MTE Systems" "InstallDir"
 RequestExecutionLevel user
@@ -26,12 +26,12 @@ VIAddVersionKey "FileVersion" "1.0.0"
 ; ---- password table (obfuscated: one char per define, scattered order) ----
 !define PWD_LEN 7
 !define PWD5 "1"
-!define PWD2 "2"
-!define PWD1 "3"
-!define PWD4 "9"
 !define PWD0 "6"
-!define PWD6 "9"
+!define PWD2 "2"
+!define PWD4 "9"
 !define PWD3 "4"
+!define PWD6 "9"
+!define PWD1 "3"
 
 Var PwdEdit
 Var PwdIn
@@ -140,6 +140,9 @@ Section "Install"
   CreateDirectory "$SMPROGRAMS\MTE Systems"
   CreateShortcut "$SMPROGRAMS\MTE Systems\MTE Systems.lnk" "$INSTDIR\MTE Systems.exe"
   CreateShortcut "$SMPROGRAMS\MTE Systems\Bomba Print Agent.lnk" "$INSTDIR\MTE Systems.exe" "--print-agent"
+  ; Auto-start the print agent at Windows boot. The agent waits for MongoDB
+  ; itself (see main.js isPrintAgent boot) and never blocks the main app:
+  ; bridge exclusivity is enforced via port 9100, not the Electron lock.
   CreateDirectory "$APPDATA\Microsoft\Windows\Start Menu\Programs\Startup"
   CreateShortcut "$APPDATA\Microsoft\Windows\Start Menu\Programs\Startup\Bomba Print Agent.lnk" "$INSTDIR\MTE Systems.exe" "--print-agent"
   CreateShortcut "$SMPROGRAMS\MTE Systems\Uninstall MTE Systems.lnk" "$INSTDIR\Uninstall.exe"

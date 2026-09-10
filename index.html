@@ -75,6 +75,15 @@
         document.body.appendChild(div);
       }
       window.addEventListener('error', function(e) {
+        // Resource load failures (script/link 404 or aborted) arrive here as
+        // Events whose target is the element — record WHICH file failed.
+        try {
+          var t = e && e.target;
+          if (t && t !== window && (t.src || t.href)) {
+            window.__bootError = 'failed to load: ' + (t.src || t.href);
+            return;
+          }
+        } catch (err) {}
         window.__bootError = (e && e.message) || 'script error';
       }, true);
       window.addEventListener('unhandledrejection', function(e) {
@@ -106,6 +115,17 @@
       function checkBoot() {
         var root = document.getElementById('root');
         if (root && root.childNodes.length === 0 && document.readyState === 'complete') {
+          // Last-chance sweep: any script/css resource that transferred 0 bytes?
+          try {
+            var res = (window.performance && performance.getEntriesByType) ? performance.getEntriesByType('resource') : [];
+            for (var i = 0; i < res.length; i++) {
+              var r = res[i];
+              if ((r.initiatorType === 'script' || r.initiatorType === 'link' || r.initiatorType === 'other') && !r.transferSize && !r.decodedBodySize) {
+                window.__bootError = window.__bootError || ('failed to load: ' + r.name);
+                break;
+              }
+            }
+          } catch (err) {}
           showBootHelp(window.__bootError || '');
           watchRoot();
         } else if (root && root.childNodes.length === 0) {

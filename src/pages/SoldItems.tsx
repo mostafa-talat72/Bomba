@@ -371,28 +371,28 @@ const SoldItems: React.FC = () => {
     >
       <div className="max-w-7xl mx-auto">
         {/* Header */}
-        <div className="mb-8">
-          <div className="flex items-center justify-between gap-4 mb-3" style={{ direction: dir }}>
-            <div className="flex items-center gap-4" style={{ direction: dir }}>
-              <div className="bg-gradient-to-br from-blue-500 to-blue-600 p-3 rounded-xl shadow-lg">
-                <Package className="w-8 h-8 text-white" />
+        <div className="mb-4 sm:mb-8">
+          <div className="flex items-center justify-between gap-2 sm:gap-4 mb-2 sm:mb-3 flex-wrap" style={{ direction: dir }}>
+            <div className="flex items-center gap-2 sm:gap-4 min-w-0" style={{ direction: dir }}>
+              <div className="bg-gradient-to-br from-blue-500 to-blue-600 p-2 sm:p-3 rounded-xl shadow-lg flex-shrink-0">
+                <Package className="w-6 h-6 sm:w-8 sm:h-8 text-white" />
               </div>
-              <div style={{ textAlign: textAlign }}>
-                <h1 className="text-3xl md:text-4xl font-bold text-gray-900 dark:text-white">
+              <div style={{ textAlign: textAlign }} className="min-w-0">
+                <h1 className="text-xl sm:text-3xl md:text-4xl font-bold text-gray-900 dark:text-white">
                   {t('soldItems.title')}
                 </h1>
-                <p className="text-gray-600 dark:text-gray-400 mt-1">
+                <p className="text-xs sm:text-base text-gray-600 dark:text-gray-400 mt-0.5 sm:mt-1">
                   {t('soldItems.description')}
                 </p>
               </div>
             </div>
-            
+
             {/* Toggle Money Visibility Button */}
             <button
               onClick={() => setShowMoney(!showMoney)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all ${
-                showMoney 
-                  ? 'bg-green-500 hover:bg-green-600 text-white' 
+              className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg font-medium transition-all text-sm sm:text-base ${
+                showMoney
+                  ? 'bg-green-500 hover:bg-green-600 text-white'
                   : 'bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300'
               }`}
               style={{ direction: dir }}
@@ -406,7 +406,7 @@ const SoldItems: React.FC = () => {
         {/* Filters and Search */}
         <ConfigProvider locale={getAntdLocale()} direction={isRTL ? 'rtl' : 'ltr'}>
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-4 md:p-6 mb-6 border border-gray-200 dark:border-gray-700" style={{ direction: dir }}>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4" style={{ direction: dir }}>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4" style={{ direction: dir }}>
               {/* Search */}
               <div className="relative" style={{ direction: dir }}>
                 <Search className={`absolute ${isRTL ? 'right-3' : 'left-3'} top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5`} />
@@ -468,7 +468,7 @@ const SoldItems: React.FC = () => {
                     {t('soldItems.filters.selectDateRange')}
                   </span>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4" style={{ direction: dir }}>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4" style={{ direction: dir }}>
                   {/* From Date */}
                   <div style={{ direction: dir }}>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2" style={{ textAlign: textAlign }}>
@@ -539,12 +539,12 @@ const SoldItems: React.FC = () => {
         </ConfigProvider>
 
         {/* Summary Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 mb-6">
-          <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl shadow-lg p-6 text-white transform hover:scale-105 transition-transform">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 md:gap-6 mb-4 sm:mb-6">
+          <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl shadow-lg p-4 sm:p-6 text-white transform hover:scale-105 transition-transform">
             <div className="flex items-center justify-between" style={{ direction: dir }}>
               <div style={{ textAlign: textAlign }}>
                 <p className="text-blue-100 text-sm font-medium mb-1">{t('soldItems.summary.totalSections')}</p>
-                <p className="text-3xl font-bold">{formatDecimal(sections.length, i18n.language === 'ar' ? 'ar' : i18n.language === 'fr' ? 'fr' : 'en')}</p>
+                <p className="text-2xl sm:text-3xl font-bold truncate">{formatDecimal(sections.length, i18n.language === 'ar' ? 'ar' : i18n.language === 'fr' ? 'fr' : 'en')}</p>
               </div>
               <div className="bg-white bg-opacity-20 p-3 rounded-lg">
                 <Package className="w-8 h-8" />
@@ -552,11 +552,11 @@ const SoldItems: React.FC = () => {
             </div>
           </div>
 
-          <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-xl shadow-lg p-6 text-white transform hover:scale-105 transition-transform">
+          <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-xl shadow-lg p-4 sm:p-6 text-white transform hover:scale-105 transition-transform">
             <div className="flex items-center justify-between" style={{ direction: dir }}>
               <div style={{ textAlign: textAlign }}>
                 <p className="text-green-100 text-sm font-medium mb-1">{t('soldItems.summary.totalQuantity')}</p>
-                <p className="text-3xl font-bold">
+                <p className="text-2xl sm:text-3xl font-bold truncate">
                   {formatDecimal(sections.reduce((sum, section) => sum + section.totalQuantity, 0), i18n.language === 'ar' ? 'ar' : i18n.language === 'fr' ? 'fr' : 'en')}
                 </p>
               </div>
@@ -566,11 +566,11 @@ const SoldItems: React.FC = () => {
             </div>
           </div>
 
-          <div className="bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl shadow-lg p-6 text-white transform hover:scale-105 transition-transform">
+          <div className="bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl shadow-lg p-4 sm:p-6 text-white transform hover:scale-105 transition-transform">
             <div className="flex items-center justify-between" style={{ direction: dir }}>
               <div style={{ textAlign: textAlign }}>
                 <p className="text-purple-100 text-sm font-medium mb-1">{t('soldItems.summary.totalRevenue')}</p>
-                <p className="text-3xl font-bold">
+                <p className="text-2xl sm:text-3xl font-bold truncate">
                   {showMoney ? formatCurrency(sections.reduce((sum, section) => sum + section.totalRevenue, 0)) : '••••••'}
                 </p>
               </div>
@@ -741,7 +741,7 @@ const SoldItems: React.FC = () => {
                                           key={`${detail.orderId}-${index}`}
                                           className={`bg-white dark:bg-gray-800 rounded-lg p-4 ${isRTL ? 'border-r-4' : 'border-l-4'} border-blue-500 shadow-sm hover:shadow-md transition-shadow`}
                                         >
-                                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                                          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
                                             {/* Bill Info */}
                                             <div className="flex items-start gap-2" style={{ direction: dir }}>
                                               <div className="bg-blue-100 dark:bg-blue-900 p-2 rounded-lg">

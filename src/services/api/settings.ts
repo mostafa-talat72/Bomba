@@ -1,4 +1,5 @@
 import { apiClient } from './client';
+import { getInstanceId } from '../../utils/instanceId';
 import type { ApiResponse, User } from './types';
 
 async function getSettings(category: string): Promise<ApiResponse<any>> {
@@ -102,10 +103,10 @@ async function updateGeneralSettings(settings: { theme?: string; language?: stri
 }
 
 
-async function createBackup(backupPath?: string): Promise<ApiResponse<any>> {
+async function createBackup(backupPath?: string, password?: string): Promise<ApiResponse<any>> {
   return apiClient.request('/backup/create', {
     method: 'POST',
-    body: JSON.stringify({ backupPath }),
+    body: JSON.stringify({ backupPath, password: password || undefined }),
   });
 }
 
@@ -115,10 +116,50 @@ async function getBackups(): Promise<ApiResponse<any>> {
 }
 
 
-async function restoreBackup(fileName: string): Promise<ApiResponse<any>> {
+async function restoreBackup(fileName: string, password?: string): Promise<ApiResponse<any>> {
   return apiClient.request(`/backup/restore/${fileName}`, {
     method: 'POST',
+    body: JSON.stringify({ password: password || undefined }),
   });
+}
+
+
+async function verifyBackup(fileName: string, password?: string): Promise<ApiResponse<any>> {
+  return apiClient.request(`/backup/verify/${fileName}`, {
+    method: 'POST',
+    body: JSON.stringify({ password: password || undefined }),
+  });
+}
+
+
+async function downloadBackup(fileName: string): Promise<{ ok: boolean; blob?: Blob; message?: string }> {
+  // Raw fetch (not apiClient.request) to receive binary + trigger browser download.
+  try {
+    const headers: Record<string, string> = { 'x-instance-id': getInstanceId() };
+    const token = apiClient.getToken();
+    if (token) headers.Authorization = `Bearer ${token}`;
+    const response = await fetch(`${(apiClient as any).baseURL}/backup/download/${encodeURIComponent(fileName)}`, { headers });
+    if (!response.ok) {
+      let message = 'فشل تنزيل النسخة الاحتياطية';
+      try {
+        const data = await response.json();
+        if (data?.message) message = data.message;
+      } catch {}
+      return { ok: false, message };
+    }
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => window.URL.revokeObjectURL(url), 5000);
+    return { ok: true };
+  } catch {
+    return { ok: false, message: 'خطأ في الاتصال بالخادم أثناء التنزيل' };
+  }
 }
 
 
@@ -126,6 +167,31 @@ async function deleteBackup(fileName: string): Promise<ApiResponse<any>> {
   return apiClient.request(`/backup/${fileName}`, {
     method: 'DELETE',
   });
+}
+
+
+async function importBackup(file: File): Promise<ApiResponse<any>> {
+  // Multipart upload — must NOT set Content-Type (browser sets the boundary).
+  try {
+    const form = new FormData();
+    form.append('file', file, file.name);
+    const headers: Record<string, string> = { 'x-instance-id': getInstanceId() };
+    const token = apiClient.getToken();
+    if (token) headers.Authorization = `Bearer ${token}`;
+    const response = await fetch(`${(apiClient as any).baseURL}/backup/import`, {
+      method: 'POST',
+      headers,
+      body: form,
+    });
+    const text = await response.text();
+    const data = text ? JSON.parse(text) : {};
+    if (!response.ok) {
+      return { success: false, message: data.message || 'فشل استيراد النسخة الاحتياطية' };
+    }
+    return { success: true, message: data.message, data: data.data };
+  } catch {
+    return { success: false, message: 'خطأ في الاتصال بالخادم أثناء الاستيراد' };
+  }
 }
 
 
@@ -138,6 +204,26 @@ async function saveBackupSettings(dir: string): Promise<ApiResponse<any>> {
   return apiClient.request('/backup/settings', {
     method: 'PUT',
     body: JSON.stringify({ dir }),
+  });
+}
+
+
+async function getDeliveryZones(): Promise<ApiResponse<any[]>> {
+  return apiClient.request('/delivery-zones');
+}
+
+
+async function createDeliveryZone(data: { name: string; fee: number }): Promise<ApiResponse<any>> {
+  return apiClient.request('/delivery-zones', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+
+async function deleteDeliveryZone(id: string): Promise<ApiResponse<any>> {
+  return apiClient.request(`/delivery-zones/${id}`, {
+    method: 'DELETE',
   });
 }
 
@@ -160,6 +246,12 @@ export const settingsApi = {
   getBackups,
   restoreBackup,
   deleteBackup,
+  importBackup,
+  verifyBackup,
+  downloadBackup,
   getBackupSettings,
   saveBackupSettings,
+  getDeliveryZones,
+  createDeliveryZone,
+  deleteDeliveryZone,
 };

@@ -1,5 +1,7 @@
 import mongoose from "mongoose";
 import { applySyncMiddleware } from "../middleware/sync/syncMiddleware.js";
+import { stampUpdatedBy } from "../middleware/auditStamping.js";
+import { auditPlugin } from "../utils/audit.js";
 import { getInstanceId } from "../utils/instanceId.js";
 
 const orderItemSchema = new mongoose.Schema({
@@ -101,6 +103,12 @@ const orderSchema = new mongoose.Schema(
             type: String,
             default: null,
         },
+        fulfillmentType: {
+            type: String,
+            enum: ["dine_in", "takeaway", "delivery"],
+            default: "dine_in",
+            index: true,
+        },
         items: [orderItemSchema],
         status: {
             type: String,
@@ -157,6 +165,11 @@ const orderSchema = new mongoose.Schema(
             type: mongoose.Schema.Types.ObjectId,
             ref: "User",
             required: true,
+        },
+        updatedBy: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "User",
+            default: null,
         },
         preparedBy: {
             type: mongoose.Schema.Types.ObjectId,
@@ -291,8 +304,19 @@ orderSchema.add({
     deletedAt: { type: Date, default: null },
     deletedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
 });
+// Audit stamping: whoever saves/updates through an authenticated request
+// becomes updatedBy (AsyncLocalStorage context, fail-open when absent).
+orderSchema.pre("save", function (next) {
+    stampUpdatedBy(this);
+    next();
+});
+orderSchema.pre("findOneAndUpdate", function (next) {
+    stampUpdatedBy(this);
+    next();
+});
 // Apply sync middleware BEFORE creating the model
 applySyncMiddleware(orderSchema, 'Order');
+auditPlugin(orderSchema, 'orders');
 
 // Create the model AFTER middleware is applied
 const Order = mongoose.model("Order", orderSchema);

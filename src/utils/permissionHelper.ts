@@ -89,6 +89,14 @@ export const canEditItemPrice = (user: UserPermissions | null): boolean => {
 };
 
 /**
+ * Check if user can view customer phone numbers and addresses (delivery privacy).
+ * Admins and 'all' always pass; cashiers need the explicit permission.
+ */
+export const canViewCustomerContacts = (user: UserPermissions | null): boolean => {
+  return hasPermission(user, 'viewCustomerContacts');
+};
+
+/**
  * Check if user has any of the specified permissions
  */
 export const hasAnyPermission = (user: UserPermissions | null, permissions: string[]): boolean => {

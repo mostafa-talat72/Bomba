@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import Device from "./Device.js";
 import { applySyncMiddleware } from "../middleware/sync/syncMiddleware.js";
+import { auditPlugin } from "../utils/audit.js";
 import { getInstanceId } from "../utils/instanceId.js";
 
 const sessionSchema = new mongoose.Schema(
@@ -625,6 +626,7 @@ sessionSchema.add({
 });
 // Apply sync middleware
 applySyncMiddleware(sessionSchema, 'Session');
+auditPlugin(sessionSchema, 'sessions');
 
 const Session = mongoose.model("Session", sessionSchema);
 export default Session;

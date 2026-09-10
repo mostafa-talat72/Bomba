@@ -1137,6 +1137,13 @@ export const initializeScheduler = () => {
     // Auto-fix table statuses every 5 minutes (drift correction)
     setupTableStatusAutoFixScheduler();
 
+    // System health checks every 5 minutes (disk, mongo, backups, queue -> admin alerts)
+    try {
+        import("./systemHealth.js").then((m) => {
+            try { m.scheduleSystemHealthChecks(); } catch {}
+        }).catch(() => {});
+    } catch {}
+
     // Check low stock every 6 hours at minute 0
     cron.schedule("0 */6 * * *", checkLowStock);
     Logger.info("✅ Low stock check scheduled: every 6 hours at minute 0");
@@ -1170,16 +1177,16 @@ export const initializeScheduler = () => {
     cron.schedule("0 0 * * *", createRecurringCosts);
     Logger.info("✅ Recurring costs creation scheduled: daily at midnight");
 
-    // Create database backup every 3 hours
-    cron.schedule("0 */3 * * *", async () => {
+    // Create database backup every hour (into the user-chosen dir)
+    cron.schedule("0 * * * *", async () => {
         try {
-            Logger.info("💾 Scheduled database backup triggered");
+            Logger.info("💾 Scheduled database backup triggered (hourly)");
             await createDatabaseBackup();
         } catch (error) {
             Logger.error("Scheduled backup failed", { error: error.message });
         }
     });
-    Logger.info("✅ Database backup scheduled: every 3 hours");
+    Logger.info("✅ Database backup scheduled: every hour");
 
     // Clean expired notifications daily at 3 AM
     cron.schedule("0 3 * * *", async () => {

@@ -3,8 +3,8 @@ import {
   ShoppingCart, Plus, Edit, Trash2, X, Printer,
   AlertTriangle, Search, CheckCircle, DollarSign,
   Calendar, Receipt, Table as TableIcon, Eye, EyeOff,
-  Gamepad2, ChevronDown, ChevronUp,
-  Clock, Zap, History
+  Gamepad2, ChevronDown, ChevronUp, User as UserIcon,
+  Clock, Zap, History, ArrowLeftRight
 } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
@@ -35,6 +35,7 @@ import TableButton from '../components/tables/TableButton';
 import PlaystationBillItem from '../components/tables/PlaystationBillItem';
 import { ItemCard, OrderItemRow } from '../components/tables/OrderItems';
 import { getTableDisplay } from '../components/tables/tableHelpers';
+import { getOrderCreatorName, getUpdaterName } from '../components/tables/tableHelpers';
 import type { LocalOrderItem } from '../components/tables/tableHelpers';
 import ModalPortal from '../components/ModalPortal';
 import UndoBar, { UndoRequest } from '../components/UndoBar';
@@ -156,40 +157,6 @@ const Tables: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<Bill[] | null>(null);
   const [billTypeFilter] = useState<'all' | 'cafe' | 'playstation' | 'computer'>('all');
-  const [fulfillmentFilter, setFulfillmentFilter] = useState<'all' | 'dine_in' | 'takeaway' | 'delivery'>('all');
-  const handleCreateFulfillment = useCallback(async (type: 'takeaway' | 'delivery') => {
-    try {
-      let deliveryInfo: any = undefined;
-      if (type === 'delivery') {
-        const phone = window.prompt('رقم هاتف العميل:') || '';
-        if (!phone.trim()) { showNotification('رقم الهاتف مطلوب للدليفري', 'error'); return; }
-        const address = window.prompt('عنوان العميل:') || '';
-        if (!address.trim()) { showNotification('العنوان مطلوب للدليفري', 'error'); return; }
-        const customerName = window.prompt('اسم العميل (اختياري):') || 'عميل دليفري';
-        deliveryInfo = { phone: phone.trim(), address: address.trim(), customerName: customerName.trim() };
-      }
-      const res: any = await (api as any).createBill?.({ fulfillmentType: type, deliveryInfo, billType: 'cafe' }) || await (api as any).request('/bills', { method: 'POST', body: JSON.stringify({ fulfillmentType: type, deliveryInfo }) });
-      const bill = res?.data || res;
-      if (bill?._id || bill?.id) {
-        showNotification(type === 'delivery' ? 'تم إنشاء طلب دليفري' : 'تم إنشاء طلب تيك أوي', 'success');
-        await fetchBills();
-        // فتح الطلب للإضافة
-        const fullBill = bill._id ? bill : { ...bill, _id: bill.id };
-        // استخدام نفس تدفق الطاولة: فتح نافذة الطلب
-        (window as any).__openFulfillmentBill?.(fullBill);
-      }
-    } catch (e: any) { showNotification(e?.message || 'فشل إنشاء الطلب', 'error'); }
-  }, [fetchBills]);
-  // expose for header buttons
-  useEffect(() => { (window as any).__fulfillmentCreate = handleCreateFulfillment; return () => { delete (window as any).__fulfillmentCreate; }; }, [handleCreateFulfillment]);
-  useEffect(() => {
-    (window as any).__openFulfillmentBill = (bill: any) => {
-      setSelectedBill(bill);
-      setSelectedTable({ _id: 'fulfillment', id: 'fulfillment', number: bill.fulfillmentType === 'delivery' ? 'دليفري' : 'تيك أوي' } as any);
-      setShowOrderModal(true);
-    };
-    return () => { delete (window as any).__openFulfillmentBill; };
-  }, []);
   const [playstationSearchQuery, setPlaystationSearchQuery] = useState('');
   const [gamingDeviceTypeFilter, setGamingDeviceTypeFilter] = useState<'all' | 'playstation' | 'computer'>('all');
   const [isPlaystationSectionCollapsed, setIsPlaystationSectionCollapsed] = useState(false);
@@ -2409,6 +2376,50 @@ const loadInitialData = async () => {
     } catch { showNotification(t('billing.notifications.payFullBillError'), 'error'); setIsProcessingPayment(false); }
   };
 
+  // طباعة + دفع كامل من نافذة الدفع: يدفع أولاً ثم يطبع مرة واحدة فقط.
+  const handlePrintAndPayFull = async (bill: Bill, method: 'cash' | 'card' | 'transfer' = 'cash') => {
+    if (!canPayFullBill(user)) { showNotification(t('common.permissionDenied'), 'error'); return; }
+    if (!bill) return;
+    if (bill.status === 'paid') {
+      try {
+        const r: any = await api.getBill((bill as any).id || (bill as any)._id);
+        if (r?.success && r.data) await printBill(r.data, user?.organizationName, i18n.language, t, getTableSectionName(r.data.table));
+      } catch {}
+      return;
+    }
+    if (bill && hasActiveSession(bill)) { showNotification(t('billing.notifications.cannotPayActiveSession'), 'error'); return; }
+    const remaining = bill.remaining || 0;
+    if (remaining <= 0) { showNotification(t('billing.notifications.noRemainingAmount'), 'info'); return; }
+    fireInstantDrawer(bill, 'payment');
+    setIsProcessingPayment(true);
+    try {
+      const result = await api.updatePayment((bill as any).id || (bill as any)._id, {
+        paid: (bill.paid || 0) + remaining, remaining: 0, status: 'paid',
+        paymentAmount: remaining, method, reference: '',
+      } as any);
+      if (result?.data) {
+        const finalPaidBill = result.data;
+        const tableId = getId((finalPaidBill.table as any) ?? finalPaidBill.table);
+        setBills(prev => {
+          const next = prev.map(b => String(b._id || (b as any).id) === String((bill as any)._id || (bill as any).id) ? finalPaidBill : b);
+          const hasUnpaid = tableId ? next.some((b: any) => String(b.table?._id || b.table) === tableId && ['draft','partial','overdue'].includes(b.status)) : true;
+          if (tableId) {
+            setTables(tprev => tprev.map((t: any) => String(t._id || t.id) === tableId ? { ...t, status: hasUnpaid ? 'occupied' : 'empty' } : t));
+            if (!hasUnpaid) { setShowUnifiedTableModal(false); setSelectedTable(null); }
+          }
+          return next;
+        });
+        setShowPaymentSuccessAnim(true);
+        setTimeout(() => setShowPaymentSuccessAnim(false), 2500);
+        showNotification(t('billing.notifications.payFullBillSuccess'), 'success');
+        // طباعة واحدة مؤكدة (الزر نفسه هو أمر الطباعة — لا نعتمد على الإعداد التلقائي هنا)
+        await printBill(finalPaidBill, user?.organizationName, i18n.language, t, getTableSectionName(finalPaidBill.table), 'payment');
+        scheduleBackgroundRefetch(true);
+      }
+    } catch { showNotification(t('billing.notifications.payFullBillError'), 'error'); }
+    finally { setIsProcessingPayment(false); }
+  };
+
   // دالة موحدة لفتح الدرج — نادِها whenever الدرج مطلوب.
   const fireInstantDrawer = (bill: Bill, drawerMode: 'bill' | 'payment' = 'payment') => {
     void (async () => {
@@ -3047,25 +3058,6 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
         </div>
       </div>
 
-      {/* ── Fulfillment Filter: صالة / تيك أوي / دليفري ── */}
-      <div className="px-4 sm:px-6 py-2 bg-gradient-to-r from-orange-50 to-amber-50 dark:from-gray-800 dark:to-gray-800 border-b border-orange-100 dark:border-gray-700 flex flex-wrap items-center gap-2">
-        {[
-          { id: 'all', label: 'الكل', icon: '🗂️' },
-          { id: 'dine_in', label: 'صالة', icon: '🪑' },
-          { id: 'takeaway', label: 'تيك أوي', icon: '🥡' },
-          { id: 'delivery', label: 'دليفري', icon: '🛵' },
-        ].map(f => (
-          <button key={f.id} onClick={() => setFulfillmentFilter(f.id as any)}
-            className={"px-3 py-1.5 rounded-full border text-sm font-bold flex items-center gap-1.5 " + (fulfillmentFilter === f.id ? 'bg-orange-600 border-orange-700 text-white shadow' : 'bg-white dark:bg-gray-700 border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:border-orange-300')}>
-            <span>{f.icon}</span><span>{f.label}</span>
-          </button>
-        ))}
-        <div className="ml-auto flex gap-2">
-          <button onClick={() => { (window as any).__fulfillmentCreate?.('takeaway'); }} className="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-bold flex items-center gap-1">🥡 تيك أوي جديد</button>
-          <button onClick={() => { (window as any).__fulfillmentCreate?.('delivery'); }} className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-bold flex items-center gap-1">🛵 دليفري جديد</button>
-        </div>
-      </div>
-
       {/* ── Table Grid ── */}
       <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700">
         <div className="p-1 sm:p-1">
@@ -3086,7 +3078,7 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
                       <span className="truncate">{section.name}</span>
                       <span className="text-sm text-gray-400 font-normal">({shownTables.length})</span>
                     </h3>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 2xl:grid-cols-8 gap-1.5 sm:gap-2">
+                    <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-1.5 sm:gap-2">
                       {shownTables.map(table => {
                         const tableIdStr = (table._id || (table as any).id).toString();
                         // استخدام tableCardData المحسوبة مسبقاً بدلاً من O(N×M) في الـ render
@@ -3331,25 +3323,25 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
             onClick={e => e.stopPropagation()}>
 
             {/* ══ HEADER ══ */}
-            <div className="flex-shrink-0 bg-gradient-to-l from-slate-800 via-gray-900 to-slate-900 px-5 py-4">
+            <div className="flex-shrink-0 bg-gradient-to-l from-slate-800 via-gray-900 to-slate-900 px-3 py-2.5 sm:px-5 sm:py-4">
               <div className="flex items-center justify-between gap-3">
                 {/* اليسار: أيقونة + اسم الطاولة */}
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="w-10 h-10 bg-white/10 rounded-xl flex items-center justify-center flex-shrink-0 border border-white/20">
-                    <TableIcon className="h-5 w-5 text-white" />
+                <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+                  <div className="w-9 h-9 sm:w-10 sm:h-10 bg-white/10 rounded-xl flex items-center justify-center flex-shrink-0 border border-white/20">
+                    <TableIcon className="h-4 w-4 sm:h-5 sm:w-5 text-white" />
                   </div>
                   <div className="min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <h2 className="text-xl font-bold text-white leading-tight">
+                      <h2 className="text-lg sm:text-xl font-bold text-white leading-tight">
                         طاولة {getTableDisplay(selectedTable.number, i18n.language)}
                       </h2>
                       {(() => {
                         const sec = typeof selectedTable.section === 'object'
                           ? (selectedTable.section as any)?.name
                           : tableSections.find((s: any) => s._id === selectedTable.section || s.id === selectedTable.section)?.name;
-                        return sec ? <span className="text-base text-gray-400 font-medium">· {sec}</span> : null;
+                        return sec ? <span className="text-sm sm:text-base text-gray-400 font-medium">· {sec}</span> : null;
                       })()}
-                      <span className={`text-base px-2.5 py-0.5 rounded-full font-bold border ${
+                      <span className={`text-sm sm:text-base px-2.5 py-0.5 rounded-full font-bold border ${
                         hasUnpaid
                           ? 'bg-red-500/15 text-red-300 border-red-500/30'
                           : 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
@@ -3359,22 +3351,22 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
                     </div>
                     {/* ── الإجماليات: تظهر فقط عند وجود فواتير غير مدفوعة ── */}
                     {hasUnpaid && (
-                      <div className="flex items-center gap-4 mt-1.5">
+                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1.5">
                         <div className="flex items-center gap-1.5">
                           <span className="w-1.5 h-1.5 rounded-full bg-white/40 inline-block"></span>
-                          <span className="text-base text-gray-400">إجمالي</span>
-                          <span className="text-base font-bold text-white">{formatCurrency(unpaidTotal)}</span>
+                          <span className="text-sm sm:text-base text-gray-400">إجمالي</span>
+                          <span className="text-sm sm:text-base font-bold text-white">{formatCurrency(unpaidTotal)}</span>
                         </div>
                         <div className="flex items-center gap-1.5">
                           <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block"></span>
-                          <span className="text-base text-gray-400">مدفوع</span>
-                          <span className="text-base font-bold text-emerald-400">{formatCurrency(unpaidPaid)}</span>
+                          <span className="text-sm sm:text-base text-gray-400">مدفوع</span>
+                          <span className="text-sm sm:text-base font-bold text-emerald-400">{formatCurrency(unpaidPaid)}</span>
                         </div>
                         {unpaidRemaining > 0 && (
                           <div className="flex items-center gap-1.5">
                             <span className="w-1.5 h-1.5 rounded-full bg-red-400 inline-block animate-pulse"></span>
-                            <span className="text-base text-gray-400">متبقي</span>
-                            <span className="text-base font-bold text-red-400">{formatCurrency(unpaidRemaining)}</span>
+                            <span className="text-sm sm:text-base text-gray-400">متبقي</span>
+                            <span className="text-sm sm:text-base font-bold text-red-400">{formatCurrency(unpaidRemaining)}</span>
                           </div>
                         )}
                       </div>
@@ -3389,11 +3381,46 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
               </div>
             </div>
 
-            {/* ── BODY: sidebar + content ── */}
-            <div className="flex-1 flex overflow-hidden min-h-0">
+            {/* ── شريط إجراءات الطاولة: بديل أزرار الكارت (موبايل + ديسكتوب) ── */}
+            <div className="flex-shrink-0 flex gap-1.5 overflow-x-auto px-2.5 py-2 bg-gray-50 dark:bg-gray-800/80 border-b border-gray-200 dark:border-gray-700/60">
+              {(() => {
+                const stubEvt = { stopPropagation() {} } as unknown as React.MouseEvent;
+                const acts: { key: string; label: string; icon: React.ReactNode; cls: string; show: boolean; run: () => void }[] = [
+                  { key: 'order', label: 'طلب جديد', icon: <Plus className="h-4 w-4" />, cls: 'bg-green-500 border-green-600 text-white', show: true, run: () => stableQuickOrder(selectedTable, stubEvt) },
+                  ...(hasUnpaid ? [
+                    // NOTE: لا زر "فتح" هنا — المستخدم داخل نافذة الطاولة أصلاً، وفتحها مجدداً بلا معنى
+                    { key: 'pay', label: 'دفع', icon: <DollarSign className="h-4 w-4" />, cls: 'bg-blue-600 border-blue-700 text-white', show: true, run: () => stableQuickBilling(selectedTable, stubEvt) },
+                  ] as typeof acts : []),
+                  ...(unpaidBills.some((b: Bill) => ['draft','partial','overdue'].includes(b.status)) ? [
+                    { key: 'edit', label: 'تعديل', icon: <Edit className="h-4 w-4" />, cls: 'bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-blue-600 dark:text-blue-400', show: true, run: () => stableQuickEditBill(selectedTable, stubEvt) },
+                  ] as typeof acts : []),
+                  ...(hasUnpaid ? [
+                    { key: 'move', label: 'نقل', icon: <ArrowLeftRight className="h-4 w-4" />, cls: 'bg-white dark:bg-gray-700 border-purple-300 dark:border-purple-700 text-purple-600 dark:text-purple-400', show: true, run: () => stableQuickChangeTable(selectedTable, stubEvt) },
+                  ] as typeof acts : []),
+                  ...(unpaidRemaining > 0 ? [
+                    { key: 'print', label: 'طباعة', icon: <Printer className="h-4 w-4" />, cls: 'bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300', show: true, run: () => stableQuickPrint(selectedTable, stubEvt) },
+                  ] as typeof acts : []),
+                  ...(activeSessionsCount > 0 ? [
+                    { key: 'stop', label: 'إيقاف الجلسات', icon: <span className="text-base leading-none">⏹</span>, cls: 'bg-white dark:bg-gray-700 border-red-300 dark:border-red-800 text-red-600 dark:text-red-400', show: true, run: () => handleEndAllSessions(selectedTable, stubEvt) },
+                  ] as typeof acts : []),
+                ];
+                return acts.filter(a => a.show).map(a => (
+                  <button
+                    key={a.key}
+                    onClick={a.run}
+                    className={`flex-shrink-0 flex items-center gap-1.5 px-3.5 min-h-10 rounded-xl text-sm font-bold border shadow-sm transition-all active:scale-95 ${a.cls}`}
+                  >
+                    {a.icon}<span className="whitespace-nowrap">{a.label}</span>
+                  </button>
+                ));
+              })()}
+            </div>
 
-              {/* ══ SIDEBAR ══ */}
-              <div className="w-[72px] flex-shrink-0 flex flex-col bg-gray-50 dark:bg-gray-800/80 border-l border-gray-200 dark:border-gray-700/60 py-2 gap-1">
+            {/* ── BODY: tabs + content (top tabs below lg, side rail on lg+) ── */}
+            <div className="flex-1 flex flex-col lg:flex-row overflow-hidden min-h-0">
+
+              {/* ══ TABS ══ */}
+              <div className="w-full lg:w-[72px] flex-shrink-0 flex flex-row lg:flex-col bg-gray-50 dark:bg-gray-800/80 border-b lg:border-b-0 lg:border-l border-gray-200 dark:border-gray-700/60 p-1.5 lg:py-2 gap-1.5 lg:gap-1 overflow-x-auto lg:overflow-visible">
                 {sideItems.map(item => {
                   const isActive = activeTab3 === item.id;
                   const cfg = colorMap[item.color];
@@ -3401,14 +3428,14 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
                   return (
                     <button key={item.id}
                       onClick={() => { setActiveTab3(item.id as any); if (item.id !== 'log' && item.id !== 'sessions') setActiveTab(item.id as any); }}
-                      className={`relative flex flex-col items-center gap-1 py-3 mx-1.5 rounded-xl text-[10px] font-semibold transition-all duration-200
+                      className={`relative flex flex-row lg:flex-col items-center justify-center gap-1.5 lg:gap-1 px-3 py-2 lg:py-3 lg:mx-1.5 rounded-xl text-[11px] lg:text-[10px] font-semibold transition-all duration-200 flex-shrink-0 lg:flex-shrink
                         ${isActive
                           ? `bg-white dark:bg-gray-700 shadow-sm border border-gray-200 dark:border-gray-600 ${cfg.active}`
-                          : `text-gray-400 dark:text-gray-500 hover:bg-white/60 dark:hover:bg-gray-700/50 hover:text-gray-600 dark:hover:text-gray-300`
+                          : `text-gray-400 dark:text-gray-500 hover:bg-white/60 dark:hover:bg-gray-700/50 hover:text-gray-600 dark:hover:text-gray-300 border border-transparent`
                         }`}>
-                      {/* شريط جانبي للعنصر النشط */}
+                      {/* شريط العنصر النشط: سفلي على الموبايل، جانبي على الديسكتوب */}
                       {isActive && (
-                        <span className={`absolute right-0 top-2 bottom-2 w-0.5 rounded-l-full ${cfg.activeBg}`} />
+                        <span className={`absolute rounded-full ${cfg.activeBg} bottom-0 left-3 right-3 h-0.5 top-auto w-auto lg:bottom-2 lg:top-2 lg:left-auto lg:right-0 lg:w-0.5 lg:h-auto`} />
                       )}
                       <div className="relative">
                         <Icon className={`h-[18px] w-[18px] ${isActive ? '' : cfg.icon}`} />
@@ -3421,7 +3448,7 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
                           <span className={`absolute -top-0.5 -right-0.5 w-2 h-2 ${cfg.dot} rounded-full animate-pulse border-2 border-white dark:border-gray-700`} />
                         )}
                       </div>
-                      <span className="text-center leading-tight">{item.label}</span>
+                      <span className="text-center leading-tight whitespace-nowrap">{item.label}</span>
                     </button>
                   );
                 })}
@@ -3433,7 +3460,7 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
                 {/* ══ ORDERS TAB ══ */}
                 {activeTab3 === 'orders' && (
                   <>
-                    <div className="flex-1 overflow-y-auto p-3 min-h-0">
+                    <div className="flex-1 overflow-y-auto p-2 sm:p-3 min-h-0">
                       {filteredTableOrders.length === 0 ? (
                         <div className="flex flex-col items-center justify-center h-full py-16 text-gray-400">
                           <div className="w-16 h-16 bg-orange-50 dark:bg-orange-900/20 rounded-2xl flex items-center justify-center mb-4 border border-orange-100 dark:border-orange-800">
@@ -3460,24 +3487,34 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
                               <div key={order.id} className={`bg-white dark:bg-gray-800 rounded-xl border overflow-hidden transition-all group cursor-pointer ${pinnedOrder?.id === order.id ? 'border-orange-400 ring-2 ring-orange-200' : 'border-gray-200/80 dark:border-gray-700/60 hover:border-gray-300'}`}
                                 onClick={() => { if (pinnedOrder?.id === order.id) setPinnedOrder(null); else setPinnedOrder(order); }}>
                                 <div className={`h-0.5 ${sc.dot}`} />
-                                <div className="flex items-center gap-2.5 px-3 py-2.5">
+                                <div className="flex items-center gap-2 px-2.5 py-2 sm:px-3 sm:py-2.5">
                                   <div className="flex-1 min-w-0">
-                                    <div className="flex items-center gap-2 mb-0.5 flex-wrap">
-                                      <span className="font-bold text-gray-900 dark:text-gray-100 text-lg">#{order.orderNumber}</span>
+                                    <div className="flex items-center gap-1.5 sm:gap-2 mb-0.5 flex-wrap">
+                                      <span className="font-bold text-gray-900 dark:text-gray-100 text-base sm:text-lg">#{order.orderNumber}</span>
                                       <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${sc.color}`}>{sc.label}</span>
                                       {orderTime && <span className="text-[10px] text-gray-400 dark:text-gray-500 flex items-center gap-1"><Clock className="h-3 w-3" />{orderTime}</span>}
+                                      {getOrderCreatorName(order) && (
+                                        <span className="text-[10px] text-violet-600 dark:text-violet-400 flex items-center gap-1 font-semibold">
+                                          <UserIcon className="h-3 w-3" />{getOrderCreatorName(order)}
+                                        </span>
+                                      )}
+                                      {getUpdaterName(order) && getUpdaterName(order) !== getOrderCreatorName(order) && (
+                                        <span className="text-[10px] text-teal-600 dark:text-teal-400 flex items-center gap-1 font-semibold">
+                                          ✎ {getUpdaterName(order)}
+                                        </span>
+                                      )}
                                     </div>
                                     {order.items && order.items.length > 0 && (
-                                      <p className="text-base text-gray-400 dark:text-gray-500 truncate">
+                                      <p className="text-sm sm:text-base text-gray-400 dark:text-gray-500 truncate">
                                         {(order.items as any[]).slice(0,3).map((i: any) => `${i.name} ×${i.quantity}`).join(' · ')}
                                         {order.items.length > 3 && <span className="text-gray-400"> +{order.items.length - 3}</span>}
                                       </p>
                                     )}
                                   </div>
-                                  <span className="font-bold text-orange-600 dark:text-orange-400 text-lg flex-shrink-0">{formatCurrency(total)}</span>
-                                  <div className="flex items-center gap-0.5 flex-shrink-0 opacity-60 group-hover:opacity-100 transition-opacity">
+                                  <span className="font-bold text-orange-600 dark:text-orange-400 text-base sm:text-lg flex-shrink-0">{formatCurrency(total)}</span>
+                                  <div className="flex items-center gap-1 flex-shrink-0">
                                     <button onClick={(e) => { e.stopPropagation(); handlePrintOrder(order); }} title={t('cafe.tableOrdersModal.print')}
-                                      className="w-7 h-7 flex items-center justify-center hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-all text-gray-400">
+                                      className="w-8 h-8 flex items-center justify-center hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-all text-gray-400">
                                       <Printer className="h-3.5 w-3.5" />
                                     </button>
                                     <button onClick={(e) => { e.stopPropagation(); handleEditOrder(order); }} title={t('cafe.tableOrdersModal.edit')}
@@ -3485,7 +3522,7 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
                                       <Edit className="h-4 w-4" />
                                     </button>
                                     <button onClick={(e) => { e.stopPropagation(); handleDeleteOrder(order); }} title={t('cafe.tableOrdersModal.delete')}
-                                      className="w-7 h-7 flex items-center justify-center hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-all text-gray-400">
+                                      className="w-8 h-8 flex items-center justify-center hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-all text-gray-400">
                                       <Trash2 className="h-3.5 w-3.5" />
                                     </button>
                                   </div>
@@ -3496,16 +3533,16 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
                         </div>
                       )}
                     </div>
-                    <div className="px-3 py-2.5 border-t border-gray-200 dark:border-gray-700/60 bg-white dark:bg-gray-800/80 flex-shrink-0 flex gap-2">
+                    <div className="px-2 sm:px-3 py-2 sm:py-2.5 border-t border-gray-200 dark:border-gray-700/60 bg-white dark:bg-gray-800/80 flex-shrink-0 flex gap-2">
                       {canAddOrder(user) ? (
                         <button onClick={handleAddOrder}
-                          className="flex-1 py-3 bg-orange-500 hover:bg-orange-600 active:bg-orange-700 text-white text-xl font-bold rounded-xl flex items-center justify-center gap-2 transition-all shadow-sm">
+                          className="flex-1 py-2.5 sm:py-3 bg-orange-500 hover:bg-orange-600 active:bg-orange-700 text-white text-lg sm:text-xl font-bold rounded-xl flex items-center justify-center gap-2 transition-all shadow-sm">
                           <Plus className="h-5 w-5" />{t('cafe.tableOrdersModal.newOrder')}
                         </button>
                       ) : <PermissionDenied size="small" message={t('users.permissions.canAddOrderDesc')} />}
                       {hasUnpaid && (
                         <button onClick={() => handlePaymentManagement(selectedTable)}
-                          className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white text-lg font-bold rounded-xl flex items-center justify-center gap-2 transition-all shadow-sm">
+                          className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white text-base sm:text-lg font-bold rounded-xl flex items-center justify-center gap-2 transition-all shadow-sm">
                           <DollarSign className="h-4 w-4" />{t('cafe.tableOrdersModal.paymentManagement')}
                         </button>
                       )}
@@ -3517,18 +3554,18 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
                 {activeTab3 === 'billing' && (
                   <>
                     {/* فلتر + بحث */}
-                    <div className="px-3 py-2 bg-white dark:bg-gray-800/80 border-b border-gray-200 dark:border-gray-700/60 flex items-center gap-2 flex-shrink-0">
+                    <div className="px-2 sm:px-3 py-2 bg-white dark:bg-gray-800/80 border-b border-gray-200 dark:border-gray-700/60 flex items-center gap-2 flex-shrink-0 flex-wrap">
                       <select value={tableBillsFilter} onChange={e => setTableBillsFilter(e.target.value)}
-                        className="flex-1 text-base border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1.5 bg-gray-50 dark:bg-gray-900 text-gray-700 dark:text-gray-300 focus:ring-1 focus:ring-blue-400 outline-none min-w-0">
+                        className="flex-1 min-w-[110px] text-sm sm:text-base border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1.5 bg-gray-50 dark:bg-gray-900 text-gray-700 dark:text-gray-300 focus:ring-1 focus:ring-blue-400 outline-none">
                         <option value="all">الكل</option>
                         <option value="unpaid">غير مدفوعة</option>
                         <option value="paid">مدفوعة</option>
                         <option value="partial">جزئية</option>
                       </select>
-                      <div className="relative flex-1 min-w-0">
+                      <div className="relative flex-[2] min-w-[140px]">
                         <Search className="absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
                         <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
-                          placeholder="بحث..." className="w-full pr-7 pl-2 py-1.5 text-base border border-gray-200 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-700 dark:text-gray-300 outline-none focus:ring-1 focus:ring-blue-400" />
+                          placeholder="بحث..." className="w-full pr-7 pl-2 py-1.5 text-sm sm:text-base border border-gray-200 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-700 dark:text-gray-300 outline-none focus:ring-1 focus:ring-blue-400" />
                       </div>
                       {searchQuery && (
                         <button onClick={() => { setSearchQuery(''); setSearchResults(null); }} className="w-6 h-6 flex items-center justify-center text-gray-400 hover:text-red-500 transition-colors flex-shrink-0">
@@ -3587,7 +3624,7 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
                       );
                     })()}
 
-                    <div className="flex-1 overflow-y-auto p-3 min-h-0">
+                    <div className="flex-1 overflow-y-auto p-2 sm:p-3 min-h-0">
                       {(() => {
                         const src = searchResults !== null ? searchResults : ((tableBillsMap as any)[tableId]?.bills || []);
                         const filtered = src.filter((b: Bill) => {
@@ -3618,38 +3655,52 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
                                     ${isUnpaid ? 'border-orange-200 dark:border-orange-800/60 hover:border-orange-300' : 'border-emerald-200 dark:border-emerald-800/60 hover:border-emerald-300'}`}
                                   onClick={() => handlePaymentClick(bill)}>
                                   <div className={`h-0.5 ${isUnpaid ? 'bg-gradient-to-l from-orange-400 to-amber-400' : 'bg-gradient-to-l from-emerald-400 to-green-400'}`} />
-                                  <div className="flex items-center gap-2.5 px-3 py-2.5">
+                                  <div className="flex items-center gap-2 px-2.5 py-2 sm:px-3 sm:py-2.5">
                                     <div className="flex-1 min-w-0">
-                                      <div className="flex items-center gap-2 mb-1 flex-wrap">
-                                        <span className="font-bold text-lg text-gray-900 dark:text-gray-100">#{bill.billNumber || (bill.id || bill._id)?.toString().slice(-6)}</span>
+                                      <div className="flex items-center gap-1.5 sm:gap-2 mb-1 flex-wrap">
+                                        <span className="font-bold text-base sm:text-lg text-gray-900 dark:text-gray-100">#{bill.billNumber || (bill.id || bill._id)?.toString().slice(-6)}</span>
                                         <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${getStatusColor(bill.status)}`}>{getStatusText(bill.status)}</span>
                                         {hasSessions && <span className="text-[10px] px-1.5 py-0.5 rounded-full font-bold bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300 flex items-center gap-0.5"><Gamepad2 className="h-2.5 w-2.5" />{(bill as any).sessions?.length}</span>}
                                         {hasSessions && (bill as any).sessions?.some((s: any) => s.status === 'active') && <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" title="تحديث لحظي كل 10 ثوانٍ" />}
                                       </div>
                                       {billTime && <div className="flex items-center gap-1 text-[10px] text-gray-400 mb-1"><Clock className="h-3 w-3" />{billTime}</div>}
-                                      <div className="flex items-center gap-3 text-base">
+                                      {(getOrderCreatorName(bill) || getUpdaterName(bill)) && (
+                                        <div className="flex items-center gap-2 text-[10px] mb-1 flex-wrap">
+                                          {getOrderCreatorName(bill) && (
+                                            <span className="text-violet-600 dark:text-violet-400 flex items-center gap-1 font-semibold">
+                                              <UserIcon className="h-3 w-3" />أنشأها: {getOrderCreatorName(bill)}
+                                            </span>
+                                          )}
+                                          {getUpdaterName(bill) && getUpdaterName(bill) !== getOrderCreatorName(bill) && (
+                                            <span className="text-teal-600 dark:text-teal-400 flex items-center gap-1 font-semibold">
+                                              ✎ آخر تعديل: {getUpdaterName(bill)}
+                                            </span>
+                                          )}
+                                        </div>
+                                      )}
+                                      <div className="flex items-center gap-x-3 gap-y-0.5 text-sm sm:text-base flex-wrap">
                                         <span className="text-gray-500">إجمالي: <strong className="text-gray-800 dark:text-gray-200">{formatCurrency(liveTotal)}</strong></span>
                                         <span className="text-emerald-600 dark:text-emerald-400">مدفوع: <strong>{formatCurrency(Number(bill.paid)||0)}</strong></span>
                                         {liveRemaining > 0 && <span className="text-red-600 dark:text-red-400 font-bold">متبقي: {formatCurrency(liveRemaining)}</span>}
                                       </div>
                                     </div>
-                                    <div className="flex gap-1 flex-shrink-0 opacity-90 group-hover:opacity-100 transition-opacity">
-                                      {/* تعديل أصناف الفاتورة مجمعة - زر واضح */}
-                                      {canEditOrder(user) && ['draft','partial','overdue'].includes(bill.status) && (
+                                    <div className="flex gap-1 flex-shrink-0 items-center">
+                                      {/* تعديل أصناف الفاتورة مجمعة - زر واضح (يشمل المدفوعة: السيرفر يعيد حساب المتبقي/الحالة) */}
+                                      {canEditOrder(user) && ['draft','partial','overdue','paid'].includes(bill.status) && (
                                         <button onClick={e => { e.stopPropagation(); setBillToEdit(bill); setShowBillItemsEditModal(true); }}
-                                          className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded-lg flex items-center gap-1 shadow-sm" title="تعديل الأصناف">
+                                          className="min-h-9 px-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded-lg flex items-center gap-1 shadow-sm" title="تعديل الأصناف">
                                           <Edit className="h-3.5 w-3.5" />تعديل
                                         </button>
                                       )}
                                       {isUnpaid && (
                                         <button onClick={e => { e.stopPropagation(); setPayChoiceBill(bill); setShowPayChoiceModal(true); }}
-                                          className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white text-base font-bold rounded-lg flex items-center gap-1 transition-all whitespace-nowrap">
+                                          className="min-h-9 px-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold rounded-lg flex items-center gap-1 transition-all whitespace-nowrap">
                                           <DollarSign className="h-3 w-3" />دفع
                                         </button>
                                       )}
                                       <button onClick={e => { e.stopPropagation(); printBill(bill as any, user?.organizationName, i18n.language, t, getTableSectionName(bill.table)).catch(() => {}); }}
-                                        className="w-7 h-7 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-500 dark:text-gray-400 rounded-lg flex items-center justify-center transition-all">
-                                        <Printer className="h-3 w-3" />
+                                        className="min-h-9 w-9 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-500 dark:text-gray-400 rounded-lg flex items-center justify-center transition-all">
+                                        <Printer className="h-3.5 w-3.5" />
                                       </button>
                                     </div>
                                   </div>
@@ -3668,7 +3719,7 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
                   <>
                     {/* ملخص الجلسات — يظهر فقط إذا في جلسات */}
                     {sessionsCount > 0 && (
-                      <div className="flex-shrink-0 px-3 py-2 bg-white dark:bg-gray-800/80 border-b border-gray-200 dark:border-gray-700/60 flex items-center gap-4">
+                      <div className="flex-shrink-0 px-2 sm:px-3 py-2 bg-white dark:bg-gray-800/80 border-b border-gray-200 dark:border-gray-700/60 flex items-center gap-x-4 gap-y-1 flex-wrap">
                         <div className="flex items-center gap-1.5">
                           <span className="w-1.5 h-1.5 rounded-full bg-gray-400 inline-block"></span>
                           <span className="text-[10px] text-gray-500">إجمالي</span>
@@ -3692,7 +3743,7 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
                         </span>
                       </div>
                     )}
-                    <div className="flex-1 overflow-y-auto p-3 min-h-0">
+                    <div className="flex-1 overflow-y-auto p-2 sm:p-3 min-h-0">
                       {allSessions.length === 0 ? (
                         <div className="flex flex-col items-center justify-center h-full py-16 text-gray-400">
                           <div className="w-16 h-16 bg-purple-50 dark:bg-purple-900/20 rounded-2xl flex items-center justify-center mb-4 border border-purple-100 dark:border-purple-800">
@@ -3837,7 +3888,7 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
                 {/* ══ LOG TAB ══ */}
                 {activeTab3 === 'log' && (
                   <>
-                    <div className="flex-1 overflow-y-auto p-3 bg-gray-50 dark:bg-gray-900 min-h-0">
+                    <div className="flex-1 overflow-y-auto p-2 sm:p-3 bg-gray-50 dark:bg-gray-900 min-h-0">
                       {tableActivityLog.length === 0 ? (
                         <div className="flex flex-col items-center justify-center h-full py-12 text-gray-400">
                           <CheckCircle className="h-10 w-10 mb-3 text-green-300" />
@@ -3892,44 +3943,51 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
           </div>
           {previewOrder && (
             <div
-              className="flex w-full lg:w-96 bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 flex-col overflow-hidden max-h-[96vh] lg:max-h-[96vh] max-h-[50vh] animate-in fade-in slide-in-from-right-4 flex-shrink-0"
+              className="flex w-full lg:w-96 bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 flex-col overflow-hidden max-h-[45vh] lg:max-h-[96vh] flex-shrink-0"
               onClick={e => e.stopPropagation()}
             >
-              <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between bg-gradient-to-l from-orange-50 to-white dark:from-gray-700 dark:to-gray-800">
-                <div>
-                  <h3 className="font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2 text-lg"><Receipt className="h-4 w-4 text-orange-500" />طلب #{previewOrder.orderNumber}</h3>
-                  <p className="text-[11px] text-gray-500 dark:text-gray-400 flex items-center gap-1 mt-0.5"><Clock className="h-3 w-3" />{previewOrder.createdAt ? formatDateTime(previewOrder.createdAt) : ''} · مثبت</p>
+              <div className="px-3 py-2.5 sm:px-4 sm:py-3 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between bg-gradient-to-l from-orange-50 to-white dark:from-gray-700 dark:to-gray-800 flex-shrink-0">
+                <div className="min-w-0">
+                  <h3 className="font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2 text-base sm:text-lg"><Receipt className="h-4 w-4 text-orange-500 flex-shrink-0" />طلب #{previewOrder.orderNumber}</h3>
+                  <p className="text-[11px] text-gray-500 dark:text-gray-400 flex items-center gap-1 mt-0.5 flex-wrap">
+                    <Clock className="h-3 w-3 flex-shrink-0" />{previewOrder.createdAt ? formatDateTime(previewOrder.createdAt) : ''} · مثبت
+                    {getOrderCreatorName(previewOrder) && (
+                      <span className="text-violet-600 dark:text-violet-400 font-semibold flex items-center gap-0.5">
+                        <UserIcon className="h-3 w-3" />{getOrderCreatorName(previewOrder)}
+                      </span>
+                    )}
+                  </p>
                 </div>
-                <button onClick={() => setPinnedOrder(null)} className="w-8 h-8 flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors" title="إغلاق">
+                <button onClick={() => setPinnedOrder(null)} className="w-8 h-8 flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors flex-shrink-0" title="إغلاق">
                   <X className="h-4 w-4" />
                 </button>
               </div>
-              <div className="flex-1 overflow-y-auto p-3 space-y-2">
+              <div className="flex-1 overflow-y-auto p-2 sm:p-3 space-y-1.5 sm:space-y-2 min-h-0">
                 {(previewOrder.items as any[]).map((it: any, idx: number) => (
-                  <div key={idx} className="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-700/40 rounded-xl border border-gray-100 dark:border-gray-600">
+                  <div key={idx} className="flex justify-between items-center p-2 sm:p-3 bg-gray-50 dark:bg-gray-700/40 rounded-xl border border-gray-100 dark:border-gray-600">
                     <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-gray-900 dark:text-gray-100 text-lg truncate">{it.name}</p>
-                      {it.notes && <p className="text-base text-gray-500 dark:text-gray-400 truncate">ملاحظة: {it.notes}</p>}
-                      <p className="text-base text-gray-400">{formatCurrency(it.price || 0)} × {it.quantity}</p>
+                      <p className="font-semibold text-gray-900 dark:text-gray-100 text-base sm:text-lg truncate">{it.name}</p>
+                      {it.notes && <p className="text-sm sm:text-base text-gray-500 dark:text-gray-400 truncate">ملاحظة: {it.notes}</p>}
+                      <p className="text-sm sm:text-base text-gray-400">{formatCurrency(it.price || 0)} × {it.quantity}</p>
                     </div>
-                    <div className="text-right flex flex-col items-end gap-1">
-                      <span className="bg-orange-500 text-white text-base font-bold rounded-full px-2 py-1">×{it.quantity}</span>
-                      <span className="font-bold text-emerald-600 dark:text-emerald-400 text-lg">{formatCurrency((it.price || 0) * (it.quantity || 0))}</span>
+                    <div className="text-right flex flex-col items-end gap-1 flex-shrink-0">
+                      <span className="bg-orange-500 text-white text-sm sm:text-base font-bold rounded-full px-2 py-0.5 sm:py-1">×{it.quantity}</span>
+                      <span className="font-bold text-emerald-600 dark:text-emerald-400 text-base sm:text-lg">{formatCurrency((it.price || 0) * (it.quantity || 0))}</span>
                     </div>
                   </div>
                 ))}
               </div>
-              <div className="p-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
-                <div className="flex justify-between items-center mb-3">
-                  <span className="text-lg text-gray-500">الإجمالي</span>
-                  <span className="font-bold text-orange-600 dark:text-orange-400 text-2xl">{formatCurrency((previewOrder as any).finalAmount ?? (previewOrder as any).totalAmount ?? (previewOrder.items as any[])?.reduce((s: number, i: any) => s + (i.price || 0) * (i.quantity || 0), 0) ?? 0)}</span>
+              <div className="p-2.5 sm:p-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 flex-shrink-0">
+                <div className="flex justify-between items-center mb-2 sm:mb-3">
+                  <span className="text-base sm:text-lg text-gray-500">الإجمالي</span>
+                  <span className="font-bold text-orange-600 dark:text-orange-400 text-xl sm:text-2xl">{formatCurrency((previewOrder as any).finalAmount ?? (previewOrder as any).totalAmount ?? (previewOrder.items as any[])?.reduce((s: number, i: any) => s + (i.price || 0) * (i.quantity || 0), 0) ?? 0)}</span>
                 </div>
                 {!pinnedOrder ? (
                   <p className="text-[11px] text-center text-gray-400 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg py-2">اضغط على الطلب لتثبيت النافذة والتحكم بها</p>
                 ) : (
                   <div className="flex gap-2">
-                    <button onClick={() => handlePrintOrder(pinnedOrder)} className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-lg font-bold rounded-xl flex items-center justify-center gap-1.5 transition-colors"><Printer className="h-4 w-4" />طباعة</button>
-                    <button onClick={() => handleEditOrder(pinnedOrder)} className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-lg font-bold rounded-xl flex items-center justify-center gap-1.5"><Edit className="h-4 w-4" />تعديل</button>
+                    <button onClick={() => handlePrintOrder(pinnedOrder)} className="flex-1 py-2 sm:py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-base sm:text-lg font-bold rounded-xl flex items-center justify-center gap-1.5 transition-colors"><Printer className="h-4 w-4" />طباعة</button>
+                    <button onClick={() => handleEditOrder(pinnedOrder)} className="flex-1 py-2 sm:py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-base sm:text-lg font-bold rounded-xl flex items-center justify-center gap-1.5"><Edit className="h-4 w-4" />تعديل</button>
                   </div>
                 )}
               </div>
@@ -3971,6 +4029,7 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
         onToggleRounding={cycleRounding}
         applyRounding={applyRounding}
         onSplitSubmit={handleSplitSubmit}
+        onPrintAndPayFull={handlePrintAndPayFull}
         tick={tick}
       />
       </React.Suspense>
@@ -4590,26 +4649,26 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
         <ModalPortal>
           <div className="fixed inset-0 z-[320] flex items-center justify-center bg-black/70 backdrop-blur-sm p-3 sm:p-4" onClick={() => setShowPayChoiceModal(false)}>
             <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md border border-gray-200 dark:border-gray-700 overflow-hidden" onClick={e => e.stopPropagation()}>
-              <div className="bg-gradient-to-r from-emerald-500 to-blue-600 px-5 py-4 text-white">
-                <h3 className="text-xl font-bold flex items-center gap-2"><DollarSign className="h-5 w-5" />تأكيد الدفع</h3>
+              <div className="bg-gradient-to-r from-emerald-500 to-blue-600 px-4 py-3 sm:px-5 sm:py-4 text-white">
+                <h3 className="text-lg sm:text-xl font-bold flex items-center gap-2"><DollarSign className="h-5 w-5" />تأكيد الدفع</h3>
                 <p className="text-sm opacity-90 mt-1">فاتورة #{payChoiceBill.billNumber || (payChoiceBill as any)._id?.toString().slice(-6)} - المتبقي {formatCurrency(Number(payChoiceBill.remaining) || 0)}</p>
               </div>
-              <div className="p-5 space-y-3 bg-gray-50 dark:bg-gray-900">
-                <p className="text-base text-gray-700 dark:text-gray-300 text-center">اختر طريقة الدفع</p>
+              <div className="p-4 sm:p-5 space-y-2.5 sm:space-y-3 bg-gray-50 dark:bg-gray-900">
+                <p className="text-sm sm:text-base text-gray-700 dark:text-gray-300 text-center">اختر طريقة الدفع</p>
                 <button
                   onClick={() => { const b = payChoiceBill; setShowPayChoiceModal(false); setPayChoiceBill(null); if (b) handleDirectPayFull(b); }}
-                  className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl flex items-center justify-center gap-2 shadow">
+                  className="w-full py-2.5 sm:py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl flex items-center justify-center gap-2 shadow">
                   <CheckCircle className="h-5 w-5" />دفع الفاتورة بالكامل
                 </button>
                 <button
                   onClick={() => { const b = payChoiceBill; setShowPayChoiceModal(false); setPayChoiceBill(null); if (b) handlePaymentClick(b); }}
-                  className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl flex items-center justify-center gap-2 shadow">
+                  className="w-full py-2.5 sm:py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl flex items-center justify-center gap-2 shadow">
                   <Receipt className="h-5 w-5" />الذهاب لإدارة الدفع
                 </button>
                 <p className="text-xs text-gray-500 text-center">إدارة الدفع تتيح الدفع الجزئي والتقسيم والخصم</p>
               </div>
-              <div className="p-3 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 flex justify-center">
-                <button onClick={() => { setShowPayChoiceModal(false); setPayChoiceBill(null); }} className="px-4 py-2 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg text-sm">إلغاء</button>
+              <div className="p-2.5 sm:p-3 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 flex justify-center">
+                <button onClick={() => { setShowPayChoiceModal(false); setPayChoiceBill(null); }} className="px-4 min-h-9 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg text-sm">إلغاء</button>
               </div>
             </div>
           </div>

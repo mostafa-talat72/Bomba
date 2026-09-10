@@ -51,6 +51,7 @@ import { useRTL } from '../hooks/useRTL';
 import api from '../services/api';
 import { formatDecimal, formatCurrency as formatCurrencyUtil, replaceAMPM } from '../utils/formatters';
 import { getCachedDevicePrinter, printThroughLocalBridge } from '../utils/localPrintBridge';
+import { isMobileDevice } from '../utils/deviceDetect';
 
 // Extend dayjs with plugins
 dayjs.extend(isSameOrAfter);
@@ -305,8 +306,9 @@ const ConsumptionReport = () => {
   const printReport = useCallback(async (sectionKey?: string | null): Promise<boolean> => {
     // ⚡ إشعار فوري: الطباعة بدأت لحظة الضغط.
     try { toast.info(t('consumptionReport.messages.printOpening')); } catch {}
+    let reportData: any = null;
     try {
-      const reportData = {
+      reportData = {
         consumptionData,
         dateRange,
         totalSales: Object.values(consumptionData).flat().reduce((sum, item) => sum + item.total, 0),
@@ -641,6 +643,26 @@ const ConsumptionReport = () => {
         </html>
       `;
 
+      // الهاتف/التابلت: لا يوجد agent محلي (127.0.0.1 هو الهاتف نفسه)، فنرسل
+      // نفس HTML المصمم للديسكتوب إلى الجهاز الرئيسي الذي يرحّله لوكيله
+      // المحلي (نفس الشكل 100%). الفشل يسقط على الجسر/طابعات الهاتف أدناه.
+      if (reportData && isMobileDevice()) {
+        try {
+          const res: any = await api.printConsumptionReport({
+            reportData,
+            organization: (user as any)?.organization ?? null,
+            language: i18n.language,
+            html: printContent,
+            printKey: `consumption:${dayjs(dateRange[0]).format('YYYYMMDD')}-${dayjs(dateRange[1]).format('YYYYMMDD')}`,
+          });
+          if (res?.success) {
+            toast.success(i18n.language === 'ar' ? 'تم إرسال التقرير للطباعة على الجهاز الرئيسي' : 'Report sent to the main device printer');
+            return true;
+          }
+        } catch {}
+        // ملاذ أخير: طابعات الهاتف نفسه (الكود أدناه).
+      }
+
       // ⚡ إعدادات متزامنة من الذاكرة + طابعة مخزنة — بدون انتظار متسلسل.
       const [savedPrinter, organizationResponse] = await Promise.all([
         getCachedDevicePrinter(),
@@ -891,10 +913,11 @@ const ConsumptionReport = () => {
       ),
       children: (
         <div className="border-t border-gray-100">
-          <Table
-            columns={columns}
-            dataSource={allItems}
-            rowKey="id"
+            <Table
+              columns={columns}
+              dataSource={allItems}
+              rowKey="id"
+              scroll={{ x: 'max-content' }}
             pagination={{
               pageSize: 10,
               showSizeChanger: true,
@@ -1019,6 +1042,7 @@ const ConsumptionReport = () => {
               columns={columns}
               dataSource={items}
               rowKey="id"
+              scroll={{ x: 'max-content' }}
               pagination={{
                 pageSize: pageSize,
                 showSizeChanger: true,
@@ -1234,17 +1258,17 @@ const ConsumptionReport = () => {
         },
       }}
       >
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-4 md:p-6 transition-colors duration-300" dir={rtl.dir}>
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-2 sm:p-4 md:p-6 transition-colors duration-300" dir={rtl.dir}>
       {/* Header Section */}
-      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-6 mb-6 border border-gray-200 dark:border-gray-700 transition-all duration-300">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-          <div className="flex items-center gap-4">
-            <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-blue-600 dark:from-blue-600 dark:to-blue-700 rounded-2xl flex items-center justify-center shadow-lg">
-              <BarChartOutlined className="text-white text-3xl" />
+      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-4 sm:p-6 mb-4 sm:mb-6 border border-gray-200 dark:border-gray-700 transition-all duration-300">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 sm:gap-4">
+          <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+            <div className="w-12 h-12 sm:w-16 sm:h-16 bg-gradient-to-br from-blue-500 to-blue-600 dark:from-blue-600 dark:to-blue-700 rounded-2xl flex items-center justify-center shadow-lg flex-shrink-0">
+              <BarChartOutlined className="text-white text-2xl sm:text-3xl" />
             </div>
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-1">{t('consumptionReport.title')}</h1>
-              <p className="text-gray-600 dark:text-gray-400 text-sm">{t('consumptionReport.subtitle')}</p>
+            <div className="min-w-0">
+              <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white mb-1">{t('consumptionReport.title')}</h1>
+              <p className="text-gray-600 dark:text-gray-400 text-xs sm:text-sm">{t('consumptionReport.subtitle')}</p>
             </div>
           </div>
           <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">

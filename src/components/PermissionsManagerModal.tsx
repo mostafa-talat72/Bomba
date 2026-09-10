@@ -88,7 +88,7 @@ const PermissionsManagerModal: React.FC<PermissionsManagerModalProps> = ({
 
   const getPermissionsByCategory = () => {
     const categories = {
-      [t('users.permissionsModal.systemManagement')]: ['all', 'users', 'settings'],
+      [t('users.permissionsModal.systemManagement')]: ['all', 'users', 'settings', 'auditLog', 'syncStatus'],
       [t('users.permissionsModal.reportsAndStats')]: ['dashboard', 'reports', 'consumption'],
       [t('users.permissionsModal.gaming')]: ['playstation', 'computer'],
       [t('users.permissionsModal.restaurantAndCafe')]: ['tables', 'cafe', 'kitchenDisplay', 'menu',
@@ -99,7 +99,7 @@ const PermissionsManagerModal: React.FC<PermissionsManagerModalProps> = ({
           'warehouse', 'canAddWarehouseItem', 'canEditWarehouseItem', 'canDeleteWarehouseItem',
           'canViewWarehouseMovements', 'canAdjustWarehouseStock', 'canEditWarehouseMovement',
           'canDeleteWarehouseMovement', 'canTransferToInventory', 'canReturnToWarehouse'],
-      [t('users.permissionsModal.financial')]: ['billing', 'view_all_bills', 'costs'],
+      [t('users.permissionsModal.financial')]: ['billing', 'view_all_bills', 'costs', 'viewCustomerContacts', 'shifts'],
     };
 
     return categories;

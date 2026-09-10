@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { applySyncMiddleware } from '../middleware/sync/syncMiddleware.js';
 
 const bonusSchema = new mongoose.Schema({
   employeeId: {
@@ -56,6 +57,8 @@ bonusSchema.add({
     deletedAt: { type: Date, default: null },
     deletedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
 });
+applySyncMiddleware(bonusSchema, 'Bonus');
+
 const Bonus = mongoose.model('Bonus', bonusSchema);
 
 export default Bonus;

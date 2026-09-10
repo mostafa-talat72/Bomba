@@ -7,6 +7,11 @@ async function printBill(data: {
   language?: string;
   tableSectionName?: string;
   drawerMode?: 'bill' | 'payment';
+  // نفس HTML المصمم للديسكتوب — يرحّله السيرفر للوكيل المحلي (نفس الشكل 100%)
+  html?: string;
+  printerName?: string;
+  paperWidthMm?: number;
+  printKey?: string;
 }): Promise<ApiResponse<any>> {
   return apiClient.request('/print/bill', {
     method: 'POST',
@@ -37,6 +42,11 @@ async function printOrder(data: {
   order: any;
   organization: any;
   language?: string;
+  // نفس HTML المصمم للديسكتوب — يرحّله السيرفر للوكيل المحلي (نفس الشكل 100%)
+  html?: string;
+  printerName?: string;
+  paperWidthMm?: number;
+  printKey?: string;
 }): Promise<ApiResponse<any>> {
   return apiClient.request('/print/order', {
     method: 'POST',
@@ -73,6 +83,11 @@ async function printConsumptionReport(data: {
   reportData: any;
   organization: any;
   language?: string;
+  // نفس HTML المصمم للديسكتوب — يرحّله السيرفر للوكيل المحلي (نفس الشكل 100%)
+  html?: string;
+  printerName?: string;
+  paperWidthMm?: number;
+  printKey?: string;
 }): Promise<ApiResponse<any>> {
   return apiClient.request('/print/consumption-report', {
     method: 'POST',

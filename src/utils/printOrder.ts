@@ -1,4 +1,5 @@
 import api from '../services/api';
+import { toast } from 'react-toastify';
 import { formatDecimal, getCurrencySymbol, getDisplayNumber } from './formatters';
 import type { TFunction } from 'i18next';
 import { getCachedDevicePrinter, printThroughLocalBridge } from './localPrintBridge';
@@ -564,26 +565,62 @@ export const printOrder = async (
   } catch {}
   if (isMobileDevice()) {
     // Phones have no local print agent: execute on the MAIN device instead.
+    // FAST PATH: zero pre-fetches — the order already carries its
+    // organization, and the server resolves settings itself.
+    // NOTE: (window as any).showNotification is never assigned anywhere, so
+    // use real toasts here — otherwise failures are completely silent.
+    const tError = (msg: string) => { try { toast.error(msg); } catch {} };
+    const tSuccess = (msg: string) => { try { toast.success(msg); } catch {} };
+    const tInfo = (msg: string) => { try { toast.info(msg); } catch {} };
     try {
-      const notify = (msg: string, type: string) => {
-        try {
-          if (typeof window !== 'undefined' && (window as any).showNotification) (window as any).showNotification(msg, type);
-        } catch {}
-      };
-      const orgRes: any = await api.getOrganization().catch(() => null);
-      const org = orgRes?.success ? orgRes.data : null;
-      if (!org) {
-        notify(language === 'ar' ? 'تعذر الوصول لبيانات المنشأة للطباعة' : 'Organization unavailable for printing', 'error');
-        return;
+      tInfo(language === 'ar' ? 'جارٍ إرسال الطلب للجهاز الرئيسي...' : 'Sending order to the main device...');
+      let orgHint: any = (order as any)?.organization || null;
+      if (!orgHint) {
+        const orgRes: any = await Promise.race([
+          api.getOrganization().catch(() => null),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 8000)),
+        ]).catch(() => null);
+        orgHint = orgRes?.success ? orgRes.data : null;
       }
-      const res: any = await api.printOrder({ order, organization: org, language });
-      notify(
-        res?.success
-          ? (language === 'ar' ? 'تم إرسال الطلب للطباعة على الجهاز الرئيسي' : language === 'fr' ? 'Commande envoyée à l’imprimante principale' : 'Order sent to the main device printer')
-          : (res?.message || (language === 'ar' ? 'فشلت الطباعة على الجهاز الرئيسي' : 'Server print failed')),
-        res?.success ? 'success' : 'error'
-      );
-    } catch {}
+      // نفس HTML المصمم للديسكتوب — يرحّله السيرفر للوكيل المحلي (نفس الشكل 100%).
+      // الفشل هنا لا يكسر المسار السريع: السيرفر يسقط على RAW النصي.
+      let orderHtmlForRelay: string | undefined;
+      try {
+        orderHtmlForRelay = await buildOrderPrintHTML(
+          order,
+          menuSections,
+          menuItemsMap,
+          fallbackOrganizationName,
+          language,
+          t,
+          tableSectionName,
+          selectedSectionIds,
+        );
+      } catch {}
+      const payload = {
+        order,
+        organization: orgHint,
+        language,
+        html: orderHtmlForRelay,
+        printerName,
+        paperWidthMm,
+        printKey: `order:${(order as any)?._id || (order as any)?.orderNumber || ''}`,
+      };
+      let res: any = await api.printOrder(payload);
+      if (!res?.success) {
+        // No printer configured on the server? Try zero-config USB auto-detect.
+        try {
+          res = await api.autoDetectAndPrintOrder(payload);
+        } catch {}
+      }
+      if (res?.success) {
+        tSuccess(language === 'ar' ? 'تم إرسال الطلب للطباعة على الجهاز الرئيسي' : language === 'fr' ? 'Commande envoyée à l’imprimante principale' : 'Order sent to the main device printer');
+      } else {
+        tError(res?.message || (language === 'ar' ? 'فشلت الطباعة على الجهاز الرئيسي — تأكد من توصيل الطابعة بالجهاز الرئيسي' : 'Server print failed — check the printer on the main device'));
+      }
+    } catch {
+      tError(language === 'ar' ? 'تعذر الاتصال بالجهاز الرئيسي' : 'Main device unreachable');
+    }
     return;
   }
   const savedPrinter = printerName ? null : await getCachedDevicePrinter();

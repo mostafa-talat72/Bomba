@@ -1,9 +1,11 @@
 import rateLimit from "express-rate-limit";
 
-// General API rate limiter
+// General API rate limiter — LAN-first app: dashboard polls every 30s and every
+// socket event refetches several lists, so rush hour on one device exceeds 500.
+// 2000 still blocks abuse floods; auth routes stay strict below.
 export const apiLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 500,
+    max: 2000,
     standardHeaders: true,
     legacyHeaders: false,
     message: {

@@ -46,6 +46,12 @@ const CATCH_UP_COLLECTIONS = [
     "advances",
     "attendances",
     "deductions",
+    "bonuses",
+    "deliveryzones",
+    "tombstones",
+    "invites",
+    "auditlogs",
+    "shifts",
 ];
 
 /** Mesh push enabled by default (offline-first). Set LAN_PEER_SYNC_ENABLED=false to disable. */
@@ -61,9 +67,11 @@ function isSafeCollection(name) {
     return true;
 }
 
+const HEX24 = /^[a-f0-9]{24}$/i;
+
 function toObjectId(id) {
     if (id instanceof mongoose.Types.ObjectId) return id;
-    if (typeof id === "string" && /^[a-f0-9]{24}$/i.test(id)) {
+    if (typeof id === "string" && HEX24.test(id)) {
         try {
             return new mongoose.Types.ObjectId(id);
         } catch {
@@ -71,6 +79,178 @@ function toObjectId(id) {
         }
     }
     return id;
+}
+
+function isPlainObject(v) {
+    return !!v && typeof v === "object" && !Array.isArray(v) && !(v instanceof mongoose.Types.ObjectId) && !(v instanceof Date) && !Buffer.isBuffer(v);
+}
+
+// EJSON wrapper { $oid: "hex..." } -> ObjectId (unambiguous, always safe).
+function unwrapOid(value) {
+    if (isPlainObject(value) && typeof value.$oid === "string" && HEX24.test(value.$oid)) {
+        try {
+            return new mongoose.Types.ObjectId(value.$oid);
+        } catch {
+            return value;
+        }
+    }
+    return value;
+}
+
+/**
+ * Single-ObjectId reference fields per collection.
+ * NOTE: string-typed fields (InventoryItem.category, Notification.category,
+ * Settings.category, Cost.subcategory, Device.number, Bonus.month, ...) are
+ * deliberately NOT listed — and conversion additionally requires an exact
+ * 24-hex value, so names/prices/notes can never be corrupted.
+ */
+const SINGLE_REFS = {
+    bills: ["organization", "table", "createdBy", "updatedBy", "deletedBy"],
+    orders: ["organization", "table", "bill", "createdBy", "preparedBy", "deliveredBy", "updatedBy"],
+    sessions: ["organization", "deviceId", "table", "bill", "createdBy", "updatedBy"],
+    tables: ["organization", "section"],
+    tablesections: ["organization"],
+    devices: ["organization"],
+    users: ["organization"],
+    menuitems: ["organization", "category", "section"],
+    menucategories: ["organization", "section"],
+    menusections: ["organization"],
+    inventoryitems: ["organization"],
+    warehouseitems: ["organization"],
+    notifications: ["organization"],
+    settings: ["organization", "updatedBy"],
+    costs: ["organization", "category", "createdBy"],
+    costcategories: ["organization"],
+    payments: ["organizationId", "employeeId", "paidBy", "recordedBy", "createdBy"],
+    payrolls: ["organizationId", "employeeId", "createdBy", "approvedBy", "paidBy"],
+    employees: ["organizationId", "userId"],
+    advances: ["organizationId", "employeeId", "approvedBy", "createdBy"],
+    attendances: ["organizationId", "employeeId", "createdBy"],
+    bonuses: ["organizationId", "employeeId", "approvedBy", "createdBy"],
+    deductions: ["organizationId", "employeeId", "approvedBy", "createdBy"],
+    deliveryzones: ["organization", "createdBy"],
+    invites: ["organization", "createdBy", "usedBy"],
+    auditlogs: ["organization", "user", "documentId"],
+    shifts: ["organization", "openedBy", "closedBy"],
+    tombstones: ["organization", "createdBy", "documentId"],
+};
+
+/** Array-of-ObjectId fields per collection. */
+const ARRAY_REFS = {
+    bills: ["orders", "sessions"],
+    notifications: ["targetUsers"],
+};
+
+/** Nested subdocument arrays: { arrayField: { single: [...], subArrays: { nestedArray: [...] } } } */
+const NESTED_REFS = {
+    orders: {
+        items: { single: ["menuItem", "category", "section"] },
+    },
+    bills: {
+        itemPayments: { single: ["orderId"], subArrays: { paymentHistory: ["paidBy"] } },
+        sessionPayments: { single: ["sessionId"], subArrays: { payments: ["paidBy"] } },
+        payments: { single: ["paidBy"] },
+    },
+    notifications: {
+        readBy: { single: ["user"] },
+    },
+    payrolls: {
+        advances: { single: ["approvedBy"] },
+        deductions: { single: ["approvedBy"] },
+        bonuses: { single: ["approvedBy"] },
+        payments: { single: ["paidBy"] },
+    },
+};
+
+function convertRefField(obj, field) {
+    const v = obj[field];
+    if (v === undefined || v === null) return;
+    const unwrapped = unwrapOid(v);
+    if (unwrapped !== v) {
+        obj[field] = unwrapped;
+        return;
+    }
+    if (typeof v === "string" && HEX24.test(v)) {
+        obj[field] = toObjectId(v);
+    }
+    // Embedded populated objects are kept as-is (their _id is fixed by recursion).
+}
+
+function normalizeSubArray(elements, singleFields) {
+    if (!Array.isArray(elements)) return elements;
+    return elements.map((el) => {
+        if (!isPlainObject(el)) return el;
+        const copy = { ...el };
+        for (const f of singleFields) convertRefField(copy, f);
+        return copy;
+    });
+}
+
+/**
+ * Deep-normalize a doc received over JSON (LAN push / catch-up) for ONE
+ * collection: restores ObjectIds lost in JSON serialization.
+ * - `_id` always converted (24-hex string or {$oid}).
+ * - Known single/array reference fields converted (exact 24-hex only).
+ * - Any `{$oid}` wrapper anywhere in known positions converted (explicitly typed).
+ * - Unknown fields are NEVER touched — plain strings stay strings.
+ */
+export function normalizeIncomingDoc(collectionName, doc) {
+    if (!doc || typeof doc !== "object" || Array.isArray(doc)) return doc;
+    const out = { ...doc };
+
+    if (out._id !== undefined) {
+        const unwrapped = unwrapOid(out._id);
+        out._id = unwrapped !== out._id ? unwrapped : toObjectId(out._id);
+    }
+
+    const singles = SINGLE_REFS[collectionName];
+    if (singles) {
+        for (const f of singles) {
+            if (out[f] === undefined || out[f] === null) continue;
+            if (isPlainObject(out[f]) && out[f].$oid === undefined) {
+                out[f] = normalizeIncomingDoc(collectionName, out[f]); // populated object: recurse, keep shape
+            } else {
+                convertRefField(out, f);
+            }
+        }
+    }
+
+    const arrays = ARRAY_REFS[collectionName];
+    if (arrays) {
+        for (const f of arrays) {
+            if (!Array.isArray(out[f])) continue;
+            out[f] = out[f].map((el) => {
+                if (el === null || el === undefined) return el;
+                const unwrapped = unwrapOid(el);
+                if (unwrapped !== el) return unwrapped;
+                if (typeof el === "string") return toObjectId(el);
+                if (isPlainObject(el)) return normalizeIncomingDoc(collectionName, el);
+                return el;
+            });
+        }
+    }
+
+    const nested = NESTED_REFS[collectionName];
+    if (nested) {
+        for (const [arrField, rule] of Object.entries(nested)) {
+            if (!Array.isArray(out[arrField])) continue;
+            out[arrField] = out[arrField].map((el) => {
+                if (!isPlainObject(el)) return el;
+                const copy = { ...el };
+                for (const f of rule.single || []) convertRefField(copy, f);
+                if (rule.subArrays) {
+                    for (const [subField, subSingles] of Object.entries(rule.subArrays)) {
+                        if (Array.isArray(copy[subField])) {
+                            copy[subField] = normalizeSubArray(copy[subField], subSingles);
+                        }
+                    }
+                }
+                return copy;
+            });
+        }
+    }
+
+    return out;
 }
 
 async function markLanOrigin(docId) {
@@ -101,11 +281,13 @@ export async function applyReceivedDoc(collectionName, doc, operation) {
         if (id === undefined || id === null) throw new Error("Delete missing _id");
         await markLanOrigin(id);
         await collection.deleteOne({ _id: id });
-        return { applied: "delete" };
+        return { applied: "delete", doc: { _id: id } };
     }
 
     if (!doc || doc._id === undefined || doc._id === null) throw new Error("Doc missing _id");
-    const toApply = { ...doc, _id: toObjectId(doc._id) };
+    // Restore ObjectIds lost in JSON serialization (all tables) BEFORE apply,
+    // so refs never land as strings in the local DB.
+    const toApply = normalizeIncomingDoc(collectionName, { ...doc, _id: toObjectId(doc._id) });
     await markLanOrigin(toApply._id);
 
     // Last-write-wins: skip when local copy is newer.
@@ -120,7 +302,7 @@ export async function applyReceivedDoc(collectionName, doc, operation) {
 
     const { _id, ...rest } = toApply;
     await collection.updateOne({ _id }, { $set: { _id, ...rest } }, { upsert: true });
-    return { applied: op };
+    return { applied: op, doc: toApply };
 }
 
 /**
@@ -286,6 +468,7 @@ export default {
     meshSyncEnabled,
     pushLanOp,
     applyReceivedDoc,
+    normalizeIncomingDoc,
     catchUpWithPeer,
     wirePeerCatchUp,
 };

@@ -179,6 +179,9 @@ Section "Install"
   CreateDirectory "$SMPROGRAMS\\${APP_NAME}"
   CreateShortcut "$SMPROGRAMS\\${APP_NAME}\\${APP_NAME}.lnk" "$INSTDIR\\${APP_NAME}.exe"
   CreateShortcut "$SMPROGRAMS\\${APP_NAME}\\Bomba Print Agent.lnk" "$INSTDIR\\${APP_NAME}.exe" "--print-agent"
+  ; Auto-start the print agent at Windows boot. The agent waits for MongoDB
+  ; itself (see main.js isPrintAgent boot) and never blocks the main app:
+  ; bridge exclusivity is enforced via port 9100, not the Electron lock.
   CreateDirectory "$APPDATA\\Microsoft\\Windows\\Start Menu\\Programs\\Startup"
   CreateShortcut "$APPDATA\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\Bomba Print Agent.lnk" "$INSTDIR\\${APP_NAME}.exe" "--print-agent"
   CreateShortcut "$SMPROGRAMS\\${APP_NAME}\\Uninstall ${APP_NAME}.lnk" "$INSTDIR\\Uninstall.exe"

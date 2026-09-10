@@ -3,6 +3,7 @@ import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
   Home,
+  Truck,
   Gamepad2,
   Monitor,
   ShoppingCart,
@@ -32,7 +33,10 @@ import {
   RefreshCw,
   Maximize2,
   Minimize2,
-  Printer
+  Printer,
+  Activity,
+  ScrollText,
+  Clock
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useTheme } from '../context/ThemeContext';
@@ -125,6 +129,13 @@ const Layout = () => {
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, [tables, t]);
 
+  // In-app logout confirm (fired by AuthContext instead of window.confirm).
+  useEffect(() => {
+    const openWarning = () => setShowOccupiedWarning(true);
+    window.addEventListener('bomba:confirm-logout', openWarning);
+    return () => window.removeEventListener('bomba:confirm-logout', openWarning);
+  }, []);
+
   // جلب معلومات الاشتراك
   useEffect(() => {
     const fetchSubscription = async () => {
@@ -195,6 +206,8 @@ const Layout = () => {
   const navigation = [
     { name: t('nav.dashboard'), href: '/dashboard', icon: Home, permissions: ['dashboard'] },
     { name: t('nav.tables', 'الطاولات'), href: '/tables', icon: TableIcon, permissions: ['tables', 'cafe', 'billing'], badgePreparing: preparingOrders, badgeReady: readyOrders },
+    { name: 'تيك أوي', href: '/takeaway', icon: Package2, permissions: ['tables', 'cafe', 'billing'] },
+    { name: 'دليفري', href: '/delivery', icon: Truck, permissions: ['tables', 'cafe', 'billing'] },
     {
       name: t('nav.devices'),
       icon: Server,
@@ -214,6 +227,9 @@ const Layout = () => {
     { name: t('nav.costs'), href: '/costs', icon: Wallet, permissions: ['costs'] },
     { name: t('nav.payroll'), href: '/payroll', icon: DollarSign, permissions: ['users'] },
     { name: t('nav.users'), href: '/users', icon: Users, permissions: ['users'] },
+    { name: t('nav.shifts'), href: '/shifts', icon: Clock, permissions: ['shifts'] },
+    { name: t('nav.auditLog'), href: '/audit-log', icon: ScrollText, permissions: ['auditLog'] },
+    { name: t('nav.syncStatus'), href: '/sync-status', icon: Activity, permissions: ['syncStatus'] },
     { name: t('nav.notifications'), href: '/notifications', icon: Bell, permissions: ['dashboard', 'playstation', 'computer', 'tables', 'cafe', 'menu', 'billing', 'reports', 'inventory', 'warehouse', 'costs', 'users', 'settings'], badge: unreadNotifications },
     { name: t('nav.subscriptions'), href: '/subscription', icon: CreditCard, permissions: ['dashboard', 'playstation', 'computer', 'cafe', 'menu', 'billing', 'reports', 'inventory', 'warehouse', 'costs', 'users', 'settings'] },
     { name: t('nav.settings'), href: '/settings', icon: Settings, permissions: ['settings'] },
@@ -522,123 +538,113 @@ const Layout = () => {
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
-        {/* Subscription Warning Banner */}
-        {subscriptionInfo && subscriptionStatus === 'active' && (() => {
-          const endDate = new Date(subscriptionInfo.endDate);
-          const now = new Date();
-          const daysLeft = Math.ceil((endDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-          
-          if (daysLeft <= 5 && daysLeft > 0) {
-            return (
-              <div className="bg-yellow-50 dark:bg-yellow-900 border-b-2 border-yellow-400 dark:border-yellow-600 px-4 py-3 flex items-center justify-between flex-wrap gap-2 fixed top-0 left-0 right-0 z-[60] lg:static">
-                <div className="flex items-center gap-3 flex-1 min-w-0">
-                  <svg className="h-5 w-5 text-yellow-600 dark:text-yellow-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                  </svg>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-yellow-800 dark:text-yellow-200">
-                      ⚠️ {t('subscription.warning', { days: daysLeft })}
-                    </p>
-                  </div>
-                </div>
-                <a
-                  href="/subscription"
-                  className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md text-yellow-800 bg-yellow-100 hover:bg-yellow-200 dark:bg-yellow-800 dark:text-yellow-100 dark:hover:bg-yellow-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-500 flex-shrink-0"
-                >
-                  {t('subscription.renewNow')}
-                </a>
-              </div>
-            );
-          }
-          return null;
-        })()}
-        
-        {/* Top Bar */}
-        <header className="bg-white dark:bg-gray-800 shadow-sm border-b border-gray-200 dark:border-gray-700 flex-shrink-0 fixed top-0 left-0 right-0 z-50 lg:static lg:z-auto"
-          style={{
-            top: subscriptionInfo && subscriptionStatus === 'active' && (() => {
-              const endDate = new Date(subscriptionInfo.endDate);
-              const now = new Date();
-              const daysLeft = Math.ceil((endDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-              return daysLeft <= 5 && daysLeft > 0 ? '52px' : '0';
-            })()
-          }}
-        >
-          <div
-            className="flex items-center justify-between h-16 px-4 sm:px-6 flex-wrap xs:flex-col xs:items-start xs:gap-2 xs:h-auto"
-          >
-            <div className="flex items-center min-w-0 xs:w-full xs:mb-2 xs:justify-between">
-              <button
-                onClick={() => setSidebarOpen(!sidebarOpen)}
-                className="lg:hidden p-2 rounded-md hover:bg-orange-50 dark:hover:bg-orange-900/20 flex-shrink-0"
-              >
-                <Menu className="h-6 w-6 text-gray-900 dark:text-gray-100" />
-              </button>
-              <button
-                onClick={() => setSidebarCollapsed(v => !v)}
-                className="hidden lg:flex p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 flex-shrink-0 ms-1"
-                title={sidebarCollapsed ? "????? ?????? ???????" : "?? ?????? ??????? - ??????? ???"}
-              >
-                {sidebarCollapsed ? <PanelLeftOpen className="h-5 w-5 text-gray-700 dark:text-gray-300" /> : <PanelLeftClose className="h-5 w-5 text-gray-700 dark:text-gray-300" />}
-              </button>
-              <h2 className="mr-2 sm:mr-4 text-lg sm:text-xl font-semibold text-gray-900 dark:text-gray-100 truncate xs:text-base xs:mr-0 xs:w-full xs:text-center">
-                {filteredNavigation.find(item => isActive(item.href))?.name ||
-                 (filteredNavigation.length === 0 ? t('nav.noPages') : t('nav.dashboard'))}
-              </h2>
-              {/* إشارة بصرية للسحب على الشاشات الصغيرة */}
-              {showSwipeIndicator && (
-                <div className="lg:hidden flex items-center mr-2 text-xs text-gray-500 dark:text-gray-400">
-                  <span className="mr-1">{t('nav.swipeToOpen')}</span>
-                  <div className="w-1 h-1 bg-gray-400 dark:bg-gray-500 rounded-full animate-pulse"></div>
-                </div>
-              )}
-            </div>
 
-            <div className="flex items-center space-x-2 sm:space-x-4 space-x-reverse flex-shrink-0 xs:w-full xs:justify-center xs:mt-2">
-              {tablesHeader.actions && (
-                <div className="flex items-center gap-2 flex-shrink-0">
-                  <button onClick={tablesHeader.actions.openManagement}
-                    className="bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors text-sm">
-                    <Settings className="h-4 w-4" />
-                    <span className="hidden sm:inline">{t('cafe.manageTables')}</span>
-                  </button>
-                  <button onClick={tablesHeader.actions.toggleFullscreen}
-                    className="bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 p-2 rounded-lg flex items-center transition-colors" title={tablesHeader.actions.isFullscreen ? 'إنهاء الشاشة الكاملة' : 'شاشة كاملة'}>
-                    {tablesHeader.actions.isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
-                  </button>
-                  <button onClick={tablesHeader.actions.refresh}
-                    className="bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors text-sm" title={t('cafe.refresh')}>
-                    <RefreshCw className="h-4 w-4" />
-                    <span className="hidden sm:inline">{t('cafe.refresh')}</span>
-                  </button>
-                </div>
-              )}
-              <LanguageSwitcher />
-              <LanStatusBadge />
-              <PermissionGuard requiredPermissions={['dashboard', 'playstation', 'computer', 'cafe', 'menu', 'billing', 'reports', 'inventory', 'costs', 'users', 'settings']}>
-                <NotificationCenter />
-              </PermissionGuard>
-              <div className="hidden sm:block text-sm text-gray-500 dark:text-gray-400">
-                {formatOrgDate(new Date(), {
-                  weekday: 'long',
-                  year: 'numeric',
-                  month: 'long',
-                  day: 'numeric'
-                })}
-              </div>
-            </div>
-          </div>
-        </header>
-
-        {/* Page Content */}
+        {/* Page Content (header lives inside the scroller as true sticky) */}
         <main
           ref={mainContentRef}
-          className="flex-1 overflow-auto min-w-0 container-responsive lg:pt-0 pt-16 bg-gray-50 dark:bg-gray-900"
+          className="flex-1 overflow-auto min-w-0 container-responsive bg-gray-50 dark:bg-gray-900"
           onTouchStart={onTouchStart}
           onTouchMove={onTouchMove}
           onTouchEnd={onTouchEnd}
         >
-          <div className="px-4 sm:px-6 py-2 w-full">
+          {/* Subscription Warning Banner (scrolls away) */}
+          {subscriptionInfo && subscriptionStatus === 'active' && (() => {
+            const endDate = new Date(subscriptionInfo.endDate);
+            const now = new Date();
+            const daysLeft = Math.ceil((endDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+
+            if (daysLeft <= 5 && daysLeft > 0) {
+              return (
+                <div className="bg-yellow-50 dark:bg-yellow-900 border-b-2 border-yellow-400 dark:border-yellow-600 px-3 sm:px-4 py-2.5 flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-center gap-3 flex-1 min-w-0">
+                    <svg className="h-5 w-5 text-yellow-600 dark:text-yellow-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-yellow-800 dark:text-yellow-200">
+                        ⚠️ {t('subscription.warning', { days: daysLeft })}
+                      </p>
+                    </div>
+                  </div>
+                  <a
+                    href="/subscription"
+                    className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md text-yellow-800 bg-yellow-100 hover:bg-yellow-200 dark:bg-yellow-800 dark:text-yellow-100 dark:hover:bg-yellow-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-500 flex-shrink-0"
+                  >
+                    {t('subscription.renewNow')}
+                  </a>
+                </div>
+              );
+            }
+            return null;
+          })()}
+
+          {/* Top Bar — sticky inside the scroller: never overlaps content */}
+          <header className="bg-white dark:bg-gray-800 shadow-sm border-b border-gray-200 dark:border-gray-700 sticky top-0 z-30">
+            <div className="flex items-center justify-between gap-2 flex-wrap px-3 sm:px-6 py-2 sm:h-16 sm:py-0">
+              <div className="flex items-center min-w-0">
+                <button
+                  onClick={() => setSidebarOpen(!sidebarOpen)}
+                  className="lg:hidden p-2 rounded-md hover:bg-orange-50 dark:hover:bg-orange-900/20 flex-shrink-0"
+                >
+                  <Menu className="h-6 w-6 text-gray-900 dark:text-gray-100" />
+                </button>
+                <button
+                  onClick={() => setSidebarCollapsed(v => !v)}
+                  className="hidden lg:flex p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 flex-shrink-0 ms-1"
+                  title={sidebarCollapsed ? "????? ?????? ???????" : "?? ?????? ??????? - ??????? ???"}
+                >
+                  {sidebarCollapsed ? <PanelLeftOpen className="h-5 w-5 text-gray-700 dark:text-gray-300" /> : <PanelLeftClose className="h-5 w-5 text-gray-700 dark:text-gray-300" />}
+                </button>
+                <h2 className="mr-2 sm:mr-4 text-base sm:text-xl font-semibold text-gray-900 dark:text-gray-100 truncate">
+                  {filteredNavigation.find(item => isActive(item.href))?.name ||
+                   (filteredNavigation.length === 0 ? t('nav.noPages') : t('nav.dashboard'))}
+                </h2>
+                {/* إشارة بصرية للسحب على الشاشات الصغيرة */}
+                {showSwipeIndicator && (
+                  <div className="lg:hidden hidden sm:flex items-center mr-2 text-xs text-gray-500 dark:text-gray-400 flex-shrink-0">
+                    <span className="mr-1">{t('nav.swipeToOpen')}</span>
+                    <div className="w-1 h-1 bg-gray-400 dark:bg-gray-500 rounded-full animate-pulse"></div>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex items-center space-x-2 sm:space-x-4 space-x-reverse flex-shrink-0">
+                {tablesHeader.actions && (
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <button onClick={tablesHeader.actions.openManagement}
+                      className="bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors text-sm">
+                      <Settings className="h-4 w-4" />
+                      <span className="hidden sm:inline">{t('cafe.manageTables')}</span>
+                    </button>
+                    <button onClick={tablesHeader.actions.toggleFullscreen}
+                      className="bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 p-2 rounded-lg flex items-center transition-colors" title={tablesHeader.actions.isFullscreen ? 'إنهاء الشاشة الكاملة' : 'شاشة كاملة'}>
+                      {tablesHeader.actions.isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+                    </button>
+                    <button onClick={tablesHeader.actions.refresh}
+                      className="bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors text-sm" title={t('cafe.refresh')}>
+                      <RefreshCw className="h-4 w-4" />
+                      <span className="hidden sm:inline">{t('cafe.refresh')}</span>
+                    </button>
+                  </div>
+                )}
+                <LanguageSwitcher />
+                <LanStatusBadge />
+                <PermissionGuard requiredPermissions={['dashboard', 'playstation', 'computer', 'cafe', 'menu', 'billing', 'reports', 'inventory', 'costs', 'users', 'settings']}>
+                  <NotificationCenter />
+                </PermissionGuard>
+                <div className="hidden sm:block text-sm text-gray-500 dark:text-gray-400">
+                  {formatOrgDate(new Date(), {
+                    weekday: 'long',
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric'
+                  })}
+                </div>
+              </div>
+            </div>
+          </header>
+
+          <div className="px-3 sm:px-6 py-2 w-full">
             <Outlet />
           </div>
         </main>

@@ -43,6 +43,8 @@ const BillItemsEditModal: React.FC<Props> = ({ isOpen, onClose, bill, menuItems,
   const [fullBill, setFullBill] = useState<Bill | null>(null);
   const [loadingBill, setLoadingBill] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  // Mobile: tabbed view (menu | order) instead of 4 squeezed columns.
+  const [mobileTab, setMobileTab] = useState<'menu' | 'order'>('menu');
   const [expandedNotes, setExpandedNotes] = useState<Record<string, boolean>>({});
   const searchInputRef = useRef<HTMLInputElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -358,20 +360,20 @@ const BillItemsEditModal: React.FC<Props> = ({ isOpen, onClose, bill, menuItems,
         <div className="bg-white dark:bg-gray-900 w-full flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
 
           {/* HEADER - نفس OrderModal */}
-          <div className="bg-gradient-to-r from-orange-500 to-red-500 px-4 py-3 flex items-center justify-between flex-shrink-0">
-            <div className="flex items-center gap-3 min-w-0">
-              <div className="w-9 h-9 bg-white/15 rounded-xl flex items-center justify-center ring-1 ring-white/25 flex-shrink-0">
+          <div className="bg-gradient-to-r from-orange-500 to-red-500 px-3 py-2 sm:px-4 sm:py-3 flex items-center justify-between flex-shrink-0">
+            <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+              <div className="w-8 h-8 sm:w-9 sm:h-9 bg-white/15 rounded-xl flex items-center justify-center ring-1 ring-white/25 flex-shrink-0">
                 <ShoppingCart className="h-4 w-4 text-white" />
               </div>
               <div className="px-3 py-2 border-b border-gray-200 dark:border-gray-700 flex justify-end">
-                <button onClick={() => setShowServiceDialog(true)} className="group px-4 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white font-bold text-sm flex items-center gap-2 shadow-md shadow-indigo-500/20 transition-all duration-200 hover:-translate-y-0.5 active:translate-y-0">
-                  <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-white/20 transition-transform group-hover:rotate-90"><Plus className="h-4 w-4" /></span>
+                <button onClick={() => setShowServiceDialog(true)} className="group px-3 py-1.5 sm:px-4 sm:py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white font-bold text-xs sm:text-sm flex items-center gap-2 shadow-md shadow-indigo-500/20 transition-all duration-200 hover:-translate-y-0.5 active:translate-y-0">
+                  <span className="flex h-5 w-5 sm:h-6 sm:w-6 items-center justify-center rounded-lg bg-white/20 transition-transform group-hover:rotate-90"><Plus className="h-3.5 w-3.5 sm:h-4 sm:w-4" /></span>
                   <span>إضافة خدمة</span>
                 </button>
               </div>
               <div className="min-w-0">
-                <h2 className="text-xl sm:text-2xl font-bold text-white truncate">تعديل أصناف الفاتورة #{billNumber}</h2>
-                <p className="text-base text-orange-100 flex items-center gap-1">
+                <h2 className="text-lg sm:text-2xl font-bold text-white truncate">تعديل أصناف الفاتورة #{billNumber}</h2>
+                <p className="text-sm sm:text-base text-orange-100 flex items-center gap-1">
                   <TableIcon className="h-3 w-3 flex-shrink-0" />
                   {tableNumber ? `طاولة ${getTableDisplay(tableNumber, i18n.language)}` : 'فاتورة'} · {items.length} أصناف
                 </p>
@@ -379,9 +381,9 @@ const BillItemsEditModal: React.FC<Props> = ({ isOpen, onClose, bill, menuItems,
             </div>
             <div className="flex items-center gap-2 flex-shrink-0">
               {items.length > 0 && (
-                <div className="bg-white/15 rounded-xl px-3 py-1.5 ring-1 ring-white/25 text-center">
-                  <p className="text-base text-orange-100 leading-none">الإجمالي</p>
-                  <p className="text-lg font-bold text-white">{fmt(calculateTotal())}</p>
+                <div className="bg-white/15 rounded-xl px-2.5 py-1 sm:px-3 sm:py-1.5 ring-1 ring-white/25 text-center">
+                  <p className="text-sm sm:text-base text-orange-100 leading-none">الإجمالي</p>
+                  <p className="text-base sm:text-lg font-bold text-white">{fmt(calculateTotal())}</p>
                 </div>
               )}
               <button onClick={onClose} className="w-8 h-8 bg-white/15 hover:bg-white/25 rounded-xl flex items-center justify-center text-white ring-1 ring-white/25 transition-all">
@@ -389,6 +391,34 @@ const BillItemsEditModal: React.FC<Props> = ({ isOpen, onClose, bill, menuItems,
               </button>
             </div>
           </div>
+
+          {/* Mobile tabs: menu | order */}
+          <div className="lg:hidden flex-shrink-0 grid grid-cols-2 gap-1 p-1.5 bg-gray-100 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+            <button
+              type="button"
+              onClick={() => setMobileTab('menu')}
+              className={`py-2 rounded-lg text-sm font-bold transition-all ${mobileTab === 'menu' ? 'bg-white dark:bg-gray-700 text-orange-600 dark:text-orange-400 shadow' : 'text-gray-500 dark:text-gray-400'}`}
+            >
+              الأصناف
+            </button>
+            <button
+              type="button"
+              onClick={() => setMobileTab('order')}
+              className={`py-2 rounded-lg text-sm font-bold transition-all flex items-center justify-center gap-1.5 ${mobileTab === 'order' ? 'bg-white dark:bg-gray-700 text-green-700 dark:text-green-400 shadow' : 'text-gray-500 dark:text-gray-400'}`}
+            >
+              الأصناف المجمعة
+              {items.length > 0 && (
+                <span className="min-w-[20px] h-5 px-1 bg-green-500 text-white text-xs font-bold rounded-full flex items-center justify-center leading-none">{items.length}</span>
+              )}
+            </button>
+          </div>
+
+          {/* تنبيه: تعديل فاتورة مدفوعة — سيعاد حساب المتبقي/الحالة تلقائياً */}
+          {((fullBill as any)?.status || (bill as any)?.status) === 'paid' && (
+            <div className="mx-2 mt-2 p-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-lg text-center text-xs text-amber-700 dark:text-amber-300 font-medium">
+              هذه الفاتورة مدفوعة بالكامل — أي تغيير في الأصناف سيعيد حساب المتبقي والحالة تلقائياً
+            </div>
+          )}
 
           {/* Error */}
           {error && (
@@ -411,9 +441,9 @@ const BillItemsEditModal: React.FC<Props> = ({ isOpen, onClose, bill, menuItems,
           {/* BODY - 4 أعمدة نفس OrderModal */}
           <div className="flex-1 flex overflow-hidden min-h-0">
 
-            {/* Col 1: Sections */}
+            {/* Col 1: Sections (desktop columns; chips on mobile) */}
             {!searchQuery.trim() && (
-              <div className="w-24 sm:w-28 flex-shrink-0 flex flex-col border-l border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+              <div className="w-24 lg:w-28 flex-shrink-0 hidden lg:flex flex-col border-l border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
                 <div className="px-2 py-2 border-b border-gray-100 dark:border-gray-700 flex-shrink-0">
                   <p className="text-base font-semibold text-gray-400 dark:text-gray-500 text-center">الأقسام</p>
                 </div>
@@ -433,9 +463,9 @@ const BillItemsEditModal: React.FC<Props> = ({ isOpen, onClose, bill, menuItems,
               </div>
             )}
 
-            {/* Col 2: Categories */}
+            {/* Col 2: Categories (desktop columns; chips on mobile) */}
             {!searchQuery.trim() && activeSectionCategories.length > 1 && (
-              <div className="w-24 sm:w-28 flex-shrink-0 flex flex-col border-l border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
+              <div className="w-24 lg:w-28 flex-shrink-0 hidden lg:flex flex-col border-l border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
                 <div className="px-2 py-2 border-b border-gray-100 dark:border-gray-700 flex-shrink-0">
                   <p className="text-base font-semibold text-gray-400 dark:text-gray-500 text-center">الفئات</p>
                 </div>
@@ -462,7 +492,45 @@ const BillItemsEditModal: React.FC<Props> = ({ isOpen, onClose, bill, menuItems,
             )}
 
             {/* Col 3: Items */}
-            <div className="flex-1 flex flex-col min-h-0 min-w-0 bg-gray-50 dark:bg-gray-900">
+            <div className={`flex-1 flex-col min-h-0 min-w-0 bg-gray-50 dark:bg-gray-900 ${mobileTab === 'menu' ? 'flex' : 'hidden'} lg:flex`}>
+              {/* Mobile chips: sections + categories */}
+              {!searchQuery.trim() && (
+                <div className="lg:hidden flex-shrink-0 px-2 pt-2 space-y-1.5">
+                  <div className="flex gap-1.5 overflow-x-auto pb-0.5">
+                    {activeSections.map(sec => {
+                      const hasCats = getCategoriesForSection(sec.id).length > 0;
+                      if (!hasCats) return null;
+                      const isAct = activeSectionId === sec.id;
+                      return (
+                        <button key={sec.id} onClick={() => setActiveSectionId(sec.id)}
+                          className={`flex-shrink-0 px-3 py-1.5 rounded-full text-sm font-bold whitespace-nowrap transition-all ${isAct ? 'bg-orange-500 text-white shadow' : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700'}`}>
+                          {sec.name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {activeSectionCategories.length > 1 && (
+                    <div className="flex gap-1.5 overflow-x-auto pb-0.5">
+                      <button onClick={() => setActiveCategoryId('all')}
+                        className={`flex-shrink-0 px-3 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-all ${activeCategoryId === 'all' ? 'bg-gray-800 dark:bg-gray-200 text-white dark:text-gray-900 shadow' : 'bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-700'}`}>
+                        الكل
+                      </button>
+                      {activeSectionCategories.map(cat => {
+                        const catId = (cat as any)._id || (cat as any).id;
+                        const isAct = activeCategoryId === catId;
+                        const count = getItemsForCategory(catId).length;
+                        if (count === 0) return null;
+                        return (
+                          <button key={catId} onClick={() => setActiveCategoryId(catId)}
+                            className={`flex-shrink-0 px-3 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-all ${isAct ? 'bg-gray-800 dark:bg-gray-200 text-white dark:text-gray-900 shadow' : 'bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-700'}`}>
+                            {cat.name}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
               <div className="px-2 pt-2 pb-1.5 flex-shrink-0">
                 <div className="relative">
                   <Search className={`absolute ${isRTL ? 'right-2.5' : 'left-2.5'} top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400 pointer-events-none`} />
@@ -504,7 +572,7 @@ const BillItemsEditModal: React.FC<Props> = ({ isOpen, onClose, bill, menuItems,
             </div>
 
             {/* Col 4: Order - مجمع */}
-            <div className="w-64 sm:w-72 flex-shrink-0 flex flex-col border-r border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+            <div className={`w-full lg:w-64 xl:w-72 flex-shrink-0 flex-col border-r border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 ${mobileTab === 'order' ? 'flex flex-1 min-h-0' : 'hidden'} lg:flex`}>
               <div className="px-3 py-2 border-b border-gray-100 dark:border-gray-700 flex-shrink-0 flex items-center justify-between">
                 <div className="flex items-center gap-1.5">
                   <div className="w-1 h-4 bg-gradient-to-b from-green-400 to-emerald-500 rounded-full"></div>

@@ -46,6 +46,35 @@ export function getDeviceId() {
     return cachedDeviceId;
 }
 
+function getTimeSourcePath() {
+    return path.join(process.env.APPDATA || path.join(os.homedir(), "AppData", "Roaming"), "bomba-desktop", "time-source.json");
+}
+
+/** Manual pin: this device is the time authority regardless of election. */
+export function isTimeSourcePinned() {
+    try {
+        const raw = fs.readFileSync(getTimeSourcePath(), "utf8");
+        return JSON.parse(raw)?.pinned === true;
+    } catch {
+        return false;
+    }
+}
+
+export function setTimeSourcePinned(on) {
+    try {
+        const p = getTimeSourcePath();
+        fs.mkdirSync(path.dirname(p), { recursive: true });
+        if (on) {
+            fs.writeFileSync(p, JSON.stringify({ pinned: true, at: new Date().toISOString() }, null, 2), "utf8");
+        } else if (fs.existsSync(p)) {
+            fs.unlinkSync(p);
+        }
+        return true;
+    } catch {
+        return false;
+    }
+}
+
 export function getDeviceInfo() {
     const ifaces = os.networkInterfaces();
     const ips = [];

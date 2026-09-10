@@ -310,11 +310,11 @@ const Subscription = () => {
 
         {(userRole === 'owner' || userRole === 'admin' || subscriptionStatus === 'active') && (
           <>
-            <div className="text-center mb-8">
-              <h1 className="text-3xl md:text-4xl font-bold text-gray-800 dark:text-gray-100 mb-4">
+            <div className="text-center mb-5 sm:mb-8">
+              <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-gray-800 dark:text-gray-100 mb-2 sm:mb-4">
                 {t('subscription.title')}
               </h1>
-              <p className="text-gray-600 dark:text-gray-400 text-lg">
+              <p className="text-gray-600 dark:text-gray-400 text-base sm:text-lg">
                 {t('subscription.subtitle')}
               </p>
             </div>
@@ -351,7 +351,7 @@ const Subscription = () => {
               />
             )}
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
               {plans.map((plan) => (
                 <Card
                   key={plan.id}

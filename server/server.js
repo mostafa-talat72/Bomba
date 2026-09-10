@@ -6,7 +6,8 @@ import express from "express";
 import cors from "cors";
 import helmet from "helmet";
 import compression from "compression";
-import { createServer } from "http";
+import { createServer, request as httpRequest } from "http";
+import net from "net";
 import { Server } from "socket.io";
 import mongoose from "mongoose";
 import connectDB from "./config/database.js";
@@ -73,7 +74,11 @@ import payrollRoutes from "./routes/payroll.js";
 import warehouseRoutes from "./routes/warehouseRoutes.js";
 import inviteRoutes from "./routes/inviteRoutes.js";
 import printRoutes from "./routes/printRoutes.js";
+import connectedDevicesRoutes from "./routes/connectedDevicesRoutes.js";
 import backupRoutes from "./routes/backupRoutes.js";
+import deliveryZoneRoutes from "./routes/deliveryZoneRoutes.js";
+import auditRoutes from "./routes/auditRoutes.js";
+import shiftRoutes from "./routes/shiftRoutes.js";
 
 // Environment variables already loaded at the top of the file
 
@@ -779,7 +784,11 @@ app.use("/api/payroll", payrollRoutes);
 app.use("/api/warehouse", warehouseRoutes);
 app.use("/api/invites", inviteRoutes);
 app.use("/api/print", printRoutes);
+app.use("/api/connected-devices", connectedDevicesRoutes);
 app.use("/api/backup", backupRoutes);
+app.use("/api/delivery-zones", deliveryZoneRoutes);
+app.use("/api/audit", auditRoutes);
+app.use("/api/shifts", shiftRoutes);
 app.use("/public", publicRoutes);
 
 // Desktop app static serving (enabled only when DESKTOP_DIST_PATH is set)
@@ -787,24 +796,222 @@ if (process.env.DESKTOP_DIST_PATH) {
     const pathModule = await import("path");
     const fsModule = await import("fs");
     const distDir = pathModule.resolve(process.env.DESKTOP_DIST_PATH);
+    const backendPort = () => Number(process.env.PORT || 5000);
 
-    if (fsModule.existsSync(distDir)) {
-        app.use(express.static(distDir));
+    // Mounts the built frontend (dist/) on any express app with identical
+    // rules: precompressed .br/.gz first, immutable cache for hashed
+    // /assets/*, never cache index.html, SPA fallback (missing /assets/*
+    // 404s instead of returning HTML). With proxyBackend set, /api/*,
+    // /socket.io/* and /health are reverse-proxied to the main backend so
+    // the frontend entry (e.g. :3000) talks to the backend (e.g. :5000)
+    // same-origin - exactly like vite dev.
+    const compressedTypes = [
+        { ext: ".br", encoding: "br", check: /\bbr\b/ },
+        { ext: ".gz", encoding: "gzip", check: /\bgzip\b/ },
+    ];
+    function mountDist(targetApp, { proxyBackend = false } = {}) {
+        if (proxyBackend) {
+            const proxyHttp = (req, res) => {
+                const port = backendPort();
+                const headers = { ...req.headers };
+                delete headers.connection;
+                delete headers["keep-alive"];
+                delete headers["transfer-encoding"];
+                try {
+                    headers.host = `127.0.0.1:${port}`;
+                } catch {}
+                // socket.io long-polling hangs requests for tens of seconds by
+                // design — never time those out or live events die mid-flight.
+                const isSocketIo = (req.originalUrl || '').startsWith('/socket.io');
+                let done = false;
+                let proxyReq = null;
+                try {
+                    proxyReq = httpRequest(
+                        {
+                            hostname: "127.0.0.1",
+                            port,
+                            path: req.originalUrl,
+                            method: req.method,
+                            headers,
+                            timeout: isSocketIo ? 0 : 30000,
+                        },
+                        (proxyRes) => {
+                            if (done) return;
+                            done = true;
+                            const outHeaders = { ...proxyRes.headers };
+                            delete outHeaders.connection;
+                            delete outHeaders["keep-alive"];
+                            delete outHeaders["transfer-encoding"];
+                            res.writeHead(proxyRes.statusCode || 502, outHeaders);
+                            proxyRes.pipe(res);
+                        }
+                    );
+                } catch {
+                    if (!done) {
+                        done = true;
+                        res.status(502).json({ success: false, error: "backend unreachable" });
+                    }
+                    return;
+                }
+                proxyReq.on("timeout", () => {
+                    try { proxyReq.destroy(); } catch {}
+                    if (!done) {
+                        done = true;
+                        res.status(504).json({ success: false, error: "backend timeout" });
+                    }
+                });
+                proxyReq.on("error", () => {
+                    if (!done) {
+                        done = true;
+                        try {
+                            res.status(502).json({ success: false, error: "backend unreachable" });
+                        } catch {}
+                    }
+                });
+                req.pipe(proxyReq);
+            };
+            targetApp.use(["/api", "/socket.io", "/health"], proxyHttp);
+        }
 
-        // SPA fallback - exclude API and socket paths
-        app.get("*", (req, res, next) => {
+        // Serve vite-prebuilt compressed assets (.br/.gz) when the client
+        // accepts them. The vendor bundle is ~5MB raw but ~1MB brotli — far
+        // more likely to survive a flaky Wi-Fi link to phones. Falls through
+        // to plain express.static when no precompressed file matches.
+        targetApp.use((req, res, next) => {
+            try {
+                if (req.method !== "GET") return next();
+                if (!/\.(js|css|json|svg|html|txt|xml|map)$/i.test(req.path)) return next();
+                const accept = String(req.headers["accept-encoding"] || "");
+                const rel = decodeURIComponent(req.path).replace(/^\/+/, "");
+                if (!rel || rel.includes("..")) return next();
+                const abs = pathModule.normalize(pathModule.join(distDir, rel));
+                if (!abs.startsWith(distDir)) return next();
+                let stat = null;
+                try {
+                    stat = fsModule.statSync(abs);
+                } catch {
+                    return next();
+                }
+                if (!stat.isFile()) return next();
+                for (const t of compressedTypes) {
+                    if (!t.check.test(accept)) continue;
+                    let cStat = null;
+                    try {
+                        cStat = fsModule.statSync(abs + t.ext);
+                    } catch {
+                        continue;
+                    }
+                    if (!cStat.isFile()) continue;
+                    res.setHeader("Content-Encoding", t.encoding);
+                    res.setHeader("Vary", "Accept-Encoding");
+                    res.type(pathModule.extname(abs));
+                    return res.sendFile(abs + t.ext);
+                }
+                return next();
+            } catch {
+                return next();
+            }
+        });
+
+        targetApp.use(express.static(distDir, {
+            // Hashed /assets/* files are immutable -> cache a year.
+            // index.html (unhashed, references the hashes) must NEVER be
+            // cached -> otherwise phones keep a stale copy pointing at
+            // deleted builds and the app white-screens after every update.
+            setHeaders: (res, filePath) => {
+                if (filePath.endsWith("index.html")) {
+                    res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+                    res.setHeader("Pragma", "no-cache");
+                } else if (filePath.includes(`${pathModule.sep}assets${pathModule.sep}`)) {
+                    res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+                }
+            },
+        }));
+
+        // SPA fallback - exclude API and socket paths.
+        // NOTE: /assets/* must 404 when missing (never fall through to
+        // index.html) - otherwise a stale cached page gets HTML instead of
+        // JS/CSS and dies with a cryptic MIME failure.
+        targetApp.get("*", (req, res, next) => {
             if (
                 req.path.startsWith("/api") ||
                 req.path.startsWith("/socket.io") ||
                 req.path.startsWith("/uploads") ||
                 req.path.startsWith("/temp") ||
                 req.path.startsWith("/public") ||
-                req.path.startsWith("/health")
+                req.path.startsWith("/health") ||
+                req.path.startsWith("/assets/")
             ) {
                 return next();
             }
+            res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+            res.setHeader("Pragma", "no-cache");
             res.sendFile(pathModule.join(distDir, "index.html"));
         });
+    }
+
+    if (fsModule.existsSync(distDir)) {
+        // Main backend also serves the SPA on its own origin (:5000).
+        mountDist(app);
+
+        // Dedicated frontend entry on :3000 (desktop/production): serves the
+        // same dist but proxies /api + /socket.io to the backend, so phones
+        // open :3000 and the frontend talks to :5000 same-origin (dev-like).
+        // Disable with FRONTEND_PORT=0. Skipped automatically when it would
+        // collide with the backend port (e.g. vite dev already owns :3000).
+        const frontPortRaw = String(process.env.FRONTEND_PORT || "3000").trim().toLowerCase();
+        const frontPort = Number(frontPortRaw);
+        const frontDisabled = ["0", "off", "false", "no", "disabled"].includes(frontPortRaw) || !frontPort;
+        if (!frontDisabled && frontPort !== backendPort()) {
+            const frontApp = express();
+            frontApp.use(compression({ threshold: 10240 }));
+            mountDist(frontApp, { proxyBackend: true });
+            const frontServer = createServer(frontApp);
+            // WebSocket upgrade (socket.io) -> raw TCP pipe to the backend.
+            frontServer.on("upgrade", (req, socket, head) => {
+                try {
+                    if (!req.url || !req.url.startsWith("/socket.io")) {
+                        socket.destroy();
+                        return;
+                    }
+                    const backend = net.connect(backendPort(), "127.0.0.1", () => {
+                        try {
+                            Logger.info(`🔌 socket.io client bridged :${frontPort} -> :${backendPort()}`);
+                            const lines = [
+                                `${req.method} ${req.url} HTTP/${req.httpVersion}`,
+                                `Host: 127.0.0.1:${backendPort()}`,
+                            ];
+                            for (const [k, v] of Object.entries(req.headers)) {
+                                if (["host", "connection"].includes(String(k).toLowerCase())) continue;
+                                lines.push(`${k}: ${v}`);
+                            }
+                            lines.push("Connection: Upgrade", "", "");
+                            backend.write(lines.join("\r\n"));
+                            if (head && head.length) backend.write(head);
+                            socket.pipe(backend).pipe(socket);
+                        } catch {
+                            try { socket.destroy(); } catch {}
+                            try { backend.destroy(); } catch {}
+                        }
+                    });
+                    const kill = () => {
+                        try { socket.destroy(); } catch {}
+                        try { backend.destroy(); } catch {}
+                    };
+                    backend.on("error", kill);
+                    socket.on("error", kill);
+                } catch {
+                    try { socket.destroy(); } catch {}
+                }
+            });
+            frontServer.listen(frontPort, process.env.HOST || "0.0.0.0", () => {
+                Logger.info(`🖥️ Frontend entry listening on :${frontPort} (proxies API to :${backendPort()})`);
+            });
+            frontServer.on("error", (e) => {
+                // Port busy (e.g. vite dev owns :3000) -> non-fatal, :5000 still serves all.
+                Logger.warn(`⚠️ Frontend entry :${frontPort} unavailable: ${e.message}`);
+            });
+        }
 
         Logger.info(`🖥️ Desktop mode: serving frontend from ${distDir}`);
     } else {
@@ -871,6 +1078,10 @@ server.listen(PORT, HOST, async () => {
             // Instant UI: push peer join/leave to browsers the moment it happens
             // (badge + toast), so the user sees "device connected" immediately.
             try {
+                // Auto-converge clocks when a peer appears with clearly wrong time (>10s).
+                import("./utils/lanTimeSync.js").then((m) => {
+                    try { lanMeshDiscovery.on("peer-up", (peer) => { try { m.maybeAutoTimeSync(peer); } catch {} }); } catch {}
+                }).catch(() => {});
                 lanMeshDiscovery.on("peer-up", (peer) => {
                     try { io.emit("lan:peer-up", { ...(peer || {}), count: lanMeshDiscovery.getPeers().length }); } catch {}
                 });

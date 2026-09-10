@@ -18,6 +18,16 @@ export const createTombstone = async (collectionName, documentId, organization, 
       { $set: { deletedAt: new Date(), deletedBy } },
       { upsert: true }
     );
+    // LAN mesh push (fire-and-forget): peers must learn deletions even offline,
+    // otherwise a peer's stale copy can resurrect the doc via catch-up.
+    try {
+        const tdoc = await Tombstone.findOne({ collectionName, documentId, organization: orgId }).lean();
+        if (tdoc) {
+            import("./lanPeerSync.js").then((m) => {
+                try { m.pushLanOp({ collection: "tombstones", type: "update", data: tdoc }); } catch {}
+            }).catch(() => {});
+        }
+    } catch {}
     // Immediate dual-write to Atlas
     const atlasConnection = dualDatabaseManager.getAtlasConnection();
     if (atlasConnection) {

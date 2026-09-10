@@ -111,16 +111,20 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
 
     if (shouldBlockExit()) {
-      const confirmed = window.confirm('توجد طاولات مشغولة، هل تريد تسجيل الخروج؟');
-      if (!confirmed) {
-        try {
-          sessionStorage.removeItem('bombaLogoutInProgress');
-        } catch {
-          // Ignore unavailable session storage.
-        }
-        setIsLoggingOut(false);
-        return;
+      // Handled in-app by Layout (occupied-tables warning modal) — never a
+      // browser confirm. If no listener is mounted, proceed without blocking.
+      try {
+        window.dispatchEvent(new CustomEvent('bomba:confirm-logout'));
+      } catch {
+        // Ignore unavailable event system.
       }
+      try {
+        sessionStorage.removeItem('bombaLogoutInProgress');
+      } catch {
+        // Ignore unavailable session storage.
+      }
+      setIsLoggingOut(false);
+      return;
     }
 
     setIsLoggingOut(true);

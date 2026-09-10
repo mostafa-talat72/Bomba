@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Table as TableIcon, ShoppingCart, DollarSign, Plus, Clock, Printer, ArrowLeftRight, Edit, DoorOpen } from 'lucide-react';
+import { Table as TableIcon, ShoppingCart, DollarSign, Plus, Clock, Printer, ArrowLeftRight, Edit } from 'lucide-react';
 import { Table, Bill } from '../../services/api';
 import { formatCurrency as formatCurrencyUtil } from '../../utils/formatters';
 import { getTableDisplay, getAgeLabel, getTableAgeColor } from './tableHelpers';
@@ -81,7 +81,7 @@ const TableButton = React.memo<TableButtonProps>(({ table, isSelected, isOccupie
 
   return (
     <div
-      className="relative"
+      className="relative h-full"
       onMouseEnter={() => { setShowTooltip(true); onHoverChange?.(table); }}
       onMouseLeave={() => { setShowTooltip(false); onHoverChange?.(null); }}
     >
@@ -90,7 +90,7 @@ const TableButton = React.memo<TableButtonProps>(({ table, isSelected, isOccupie
         tabIndex={0}
         onClick={() => onClick(table)}
         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(table); } }}
-        className={`group relative w-full rounded-xl sm:rounded-2xl border-2 transition-all duration-300 transform hover:scale-[1.02] hover:-translate-y-0.5 cursor-pointer ${styles.card}`}
+        className={`group relative w-full h-full flex flex-col rounded-xl sm:rounded-2xl border-2 transition-all duration-300 transform hover:scale-[1.02] hover:-translate-y-0.5 cursor-pointer ${styles.card}`}
       >
         {/* ── وقت / حالة badge ── */}
         <div className="absolute -top-2 -right-2 z-10">
@@ -116,28 +116,28 @@ const TableButton = React.memo<TableButtonProps>(({ table, isSelected, isOccupie
           </div>
         )}
 
-        {/* ── جسم الكارت ── */}
-        <div className="flex flex-col items-center justify-center px-2 pt-3 pb-6 sm:pt-4 sm:pb-7">
+        {/* ── جسم الكارت (عرض فقط على الموبايل — الأزرار داخل نافذة الطاولة) ── */}
+        <div className="flex flex-col items-center justify-center px-1.5 sm:px-2 pt-2 sm:pt-4 pb-2">
           {/* أيقونة الطاولة / الجلسة النشطة */}
-          <div className={`w-8 h-8 sm:w-9 sm:h-9 rounded-lg flex items-center justify-center mb-1.5 transition-all duration-300 group-hover:scale-110 group-hover:rotate-6 shadow-sm ${styles.icon}`}>
+          <div className={`w-7 h-7 sm:w-9 sm:h-9 rounded-lg flex items-center justify-center mb-1 sm:mb-1.5 transition-all duration-300 group-hover:scale-110 group-hover:rotate-6 shadow-sm ${styles.icon}`}>
             {isOccupied && activeSessionType ? (
-              <span className="text-2xl sm:text-3xl leading-none select-none animate-pulse">
+              <span className="text-xl sm:text-3xl leading-none select-none animate-pulse">
                 {activeSessionType === 'playstation' ? '🎮' :
                  activeSessionType === 'computer'    ? '💻' : '🎮💻'}
               </span>
             ) : (
-              <TableIcon className="h-4 w-4 sm:h-5 sm:w-5 text-white" />
+              <TableIcon className="h-3.5 w-3.5 sm:h-5 sm:w-5 text-white" />
             )}
           </div>
 
-          {/* رقم الطاولة */}
-          <span className={`text-lg sm:text-xl font-extrabold leading-none ${styles.text}`}>
+          {/* رقم الطاولة — سطران كحد أقصى، القص عند المسافات فقط */}
+          <span className={`text-base sm:text-xl font-extrabold leading-tight text-center line-clamp-2 break-normal ${styles.text}`}>
             {getTableDisplay(table.number, i18n.language)}
           </span>
 
           {/* المبلغ المتبقي — يشمل delta الجلسات الحية كل 10 ثوانٍ */}
           {isOccupied && liveRemaining > 0 && (
-            <span className={`text-sm font-semibold mt-0.5 hidden sm:block ${styles.sub}`}>
+            <span className={`text-xs sm:text-sm font-semibold mt-0.5 ${styles.sub}`}>
               {formatCurrencyUtil(liveRemaining, i18n.language, localStorage.getItem('organizationCurrency') || 'EGP')}
               {liveExtra > 0 && <span className="ml-1 text-[10px] animate-pulse">●</span>}
             </span>
@@ -147,80 +147,102 @@ const TableButton = React.memo<TableButtonProps>(({ table, isSelected, isOccupie
         {/* hover glow */}
         <div className={`absolute inset-0 rounded-xl sm:rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none ${styles.hover}`} />
 
-        {/* ── Quick action buttons: two large buttons per row ── */}
+        {/* ── Quick actions: hover overlay COVERING the card (like the original
+            design) — named compact buttons, card never expands or moves.
+            Mobile: cards are display-only (tap opens the table window
+            where all actions live consistently). ── */}
         {isOccupied && !isSelected && (
-          <div className="absolute bottom-1 left-1 right-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-all duration-200 translate-y-0 sm:translate-y-1 sm:group-hover:translate-y-0 z-10">
-            <div className="grid grid-cols-2 gap-1.5">
-              {onOpen && (
-                <button
-                  onClick={(e) => onOpen(table, e)}
-                  className="col-span-2 min-h-10 bg-orange-500 hover:bg-orange-600 text-white text-sm font-bold rounded-lg flex items-center justify-center gap-1.5 shadow border border-orange-600 transition-all"
-                  title={t('cafe.openTable', 'فتح الطاولة')}>
-                  <DoorOpen className="h-4 w-4" />
-                  <span>{t('cafe.openTable', 'فتح')}</span>
-                </button>
-              )}
+            <div className="hidden sm:block absolute inset-x-1 bottom-1 z-20 opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-opacity duration-200">
+              <div className="rounded-lg p-1 shadow-xl border bg-white/95 dark:bg-gray-900/95 border-gray-200 dark:border-gray-700">
+              <div className="flex items-stretch justify-between gap-1 min-w-0">
+              <div className="flex-1 min-w-0 flex flex-col gap-1">
+              {/* NOTE: لا زر "فتح" هنا — الضغط على الكارت نفسه يفتحه */}
               <button
                 onClick={(e) => onQuickOrder(table, e)}
-                className="min-h-10 bg-white hover:bg-gray-50 dark:bg-gray-900 dark:hover:bg-gray-800 backdrop-blur-sm text-red-600 dark:text-red-400 text-sm font-bold rounded-lg flex items-center justify-center gap-1.5 shadow border border-red-200 dark:border-red-800 transition-all"
+                className="min-h-8 bg-white hover:bg-gray-50 dark:bg-gray-900 dark:hover:bg-gray-800 text-red-600 dark:text-red-400 text-xs font-bold rounded-md flex items-center justify-center gap-1 shadow border border-red-200 dark:border-red-800 transition-all"
                 title={t('cafe.tableOrdersModal.newOrder')}>
-                <ShoppingCart className="h-4 w-4" />
+                <ShoppingCart className="h-3.5 w-3.5" />
                 <span>طلب</span>
               </button>
               <button
                 onClick={(e) => onQuickBilling(table, e)}
-                className="min-h-10 bg-white hover:bg-gray-50 dark:bg-gray-900 dark:hover:bg-gray-800 backdrop-blur-sm text-blue-600 dark:text-blue-400 text-sm font-bold rounded-lg flex items-center justify-center gap-1.5 shadow border border-blue-200 dark:border-blue-800 transition-all"
+                className="min-h-8 bg-white hover:bg-gray-50 dark:bg-gray-900 dark:hover:bg-gray-800 text-blue-600 dark:text-blue-400 text-xs font-bold rounded-md flex items-center justify-center gap-1 shadow border border-blue-200 dark:border-blue-800 transition-all"
                 title={t('billing.paymentManagement')}>
-                <DollarSign className="h-4 w-4" />
+                <DollarSign className="h-3.5 w-3.5" />
                 <span>دفع</span>
               </button>
-              {onQuickEditBill && tableBills.some(b => ['draft','partial','overdue'].includes(b.status)) ? (
+              {(onQuickEditBill && tableBills.some(b => ['draft','partial','overdue','paid'].includes(b.status))) && (
                 <button
                   onClick={(e) => onQuickEditBill(table, e)}
-                  className="min-h-10 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded-lg flex items-center justify-center gap-1.5 shadow border border-blue-700 transition-all"
+                  className="min-h-8 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-md flex items-center justify-center gap-1 shadow border border-blue-700 transition-all"
                   title="تعديل الأصناف">
-                  <Edit className="h-4 w-4" />
+                  <Edit className="h-3.5 w-3.5" />
                   <span>تعديل</span>
                 </button>
-              ) : <div />}
-              {onQuickChangeTable ? (
+              )}
+              </div>
+              {/* ── الوسط: علامة الطاولة + المبلغ المتبقي تحتها ── */}
+              <div className="flex flex-col items-center justify-center px-1 min-w-0 max-w-[40%] flex-shrink">
+                {isOccupied && activeSessionType ? (
+                  <span className="text-2xl leading-none select-none animate-pulse">
+                    {activeSessionType === 'playstation' ? '🎮' :
+                     activeSessionType === 'computer'    ? '💻' : '🎮💻'}
+                  </span>
+                ) : (
+                  <span className={`w-7 h-7 rounded-lg flex items-center justify-center shadow-sm ${styles.icon}`}>
+                    <TableIcon className="h-3.5 w-3.5 text-white" />
+                  </span>
+                )}
+                <span className={`text-base font-extrabold leading-tight text-center line-clamp-2 break-normal ${styles.text}`}>
+                  {getTableDisplay(table.number, i18n.language)}
+                </span>
+                {liveRemaining > 0 && (
+                  <span className={`text-xs font-bold leading-tight text-center break-normal ${styles.sub}`}>
+                    {formatCurrencyUtil(liveRemaining, i18n.language, localStorage.getItem('organizationCurrency') || 'EGP')}
+                  </span>
+                )}
+              </div>
+              <div className="flex-1 min-w-0 flex flex-col gap-1">
+              {onQuickChangeTable && (
                 <button
                   onClick={(e) => onQuickChangeTable(table, e)}
-                  className="min-h-10 bg-white hover:bg-gray-50 dark:bg-gray-900 dark:hover:bg-gray-800 text-purple-600 dark:text-purple-400 text-sm font-bold rounded-lg flex items-center justify-center gap-1.5 shadow border border-purple-200 dark:border-purple-800 transition-all"
+                  className="min-h-8 bg-white hover:bg-gray-50 dark:bg-gray-900 dark:hover:bg-gray-800 text-purple-600 dark:text-purple-400 text-xs font-bold rounded-md flex items-center justify-center gap-1 shadow border border-purple-200 dark:border-purple-800 transition-all"
                   title={t('billing.changeTableTitle', 'تغيير الطاولة')}>
-                  <ArrowLeftRight className="h-4 w-4" />
+                  <ArrowLeftRight className="h-3.5 w-3.5" />
                   <span>نقل</span>
                 </button>
-              ) : <div />}
-              {onQuickPrint && totalRemaining > 0 ? (
+              )}
+              {(onQuickPrint && totalRemaining > 0) && (
                 <button
                   onClick={(e) => onQuickPrint(table, e)}
-                  className="min-h-10 bg-white hover:bg-gray-50 dark:bg-gray-900 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-300 text-sm font-bold rounded-lg flex items-center justify-center gap-1.5 shadow border border-gray-200 dark:border-gray-600 transition-all"
+                  className="min-h-8 bg-white hover:bg-gray-50 dark:bg-gray-900 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-300 text-xs font-bold rounded-md flex items-center justify-center gap-1 shadow border border-gray-200 dark:border-gray-600 transition-all"
                   title="طباعة الفاتورة">
-                  <Printer className="h-4 w-4" />
+                  <Printer className="h-3.5 w-3.5" />
                   <span>طباعة</span>
                 </button>
-              ) : <div />}
-              {activeSessionCount > 0 && onEndAllSessions ? (
+              )}
+              {(activeSessionCount > 0 && onEndAllSessions) && (
                 <button
                   onClick={(e) => onEndAllSessions(table, e)}
-                  className={`min-h-10 bg-white hover:bg-gray-50 dark:bg-gray-900 dark:hover:bg-gray-800 text-sm font-bold rounded-lg flex items-center justify-center gap-1.5 shadow border transition-all ${
+                  className={`min-h-8 bg-white hover:bg-gray-50 dark:bg-gray-900 dark:hover:bg-gray-800 text-xs font-bold rounded-md flex items-center justify-center gap-1 shadow border transition-all ${
                     sessionUrgency === 'danger' ? 'border-red-400 text-red-600 dark:text-red-400 animate-pulse' : 'border-red-200 dark:border-red-800 text-red-600 dark:text-red-400'
                   }`}
                   title={`إيقاف جميع جلسات البلايستيشن (${activeSessionCount})`}>
-                  <span className="text-base">⏹</span><span>إيقاف الجلسات</span>
+                  <span className="text-sm leading-none">⏹</span><span>إيقاف</span>
                 </button>
-              ) : <div />}
+              )}
+              </div>
+              </div>
+              </div>
             </div>
-          </div>
         )}
         {!isOccupied && (
-          <div className="absolute bottom-1.5 left-1 right-1 flex gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-all duration-200 translate-y-0 sm:translate-y-1 sm:group-hover:translate-y-0 z-10">
+          <div className="hidden sm:block absolute inset-x-1 bottom-1 z-20 opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-opacity duration-200">
             <button
               onClick={(e) => onQuickOrder(table, e)}
-              className="flex-1 py-1.5 bg-green-500 hover:bg-green-600 dark:bg-green-600 dark:hover:bg-green-500 text-white text-sm font-bold rounded-lg flex items-center justify-center gap-1 shadow-md shadow-green-200 dark:shadow-green-900/40 border border-green-600 dark:border-green-500 transition-all"
+              className="w-full py-1 bg-green-500 hover:bg-green-600 dark:bg-green-600 dark:hover:bg-green-500 text-white text-xs font-bold rounded-lg flex items-center justify-center gap-1 shadow-md shadow-green-200 dark:shadow-green-900/40 border border-green-600 dark:border-green-500 transition-all"
               title={t('cafe.tableOrdersModal.newOrder')}>
-              <Plus className="h-4 w-4" />
+              <Plus className="h-3.5 w-3.5" />
               <span>طلب جديد</span>
             </button>
           </div>

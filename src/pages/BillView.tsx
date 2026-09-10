@@ -464,7 +464,7 @@ const BillView = () => {
 				</div>
 				
 				{/* Header */}
-				<div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
+				<div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6 mb-4 sm:mb-6">
 					<div className="flex items-center justify-between mb-4">
 						<div>
 							<h1 className="text-2xl font-bold text-gray-900 mb-1">{t('billView.title')} #{bill.billNumber}</h1>
@@ -924,7 +924,7 @@ const BillView = () => {
 					}}
 				>
 					<div
-						className="bg-white rounded-lg shadow-lg max-w-2xl w-full p-6 relative max-h-[90vh] flex flex-col"
+						className="bg-white rounded-lg shadow-lg max-w-2xl w-full p-4 sm:p-6 relative max-h-[90vh] flex flex-col"
 					>
 						<button
 							className="absolute top-2 left-2 text-gray-400 hover:text-gray-700 text-xl font-bold z-10"
@@ -932,7 +932,7 @@ const BillView = () => {
 							tabIndex={0}
 						>×</button>
 						<h2 className="text-xl font-bold mb-4 text-center">{t('billView.allOrders')}</h2>
-						<div className="grid grid-cols-1 md:grid-cols-2 gap-4 overflow-y-auto pr-1" style={{ maxHeight: '70vh' }}>
+						<div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 overflow-y-auto pr-1" style={{ maxHeight: '70vh' }}>
 							{bill.orders?.map((order) => (
 								<div key={order._id} className="bg-gray-50 rounded-lg shadow border p-4 flex flex-col gap-2">
 									<div className="flex items-center justify-between mb-2">

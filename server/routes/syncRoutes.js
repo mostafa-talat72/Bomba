@@ -1,6 +1,7 @@
 import express from "express";
 import {
     getMetrics,
+    getOverview,
     getHealth,
     getReport,
     getQueueStatus,
@@ -26,6 +27,9 @@ const router = express.Router();
 
 // Public health check (no auth required)
 router.get("/health", getHealth);
+
+// Combined overview for the Sync Status dashboard (granular permission)
+router.get("/overview", protect, authorize("syncStatus", "settings", "all"), getOverview);
 
 // All other routes require authentication and admin role
 router.use(protect);

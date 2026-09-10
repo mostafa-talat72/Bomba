@@ -281,11 +281,13 @@ export const getBills = async (req, res) => {
         const shouldPaginate = isAll;
 
         let billQuery = Bill.find(query)
-            .select('billNumber table status total remaining paid subtotal billType sessions orders itemPayments sessionPayments createdAt')
+            .select('billNumber table status total remaining paid subtotal billType fulfillmentType deliveryInfo customerName customerPhone sessions orders itemPayments sessionPayments createdAt updatedAt createdBy updatedBy')
             .populate({
                 path: "table",
                 select: "number name",
             })
+            .populate("createdBy", "name")
+            .populate("updatedBy", "name")
             .populate({
                 path: "sessions",
                 select: "deviceName deviceNumber deviceType status startTime endTime controllers controllersHistory discount totalCost finalCost deviceId",
@@ -868,9 +870,12 @@ export const createBill = async (req, res) => {
         let bill;
         for (let attempt = 0; attempt < 10; attempt++) {
             try {
+                // لغير الصالة: الاسم والهاتف على مستوى الفاتورة من بيانات التوصيل (للطباعة والبحث)
+                const effCustomerName = customerName || (normalizedFulfillmentType !== 'dine_in' ? (deliveryInfo?.customerName || null) : null);
+                const effCustomerPhone = customerPhone || (normalizedFulfillmentType !== 'dine_in' ? (deliveryInfo?.phone || null) : null);
                 bill = await Bill.create({
-                    customerName,
-                    customerPhone,
+                    customerName: effCustomerName,
+                    customerPhone: effCustomerPhone,
                     tableNumber: tableNumber,
                     orders: orders || [],
                     sessions: sessions || [],
@@ -1027,12 +1032,12 @@ export const updateBill = async (req, res) => {
             });
         }
 
-        // Don't allow updates if bill is paid
-        if (bill.status === "paid") {
-            return res.status(400).json({
-                success: false,
-                message: "لا يمكن تعديل فاتورة مدفوعة بالكامل",
-            });
+        // Paid bills CAN be edited: totals/remaining/status are recomputed on
+        // save by pre-save hooks (paid→partial if the total grows, stays paid
+        // if still fully covered). Only cancelled bills stay locked.
+        const wasPaid = bill.status === "paid";
+        if (wasPaid) {
+            Logger.info(`✏️ Editing paid bill ${bill.billNumber} — totals will be recomputed on save`);
         }
 
         // Update fields if provided
@@ -1044,6 +1049,20 @@ export const updateBill = async (req, res) => {
         if (tax !== undefined) bill.tax = tax;
         if (notes !== undefined) bill.notes = notes;
         if (dueDate !== undefined) bill.dueDate = dueDate;
+        // Fulfillment type change (e.g. delivery/takeaway moved to a table becomes dine_in)
+        if (req.body.fulfillmentType !== undefined) {
+            const fv = String(req.body.fulfillmentType);
+            if (['dine_in', 'takeaway', 'delivery'].includes(fv)) bill.fulfillmentType = fv;
+        }
+        // Delivery/takeaway info (merged by known keys only)
+        if (req.body.deliveryInfo && typeof req.body.deliveryInfo === 'object') {
+            if (!bill.deliveryInfo) bill.deliveryInfo = {};
+            for (const k of ['customerName', 'phone', 'address', 'deliveryFee', 'driver', 'status', 'outAt', 'deliveredAt']) {
+                if (req.body.deliveryInfo[k] !== undefined) bill.deliveryInfo[k] = req.body.deliveryInfo[k];
+            }
+            if (bill.deliveryInfo.status === 'out_for_delivery' && !bill.deliveryInfo.outAt) bill.deliveryInfo.outAt = new Date();
+            if (bill.deliveryInfo.status === 'delivered' && !bill.deliveryInfo.deliveredAt) bill.deliveryInfo.deliveredAt = new Date();
+        }
         
         let movedFromTableId = null;
         // إذا تم تغيير الطاولة (باستخدام ID)
@@ -1754,13 +1773,7 @@ export const addOrderToBill = async (req, res) => {
             });
         }
 
-        if (bill.status === "paid") {
-            return res.status(400).json({
-                success: false,
-                message: "لا يمكن إضافة طلبات لفاتورة مدفوعة",
-            });
-        }
-
+        // NOTE: paid bills accept new orders too — save() recomputes totals/status.
         const order = await Order.findById(orderId);
 
         if (!order) {
@@ -1830,13 +1843,7 @@ export const removeOrderFromBill = async (req, res) => {
             });
         }
 
-        if (bill.status === "paid") {
-            return res.status(400).json({
-                success: false,
-                message: "لا يمكن إزالة طلبات من فاتورة مدفوعة",
-            });
-        }
-
+        // NOTE: paid bills accept order removal too — save() recomputes totals/status.
         const order = await Order.findById(orderId);
 
         if (!order) {
@@ -2266,6 +2273,17 @@ export const deleteBill = async (req, res) => {
             emitBillDeleted(req, bill._id, tableId);
             req.io.notifyBillUpdate("deleted", { _id: bill._id, billNumber: bill.billNumber }, getOrganizationId(req.user));
         }
+
+        // Audit (fire-and-forget)
+        import("../utils/auditHelper.js").then((m) => {
+            m.logAudit({
+                action: "bill.deleted", collection: "bills",
+                documentId: bill._id, documentNumber: bill.billNumber,
+                user: req.user, organization: organizationId,
+                deviceId: req.headers?.["x-instance-id"] || null,
+                details: { orders: orderIds.length, sessions: sessionIds.length, total: bill.total },
+            }).catch(() => {});
+        }).catch(() => {});
 
         res.json({
             success: true,

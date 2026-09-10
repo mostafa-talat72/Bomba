@@ -91,42 +91,42 @@ const UserCard: React.FC<UserCardProps> = ({
       dir={isRTL ? 'rtl' : 'ltr'}
     >
       {/* Status Badge */}
-      <div className="absolute top-4 left-4 z-10">
-        <div className={`flex items-center gap-2 px-3 py-2 rounded-xl shadow-lg bg-gradient-to-r ${getStatusGradient(user.status)} text-white font-bold text-sm`}>
+      <div className="absolute top-2.5 sm:top-4 left-2.5 sm:left-4 z-10">
+        <div className={`flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-1.5 sm:py-2 rounded-xl shadow-lg bg-gradient-to-r ${getStatusGradient(user.status)} text-white font-bold text-xs sm:text-sm`}>
           {getStatusIcon(user.status)}
           <span>{getStatusText(user.status)}</span>
         </div>
       </div>
 
       {/* Main Content */}
-      <div className="p-6 pt-16">
+      <div className="p-3 sm:p-6 pt-12 sm:pt-16">
         {/* User Header */}
-        <div className="flex items-center mb-4">
-          <div 
-            className="w-16 h-16 rounded-2xl flex items-center justify-center shadow-lg flex-shrink-0"
-            style={{ 
+        <div className="flex items-center mb-3 sm:mb-4">
+          <div
+            className="w-12 h-12 sm:w-16 sm:h-16 rounded-2xl flex items-center justify-center shadow-lg flex-shrink-0"
+            style={{
               background: `linear-gradient(135deg, ${roleInfo.color.replace('text-', '#')} 0%, ${roleInfo.color.replace('text-', '#')}dd 100%)`,
               boxShadow: '0 8px 24px -6px rgba(249, 115, 22, 0.4)'
             }}
           >
-            <User className="h-8 w-8 text-white" />
+            <User className="h-6 w-6 sm:h-8 sm:w-8 text-white" />
           </div>
-          <div className="mr-4 flex-1 min-w-0">
-            <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100 truncate mb-1">{user.name}</h3>
-            <p className="text-sm text-gray-600 dark:text-gray-400 truncate mb-2">{user.email}</p>
-            
+          <div className="mr-2.5 sm:mr-4 flex-1 min-w-0">
+            <h3 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-gray-100 truncate mb-1">{user.name}</h3>
+            <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 truncate mb-1.5 sm:mb-2">{user.email}</p>
+
             {/* Role Badge */}
-            <div className={`inline-flex items-center px-3 py-1.5 rounded-xl text-sm font-bold shadow-md ${roleInfo.bgColor} ${roleInfo.color}`}>
-              <RoleIcon className="h-4 w-4 ml-2" />
+            <div className={`inline-flex items-center px-2 sm:px-3 py-1 sm:py-1.5 rounded-xl text-xs sm:text-sm font-bold shadow-md ${roleInfo.bgColor} ${roleInfo.color}`}>
+              <RoleIcon className="h-3.5 w-3.5 sm:h-4 sm:w-4 ml-1.5 sm:ml-2" />
               {roleInfo.name}
             </div>
           </div>
         </div>
 
         {/* Last Login */}
-        <div className="flex items-center text-sm text-gray-600 dark:text-gray-400 mb-4 p-3 bg-gradient-to-r from-gray-100 to-gray-200 dark:from-gray-700 dark:to-gray-600 rounded-xl">
-          <Calendar className="h-4 w-4 ml-2 text-blue-600 dark:text-blue-400" />
-          <span className="font-semibold">
+        <div className="flex items-center text-xs sm:text-sm text-gray-600 dark:text-gray-400 mb-3 sm:mb-4 p-2.5 sm:p-3 bg-gradient-to-r from-gray-100 to-gray-200 dark:from-gray-700 dark:to-gray-600 rounded-xl">
+          <Calendar className="h-4 w-4 ml-2 text-blue-600 dark:text-blue-400 flex-shrink-0" />
+          <span className="font-semibold truncate">
             {t('users.lastLogin')}: {formatLastLogin(user.lastLogin)}
           </span>
         </div>

@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import { applySyncMiddleware } from "../middleware/sync/syncMiddleware.js";
+import { auditPlugin } from "../utils/audit.js";
 
 const variantSchema = new mongoose.Schema(
     {
@@ -265,5 +266,6 @@ menuItemSchema.add({
 });
 // Apply sync middleware
 applySyncMiddleware(menuItemSchema, 'MenuItem');
+auditPlugin(menuItemSchema, 'menuitems');
 
 export default mongoose.model("MenuItem", menuItemSchema);

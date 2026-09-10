@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
 import zlib from "zlib";
+import crypto from "crypto";
 import { promisify } from "util";
 import { EJSON } from "bson";
 import mongoose from "mongoose";
@@ -8,6 +9,56 @@ import Logger from "../middleware/logger.js";
 
 const gzipAsync = promisify(zlib.gzip);
 const gunzipAsync = promisify(zlib.gunzip);
+const scryptAsync = promisify(crypto.scrypt);
+
+// ---- Password encryption (AES-256-GCM, scrypt key derivation, no new deps) ----
+const ENC_ALGO = "aes-256-gcm";
+const ENC_SALT_BYTES = 16;
+const ENC_IV_BYTES = 12;
+
+const encryptBuffer = async (plainBuf, password) => {
+    const salt = crypto.randomBytes(ENC_SALT_BYTES);
+    const iv = crypto.randomBytes(ENC_IV_BYTES);
+    const key = await scryptAsync(String(password), salt, 32);
+    const cipher = crypto.createCipheriv(ENC_ALGO, key, iv);
+    const ciphertext = Buffer.concat([cipher.update(plainBuf), cipher.final()]);
+    const tag = cipher.getAuthTag();
+    const wrapper = {
+        v: 1, algo: ENC_ALGO,
+        salt: salt.toString("base64"), iv: iv.toString("base64"),
+        tag: tag.toString("base64"), data: ciphertext.toString("base64"),
+    };
+    return Buffer.from(JSON.stringify(wrapper), "utf8");
+};
+
+const decryptBuffer = async (encBuf, password) => {
+    let wrapper;
+    try {
+        wrapper = JSON.parse(encBuf.toString("utf8"));
+    } catch {
+        throw new Error("ملف التشفير تالف");
+    }
+    if (!wrapper || wrapper.v !== 1 || !wrapper.salt || !wrapper.iv || !wrapper.tag || !wrapper.data) {
+        throw new Error("صيغة التشفير غير معروفة");
+    }
+    const key = await scryptAsync(String(password), Buffer.from(wrapper.salt, "base64"), 32);
+    const decipher = crypto.createDecipheriv(
+        wrapper.algo || ENC_ALGO,
+        key,
+        Buffer.from(wrapper.iv, "base64")
+    );
+    decipher.setAuthTag(Buffer.from(wrapper.tag, "base64"));
+    try {
+        return Buffer.concat([
+            decipher.update(Buffer.from(wrapper.data, "base64")),
+            decipher.final(),
+        ]);
+    } catch {
+        throw new Error("كلمة السر غير صحيحة أو الملف تالف");
+    }
+};
+
+export const isEncryptedBackup = (fileName) => typeof fileName === "string" && fileName.toLowerCase().endsWith(".enc.json.gz");
 
 // Backup configuration
 const DEFAULT_BACKUP_DIR = process.env.DESKTOP_BACKUP_DIR || path.join(process.cwd(), 'backups');
@@ -92,16 +143,26 @@ const listBackupFiles = (backupDir) => {
                 createdAt: stat.birthtime && stat.birthtime.getTime() > 0 ? stat.birthtime : stat.mtime,
                 // Legacy mongodump archives (*.gz) vs new pure-JS dumps (*.json.gz).
                 // Only pure-JS dumps are restorable by this version.
-                format: fileName.endsWith('.json.gz') ? 'json' : 'mongodump',
+                // Encrypted dumps (*.enc.json.gz) need a password to restore.
+                format: fileName.toLowerCase().endsWith('.enc.json.gz') ? 'json-enc' : (fileName.endsWith('.json.gz') ? 'json' : 'mongodump'),
+                encrypted: fileName.toLowerCase().endsWith('.enc.json.gz'),
             };
         })
         .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 };
 
+// Guard against overlapping runs (hourly + login/logout triggers).
+let backupInProgress = false;
+
 // Create database backup — pure JS (no mongodump binary needed).
 // Dumps every non-system collection as EJSON (ObjectIds/Dates preserved),
 // gzipped into a single file. Works offline and inside the packaged app.
-export const createDatabaseBackup = async (customPath) => {
+export const createDatabaseBackup = async (customPath, options = {}) => {
+    if (backupInProgress) {
+        Logger.info("Backup skipped: another backup is already running");
+        return { success: false, skipped: true, message: "نسخة احتياطية جارية بالفعل" };
+    }
+    backupInProgress = true;
     const startedAt = new Date();
     try {
         const backupDir = customPath && customPath.trim()
@@ -124,16 +185,22 @@ export const createDatabaseBackup = async (customPath) => {
         }
 
         const timestamp = startedAt.toISOString().replace(/[:.]/g, "-");
-        const backupFileName = `bomba-backup-${timestamp}.json.gz`;
+        const usePassword = options && typeof options.password === "string" && options.password.length > 0;
+        const backupFileName = usePassword
+            ? `bomba-backup-${timestamp}.enc.json.gz`
+            : `bomba-backup-${timestamp}.json.gz`;
         const backupPath = path.join(backupDir, backupFileName);
 
         const json = EJSON.stringify(dump);
         const gz = await gzipAsync(json);
-        fs.writeFileSync(backupPath, gz);
+        // Optional password encryption (AES-256-GCM over the gzipped payload;
+        // ciphertext is not re-gzipped — encrypted bytes don't compress)
+        const payload = usePassword ? await encryptBuffer(gz, options.password) : gz;
+        fs.writeFileSync(backupPath, payload);
 
-        // Retention: keep only the last MAX_BACKUPS pure-JS dumps
+        // Retention: keep only the last MAX_BACKUPS pure-JS dumps (plain + encrypted)
         try {
-            const files = listBackupFiles(backupDir).filter((f) => f.format === 'json');
+            const files = listBackupFiles(backupDir).filter((f) => f.format === 'json' || f.format === 'json-enc');
             for (const old of files.slice(MAX_BACKUPS)) {
                 fs.unlinkSync(old.path);
                 Logger.info(`Removed old backup: ${old.fileName}`);
@@ -156,12 +223,15 @@ export const createDatabaseBackup = async (customPath) => {
             size: stat.size,
             documents,
             collections: collections.length,
+            encrypted: usePassword,
             timestamp: startedAt,
         };
     } catch (error) {
         setLastBackupStatus({ at: new Date().toISOString(), success: false, error: error.message });
         Logger.error("Database backup failed", { error: error.message });
         return { success: false, message: "فشل إنشاء النسخة الاحتياطية", error: error.message };
+    } finally {
+        backupInProgress = false;
     }
 };
 
@@ -177,23 +247,76 @@ export const listBackups = async (customDir) => {
     }
 };
 
-// Restore database from backup (pure-JS format only)
-export const restoreDatabaseBackup = async (fileName, customDir) => {
+// Read + validate a backup file WITHOUT touching the DB.
+// Returns { dump } on success or { error, needsPassword } on failure.
+export const readBackupDump = async (fileName, customDir, password) => {
+    const backupDir = customDir || await getBackupDir();
+    const backupPath = path.join(backupDir, path.basename(fileName));
+    if (!fs.existsSync(backupPath)) {
+        return { error: "ملف النسخة الاحتياطية غير موجود" };
+    }
+    if (path.dirname(path.resolve(backupPath)) !== path.resolve(backupDir)) {
+        return { error: "مسار غير صالح" };
+    }
+    const lower = String(fileName).toLowerCase();
+    if (!lower.endsWith('.json.gz')) {
+        return { error: "هذا الملف بصيغة mongodump القديمة ولا يمكن استعادته بهذه النسخة — أنشئ نسخة جديدة أولاً" };
+    }
+    const encrypted = lower.endsWith('.enc.json.gz');
+    if (encrypted && (!password || !String(password).length)) {
+        return { error: "هذه النسخة مشفرة — أدخل كلمة السر", needsPassword: true };
+    }
     try {
-        const backupDir = customDir || await getBackupDir();
-        const backupPath = path.join(backupDir, fileName);
-        if (!fs.existsSync(backupPath)) {
-            return { success: false, message: "ملف النسخة الاحتياطية غير موجود" };
-        }
-        if (!fileName.endsWith('.json.gz')) {
-            return { success: false, message: "هذا الملف بصيغة mongodump القديمة ولا يمكن استعادته بهذه النسخة — أنشئ نسخة جديدة أولاً" };
-        }
-
-        const raw = await gunzipAsync(fs.readFileSync(backupPath));
+        const fileBuf = fs.readFileSync(backupPath);
+        const gzBuf = encrypted ? await decryptBuffer(fileBuf, password) : fileBuf;
+        const raw = await gunzipAsync(gzBuf);
         const dump = EJSON.parse(raw.toString('utf8'));
-        if (!dump || typeof dump !== 'object' || !dump.collections) {
-            throw new Error('ملف النسخة تالف أو بصيغة غير معروفة');
+        if (!dump || typeof dump !== 'object' || !dump.collections || typeof dump.collections !== 'object') {
+            return { error: "ملف النسخة تالف أو بصيغة غير معروفة" };
         }
+        return { dump, encrypted, backupPath };
+    } catch (e) {
+        return { error: e.message || "تعذر قراءة ملف النسخة" };
+    }
+};
+
+// Verify a backup file (structure + counts) without restoring it.
+export const verifyBackup = async (fileName, customDir, password) => {
+    try {
+        const read = await readBackupDump(fileName, customDir, password);
+        if (read.error) {
+            return { success: false, message: read.error, needsPassword: !!read.needsPassword };
+        }
+        const collections = Object.keys(read.dump.collections);
+        let documents = 0;
+        for (const docs of Object.values(read.dump.collections)) {
+            if (Array.isArray(docs)) documents += docs.length;
+        }
+        return {
+            success: true,
+            message: "النسخة سليمة وجاهزة للاستعادة",
+            data: {
+                fileName: path.basename(fileName),
+                encrypted: read.encrypted,
+                createdAt: read.dump.createdAt || null,
+                collections: collections.length,
+                documents,
+            },
+        };
+    } catch (error) {
+        Logger.error("Backup verify failed", { error: error.message });
+        return { success: false, message: "فشل فحص النسخة", error: error.message };
+    }
+};
+
+// Restore database from backup (pure-JS format only)
+export const restoreDatabaseBackup = async (fileName, customDir, password) => {
+    try {
+        const read = await readBackupDump(fileName, customDir, password);
+        if (read.error) {
+            return { success: false, message: read.error, needsPassword: !!read.needsPassword };
+        }
+        const { dump } = read;
 
         const db = mongoose.connection.db;
         if (!db) throw new Error('قاعدة البيانات غير متصلة');
@@ -243,6 +366,9 @@ export default {
     listBackups,
     restoreDatabaseBackup,
     deleteBackup,
+    verifyBackup,
+    readBackupDump,
+    isEncryptedBackup,
     getBackupDir,
     saveBackupDir,
     ensureBackupDir,

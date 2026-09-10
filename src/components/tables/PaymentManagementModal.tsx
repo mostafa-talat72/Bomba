@@ -8,6 +8,7 @@ import { Bill } from '../../services/api';
 import { useOrganization } from '../../context/OrganizationContext';
 import { formatDecimal } from '../../utils/formatters';
 import { printBill } from '../../utils/printBill';
+import { resolveEffectivePrintSettings } from '../../utils/resolvePrintSettings';
 import { aggregateItemsWithPayments } from '../../utils/billAggregation';
 import { canPayFullBill, canDeleteBill, canEditPartialPayment } from '../../utils/permissionHelper';
 import { getTableDisplay } from './tableHelpers';
@@ -51,6 +52,8 @@ interface PaymentManagementModalProps {
   applyRounding?: (v: number) => number;
   // الدفع المقسوم
   onSplitSubmit?: (amount2: string, method2: 'cash' | 'card' | 'transfer') => Promise<void> | void;
+  // طباعة + دفع كامل (اختياري من الأب)
+  onPrintAndPayFull?: (bill: Bill, method: 'cash' | 'card' | 'transfer') => Promise<void> | void;
   // للـ tick اللحظي كل 10 ثوانٍ
   tick?: number;
 }
@@ -89,10 +92,14 @@ const PaymentManagementModal: React.FC<PaymentManagementModalProps> = ({
   onToggleRounding,
   applyRounding,
   onSplitSubmit,
+  onPrintAndPayFull,
   tick,
 }) => {
   const { t, i18n } = useTranslation();
   const { formatDate } = useOrganization();
+
+  // ── تبويبات النافذة (دفع / تفاصيل) ──
+  const [payTab, setPayTab] = React.useState<'pay' | 'details'>('pay');
 
   // ── الدفع المقسوم ──
   const [splitEnabled, setSplitEnabled] = React.useState(false);
@@ -101,6 +108,23 @@ const PaymentManagementModal: React.FC<PaymentManagementModalProps> = ({
 
   // إعادة ضبط التقسيم عند تغيير الفاتورة
   React.useEffect(() => { setSplitEnabled(false); setSplitAmount2(''); setSplitMethod2('card'); }, [selectedBill?._id, selectedBill?.id]);
+
+  // الدفع بالكامل عند الطباعة — إعداد ثابت من الإعدادات (printMarksPaid) يطبق
+  // على جميع الفواتير، بلا خيار لكل فاتورة.
+  const shouldPayOnPrint = resolveEffectivePrintSettings(user, (user as any)?.organization)?.printMarksPaid === true;
+  const [printing, setPrinting] = React.useState(false);
+  const handlePrintClick = async () => {
+    if (!selectedBill) return;
+    if (shouldPayOnPrint && selectedBill.status !== 'paid' && onPrintAndPayFull) {
+      if (!canPayFullBill(user)) { showNotification(t('common.permissionDenied'), 'error'); return; }
+      setPrinting(true);
+      try { await onPrintAndPayFull(selectedBill, paymentMethod); }
+      catch (e) { console.error(e); }
+      finally { setPrinting(false); }
+      return;
+    }
+    printBill(selectedBill, user?.organizationName, i18n.language, t).catch(console.error);
+  };
 
   const roundFn = applyRounding || ((v: number) => v);
 
@@ -190,9 +214,9 @@ const PaymentManagementModal: React.FC<PaymentManagementModalProps> = ({
             </div>
 
             {/* ══ إجماليات ثابتة ══ */}
-            <div className="flex-shrink-0 px-4 py-2.5 bg-gray-50 dark:bg-gray-800/60 border-b border-gray-100 dark:border-gray-700/60">
-              <div className="flex items-center gap-3 max-w-lg">
-                <div className="grid grid-cols-3 gap-3 flex-1">
+            <div className="flex-shrink-0 px-3 sm:px-4 py-2.5 bg-gray-50 dark:bg-gray-800/60 border-b border-gray-100 dark:border-gray-700/60">
+              <div className="flex items-center gap-2 sm:gap-3 max-w-lg flex-wrap">
+                <div className="grid grid-cols-3 gap-2 sm:gap-3 flex-1 min-w-[220px]">
                   {[
                     { label: t('billing.totalAmount'),    value: selectedBill?.total     || 0, cls: 'text-gray-800 dark:text-gray-100',          bg: 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700' },
                     { label: t('billing.paidPreviously'), value: selectedBill?.paid      || 0, cls: 'text-emerald-700 dark:text-emerald-400',     bg: 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800/60' },
@@ -200,9 +224,9 @@ const PaymentManagementModal: React.FC<PaymentManagementModalProps> = ({
                       cls: (selectedBill?.remaining||0) > 0 ? 'text-red-700 dark:text-red-400' : 'text-emerald-700 dark:text-emerald-400',
                       bg:  (selectedBill?.remaining||0) > 0 ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800/60' : 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800/60' },
                   ].map(item => (
-                    <div key={item.label} className={`${item.bg} border rounded-xl px-3 py-1.5 text-center`}>
-                      <p className="text-[10px] text-gray-500 dark:text-gray-400 mb-0.5">{item.label}</p>
-                      <p className={`text-lg font-bold ${item.cls}`}>{formatCurrency(item.value)}</p>
+                    <div key={item.label} className={`${item.bg} border rounded-xl px-2 sm:px-3 py-1.5 text-center min-w-0`}>
+                      <p className="text-[10px] text-gray-500 dark:text-gray-400 mb-0.5 truncate">{item.label}</p>
+                      <p className={`text-base sm:text-lg font-bold truncate ${item.cls}`}>{formatCurrency(item.value)}</p>
                     </div>
                   ))}
                 </div>
@@ -227,17 +251,35 @@ const PaymentManagementModal: React.FC<PaymentManagementModalProps> = ({
               </div>
             </div>
 
+            {/* Mobile tabs: pay | details */}
+            <div className="lg:hidden flex-shrink-0 grid grid-cols-2 gap-1 p-1.5 bg-gray-100 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+              <button
+                type="button"
+                onClick={() => setPayTab('pay')}
+                className={`py-2 rounded-lg text-sm font-bold transition-all ${payTab === 'pay' ? 'bg-white dark:bg-gray-700 text-blue-700 dark:text-blue-300 shadow' : 'text-gray-500 dark:text-gray-400'}`}
+              >
+                الدفع
+              </button>
+              <button
+                type="button"
+                onClick={() => setPayTab('details')}
+                className={`py-2 rounded-lg text-sm font-bold transition-all ${payTab === 'details' ? 'bg-white dark:bg-gray-700 text-blue-700 dark:text-blue-300 shadow' : 'text-gray-500 dark:text-gray-400'}`}
+              >
+                التفاصيل
+              </button>
+            </div>
+
             {/* ══ BODY: 4 أعمدة ══ */}
-            <div className="flex-1 flex overflow-hidden min-h-0">
+            <div className="flex-1 flex flex-col lg:flex-row overflow-y-auto lg:overflow-hidden min-h-0">
 
               {/* ══ عمود 1: خيارات الدفع + الجلسات النشطة ══ */}
-              <div className="flex flex-col min-h-0 border-l border-gray-100 dark:border-gray-700/60" style={{ width: '320px', flexShrink: 0 }}>
+              <div className={`flex-col min-h-0 border-l border-gray-100 dark:border-gray-700/60 w-full lg:w-[320px] flex-shrink-0 ${payTab === 'pay' ? 'flex' : 'hidden'} lg:flex`}>
                 <div className="flex-shrink-0 px-3 py-1.5 bg-indigo-50 dark:bg-indigo-900/20 border-b border-gray-100 dark:border-gray-700/60">
                   <p className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider flex items-center gap-1">
                     <DollarSign className="h-3 w-3" />خيارات الدفع
                   </p>
                 </div>
-                <div className="flex-1 overflow-y-auto flex flex-col min-h-0">
+                <div className="lg:flex-1 lg:overflow-y-auto flex flex-col lg:min-h-0">
                   <div className="p-3 flex flex-col gap-2 flex-1">
 
                     {selectedBill?.status !== 'paid' ? (<>
@@ -391,7 +433,7 @@ const PaymentManagementModal: React.FC<PaymentManagementModalProps> = ({
                 </div>
 
                 {/* footer */}
-                <div className="flex-shrink-0 px-3 py-2.5 border-t border-gray-100 dark:border-gray-700/60 bg-white dark:bg-gray-900 flex items-center justify-between gap-2">
+                <div className="sticky bottom-0 z-10 flex-shrink-0 px-3 py-2.5 border-t border-gray-100 dark:border-gray-700/60 bg-white dark:bg-gray-900 flex items-center justify-between gap-2">
                   {selectedBill?.status !== 'paid' ? (
                     <button onClick={() => { if (!canDeleteBill(user)) { showNotification(t('common.permissionDenied'), 'error'); return; } setShowCancelConfirmModal(true); }}
                       className="px-3 py-1.5 text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 rounded-lg text-sm font-medium transition-all border border-red-100 dark:border-red-800/50">
@@ -427,10 +469,10 @@ const PaymentManagementModal: React.FC<PaymentManagementModalProps> = ({
               </div>
 
               {/* ══ عمود 2: تفاصيل الأصناف ↕ الدفعات السابقة ══ */}
-              <div className="flex flex-col min-h-0 border-l border-gray-100 dark:border-gray-700/60 overflow-hidden" style={{ width: '240px', flexShrink: 0 }}>
+              <div className={`flex-col min-h-0 border-l border-gray-100 dark:border-gray-700/60 overflow-hidden w-full lg:w-[240px] flex-shrink-0 ${payTab === 'details' ? 'flex' : 'hidden'} lg:flex`}>
 
                 {/* ── الأصناف (نصف علوي) ── */}
-                <div className="flex flex-col min-h-0" style={{ flex: 1 }}>
+                <div className="flex flex-col min-h-0 lg:flex-1">
                   <div className="flex-shrink-0 px-3 py-1.5 bg-gray-50 dark:bg-gray-800/80 border-b border-gray-100 dark:border-gray-700/60">
                     <p className="text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider flex items-center gap-1">
                       <Receipt className="h-3 w-3" />{t('billing.itemDetails')}
@@ -441,7 +483,7 @@ const PaymentManagementModal: React.FC<PaymentManagementModalProps> = ({
                       )}
                     </p>
                   </div>
-                  <div className="flex-1 overflow-y-auto p-2 space-y-1.5 min-h-0">
+                  <div className="lg:flex-1 lg:overflow-y-auto overflow-visible p-2 space-y-1.5 lg:min-h-0 max-h-[35vh] lg:max-h-none">
                     {(selectedBill?.orders?.length || 0) === 0 ? (
                       <div className="flex flex-col items-center justify-center h-full text-gray-300 dark:text-gray-600">
                         <Receipt className="h-6 w-6 mb-1 opacity-40" /><p className="text-[10px]">لا توجد أصناف</p>
@@ -476,7 +518,7 @@ const PaymentManagementModal: React.FC<PaymentManagementModalProps> = ({
                 <div className="flex-shrink-0 h-px bg-gray-200 dark:bg-gray-700" />
 
                 {/* ── الدفعات السابقة (نصف سفلي) ── */}
-                <div className="flex flex-col min-h-0" style={{ flex: 1 }}>
+                <div className="flex flex-col min-h-0 lg:flex-1">
                   <div className="flex-shrink-0 px-3 py-1.5 bg-blue-50/60 dark:bg-blue-900/20 border-b border-gray-100 dark:border-gray-700/60">
                     <p className="text-[11px] font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider flex items-center gap-1">
                       <DollarSign className="h-3 w-3" />{t('billing.previousItemPayments')}
@@ -486,7 +528,7 @@ const PaymentManagementModal: React.FC<PaymentManagementModalProps> = ({
                       })()}
                     </p>
                   </div>
-                  <div className="flex-1 overflow-y-auto p-2 space-y-1.5 min-h-0">
+                  <div className="lg:flex-1 lg:overflow-y-auto overflow-visible p-2 space-y-1.5 lg:min-h-0 max-h-[35vh] lg:max-h-none">
                     {(() => {
                       const allPmts: any[] = [];
                       (selectedBill?.itemPayments || []).forEach((ip: any) => {
@@ -509,7 +551,7 @@ const PaymentManagementModal: React.FC<PaymentManagementModalProps> = ({
                             </p>
                             {canEditPartialPayment(user) && (
                               <button onClick={() => handleEditItemPayment({ itemPayment: ip, payment: p, paymentIdx: idx }, i)}
-                                className="text-[10px] text-blue-500 hover:text-blue-700 dark:text-blue-400 font-medium px-1 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded transition-all flex-shrink-0">
+                                className="text-[11px] sm:text-[10px] text-blue-500 hover:text-blue-700 dark:text-blue-400 font-medium px-2 min-h-7 inline-flex items-center hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded transition-all flex-shrink-0">
                                 {t('common.edit')}
                               </button>
                             )}
@@ -522,7 +564,7 @@ const PaymentManagementModal: React.FC<PaymentManagementModalProps> = ({
               </div>
 
               {/* ══ عمود 3: جميع الجلسات (نشطة + منتهية) ══ */}
-              <div className="flex flex-col min-h-0 border-l border-gray-100 dark:border-gray-700/60 overflow-hidden" style={{ width: '220px', flexShrink: 0 }}>
+              <div className={`flex-col min-h-0 border-l border-gray-100 dark:border-gray-700/60 overflow-hidden w-full lg:w-[220px] flex-shrink-0 ${payTab === 'details' ? 'flex' : 'hidden'} lg:flex`}>
                 <div className="flex-shrink-0 px-3 py-1.5 bg-violet-50/60 dark:bg-violet-900/20 border-b border-gray-100 dark:border-gray-700/60">
                   <p className="text-[11px] font-bold text-violet-600 dark:text-violet-400 uppercase tracking-wider flex items-center gap-1">
                     <Gamepad2 className="h-3 w-3" />الجلسات
@@ -533,7 +575,7 @@ const PaymentManagementModal: React.FC<PaymentManagementModalProps> = ({
                     })()}
                   </p>
                 </div>
-                <div className="flex-1 overflow-y-auto p-2 space-y-2 min-h-0">
+                <div className="lg:flex-1 lg:overflow-y-auto overflow-visible p-2 space-y-2 lg:min-h-0 max-h-[35vh] lg:max-h-none">
                   {(() => {
                     const allSess = selectedBill?.sessions || [];
                     if (!allSess.length) return (
@@ -597,7 +639,7 @@ const PaymentManagementModal: React.FC<PaymentManagementModalProps> = ({
                             </div>
                             {isActive ? (
                               <button onClick={() => handleEndSession(session._id || session.id)}
-                                className="w-full py-1 bg-red-500 hover:bg-red-600 active:scale-95 text-white text-[11px] font-bold rounded-lg transition-all">
+                                className="w-full min-h-8 py-1 bg-red-500 hover:bg-red-600 active:scale-95 text-white text-xs sm:text-[11px] font-bold rounded-lg transition-all">
                                 ⏹ إنهاء الجلسة
                               </button>
                             ) : (
@@ -614,7 +656,7 @@ const PaymentManagementModal: React.FC<PaymentManagementModalProps> = ({
               </div>
 
               {/* ══ عمود 4: QR + ملخص ══ */}
-              <div className="flex-1 flex flex-col bg-gray-50 dark:bg-gray-800/40 overflow-y-auto min-w-0">
+              <div className={`flex-col bg-gray-50 dark:bg-gray-800/40 lg:overflow-y-auto overflow-visible min-w-0 w-full lg:flex-1 lg:min-h-0 ${payTab === 'details' ? 'flex' : 'hidden'} lg:flex`}>
                 <div className="p-3 space-y-3">
                   {/* QR */}
                   <div>
@@ -627,13 +669,18 @@ const PaymentManagementModal: React.FC<PaymentManagementModalProps> = ({
                           <QrCode className="h-9 w-9 text-gray-300 dark:text-gray-600" />
                         </div>
                       )}
+                      {selectedBill?.status !== 'paid' && onPrintAndPayFull && shouldPayOnPrint && (
+                        <p className="mt-2 text-[11px] text-emerald-700 dark:text-emerald-300 font-medium">
+                          ✅ الطباعة تدفع الفاتورة بالكامل (مفعّل من الإعدادات)
+                        </p>
+                      )}
                       <div className="flex gap-1.5 mt-2.5">
-                        <button onClick={() => selectedBill && printBill(selectedBill, user?.organizationName, i18n.language, t).catch(console.error)}
-                          className="flex-1 py-1.5 bg-purple-600 hover:bg-purple-700 active:scale-95 text-white text-[11px] font-medium rounded-lg flex items-center justify-center gap-1 transition-all">
-                          <Printer className="h-3 w-3" />طباعة
+                        <button onClick={handlePrintClick} disabled={printing}
+                          className="flex-1 min-h-9 py-1.5 bg-purple-600 hover:bg-purple-700 active:scale-95 text-white text-xs sm:text-[11px] font-medium rounded-lg flex items-center justify-center gap-1 transition-all disabled:opacity-50">
+                          <Printer className="h-3 w-3" />{printing ? '...' : (shouldPayOnPrint && selectedBill?.status !== 'paid' && onPrintAndPayFull ? 'طباعة + دفع كامل' : 'طباعة')}
                         </button>
                         <button onClick={() => { const url = selectedBill?.qrCodeUrl || `${window.location.origin}/bill/${selectedBill?.id || selectedBill?._id}`; navigator.clipboard.writeText(url); showNotification(t('billing.linkCopied')); }}
-                          className="flex-1 py-1.5 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white text-[11px] font-medium rounded-lg transition-all">نسخ</button>
+                          className="flex-1 min-h-9 py-1.5 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white text-xs sm:text-[11px] font-medium rounded-lg transition-all">نسخ</button>
                       </div>
                     </div>
                   </div>

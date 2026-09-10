@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import bcrypt from "bcryptjs";
 import { applySyncMiddleware } from "../middleware/sync/syncMiddleware.js";
+import { auditPlugin } from "../utils/audit.js";
 
 const userSchema = new mongoose.Schema(
     {
@@ -360,5 +361,6 @@ userSchema.add({
 });
 // Apply sync middleware
 applySyncMiddleware(userSchema, 'User');
+auditPlugin(userSchema, 'users');
 
 export default mongoose.model("User", userSchema);

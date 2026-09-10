@@ -9,6 +9,7 @@ import { ReportSettingsSection } from '../components/ReportSettingsSection';
 import { PayrollPermissionsSection } from '../components/PayrollPermissionsSection';
 import PrinterSettingsForm from '../components/settings/PrinterSettingsForm';
 import MobileConnectCard from '../components/MobileConnectCard';
+import ConnectedDevicesCard from '../components/ConnectedDevicesCard';
 import { WORLD_TIMEZONES } from '../../shared/timezones';
 import { getCurrencyName } from '../../shared/currencyNames';
 import { CURRENCY_SYMBOLS } from '../../shared/currencySymbols';
@@ -17,6 +18,8 @@ import { WORLD_LANGUAGES } from '../../shared/languages';
 import api from '../services/api';
 import { apiClient } from '../services/api/client';
 import ServerConnectionModal from '../components/ServerConnectionModal';
+import ConfirmModal from '../components/ConfirmModal';
+import ModalPortal from '../components/ModalPortal';
 import { openCashDrawerThroughAgent } from '../utils/localPrintBridge';
 
 // Type for alert messages
@@ -156,6 +159,14 @@ const Settings: FC = () => {
   const [showServerModal, setShowServerModal] = useState(false);
   const serverUrlDisplay = apiClient.baseURL.replace(/\/api$/, '');
   const [backupBusy, setBackupBusy] = useState(false);
+  const [backups, setBackups] = useState<any[]>([]);
+  const [backupsLoading, setBackupsLoading] = useState(false);
+  const [restoreBusy, setRestoreBusy] = useState<string | null>(null);
+  const [importBusy, setImportBusy] = useState(false);
+  const [verifyBusy, setVerifyBusy] = useState<string | null>(null);
+  const [backupPassword, setBackupPassword] = useState('');
+  const [lastBackup, setLastBackup] = useState<any>(null);
+  const importInputRef = useRef<HTMLInputElement>(null);
   const [organizationSaving, setOrganizationSaving] = useState(false);
   const [permissionsSaving, setPermissionsSaving] = useState(false);
   
@@ -666,6 +677,7 @@ const Settings: FC = () => {
         }
       } catch {}
     })();
+    loadBackups();
   }, []);
 
   const handleBrowseBackupFolder = async () => {
@@ -696,10 +708,12 @@ const Settings: FC = () => {
     setBackupBusy(true);
     try {
       const path = (generalSettings.backupPath || '').trim();
-      const res: any = await api.createBackup(path || undefined);
+      const pwd = backupPassword.trim();
+      const res: any = await api.createBackup(path || undefined, pwd || undefined);
       if (res?.success) {
         const d = res.data || {};
         showAlertMessage(`تم إنشاء النسخة الاحتياطية بنجاح (${d.fileName || ''}${d.documents ? ` — ${d.documents} سجل` : ''})`);
+        loadBackups();
       } else {
         showAlertMessage(res?.message || 'فشل إنشاء النسخة الاحتياطية', 'error');
       }
@@ -707,6 +721,155 @@ const Settings: FC = () => {
       showAlertMessage(error?.message || 'فشل إنشاء النسخة الاحتياطية', 'error');
     } finally {
       setBackupBusy(false);
+    }
+  };
+
+  const loadBackups = async () => {
+    setBackupsLoading(true);
+    try {
+      const res: any = await api.getBackups();
+      if (res?.success) {
+        const list = res.data?.backups || res.data || [];
+        setBackups(Array.isArray(list) ? list : []);
+        if (res.data?.last) setLastBackup(res.data.last);
+      }
+    } catch {
+      // silent — list is optional
+    } finally {
+      setBackupsLoading(false);
+    }
+  };
+
+  const handleVerifyBackup = async (fileName: string) => {
+    setVerifyBusy(fileName);
+    try {
+      let res: any = await api.verifyBackup(fileName);
+      if (!res?.success && (res as any)?.needsPassword) {
+        setPwdValue('');
+        setPwdModal({ fileName, mode: 'verify' });
+        return;
+      }
+      if (res?.success) {
+        const d = res.data || {};
+        showAlertMessage(`النسخة سليمة ✅ (${d.collections || 0} جداول — ${d.documents || 0} سجل)`);
+      } else {
+        showAlertMessage(res?.message || 'النسخة تالفة', 'error');
+      }
+    } catch (error: any) {
+      showAlertMessage(error?.message || 'فشل الفحص', 'error');
+    } finally {
+      setVerifyBusy(null);
+    }
+  };
+
+  const handleDownloadBackup = async (fileName: string) => {
+    try {
+      const res = await api.downloadBackup(fileName);
+      if (res?.ok) {
+        showAlertMessage(`بدأ تنزيل النسخة (${fileName}) — انسخها لفلاشة لنقلها لجهاز آخر`);
+      } else {
+        showAlertMessage(res?.message || 'فشل التنزيل', 'error');
+      }
+    } catch (error: any) {
+      showAlertMessage(error?.message || 'فشل التنزيل', 'error');
+    }
+  };
+
+  const [restoreConfirm, setRestoreConfirm] = useState<string | null>(null);
+  const [pwdModal, setPwdModal] = useState<{ fileName: string; mode: 'verify' | 'restore' } | null>(null);
+  const [pwdValue, setPwdValue] = useState('');
+
+  const handleRestoreBackup = (fileName: string) => {
+    setRestoreConfirm(fileName);
+  };
+
+  const confirmRestoreBackup = async () => {
+    const fileName = restoreConfirm;
+    setRestoreConfirm(null);
+    if (!fileName) return;
+    setRestoreBusy(fileName);
+    try {
+      // Safety backup before destructive restore
+      try { await api.createBackup(undefined); } catch {}
+      let res: any = await api.restoreBackup(fileName);
+      if (!res?.success && (res as any)?.needsPassword) {
+        setPwdValue('');
+        setPwdModal({ fileName, mode: 'restore' });
+        return;
+      }
+      if (res?.success) {
+        showAlertMessage('تمت الاستعادة بنجاح — سيتم إعادة تحميل الصفحة الآن');
+        setTimeout(() => window.location.reload(), 2500);
+      } else {
+        showAlertMessage(res?.message || 'فشلت الاستعادة', 'error');
+      }
+    } catch (error: any) {
+      showAlertMessage(error?.message || 'فشلت الاستعادة', 'error');
+    } finally {
+      setRestoreBusy(null);
+    }
+  };
+
+  const submitBackupPassword = async () => {
+    const ctx = pwdModal;
+    setPwdModal(null);
+    if (!ctx) return;
+    const pwd = pwdValue;
+    setPwdValue('');
+    try {
+      if (ctx.mode === 'verify') {
+        setVerifyBusy(ctx.fileName);
+        try {
+          const res: any = await api.verifyBackup(ctx.fileName, pwd);
+          if (res?.success) {
+            const d = res.data || {};
+            showAlertMessage(`النسخة سليمة ✅ (${d.collections || 0} جداول — ${d.documents || 0} سجل)`);
+          } else {
+            showAlertMessage(res?.message || 'النسخة تالفة', 'error');
+          }
+        } finally {
+          setVerifyBusy(null);
+        }
+      } else {
+        setRestoreBusy(ctx.fileName);
+        try {
+          const res: any = await api.restoreBackup(ctx.fileName, pwd);
+          if (res?.success) {
+            showAlertMessage('تمت الاستعادة بنجاح — سيتم إعادة تحميل الصفحة الآن');
+            setTimeout(() => window.location.reload(), 2500);
+          } else {
+            showAlertMessage(res?.message || 'فشلت الاستعادة', 'error');
+          }
+        } finally {
+          setRestoreBusy(null);
+        }
+      }
+    } catch (error: any) {
+      showAlertMessage(error?.message || 'فشل العملية', 'error');
+    }
+  };
+
+  const handleImportBackup = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    if (!file.name.toLowerCase().endsWith('.json.gz')) {
+      showAlertMessage('الملف يجب أن يكون نسخة احتياطية بصيغة .json.gz', 'error');
+      return;
+    }
+    setImportBusy(true);
+    try {
+      const res: any = await api.importBackup(file);
+      if (res?.success) {
+        showAlertMessage(`تم استيراد النسخة بنجاح (${res.data?.fileName || file.name})`);
+        loadBackups();
+      } else {
+        showAlertMessage(res?.message || 'فشل الاستيراد', 'error');
+      }
+    } catch (error: any) {
+      showAlertMessage(error?.message || 'فشل الاستيراد', 'error');
+    } finally {
+      setImportBusy(false);
     }
   };
 
@@ -1111,39 +1274,39 @@ const Settings: FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-8" dir={isRTL ? 'rtl' : 'ltr'}>
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-4 sm:py-8" dir={isRTL ? 'rtl' : 'ltr'}>
+      <div className="max-w-4xl mx-auto px-3 sm:px-6 lg:px-8">
         {/* Header */}
-          <div className="flex items-center justify-between flex-wrap xs:flex-col xs:items-start xs:gap-2 xs:space-y-2 xs:w-full">
-            <div className="flex items-center xs:w-full xs:justify-between">
-              <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 flex items-center xs:text-base xs:w-full xs:text-center">
-              <SettingsIcon className={`h-6 w-6 text-orange-600 dark:text-orange-400 ${isRTL ? 'ml-2' : 'mr-2'}`} />
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div className="flex items-center flex-wrap gap-x-2 min-w-0">
+              <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100 flex items-center">
+              <SettingsIcon className={`h-5 w-5 sm:h-6 sm:w-6 text-orange-600 dark:text-orange-400 ${isRTL ? 'ml-2' : 'mr-2'}`} />
               {t('settings.title')}
             </h1>
-              <p className="text-gray-600 dark:text-gray-300 ${isRTL ? 'mr-4' : 'ml-4'} xs:mr-0 xs:w-full xs:text-center">{t('settings.subtitle')}</p>
+              <p className="text-xs sm:text-base text-gray-600 dark:text-gray-300 ${isRTL ? 'mr-2 sm:mr-4' : 'ml-2 sm:ml-4'}">{t('settings.subtitle')}</p>
             </div>
-            <div className="flex items-center gap-2 xs:w-full xs:justify-center xs:mt-2">
+            <div className="flex items-center gap-2">
           </div>
       </div>
 
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
           {/* Tabs */}
           <div className="border-b border-gray-200 dark:border-gray-700">
-              <nav className="flex flex-wrap justify-center gap-2 md:gap-6 px-6 mb-4" aria-label="Tabs">
+              <nav className="flex gap-1 sm:gap-2 md:gap-6 px-2 sm:px-6 mb-2 sm:mb-4 overflow-x-auto" aria-label="Tabs">
               {tabs.map((tab) => {
                 const Icon = tab.icon;
                 return (
                   <button
                     key={tab.id}
                     onClick={() => setActiveTab(tab.id)}
-                      className={`flex items-center space-x-2 py-4 px-1 border-b-2 font-medium text-sm transition-colors duration-200
+                      className={`flex items-center space-x-2 py-3 sm:py-4 px-2 sm:px-1 border-b-2 font-medium text-sm transition-colors duration-200 flex-shrink-0
                         ${activeTab === tab.id
                         ? 'border-orange-500 text-orange-600 dark:text-orange-400'
                           : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'}
                       `}
                   >
                     <Icon className="h-5 w-5" />
-                    <span>{tab.name}</span>
+                    <span className="hidden min-[420px]:inline">{tab.name}</span>
                   </button>
                 );
               })}
@@ -1151,13 +1314,13 @@ const Settings: FC = () => {
         </div>
 
           {/* Tab Content */}
-              <div className="p-6">
+              <div className="p-3 sm:p-6">
             {/* Profile Tab */}
             {activeTab === 'profile' && (
                 <div className="space-y-6">
                 <div>
                   <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">{t('settings.profile.title')}</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                         {t('settings.profile.fullName')}
@@ -1570,6 +1733,17 @@ const Settings: FC = () => {
                       <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                         سيتم حفظ النسخ الاحتياطية في هذا المجلد على هذا الجهاز فقط
                       </p>
+                      <input
+                        type="password"
+                        value={backupPassword}
+                        onChange={(e) => setBackupPassword(e.target.value)}
+                        placeholder="كلمة سر للنسخة (اختياري — للتشفير)"
+                        autoComplete="new-password"
+                        className="mt-2 w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                      />
+                      <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1">
+                        بدون كلمة سر تُحفظ النسخة عادية — مع كلمة سر تُشفَّر ولا تُفتح بدونها
+                      </p>
                       <button
                         type="button"
                         onClick={handleBackupNow}
@@ -1578,6 +1752,87 @@ const Settings: FC = () => {
                       >
                         {backupBusy ? 'جاري إنشاء النسخة...' : 'نسخ احتياطي الآن'}
                       </button>
+                      {lastBackup?.at && (
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                          آخر نسخة: {new Date(lastBackup.at).toLocaleString('ar-EG')} — {lastBackup.success ? `ناجحة (${lastBackup.fileName || ''})` : `فاشلة (${lastBackup.error || ''})`}
+                        </p>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => importInputRef.current?.click()}
+                        disabled={importBusy}
+                        className="mt-2 mr-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 text-white rounded-md disabled:opacity-50 min-w-40"
+                      >
+                        {importBusy ? 'جاري الاستيراد...' : 'استيراد نسخة من جهاز آخر'}
+                      </button>
+                      <input
+                        ref={importInputRef}
+                        type="file"
+                        accept=".gz"
+                        style={{ display: 'none' }}
+                        onChange={handleImportBackup}
+                      />
+                      <div className="mt-3">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-sm font-medium text-gray-700 dark:text-gray-300">النسخ المحفوظة</span>
+                          <button
+                            type="button"
+                            onClick={loadBackups}
+                            disabled={backupsLoading}
+                            className="text-xs text-orange-600 hover:text-orange-700 dark:text-orange-400 disabled:opacity-50"
+                          >
+                            {backupsLoading ? 'جاري التحديث...' : 'تحديث القائمة'}
+                          </button>
+                        </div>
+                        {backups.length === 0 && !backupsLoading && (
+                          <p className="text-xs text-gray-500 dark:text-gray-400">لا توجد نسخ محفوظة بعد</p>
+                        )}
+                        <div className="space-y-2 max-h-48 overflow-y-auto">
+                          {backups.map((b: any) => (
+                            <div key={b.fileName} className="flex items-center justify-between gap-2 px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md">
+                              <div className="min-w-0 flex-1">
+                                <p className="text-xs font-mono text-gray-800 dark:text-gray-200 truncate" dir="ltr">
+                                  {b.encrypted ? '🔒 ' : ''}{b.fileName}
+                                </p>
+                                <p className="text-[11px] text-gray-500 dark:text-gray-400">
+                                  {b.size ? `${(b.size / 1024 / 1024).toFixed(2)} MB` : ''}{b.createdAt ? ` — ${new Date(b.createdAt).toLocaleString('ar-EG')}` : ''}
+                                </p>
+                              </div>
+                              <div className="flex gap-1 flex-shrink-0">
+                                <button
+                                  type="button"
+                                  onClick={() => handleVerifyBackup(b.fileName)}
+                                  disabled={verifyBusy !== null || restoreBusy !== null}
+                                  title="فحص سلامة النسخة دون استعادتها"
+                                  className="px-2 py-1 text-xs bg-gray-500 hover:bg-gray-600 text-white rounded-md disabled:opacity-50"
+                                >
+                                  {verifyBusy === b.fileName ? 'يفحص...' : 'فحص'}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDownloadBackup(b.fileName)}
+                                  disabled={restoreBusy !== null}
+                                  title="تنزيل الملف لنقله لجهاز آخر عبر فلاشة"
+                                  className="px-2 py-1 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded-md disabled:opacity-50"
+                                >
+                                  تنزيل
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRestoreBackup(b.fileName)}
+                                  disabled={restoreBusy !== null}
+                                  className="px-2 py-1 text-xs bg-orange-600 hover:bg-orange-700 text-white rounded-md disabled:opacity-50"
+                                >
+                                  {restoreBusy === b.fileName ? 'جاري الاستعادة...' : 'استعادة'}
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                        <p className="text-[11px] text-red-500 dark:text-red-400 mt-2">
+                          تنبيه: الاستعادة تستبدل قاعدة البيانات الحالية بالكامل (يتم أخذ نسخة أمان تلقائياً أولاً)
+                        </p>
+                      </div>
                     </div>
 
                     <div>
@@ -1742,6 +1997,13 @@ const Settings: FC = () => {
                 <div>
                   <MobileConnectCard />
                 </div>
+
+                {/* Connected devices + per-device print permission (admin/owner only) */}
+                {(user?.role === 'admin' || user?.role === 'owner') && (
+                  <div>
+                    <ConnectedDevicesCard />
+                  </div>
+                )}
               </div>
             )}
 
@@ -1777,7 +2039,7 @@ const Settings: FC = () => {
                       <Building2 className="h-5 w-5 ml-2" />
                       {t('settings.organization.basicInfo')}
                     </h4>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                       <div>
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                           {t('settings.organization.name')}
@@ -1943,7 +2205,7 @@ const Settings: FC = () => {
                     <h4 className="text-md font-medium text-gray-900 dark:text-gray-100 mb-4">
                       {t('settings.organization.socialLinks.title')}
                     </h4>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                       <div>
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                           <Facebook className="h-4 w-4 inline ml-1 text-blue-600" />
@@ -2091,44 +2353,46 @@ const Settings: FC = () => {
                   </div>
 
                   {/* Working Hours */}
-                  <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg mb-6">
-                    <h4 className="text-md font-medium text-gray-900 dark:text-gray-100 mb-4 flex items-center">
+                  <div className="bg-gray-50 dark:bg-gray-700 p-3 sm:p-4 rounded-lg mb-4 sm:mb-6">
+                    <h4 className="text-base sm:text-md font-medium text-gray-900 dark:text-gray-100 mb-3 sm:mb-4 flex items-center">
                       <Clock className="h-5 w-5 ml-2" />
                       {t('settings.organization.workingHours.title')}
                     </h4>
-                    <div className="space-y-4">
+                    <div className="space-y-2.5 sm:space-y-4">
                       {Object.entries(organization.workingHours).map(([day, hours]) => {
                         return (
-                          <div key={day} className="flex items-center justify-between p-3 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-600">
-                            <div className="flex items-center space-x-4">
-                              <span className="text-sm font-medium text-gray-900 dark:text-gray-100 min-w-16">
-                                {t(`settings.organization.workingHours.days.${day}`)}
-                              </span>
-                              <label className="relative inline-flex items-center cursor-pointer">
-                                <input
-                                  type="checkbox"
-                                  checked={!hours.closed}
-                                  onChange={(e) => setOrganization({
-                                    ...organization,
-                                    workingHours: {
-                                      ...organization.workingHours,
-                                      [day]: { ...hours, closed: !e.target.checked, is24Hours: false }
-                                    }
-                                  })}
-                                  className="sr-only peer"
-                                />
-                                <div className="w-11 h-6 bg-gray-200 dark:bg-gray-700 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-orange-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-orange-600"></div>
-                              </label>
-                              <span className="text-xs text-gray-500 dark:text-gray-400">
-                                {hours.closed ? t('settings.organization.workingHours.closed') : hours.is24Hours ? t('settings.organization.workingHours.hours24') : t('settings.organization.workingHours.open')}
-                              </span>
+                          <div key={day} className="p-2.5 sm:p-3 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-600">
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="flex items-center gap-2 sm:gap-4 min-w-0">
+                                <span className="text-sm font-medium text-gray-900 dark:text-gray-100 min-w-14">
+                                  {t(`settings.organization.workingHours.days.${day}`)}
+                                </span>
+                                <label className="relative inline-flex items-center cursor-pointer flex-shrink-0">
+                                  <input
+                                    type="checkbox"
+                                    checked={!hours.closed}
+                                    onChange={(e) => setOrganization({
+                                      ...organization,
+                                      workingHours: {
+                                        ...organization.workingHours,
+                                        [day]: { ...hours, closed: !e.target.checked, is24Hours: false }
+                                      }
+                                    })}
+                                    className="sr-only peer"
+                                  />
+                                  <div className="w-12 h-7 bg-gray-200 dark:bg-gray-700 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-orange-300 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[4px] after:start-[4px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-orange-600"></div>
+                                </label>
+                                <span className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">
+                                  {hours.closed ? t('settings.organization.workingHours.closed') : hours.is24Hours ? t('settings.organization.workingHours.hours24') : t('settings.organization.workingHours.open')}
+                                </span>
+                              </div>
                             </div>
-                            
+
                             {!hours.closed && (
-                              <div className="flex items-center space-x-2">
+                              <div className="flex items-center gap-2 sm:gap-2 mt-2.5 flex-wrap">
                                 {/* 24 Hours Toggle */}
-                                <div className="flex items-center space-x-2">
-                                  <label className="relative inline-flex items-center cursor-pointer">
+                                <div className="flex items-center gap-1.5 sm:gap-2">
+                                  <label className="relative inline-flex items-center cursor-pointer flex-shrink-0">
                                     <input
                                       type="checkbox"
                                       checked={hours.is24Hours}
@@ -2136,8 +2400,8 @@ const Settings: FC = () => {
                                         ...organization,
                                         workingHours: {
                                           ...organization.workingHours,
-                                          [day]: { 
-                                            ...hours, 
+                                          [day]: {
+                                            ...hours,
                                             is24Hours: e.target.checked,
                                             open: e.target.checked ? '00:00' : hours.open,
                                             close: e.target.checked ? '23:59' : hours.close
@@ -2146,18 +2410,18 @@ const Settings: FC = () => {
                                       })}
                                       className="sr-only peer"
                                     />
-                                    <div className="w-9 h-5 bg-gray-200 dark:bg-gray-700 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+                                    <div className="w-10 h-6 bg-gray-200 dark:bg-gray-700 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[4px] after:start-[4px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
                                   </label>
                                   <span className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">
                                     {t('settings.organization.workingHours.hours24')}
                                   </span>
                                 </div>
-                                
+
                                 {/* Time Inputs - Hidden when 24 hours is enabled */}
                                 {!hours.is24Hours && (
                                   <>
-                                    <div className="flex items-center space-x-2">
-                                      <label className="text-xs text-gray-500 dark:text-gray-400">{t('settings.organization.workingHours.from')}</label>
+                                    <div className="flex items-center gap-1.5 flex-1 min-w-[130px]">
+                                      <label className="text-xs text-gray-500 dark:text-gray-400 flex-shrink-0">{t('settings.organization.workingHours.from')}</label>
                                       <input
                                         type="time"
                                         value={hours.open}
@@ -2168,11 +2432,11 @@ const Settings: FC = () => {
                                             [day]: { ...hours, open: e.target.value }
                                           }
                                         })}
-                                        className="px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                                        className="flex-1 min-w-0 px-2 min-h-10 text-sm border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                                       />
                                     </div>
-                                    <div className="flex items-center space-x-2">
-                                      <label className="text-xs text-gray-500 dark:text-gray-400">{t('settings.organization.workingHours.to')}</label>
+                                    <div className="flex items-center gap-1.5 flex-1 min-w-[130px]">
+                                      <label className="text-xs text-gray-500 dark:text-gray-400 flex-shrink-0">{t('settings.organization.workingHours.to')}</label>
                                       <input
                                         type="time"
                                         value={hours.close}
@@ -2183,15 +2447,15 @@ const Settings: FC = () => {
                                             [day]: { ...hours, close: e.target.value }
                                           }
                                         })}
-                                        className="px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                                        className="flex-1 min-w-0 px-2 min-h-10 text-sm border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                                       />
                                     </div>
                                   </>
                                 )}
-                                
+
                                 {/* Display 24 hours indicator */}
                                 {hours.is24Hours && (
-                                  <div className="flex items-center space-x-2 bg-blue-50 dark:bg-blue-900/20 px-3 py-1 rounded-full">
+                                  <div className="flex items-center gap-2 bg-blue-50 dark:bg-blue-900/20 px-3 py-1 rounded-full">
                                     <span className="text-xs text-blue-600 dark:text-blue-400 font-medium">
                                       {t('settings.organization.workingHours.openAllDay')}
                                     </span>
@@ -2214,7 +2478,7 @@ const Settings: FC = () => {
                             });
                             setOrganization({ ...organization, workingHours: newWorkingHours });
                           }}
-                          className="px-3 py-1 text-xs bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 rounded-full hover:bg-green-200 dark:hover:bg-green-800 transition-colors"
+                          className="px-3.5 min-h-9 text-xs sm:text-sm font-bold bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 rounded-full hover:bg-green-200 dark:hover:bg-green-800 transition-colors"
                         >
                           {t('settings.organization.workingHours.quickActions.openAll')}
                         </button>
@@ -2228,7 +2492,7 @@ const Settings: FC = () => {
                             newWorkingHours.friday = { open: '14:00', close: '22:00', closed: false, is24Hours: false };
                             setOrganization({ ...organization, workingHours: newWorkingHours });
                           }}
-                          className="px-3 py-1 text-xs bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 rounded-full hover:bg-blue-200 dark:hover:bg-blue-800 transition-colors"
+                          className="px-3.5 min-h-9 text-xs sm:text-sm font-bold bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 rounded-full hover:bg-blue-200 dark:hover:bg-blue-800 transition-colors"
                         >
                           {t('settings.organization.workingHours.quickActions.normalHours')}
                         </button>
@@ -2241,7 +2505,7 @@ const Settings: FC = () => {
                             });
                             setOrganization({ ...organization, workingHours: newWorkingHours });
                           }}
-                          className="px-3 py-1 text-xs bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200 rounded-full hover:bg-purple-200 dark:hover:bg-purple-800 transition-colors"
+                          className="px-3.5 min-h-9 text-xs sm:text-sm font-bold bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200 rounded-full hover:bg-purple-200 dark:hover:bg-purple-800 transition-colors"
                         >
                           {t('settings.organization.workingHours.quickActions.open24Hours')}
                         </button>
@@ -2254,7 +2518,7 @@ const Settings: FC = () => {
                             });
                             setOrganization({ ...organization, workingHours: newWorkingHours });
                           }}
-                          className="px-3 py-1 text-xs bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200 rounded-full hover:bg-red-200 dark:hover:bg-red-800 transition-colors"
+                          className="px-3.5 min-h-9 text-xs sm:text-sm font-bold bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200 rounded-full hover:bg-red-200 dark:hover:bg-red-800 transition-colors"
                         >
                           {t('settings.organization.workingHours.quickActions.closeAll')}
                         </button>
@@ -2610,6 +2874,48 @@ const Settings: FC = () => {
         </div>
       )}
       <ServerConnectionModal isOpen={showServerModal} onClose={() => setShowServerModal(false)} />
+
+      {/* Restore backup confirm (in-app, replaces browser confirm) */}
+      <ConfirmModal
+        isOpen={restoreConfirm !== null}
+        onClose={() => setRestoreConfirm(null)}
+        onConfirm={confirmRestoreBackup}
+        title="استعادة نسخة احتياطية"
+        message={`سيتم استبدال قاعدة البيانات الحالية بمحتوى النسخة "${restoreConfirm || ''}". سيتم إنشاء نسخة احتياطية تلقائية أولاً للسلامة. متابعة؟`}
+        confirmText="استعادة"
+        cancelText="تراجع"
+        confirmColor="bg-orange-600 hover:bg-orange-700"
+        loading={restoreBusy !== null}
+      />
+
+      {/* Backup password prompt (in-app, replaces browser prompt) */}
+      {pwdModal && (
+        <ModalPortal>
+          <div className="fixed inset-0 z-[360] flex items-center justify-center bg-black/60 p-4" onClick={() => setPwdModal(null)}>
+            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-sm border border-gray-200 dark:border-gray-700 overflow-hidden" onClick={e => e.stopPropagation()}>
+              <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+                <h3 className="font-bold text-gray-900 dark:text-gray-100">النسخة مشفرة</h3>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 break-all" dir="ltr">{pwdModal.fileName}</p>
+              </div>
+              <div className="p-4 space-y-3">
+                <input
+                  type="password"
+                  autoFocus
+                  value={pwdValue}
+                  onChange={e => setPwdValue(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter' && pwdValue) submitBackupPassword(); }}
+                  placeholder="أدخل كلمة السر"
+                  className="w-full border border-gray-300 dark:border-gray-600 rounded-xl px-3 py-2.5 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 outline-none focus:ring-2 focus:ring-orange-400"
+                />
+                <div className="flex gap-2">
+                  <button onClick={() => setPwdModal(null)} className="flex-1 py-2.5 border border-gray-300 dark:border-gray-600 rounded-xl text-gray-600 dark:text-gray-300 font-bold">تراجع</button>
+                  <button onClick={submitBackupPassword} disabled={!pwdValue} className="flex-1 py-2.5 bg-orange-600 hover:bg-orange-700 text-white rounded-xl font-bold disabled:opacity-50">متابعة</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </ModalPortal>
+      )}
     {/* Developer Fingerprint */}
       <div className="mt-8 pt-6 border-t border-gray-200 dark:border-gray-800">
         <div className="text-center">

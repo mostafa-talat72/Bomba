@@ -16,7 +16,7 @@ export interface User {
   name: string;
   email: string;
   username?: string;
-  role: 'admin' | 'staff' | 'cashier' | 'kitchen';
+  role: 'admin' | 'staff' | 'cashier' | 'kitchen' | 'owner';
   permissions: string[];
   status: 'active' | 'inactive' | 'suspended';
   lastLogin?: Date;
@@ -255,7 +255,7 @@ export interface Bill {
   paid: number;
   remaining: number;
   status: 'draft' | 'partial' | 'paid' | 'cancelled' | 'overdue';
-  paymentMethod: 'cash' | 'card' | 'transfer' | 'mixed';
+  paymentMethod: 'cash' | 'card' | 'transfer' | 'e_wallet' | 'mixed';
   billType: 'cafe' | 'playstation' | 'computer';
   fulfillmentType?: 'dine_in' | 'takeaway' | 'delivery';
   deliveryInfo?: {

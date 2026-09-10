@@ -40,6 +40,8 @@ const OrderModal: React.FC<OrderModalProps> = ({
   const { t, i18n } = useTranslation();
   const { isRTL } = useLanguage();
   const [searchQuery, setSearchQuery] = useState('');
+  // Mobile: tabbed view (menu | order) instead of 4 squeezed columns.
+  const [mobileTab, setMobileTab] = useState<'menu' | 'order'>('menu');
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   // ── مرة واحدة، لا تتغير في كل render ──────────────────────────────
@@ -152,14 +154,14 @@ const OrderModal: React.FC<OrderModalProps> = ({
       <div className="bg-white dark:bg-gray-900 w-full flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
 
         {/* HEADER — بدون بحث */}
-        <div className="bg-gradient-to-r from-orange-500 to-red-500 px-4 py-3 flex items-center justify-between flex-shrink-0">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="w-9 h-9 bg-white/15 rounded-xl flex items-center justify-center ring-1 ring-white/25 flex-shrink-0">
+        <div className="bg-gradient-to-r from-orange-500 to-red-500 px-3 py-2 sm:px-4 sm:py-3 flex items-center justify-between flex-shrink-0">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+            <div className="w-8 h-8 sm:w-9 sm:h-9 bg-white/15 rounded-xl flex items-center justify-center ring-1 ring-white/25 flex-shrink-0">
               <ShoppingCart className="h-4 w-4 text-white" />
             </div>
             <div className="min-w-0">
-              <h2 className="text-xl sm:text-2xl font-bold text-white truncate">{isEdit ? t('cafe.orderModal.editOrderTitle') : t('cafe.orderModal.newOrderTitle')}</h2>
-              <p className="text-base text-orange-100 flex items-center gap-1">
+              <h2 className="text-lg sm:text-2xl font-bold text-white truncate">{isEdit ? t('cafe.orderModal.editOrderTitle') : t('cafe.orderModal.newOrderTitle')}</h2>
+              <p className="text-sm sm:text-base text-orange-100 flex items-center gap-1">
                 <TableIcon className="h-3 w-3 flex-shrink-0" />
                 {t('cafe.orderModal.table', { number: getTableDisplay(table.number, i18n.language) })}
               </p>
@@ -167,9 +169,9 @@ const OrderModal: React.FC<OrderModalProps> = ({
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
             {orderItems.length > 0 && (
-              <div className="bg-white/15 rounded-xl px-3 py-1.5 ring-1 ring-white/25 text-center">
-                <p className="text-base text-orange-100 leading-none">الإجمالي</p>
-                <p className="text-lg font-bold text-white">{fmt(calculateTotal())}</p>
+              <div className="bg-white/15 rounded-xl px-2.5 py-1 sm:px-3 sm:py-1.5 ring-1 ring-white/25 text-center">
+                <p className="text-sm sm:text-base text-orange-100 leading-none">الإجمالي</p>
+                <p className="text-base sm:text-lg font-bold text-white">{fmt(calculateTotal())}</p>
               </div>
             )}
             <button onClick={onClose} className="w-8 h-8 bg-white/15 hover:bg-white/25 rounded-xl flex items-center justify-center text-white ring-1 ring-white/25 transition-all">
@@ -178,12 +180,33 @@ const OrderModal: React.FC<OrderModalProps> = ({
           </div>
         </div>
 
+        {/* Mobile tabs: menu | order */}
+        <div className="lg:hidden flex-shrink-0 grid grid-cols-2 gap-1 p-1.5 bg-gray-100 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+          <button
+            type="button"
+            onClick={() => setMobileTab('menu')}
+            className={`py-2 rounded-lg text-sm font-bold transition-all ${mobileTab === 'menu' ? 'bg-white dark:bg-gray-700 text-orange-600 dark:text-orange-400 shadow' : 'text-gray-500 dark:text-gray-400'}`}
+          >
+            الأصناف
+          </button>
+          <button
+            type="button"
+            onClick={() => setMobileTab('order')}
+            className={`py-2 rounded-lg text-sm font-bold transition-all flex items-center justify-center gap-1.5 ${mobileTab === 'order' ? 'bg-white dark:bg-gray-700 text-green-700 dark:text-green-400 shadow' : 'text-gray-500 dark:text-gray-400'}`}
+          >
+            الطلب
+            {orderItems.length > 0 && (
+              <span className="min-w-[20px] h-5 px-1 bg-green-500 text-white text-xs font-bold rounded-full flex items-center justify-center leading-none">{orderItems.length}</span>
+            )}
+          </button>
+        </div>
+
         {/* BODY */}
         <div className="flex-1 flex overflow-hidden min-h-0">
 
-          {/* Col 1: Sections */}
+          {/* Col 1: Sections (desktop columns; chips on mobile) */}
           {!searchQuery.trim() && (
-            <div className="w-24 sm:w-28 flex-shrink-0 flex flex-col border-l border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+            <div className="w-24 lg:w-28 flex-shrink-0 hidden lg:flex flex-col border-l border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
               <div className="px-2 py-2 border-b border-gray-100 dark:border-gray-700 flex-shrink-0">
                 <p className="text-base font-semibold text-gray-400 dark:text-gray-500 text-center">الأقسام</p>
               </div>
@@ -203,9 +226,9 @@ const OrderModal: React.FC<OrderModalProps> = ({
             </div>
           )}
 
-          {/* Col 2: Categories */}
+          {/* Col 2: Categories (desktop columns; chips on mobile) */}
           {!searchQuery.trim() && activeSectionCategories.length > 1 && (
-            <div className="w-24 sm:w-28 flex-shrink-0 flex flex-col border-l border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
+            <div className="w-24 lg:w-28 flex-shrink-0 hidden lg:flex flex-col border-l border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
               <div className="px-2 py-2 border-b border-gray-100 dark:border-gray-700 flex-shrink-0">
                 <p className="text-base font-semibold text-gray-400 dark:text-gray-500 text-center">الفئات</p>
               </div>
@@ -232,7 +255,46 @@ const OrderModal: React.FC<OrderModalProps> = ({
           )}
 
           {/* Col 3: Items */}
-          <div className="flex-1 flex flex-col min-h-0 min-w-0 bg-gray-50 dark:bg-gray-900">
+          <div className={`flex-1 flex-col min-h-0 min-w-0 bg-gray-50 dark:bg-gray-900 ${mobileTab === 'menu' ? 'flex' : 'hidden'} lg:flex`}>
+
+            {/* Mobile chips: sections + categories */}
+            {!searchQuery.trim() && (
+              <div className="lg:hidden flex-shrink-0 px-2 pt-2 space-y-1.5">
+                <div className="flex gap-1.5 overflow-x-auto pb-0.5">
+                  {activeSections.map(sec => {
+                    const hasCats = getCategoriesForSection(sec.id).length > 0;
+                    if (!hasCats) return null;
+                    const isAct = activeSectionId === sec.id;
+                    return (
+                      <button key={sec.id} onClick={() => setActiveSectionId(sec.id)}
+                        className={`flex-shrink-0 px-3 py-1.5 rounded-full text-sm font-bold whitespace-nowrap transition-all ${isAct ? 'bg-orange-500 text-white shadow' : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700'}`}>
+                        {sec.name}
+                      </button>
+                    );
+                  })}
+                </div>
+                {activeSectionCategories.length > 1 && (
+                  <div className="flex gap-1.5 overflow-x-auto pb-0.5">
+                    <button onClick={() => setActiveCategoryId('all')}
+                      className={`flex-shrink-0 px-3 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-all ${activeCategoryId === 'all' ? 'bg-gray-800 dark:bg-gray-200 text-white dark:text-gray-900 shadow' : 'bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-700'}`}>
+                      الكل
+                    </button>
+                    {activeSectionCategories.map(cat => {
+                      const catId = cat._id || cat.id;
+                      const isAct = activeCategoryId === catId;
+                      const count = getItemsForCategory(cat.id).length;
+                      if (count === 0) return null;
+                      return (
+                        <button key={catId} onClick={() => setActiveCategoryId(catId)}
+                          className={`flex-shrink-0 px-3 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-all ${isAct ? 'bg-gray-800 dark:bg-gray-200 text-white dark:text-gray-900 shadow' : 'bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-700'}`}>
+                          {cat.name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* البحث داخل الأصناف */}
             <div className="px-2 pt-2 pb-1.5 flex-shrink-0">
@@ -288,7 +350,7 @@ const OrderModal: React.FC<OrderModalProps> = ({
           </div>
 
           {/* Col 4: Order — أوسع */}
-          <div className="w-64 sm:w-72 flex-shrink-0 flex flex-col border-r border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+          <div className={`w-full lg:w-64 xl:w-72 flex-shrink-0 flex-col border-r border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 ${mobileTab === 'order' ? 'flex flex-1 min-h-0' : 'hidden'} lg:flex`}>
             <div className="px-3 py-2 border-b border-gray-100 dark:border-gray-700 flex-shrink-0 flex items-center justify-between">
               <div className="flex items-center gap-1.5">
                 <div className="w-1 h-4 bg-gradient-to-b from-green-400 to-emerald-500 rounded-full"></div>

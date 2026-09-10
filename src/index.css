@@ -210,6 +210,26 @@ body {
 
 /* Mobile-first responsive utilities */
 @media (max-width: 640px) {
+	/* Phones render the desktop-designed UI at 87.5% scale: every rem-based
+	   size (text, padding, cards, icons) shrinks proportionally, while px
+	   borders and touch targets stay usable. */
+	html {
+		font-size: 14px;
+	}
+
+	/* Touch-sized checkboxes/radios in ALL windows (16px is untappable).
+	   rem-independent px sizing so the 14px root scale doesn't shrink them. */
+	input[type="checkbox"],
+	input[type="radio"] {
+		width: 20px;
+		height: 20px;
+		min-width: 20px;
+		min-height: 20px;
+		accent-color: #ea580c;
+		flex-shrink: 0;
+		cursor: pointer;
+	}
+
 	.mobile-p-2 {
 		padding: 0.5rem;
 	}

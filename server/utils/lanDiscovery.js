@@ -17,7 +17,7 @@
 import dgram from "dgram";
 import os from "os";
 import { EventEmitter } from "events";
-import { getDeviceId } from "./deviceIdentity.js";
+import { getDeviceId, isTimeSourcePinned } from "./deviceIdentity.js";
 import Logger from "../middleware/logger.js";
 
 export const LAN_SERVICE = "bomba-server";
@@ -77,6 +77,7 @@ class LanMeshDiscovery extends EventEmitter {
             name: this.name,
             ip: getLocalIP(),
             ts: Date.now(),
+            timeSource: isTimeSourcePinned(),
         };
     }
 
@@ -143,13 +144,24 @@ class LanMeshDiscovery extends EventEmitter {
         // reachable interface (e.g. Ethernet APIPA 169.254.x.x on a direct
         // cable), while the advertised data.ip may be a different NIC (WiFi).
         const reachableIp = rinfo.address || data.ip;
-        const isNew = !this.peers.has(data.deviceId);
+        const nowMs = Date.now();
+        // Clock offset vs this peer (LAN transit ~1ms, negligible): positive
+        // means the peer's clock is ahead of ours. Smoothed (EMA) to filter jitter.
+        // Used by the Sync Status page to warn about time drift between devices.
+        const prev = this.peers.get(data.deviceId);
+        const sample = (typeof data.ts === "number" ? data.ts : nowMs) - nowMs;
+        const clockOffsetMs = prev && typeof prev.clockOffsetMs === "number"
+            ? Math.round(prev.clockOffsetMs * 0.7 + sample * 0.3)
+            : Math.round(sample);
+        const isNew = !prev;
         this.peers.set(data.deviceId, {
             deviceId: data.deviceId,
             ip: reachableIp,
             port: data.port || 5000,
             name: data.name || "unknown",
-            lastSeen: Date.now(),
+            lastSeen: nowMs,
+            clockOffsetMs,
+            timeSource: data.timeSource === true,
         });
         if (isNew) {
             Logger.info(`[LanMesh] peer up: ${data.name || data.deviceId} @ ${reachableIp}:${data.port || 5000}`);
@@ -179,6 +191,7 @@ class LanMeshDiscovery extends EventEmitter {
             name: this.name,
             localIP: getLocalIP(),
             port: this.httpPort,
+            timeSource: isTimeSourcePinned(),
             peers: this.getPeers(),
         };
     }

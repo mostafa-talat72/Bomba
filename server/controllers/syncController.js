@@ -1,9 +1,12 @@
+import os from "os";
 import syncMonitor from "../services/sync/syncMonitor.js";
 import syncWorker from "../services/sync/syncWorker.js";
 import syncQueueManager from "../services/sync/syncQueueManager.js";
 import dualDatabaseManager from "../config/dualDatabaseManager.js";
 import syncConfig from "../config/syncConfig.js";
 import Logger from "../middleware/logger.js";
+import { getLastBackupStatus } from "../utils/backup.js";
+import { getDeviceId } from "../utils/deviceIdentity.js";
 import bidirectionalSyncMonitor from "../services/sync/bidirectionalSyncMonitor.js";
 import syncStatusMonitor from "../services/sync/syncStatusMonitor.js";
 import { runStartupTypeAudit } from "../utils/startupTypeAudit.js";
@@ -160,6 +163,56 @@ export const getConnectionStatus = async (req, res) => {
         res.status(500).json({
             success: false,
             message: "Failed to get connection status",
+            error: error.message,
+        });
+    }
+};
+
+/**
+ * Combined sync overview for the status dashboard:
+ * device identity, connections, queue, worker, LAN peers, last backup.
+ * @route GET /api/sync/overview
+ * @access Private (Admin only)
+ */
+export const getOverview = async (req, res) => {
+    try {
+        const queueStats = syncQueueManager.getStats();
+        const syncLag = syncQueueManager.getSyncLag();
+        const workerStats = syncWorker.getStats();
+        let connections = null;
+        try {
+            connections = dualDatabaseManager.getConnectionStatus();
+        } catch {}
+        let lan = { peers: [], count: 0 };
+        try {
+            const mod = await import("../utils/lanDiscovery.js");
+            const status = mod.default?.getStatus?.();
+            if (status) lan = { peers: status.peers || [], count: (status.peers || []).length, localIP: status.localIP, port: status.port };
+        } catch {}
+        let lastBackup = null;
+        try {
+            lastBackup = getLastBackupStatus();
+        } catch {}
+        let deviceId = null;
+        try {
+            deviceId = getDeviceId();
+        } catch {}
+        res.json({
+            success: true,
+            data: {
+                device: { deviceId, hostname: os.hostname(), time: new Date().toISOString() },
+                connections,
+                queue: { ...queueStats, syncLag, isLagging: syncQueueManager.isLagging() },
+                worker: workerStats,
+                lan,
+                lastBackup,
+            },
+        });
+    } catch (error) {
+        Logger.error("Error getting sync overview:", error);
+        res.status(500).json({
+            success: false,
+            message: "Failed to get sync overview",
             error: error.message,
         });
     }

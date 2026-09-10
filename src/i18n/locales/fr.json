@@ -100,6 +100,9 @@
     "notifications": "Notifications",
     "subscriptions": "Abonnements",
     "devices": "Appareils",
+    "syncStatus": "État de synchronisation",
+    "auditLog": "Journal d'audit",
+    "shifts": "Quarts de travail",
     "noPages": "Aucune page disponible",
     "noPermissions": "Aucun pouvoir ne vous est accordé",
     "swipeToOpen": "→ Faites glisser pour ouvrir le menu"
@@ -564,6 +567,14 @@
       "canDeleteBillDesc": "Autoriser la suppression des factures",
       "canEditPartialPayment": "Modifier les Paiements Partiels",
       "canEditPartialPaymentDesc": "Autoriser la modification des paiements partiels pour les articles et les sessions",
+      "shifts": "Quarts de travail",
+      "shiftsDesc": "Autoriser l'ouverture/la fermeture des quarts et l'historique",
+      "auditLog": "Journal d'audit",
+      "auditLogDesc": "Autoriser la consultation du journal des événements",
+      "syncStatus": "État de synchronisation",
+      "syncStatusDesc": "Autoriser la consultation de l'état de synchronisation",
+      "viewCustomerContacts": "Voir les Contacts Clients",
+      "viewCustomerContactsDesc": "Autoriser la consultation des téléphones et adresses de livraison",
       "canTransferToInventory": "Transférer à l'Inventaire",
       "canTransferToInventoryDesc": "Autoriser le transfert des quantités de l'entrepôt vers l'inventaire",
       "canReturnToWarehouse": "Retourner à l'Entrepôt",
@@ -1791,7 +1802,9 @@
       "printSettings": {
         "title": "Paramètres d'impression",
         "printQRCode": "Afficher le QR code sur l'impression de facture",
-        "printQRCodeDesc": "Afficher le QR code contenant les informations de contact sur les factures imprimées"
+        "printQRCodeDesc": "Afficher le QR code contenant les informations de contact sur les factures imprimées",
+        "printMarksPaid": "L'impression marque la facture comme payée",
+        "printMarksPaidDesc": "Si activé : toute impression depuis la fenêtre de paiement paie la facture en totalité"
       },
       "saveSettings": "Enregistrer les paramètres",
       "saveAllSettings": "Tous les paramètres ont été enregistrés avec succès",

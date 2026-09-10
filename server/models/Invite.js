@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import crypto from "crypto";
+import { applySyncMiddleware } from "../middleware/sync/syncMiddleware.js";
 
 const inviteSchema = new mongoose.Schema(
     {
@@ -63,4 +64,7 @@ inviteSchema.add({
     deletedAt: { type: Date, default: null },
     deletedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
 });
+// Sync (Atlas queue + LAN mesh push) like all other collections.
+// NOTE: `token` is 64-hex so the 24-hex normalizer never touches it.
+applySyncMiddleware(inviteSchema, 'Invite');
 export default mongoose.model("Invite", inviteSchema);

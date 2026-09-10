@@ -2,6 +2,7 @@ import printerService from '../services/printerService.js';
 import printerDetectionService from '../services/printerDetectionService.js';
 import Organization from '../models/Organization.js';
 import { aggregateItemsWithPayments } from '../utils/billAggregation.js';
+import { relayHtmlToLocalAgent } from '../utils/localAgentRelay.js';
 import { resolvePrintSettingsForUser } from '../utils/organization.js';
 import { organizationFilter, resolvePrintSettings } from '../utils/organization.js';
 
@@ -33,68 +34,124 @@ class PrintController {
     this.autoDetectAndOpenCashDrawer = this.autoDetectAndOpenCashDrawer.bind(this);
   }
   /**
+   * Resolve a usable printer: configured one first; if nothing is configured
+   * (printerType 'none'/missing — the common case, since desktop printing uses
+   * the local agent), fall back to zero-config USB auto-detect so phone/LAN
+   * jobs still reach the shop printer. Never guesses when a printer IS
+   * configured but unreachable (returns the connection error instead).
+   */
+  async resolvePrinterOrAutoDetect(printSettings) {
+    const configured = printSettings && printSettings.printerType && printSettings.printerType !== 'none';
+    if (configured) {
+      // ensureConnected (لا initializePrinter) حتى يسجل مفتاح الاتصال الدافئ
+      // فتعيد printJob استخدامه بدل تهيئة ثانية + سطر disconnect زائف.
+      const connected = await printerService.ensureConnected(printSettings);
+      if (connected) return { ok: true, settings: printSettings, autoDetected: false };
+      return { ok: false, message: 'Failed to connect to printer. Please check printer connection.' };
+    }
+    try {
+      const detected = await printerDetectionService.detectUSBPrinters();
+      if (detected && detected.length > 0) {
+        const sel = detected[0];
+        const auto = {
+          ...(printSettings || {}),
+          printerType: 'usb',
+          printerDevice: sel.path,
+          // winspool يتعرف باسم الطابعة في النظام (RONGTA) لا باسم التعريف (XP-80C)
+          printerName: sel.name || sel.driver,
+          printerNameCandidates: detected.map((d) => d.name).filter(Boolean),
+          printerModel: 'epson',
+        };
+        // ensureConnected حتى لا تعيد printJob التهيئة مرة ثانية.
+        const connected = await printerService.ensureConnected(auto);
+        if (connected) {
+          console.log('No printer configured — auto-detected USB printer:', sel.name);
+          return { ok: true, settings: auto, autoDetected: true, printerUsed: sel.name };
+        }
+      }
+    } catch (e) {
+      console.warn('Printer auto-detect fallback failed:', e.message);
+    }
+    return { ok: false, message: 'Printer not configured. Please configure printer settings first.' };
+  }
+  /**
    * طباعة فاتورة مباشرة
    */
   async printBill(req, res) {
     try {
-      const { bill, organization, language = 'ar', tableSectionName, drawerMode = 'bill' } = req.body;
+      const { bill, organization, language = 'ar', tableSectionName, drawerMode = 'bill',
+        html: relayHtml, printerName: relayPrinterName, paperWidthMm: relayPaperWidth, printKey: relayPrintKey } = req.body;
 
       if (!bill) {
         return res.status(400).json({ success: false, message: 'Bill data is required' });
       }
       // الحصول على إعدادات الطابعة من المنشأة
-      const printSettings = await loadPrintSettings(organization, req.user);
+      let printSettings = await loadPrintSettings(organization, req.user);
 
-      // التحقق من أن الطابعة معدة
-      if (!printSettings || printSettings.printerType === 'none') {
-        return res.status(400).json({ 
-          success: false, 
-          message: 'Printer not configured. Please configure printer settings first.' 
+      // تهيئة الطابعة (مع اكتشاف USB تلقائي عند عدم وجود إعداد — حالة الهاتف)
+      const resolvedBill = await this.resolvePrinterOrAutoDetect(printSettings);
+      if (!resolvedBill.ok) {
+        return res.status(resolvedBill.message.startsWith('Printer not configured') ? 400 : 500).json({
+          success: false,
+          message: resolvedBill.message,
         });
       }
-
-      // تهيئة الطابعة
-      const connected = await printerService.initializePrinter(printSettings);
-      if (!connected) {
-        return res.status(500).json({ 
-          success: false, 
-          message: 'Failed to connect to printer. Please check printer connection.' 
-        });
-      }
+      printSettings = resolvedBill.settings;
 
       // توليد محتوى الفاتورة للطباعة
       const content = await this.generateBillContent(bill, organization, language, tableSectionName, printSettings);
 
       // طباعة الفاتورة مع فتح درج الكاشير إذا كان مفعلاً
+      // (printJob: اتصال دافئ + تسلسل المهام — بدون قطع الاتصال بعده)
       const openDrawerSetting = drawerMode === 'payment'
         ? 'openCashDrawerOnPayment'
         : 'openCashDrawer';
       const openDrawer = printSettings[openDrawerSetting] !== false;
-      const autoCut = printSettings.autoCut === true;
+      // القص مفعّل افتراضياً (مثل الدرج) ما لم يُعطّل صراحة من الإعدادات.
+      const autoCut = printSettings.autoCut !== false;
 
-      const result = await printerService.printDocument(content, openDrawer, autoCut);
+      // الهاتف يرسل نفس HTML المصمم للديسكتوب: رحّله للوكيل المحلي أولاً
+      // (Chromium على الجهاز الرئيسي = نفس الشكل 100%). عند غياب الوكيل
+      // نسقط على مسار RAW النصي أدناه.
+      if (typeof relayHtml === 'string' && relayHtml.length > 0) {
+        const relay = await relayHtmlToLocalAgent({
+          html: relayHtml,
+          printerName: relayPrinterName,
+          openDrawer,
+          paperWidthMm: relayPaperWidth,
+          printKey: relayPrintKey,
+        });
+        if (relay.ok) {
+          return res.json({
+            success: true,
+            message: 'Bill printed successfully',
+            cashDrawerOpened: openDrawer,
+            relayed: true,
+            printerUsed: relay.printerName,
+          });
+        }
+        console.warn('Local agent relay failed, RAW fallback:', relay.message);
+      }
 
-      // إغلاق الاتصال بالطابعة
-      await printerService.disconnect();
+      const result = await printerService.printJob(printSettings, { content, openDrawer, autoCut });
 
       if (result.success) {
-        return res.json({ 
-          success: true, 
+        return res.json({
+          success: true,
           message: 'Bill printed successfully',
           cashDrawerOpened: openDrawer
         });
       } else {
-        return res.status(500).json({ 
-          success: false, 
+        return res.status(500).json({
+          success: false,
           message: 'Failed to print bill',
           error: result.error
         });
       }
     } catch (error) {
       console.error('Error in printBill:', error);
-      await printerService.disconnect();
-      return res.status(500).json({ 
-        success: false, 
+      return res.status(500).json({
+        success: false,
         message: 'Internal server error during printing',
         error: error.message
       });
@@ -106,51 +163,59 @@ class PrintController {
    */
   async printOrder(req, res) {
     try {
-      const { order, organization, language = 'ar' } = req.body;
+      const { order, organization, language = 'ar',
+        html: relayHtml, printerName: relayPrinterName, paperWidthMm: relayPaperWidth, printKey: relayPrintKey } = req.body;
 
       if (!order) {
         return res.status(400).json({ success: false, message: 'Order data is required' });
       }
 
       // الحصول على إعدادات الطابعة
-      const printSettings = await loadPrintSettings(organization, req.user);
+      let printSettings = await loadPrintSettings(organization, req.user);
 
-      if (!printSettings || printSettings.printerType === 'none') {
-        return res.status(400).json({ 
-          success: false, 
-          message: 'Printer not configured' 
+      // تهيئة الطابعة (مع اكتشاف USB تلقائي عند عدم وجود إعداد — حالة الهاتف)
+      const resolvedOrder = await this.resolvePrinterOrAutoDetect(printSettings);
+      if (!resolvedOrder.ok) {
+        return res.status(resolvedOrder.message.startsWith('Printer not configured') ? 400 : 500).json({
+          success: false,
+          message: resolvedOrder.message,
         });
       }
-
-      const connected = await printerService.initializePrinter(printSettings);
-      if (!connected) {
-        return res.status(500).json({ 
-          success: false, 
-          message: 'Failed to connect to printer' 
-        });
-      }
+      printSettings = resolvedOrder.settings;
 
       const content = await this.generateOrderContent(order, organization, language, printSettings);
 
-      // طباعة الطلب بدون فتح درج الكاشير
-      const result = await printerService.printDocument(content, false, printSettings.autoCut);
+      // نفس HTML المصمم للديسكتوب: ترحيل للوكيل المحلي أولاً (نفس الشكل 100%).
+      if (typeof relayHtml === 'string' && relayHtml.length > 0) {
+        const relay = await relayHtmlToLocalAgent({
+          html: relayHtml,
+          printerName: relayPrinterName,
+          openDrawer: false,
+          paperWidthMm: relayPaperWidth,
+          printKey: relayPrintKey,
+        });
+        if (relay.ok) {
+          return res.json({ success: true, message: 'Order printed successfully', relayed: true, printerUsed: relay.printerName });
+        }
+        console.warn('Local agent relay failed, RAW fallback:', relay.message);
+      }
 
-      await printerService.disconnect();
+      // طباعة الطلب بدون فتح درج الكاشير (اتصال دافئ + تسلسل)
+      const result = await printerService.printJob(printSettings, { content, openDrawer: false, autoCut: printSettings.autoCut !== false });
 
       if (result.success) {
         return res.json({ success: true, message: 'Order printed successfully' });
       } else {
-        return res.status(500).json({ 
-          success: false, 
+        return res.status(500).json({
+          success: false,
           message: 'Failed to print order',
           error: result.error
         });
       }
     } catch (error) {
       console.error('Error in printOrder:', error);
-      await printerService.disconnect();
-      return res.status(500).json({ 
-        success: false, 
+      return res.status(500).json({
+        success: false,
         message: 'Internal server error',
         error: error.message
       });
@@ -162,50 +227,58 @@ class PrintController {
    */
   async printConsumptionReport(req, res) {
     try {
-      const { reportData, organization, language = 'ar' } = req.body;
+      const { reportData, organization, language = 'ar',
+        html: relayHtml, printerName: relayPrinterName, paperWidthMm: relayPaperWidth, printKey: relayPrintKey } = req.body;
 
       if (!reportData) {
         return res.status(400).json({ success: false, message: 'Report data is required' });
       }
 
-      const printSettings = await loadPrintSettings(organization, req.user);
+      let printSettings = await loadPrintSettings(organization, req.user);
 
-      if (!printSettings || printSettings.printerType === 'none') {
-        return res.status(400).json({ 
-          success: false, 
-          message: 'Printer not configured' 
+      // تهيئة الطابعة (مع اكتشاف USB تلقائي عند عدم وجود إعداد — حالة الهاتف)
+      const resolvedReport = await this.resolvePrinterOrAutoDetect(printSettings);
+      if (!resolvedReport.ok) {
+        return res.status(resolvedReport.message.startsWith('Printer not configured') ? 400 : 500).json({
+          success: false,
+          message: resolvedReport.message,
         });
       }
-
-      const connected = await printerService.initializePrinter(printSettings);
-      if (!connected) {
-        return res.status(500).json({ 
-          success: false, 
-          message: 'Failed to connect to printer' 
-        });
-      }
+      printSettings = resolvedReport.settings;
 
       const content = await this.generateConsumptionReportContent(reportData, organization, language, printSettings);
 
-      // طباعة التقرير بدون فتح درج الكاشير
-      const result = await printerService.printDocument(content, false, printSettings.autoCut);
+      // نفس HTML المصمم للديسكتوب: ترحيل للوكيل المحلي أولاً (نفس الشكل 100%).
+      if (typeof relayHtml === 'string' && relayHtml.length > 0) {
+        const relay = await relayHtmlToLocalAgent({
+          html: relayHtml,
+          printerName: relayPrinterName,
+          openDrawer: false,
+          paperWidthMm: relayPaperWidth,
+          printKey: relayPrintKey,
+        });
+        if (relay.ok) {
+          return res.json({ success: true, message: 'Report printed successfully', relayed: true, printerUsed: relay.printerName });
+        }
+        console.warn('Local agent relay failed, RAW fallback:', relay.message);
+      }
 
-      await printerService.disconnect();
+      // طباعة التقرير بدون فتح درج الكاشير (اتصال دافئ + تسلسل)
+      const result = await printerService.printJob(printSettings, { content, openDrawer: false, autoCut: printSettings.autoCut !== false });
 
       if (result.success) {
         return res.json({ success: true, message: 'Report printed successfully' });
       } else {
-        return res.status(500).json({ 
-          success: false, 
+        return res.status(500).json({
+          success: false,
           message: 'Failed to print report',
           error: result.error
         });
       }
     } catch (error) {
       console.error('Error in printConsumptionReport:', error);
-      await printerService.disconnect();
-      return res.status(500).json({ 
-        success: false, 
+      return res.status(500).json({
+        success: false,
         message: 'Internal server error',
         error: error.message
       });
@@ -336,7 +409,9 @@ class PrintController {
 
     if (order.items && order.items.length > 0) {
       order.items.filter(item => !item.isService || item.showInPrint !== false).forEach(item => {
-        content += `${item.name}\n`;
+        const v = item && typeof item.variant === 'string' ? item.variant.trim() : '';
+        const variantText = v && v !== 'عادي' ? ` (${v})` : '';
+        content += `${item.name || ''}${variantText}\n`;
         content += `Qty: ${item.quantity} | Price: ${item.price}\n`;
       });
     }
@@ -653,7 +728,9 @@ class PrintController {
       const autoDetectedSettings = {
         printerType: 'usb',
         printerDevice: selectedPrinter.path,
-        printerName: selectedPrinter.driver || selectedPrinter.name,
+        // winspool يتعرف باسم الطابعة في النظام (RONGTA) لا باسم التعريف (XP-80C)
+        printerName: selectedPrinter.name || selectedPrinter.driver,
+        printerNameCandidates: detectedPrinters.map((d) => d.name).filter(Boolean),
         printerIP: null,
         printerPort: null,
         printerModel: 'epson',
@@ -661,23 +738,11 @@ class PrintController {
         openCashDrawer: openDrawer
       };
 
-      // 4. تهيئة الطابعة بالإعدادات المكتشفة
-      const connected = await printerService.initializePrinter(autoDetectedSettings);
-      if (!connected) {
-        return res.status(500).json({ 
-          success: false, 
-          message: 'Failed to connect to detected printer. Please try again.' 
-        });
-      }
-
       // 5. توليد محتوى الفاتورة للطباعة
       const content = await this.generateBillContent(bill, organization, language, tableSectionName, autoDetectedSettings);
 
-      // 6. طباعة الفاتورة مع فتح درج الكاشير
-      const result = await printerService.printDocument(content, openDrawer, true);
-
-      // 7. إغلاق الاتصال بالطابعة
-      await printerService.disconnect();
+      // 6. طباعة الفاتورة مع فتح درج الكاشير (اتصال دافئ + تسلسل)
+      const result = await printerService.printJob(autoDetectedSettings, { content, openDrawer, autoCut: true });
 
       if (result.success) {
         return res.json({ 
@@ -695,9 +760,8 @@ class PrintController {
       }
     } catch (error) {
       console.error('Error in autoDetectAndPrintBill:', error);
-      await printerService.disconnect();
-      return res.status(500).json({ 
-        success: false, 
+      return res.status(500).json({
+        success: false,
         message: 'Internal server error during auto-detect printing',
         error: error.message
       });
@@ -737,7 +801,9 @@ class PrintController {
       const autoDetectedSettings = {
         printerType: 'usb',
         printerDevice: selectedPrinter.path,
-        printerName: selectedPrinter.driver || selectedPrinter.name,
+        // winspool يتعرف باسم الطابعة في النظام (RONGTA) لا باسم التعريف (XP-80C)
+        printerName: selectedPrinter.name || selectedPrinter.driver,
+        printerNameCandidates: detectedPrinters.map((d) => d.name).filter(Boolean),
         printerIP: null,
         printerPort: null,
         printerModel: 'epson',
@@ -745,23 +811,11 @@ class PrintController {
         openCashDrawer: false
       };
 
-      // 4. تهيئة الطابعة بالإعدادات المكتشفة
-      const connected = await printerService.initializePrinter(autoDetectedSettings);
-      if (!connected) {
-        return res.status(500).json({ 
-          success: false, 
-          message: 'Failed to connect to detected printer. Please try again.' 
-        });
-      }
-
       // 5. توليد محتوى الطلب للطباعة
       const content = await this.generateOrderContent(order, organization, language, autoDetectedSettings);
 
-      // 6. طباعة الطلب بدون فتح درج الكاشير
-      const result = await printerService.printDocument(content, false, true);
-
-      // 7. إغلاق الاتصال بالطابعة
-      await printerService.disconnect();
+      // 6. طباعة الطلب بدون فتح درج الكاشير (اتصال دافئ + تسلسل)
+      const result = await printerService.printJob(autoDetectedSettings, { content, openDrawer: false, autoCut: true });
 
       if (result.success) {
         return res.json({ 
@@ -778,9 +832,8 @@ class PrintController {
       }
     } catch (error) {
       console.error('Error in autoDetectAndPrintOrder:', error);
-      await printerService.disconnect();
-      return res.status(500).json({ 
-        success: false, 
+      return res.status(500).json({
+        success: false,
         message: 'Internal server error during auto-detect order printing',
         error: error.message
       });

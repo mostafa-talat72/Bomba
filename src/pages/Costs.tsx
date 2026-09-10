@@ -1,6 +1,8 @@
-import { useState, useEffect } from 'react';
-import { 
-  DollarSign, Plus, Filter, Search, 
+import { useState, useEffect, useRef } from 'react';
+import { io, Socket } from 'socket.io-client';
+import { API_BASE_URL } from '../utils/apiBase';
+import {
+  DollarSign, Plus, Filter, Search,
   TrendingUp, AlertCircle, CheckCircle,
   Clock, XCircle, Settings, RefreshCw
 } from 'lucide-react';
@@ -154,6 +156,8 @@ const Costs = () => {
     fetchCosts();
   }, [pagination.page]);
 
+
+
   const fetchCategories = async () => {
     try {
       setCategoriesLoading(true);
@@ -217,6 +221,46 @@ const Costs = () => {
       setLoading(false);
     }
   };
+
+  // Instant cross-device refresh: LAN/Atlas changes arrive with the doc,
+  // so just refetch the current view (debounced) instead of polling.
+  const costsFetchRef = useRef({ fetchCosts, fetchCategories });
+  costsFetchRef.current = { fetchCosts, fetchCategories };
+  useEffect(() => {
+    let socket: Socket | null = null;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    try {
+      const socketUrl = API_BASE_URL.replace(/\/api\/?$/, '');
+      socket = io(socketUrl, {
+        path: '/socket.io/',
+        auth: { token: localStorage.getItem('token') || undefined },
+        transports: ['websocket', 'polling'],
+        reconnection: true,
+      });
+      const schedule = () => {
+        if (timer) clearTimeout(timer);
+        timer = setTimeout(() => {
+          costsFetchRef.current.fetchCosts();
+          costsFetchRef.current.fetchCategories();
+        }, 400);
+      };
+      socket.on('cost-update', schedule);
+      socket.on('lan:remote-change', (evt: any) => {
+        if (evt?.collection === 'costs' || evt?.collection === 'costcategories') schedule();
+      });
+      return () => {
+        try {
+          if (timer) clearTimeout(timer);
+          socket?.off('cost-update');
+          socket?.off('lan:remote-change');
+          socket?.disconnect();
+        } catch {}
+      };
+    } catch {
+      return;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Remove frontend calculation function since we rely on backend
   // const calculateStats = (costsData: Cost[]) => {
@@ -339,21 +383,21 @@ const Costs = () => {
 
   return (
     <ConfigProvider locale={getAntdLocale()} direction={isRTL ? 'rtl' : 'ltr'}>
-    <div className="p-6 space-y-6" dir={isRTL ? 'rtl' : 'ltr'}>
+    <div className="p-2 sm:p-6 space-y-4 sm:space-y-6" dir={isRTL ? 'rtl' : 'ltr'}>
       {/* Header */}
-      <div className="flex justify-between items-center slide-up">
-        <div>
-          <h1 className="text-4xl font-bold gradient-text-animated">
+      <div className="flex justify-between items-center flex-wrap gap-2 slide-up">
+        <div className="min-w-0">
+          <h1 className="text-2xl sm:text-4xl font-bold gradient-text-animated">
             {t('costs.title')}
           </h1>
-          <p className="text-gray-600 dark:text-gray-400 mt-2 text-lg">
+          <p className="text-gray-600 dark:text-gray-400 mt-1 sm:mt-2 text-sm sm:text-lg">
             {t('costs.subtitle')}
           </p>
         </div>
-        <div className="flex gap-3">
+        <div className="flex gap-2 sm:gap-3 w-full sm:w-auto">
           <button
             onClick={() => setShowCategoryModal(true)}
-            className="modern-action-btn modern-action-btn-secondary flex items-center gap-2"
+            className="modern-action-btn modern-action-btn-secondary flex-1 sm:flex-none flex items-center justify-center gap-2"
           >
             <Settings className="w-5 h-5" />
             {t('costs.manageCategories')}
@@ -363,7 +407,7 @@ const Costs = () => {
               setEditingCost(null);
               setShowCostModal(true);
             }}
-            className="modern-action-btn modern-action-btn-primary flex items-center gap-2"
+            className="modern-action-btn modern-action-btn-primary flex-1 sm:flex-none flex items-center justify-center gap-2"
           >
             <Plus className="w-5 h-5" />
             {t('costs.addCost')}
@@ -375,7 +419,7 @@ const Costs = () => {
       {loading && !costs.length ? (
         <StatisticsCardsSkeleton />
       ) : (
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
         {/* Total Card */}
         <div 
           className="modern-stats-card stats-card hover-lift"
@@ -812,7 +856,7 @@ const Costs = () => {
 
         {!isDateFilterCollapsed && (
           <div className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
               {/* Search Input */}
               <div className="lg:col-span-2 modern-search-container">
                 <input
@@ -872,7 +916,7 @@ const Costs = () => {
             </div>
 
             {/* Date Range Filters */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 rounded-xl bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-900 border border-gray-200 dark:border-gray-700">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 p-3 sm:p-4 rounded-xl bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-900 border border-gray-200 dark:border-gray-700">
               <div>
                 <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
                   {t('costs.filters.from')}

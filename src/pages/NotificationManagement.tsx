@@ -235,57 +235,57 @@ const NotificationManagement = () => {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between flex-wrap xs:flex-col xs:items-start xs:gap-2 xs:space-y-2 xs:w-full">
-        <div className="flex items-center xs:w-full xs:justify-between">
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 flex items-center xs:text-base xs:w-full xs:text-center">
-            <Bell className="h-6 w-6 text-orange-600 dark:text-orange-400 ml-2" />
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <div className="flex items-center flex-wrap gap-x-2 min-w-0">
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100 flex items-center">
+            <Bell className="h-5 w-5 sm:h-6 sm:w-6 text-orange-600 dark:text-orange-400 ml-2" />
             {t('notificationManagement.title')}
           </h1>
-          <p className="text-gray-600 dark:text-gray-300 mr-4 xs:mr-0 xs:w-full xs:text-center">{t('notificationManagement.subtitle')}</p>
+          <p className="text-xs sm:text-base text-gray-600 dark:text-gray-300 mr-2 sm:mr-4">{t('notificationManagement.subtitle')}</p>
         </div>
-        <div className="flex items-center gap-2 xs:w-full xs:justify-center xs:mt-2">
+        <div className="flex items-center gap-2">
           {/* ضع هنا أزرار الإجراءات مثل إرسال إشعار */}
         </div>
       </div>
 
       {/* Stats */}
       {stats && (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
-            <div className="flex items-center">
-              <Bell className="h-8 w-8 text-orange-600 dark:text-orange-400" />
-              <div className="mr-3">
-                <p className="text-sm text-gray-600 dark:text-gray-300">{t('notificationManagement.stats.total')}</p>
-                <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{formatNumber(stats.total)}</p>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+          <div className="bg-white dark:bg-gray-800 p-3 sm:p-4 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
+            <div className="flex items-center min-w-0">
+              <Bell className="h-6 w-6 sm:h-8 sm:w-8 text-orange-600 dark:text-orange-400 flex-shrink-0" />
+              <div className="mr-2 sm:mr-3 min-w-0">
+                <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-300 truncate">{t('notificationManagement.stats.total')}</p>
+                <p className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100">{formatNumber(stats.total)}</p>
               </div>
             </div>
           </div>
-          <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
-            <div className="flex items-center">
-              <Eye className="h-8 w-8 text-orange-600 dark:text-orange-400" />
-              <div className="mr-3">
-                <p className="text-sm text-gray-600 dark:text-gray-300">{t('notificationManagement.stats.unread')}</p>
-                <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{formatNumber(stats.unread)}</p>
+          <div className="bg-white dark:bg-gray-800 p-3 sm:p-4 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
+            <div className="flex items-center min-w-0">
+              <Eye className="h-6 w-6 sm:h-8 sm:w-8 text-orange-600 dark:text-orange-400 flex-shrink-0" />
+              <div className="mr-2 sm:mr-3 min-w-0">
+                <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-300 truncate">{t('notificationManagement.stats.unread')}</p>
+                <p className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100">{formatNumber(stats.unread)}</p>
               </div>
             </div>
           </div>
-          <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
-            <div className="flex items-center">
-              <CheckCircle className="h-8 w-8 text-green-600 dark:text-green-400" />
-              <div className="mr-3">
-                <p className="text-sm text-gray-600 dark:text-gray-300">{t('notificationManagement.stats.read')}</p>
-                <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{formatNumber((stats.total || 0) - (stats.unread || 0))}</p>
+          <div className="bg-white dark:bg-gray-800 p-3 sm:p-4 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
+            <div className="flex items-center min-w-0">
+              <CheckCircle className="h-6 w-6 sm:h-8 sm:w-8 text-green-600 dark:text-green-400 flex-shrink-0" />
+              <div className="mr-2 sm:mr-3 min-w-0">
+                <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-300 truncate">{t('notificationManagement.stats.read')}</p>
+                <p className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100">{formatNumber((stats.total || 0) - (stats.unread || 0))}</p>
               </div>
             </div>
           </div>
-          <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
-            <div className="flex items-center">
-              <Filter className="h-8 w-8 text-purple-600 dark:text-purple-400" />
-              <div className="mr-3">
-                <p className="text-sm text-gray-600 dark:text-gray-300">{t('notificationManagement.stats.categories')}</p>
-                <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{formatNumber(Object.keys(stats.byCategory || {}).length)}</p>
+          <div className="bg-white dark:bg-gray-800 p-3 sm:p-4 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
+            <div className="flex items-center min-w-0">
+              <Filter className="h-6 w-6 sm:h-8 sm:w-8 text-purple-600 dark:text-purple-400 flex-shrink-0" />
+              <div className="mr-2 sm:mr-3 min-w-0">
+                <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-300 truncate">{t('notificationManagement.stats.categories')}</p>
+                <p className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100">{formatNumber(Object.keys(stats.byCategory || {}).length)}</p>
               </div>
             </div>
           </div>

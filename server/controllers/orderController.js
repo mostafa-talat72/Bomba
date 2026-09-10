@@ -550,13 +550,15 @@ export const getOrders = async (req, res) => {
         // minimal=true (report/consumption callers): skip the 3 populates — they add
         // extra queries per request and the caller only consumes items/totals.
         let ordersQuery = Order.find(query)
-            .select('orderNumber table status total createdAt bill items organization finalAmount')
+            .select('orderNumber table status total createdAt bill items organization finalAmount fulfillmentType createdBy updatedBy')
             .sort({ createdAt: -1 })
             .lean(); // Convert to plain JS objects for better performance - جلب جميع الطلبات بدون حد
         if (minimal !== "true") {
             ordersQuery = ordersQuery
                 .populate('table', 'number name')
                 .populate('bill', 'status') // إضافة populate للفاتورة لمعرفة حالتها
+                .populate('createdBy', 'name') // اسم منشئ الطلب (يُعرض على كارت الطلب)
+                .populate('updatedBy', 'name') // اسم آخر من عدّل الطلب
                 .populate('organization', 'name'); // إضافة populate للمنشأة
         }
         const orders = await ordersQuery;
@@ -732,8 +734,9 @@ export const calculateOrderRequirements = async (req, res) => {
 // @access  Private
 export const createOrder = async (req, res) => {
     try {
-        const { table, customerName, customerPhone, items, notes, bill, status, session } =
+        const { table, customerName, customerPhone, items, notes, bill, status, session, fulfillmentType } =
             req.body;
+        const normalizedFulfillment = ['dine_in','takeaway','delivery'].includes(String(fulfillmentType)) ? String(fulfillmentType) : (table ? 'dine_in' : 'takeaway');
 
         // Validate items
         if (!items || !Array.isArray(items) || items.length === 0) {
@@ -918,6 +921,7 @@ export const createOrder = async (req, res) => {
             organization: getOrganizationId(req.user),
             createdBy: req.user._id,
             status: status || 'pending',
+            fulfillmentType: normalizedFulfillment,
             // سيتم إنشاء رقم الطلب تلقائيًا في الخطاف pre-save
         };
 
@@ -974,7 +978,8 @@ export const createOrder = async (req, res) => {
                 // إنشاء فاتورة جديدة للطاولة (مع إعادة المحاولة عند تكرار الرقم)
                 const billData = {
                     table: table,
-                    customerName: customerName || `طاولة ${tableNumber}`,
+                    customerName: customerName || (normalizedFulfillment !== 'dine_in' ? 'عميل ' + (normalizedFulfillment === 'delivery' ? 'دليفري' : 'تيك أوي') : `طاولة ${tableNumber}`),
+                    fulfillmentType: normalizedFulfillment,
                     customerPhone: customerPhone || null,
                     orders: [],
                     sessions: [],
@@ -2125,6 +2130,17 @@ export const deleteOrder = async (req, res) => {
             response.refundedAmount = refundedAmount;
         }
 
+        // Audit (fire-and-forget)
+        import("../utils/auditHelper.js").then((m) => {
+            m.logAudit({
+                action: "order.deleted", collection: "orders",
+                documentId: orderId, documentNumber: orderNumber,
+                user: req.user, organization: getOrganizationId(req.user),
+                deviceId: req.headers?.["x-instance-id"] || null,
+                details: { refundedAmount },
+            }).catch(() => {});
+        }).catch(() => {});
+
         res.json(response);
     } catch (error) {
         Logger.error("خطأ في حذف الطلب", error);
@@ -2155,6 +2171,7 @@ export const getPendingOrders = async (req, res) => {
                 }
             })
             .populate("createdBy", "name")
+            .populate("updatedBy", "name")
             .sort({ createdAt: 1 });
 
         res.json({

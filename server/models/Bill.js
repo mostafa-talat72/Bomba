@@ -1,6 +1,8 @@
 import mongoose from "mongoose";
 import QRCode from "qrcode";
 import { applySyncMiddleware } from "../middleware/sync/syncMiddleware.js";
+import { stampUpdatedBy } from "../middleware/auditStamping.js";
+import { auditPlugin } from "../utils/audit.js";
 import { getInstanceId } from "../utils/instanceId.js";
 
 // Helper function to get item redistribution key
@@ -74,6 +76,8 @@ const billSchema = new mongoose.Schema(
             deliveryFee: { type: Number, default: 0, min: 0 },
             driver: { type: String, default: null },
             status: { type: String, enum: ["preparing", "out_for_delivery", "delivered"], default: "preparing" },
+            outAt: { type: Date, default: null },
+            deliveredAt: { type: Date, default: null },
         },
         table: {
             type: mongoose.Schema.Types.ObjectId,
@@ -142,7 +146,7 @@ const billSchema = new mongoose.Schema(
         },
         paymentMethod: {
             type: String,
-            enum: ["cash", "card", "transfer", "mixed"],
+            enum: ["cash", "card", "transfer", "e_wallet", "mixed"],
             default: "cash",
         },
         payments: [
@@ -154,7 +158,7 @@ const billSchema = new mongoose.Schema(
                 },
                         method: {
                             type: String,
-                            enum: ["cash", "card", "transfer", "adjustment"],
+                            enum: ["cash", "card", "transfer", "e_wallet", "adjustment"],
                             required: true,
                         },
                 reference: {
@@ -2000,7 +2004,18 @@ billSchema.add({
     deletedAt: { type: Date, default: null },
     deletedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
 });
+// Audit stamping: whoever saves/updates through an authenticated request
+// becomes updatedBy (AsyncLocalStorage context, fail-open when absent).
+billSchema.pre("save", function (next) {
+    stampUpdatedBy(this);
+    next();
+});
+billSchema.pre("findOneAndUpdate", function (next) {
+    stampUpdatedBy(this);
+    next();
+});
 // Apply sync middleware
 applySyncMiddleware(billSchema, 'Bill');
+auditPlugin(billSchema, 'bills');
 
 export default mongoose.model("Bill", billSchema);
