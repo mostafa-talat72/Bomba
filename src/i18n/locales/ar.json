@@ -1530,7 +1530,8 @@
       "password": "كلمة المرور",
       "notifications": "الإشعارات",
       "general": "عام",
-      "organization": "المنشأة"
+      "organization": "المنشأة",
+      "myNotifications": "إشعاراتي"
     },
     "profile": {
       "title": "الملف الشخصي",
@@ -4146,7 +4147,18 @@
     "messages": {
       "loading": "جاري التحميل...",
       "noNotifications": "لا توجد إشعارات"
-    }
+    },
+    "muteToastsTitle": "كتم تنبيهات",
+    "muteToasts": {
+      "order": "الطلبات",
+      "bill": "الفواتير",
+      "session": "الجلسات",
+      "table": "الطاولات"
+    },
+    "seenBy": "شوهد من:",
+    "kitchenAlarmAck": "تم الاستلام — إيقاف التنبيه",
+    "kitchenAlarm": "منبه المطبخ",
+    "kitchenAlarmHint": "صوت متكرر لكل طلب جديد حتى التأكيد (لشاشات المطبخ)"
   },
   "notificationManagement": {
     "title": "إدارة الإشعارات",
@@ -4357,5 +4369,55 @@
     "testFail": "تعذر الوصول للسيرفر",
     "save": "حفظ وإعادة التحميل",
     "reset": "رجوع للتلقائي"
+  },
+  "activity": {
+    "order": {
+      "created": "طلب جديد {{number}}",
+      "updated": "تعديل الطلب {{number}}",
+      "deleted": "حذف الطلب {{number}}",
+      "ready": "الطلب {{number}} جاهز للتسليم",
+      "delivered": "تم توصيل الطلب {{number}}"
+    },
+    "bill": {
+      "created": "فاتورة جديدة {{number}}",
+      "updated": "تعديل الفاتورة {{number}}",
+      "deleted": "حذف الفاتورة {{number}}",
+      "paid": "دفع الفاتورة {{number}} بالكامل",
+      "partial": "دفعة جزئية للفاتورة {{number}}",
+      "transferred": "نقل الفاتورة {{number}} من طاولة {{from}} إلى طاولة {{table}}"
+    },
+    "session": {
+      "started": "بدء جلسة {{device}}",
+      "ended": "إنهاء جلسة {{device}}",
+      "updated": "تعديل جلسة {{device}}"
+    },
+    "table": {
+      "created": "إضافة طاولة {{number}}",
+      "updated": "تعديل طاولة {{number}}",
+      "deleted": "حذف طاولة {{number}}"
+    },
+    "tableWord": "طاولة",
+    "billWord": "فاتورة",
+    "phoneTag": "هاتف"
+  },
+  "notifPrefs": {
+    "title": "إشعارات المستخدم",
+    "selfTitle": "إشعاراتي",
+    "toastTitle": "تنبيهات فورية حسب النوع",
+    "otherTitle": "أخرى",
+    "kinds": {
+      "order": "الطلبات",
+      "bill": "الفواتير",
+      "session": "الجلسات",
+      "table": "الطاولات",
+      "inventory": "المخزون",
+      "system": "النظام"
+    },
+    "sound": "الصوت",
+    "kitchenAlarm": "منبه المطبخ",
+    "save": "حفظ",
+    "saved": "تم حفظ إعدادات الإشعارات",
+    "loadError": "تعذر تحميل إعدادات الإشعارات",
+    "selfDesc": "تفضيلاتك الشخصية للتنبيهات الفورية والصوت ومنبه المطبخ — تعمل على أي جهاز تدخل منه"
   }
 }

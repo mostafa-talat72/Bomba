@@ -40,7 +40,8 @@ interface AuthContextType {
   canEditUser: (targetUser: User) => boolean;
   canDeleteUser: (targetUser: User) => boolean;
 
-  showNotification: (message: string, type?: 'success' | 'error' | 'warning' | 'info') => void;
+  showNotification: (message: string, type?: 'success' | 'error' | 'warning' | 'info', opts?: { onClick?: () => void; sticky?: boolean; onClose?: () => void }) => React.ReactText;
+  updateNotificationToast: (id: React.ReactText, message: string) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -78,21 +79,42 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const firstLoginRef = useRef(true);
 
-  const showNotification = (message: string, type: 'success' | 'error' | 'warning' | 'info' = 'info'): void => {
+  const showNotification = (
+    message: string,
+    type: 'success' | 'error' | 'warning' | 'info' = 'info',
+    opts?: { onClick?: () => void; sticky?: boolean; onClose?: () => void }
+  ): React.ReactText => {
+    const content = opts?.onClick ? (
+      <div onClick={opts.onClick} style={{ cursor: 'pointer' }}>
+        {message}
+      </div>
+    ) : (
+      message
+    );
     const options = {
-      autoClose: 3500,
+      // الحرج يبقى معلقاً حتى يقفله المستخدم يدوياً (نفاد مخزون/فشل نسخ...).
+      autoClose: (opts?.sticky ? false : 3500) as number | false,
       hideProgressBar: false,
       closeOnClick: true,
       pauseOnHover: true,
       draggable: true,
       rtl: true,
+      // إيقاف أي صوت/منبه مرتبط عند إقفال التوست (زر X).
+      onClose: opts?.onClose,
     };
     switch (type) {
-      case 'success': toast.success(message, options); break;
-      case 'error': toast.error(message, options); break;
-      case 'warning': toast.warning(message, options); break;
-      case 'info': toast.info(message, options); break;
+      case 'success': return toast.success(content, options);
+      case 'error': return toast.error(content, options);
+      case 'warning': return toast.warning(content, options);
+      case 'info':
+      default: return toast.info(content, options);
     }
+  };
+
+  const updateNotificationToast = (id: React.ReactText, message: string): void => {
+    try {
+      if (toast.isActive(id)) toast.update(id, { render: message });
+    } catch {}
   };
 
   const shouldBlockExit = (): boolean => {
@@ -485,6 +507,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     canDeleteUser,
 
     showNotification,
+    updateNotificationToast,
   };
 
   return (

@@ -12,6 +12,10 @@ import {
     updateUserStatus,
     getMyPrintSettings,
     updateMyPrintSettings,
+    getMyNotificationSettings,
+    updateMyNotificationSettings,
+    getUserNotificationSettings,
+    updateUserNotificationSettings,
 } from "../controllers/userController.js";
 import { protect, authorize } from "../middleware/auth.js";
 import {
@@ -28,6 +32,12 @@ router.put("/change-password", changePassword);
 // Own printer settings (no special permissions needed; must be before /:id routes)
 router.get("/me/print-settings", getMyPrintSettings);
 router.put("/me/print-settings", updateMyPrintSettings);
+// Own notification settings (no special permissions needed; must be before /:id routes)
+router.get("/me/notification-settings", getMyNotificationSettings);
+router.put("/me/notification-settings", updateMyNotificationSettings);
+// Per-user notification settings (admin / users permission, same organization)
+router.get("/:id/notification-settings", getUserNotificationSettings);
+router.put("/:id/notification-settings", updateUserNotificationSettings);
 
 // User management routes - Remove general authorization, handle it per route
 router.route("/")

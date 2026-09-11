@@ -6,13 +6,40 @@ import { AsyncLocalStorage } from "node:async_hooks";
 // LAN-sync applier) => no stamping, request unaffected.
 const als = new AsyncLocalStorage();
 
-export function runWithAuditUser(userId, fn) {
-    return als.run({ userId: userId ? String(userId) : null }, fn);
+export function runWithAuditUser(userId, fn, actor = null, route = null) {
+    const prev = als.getStore() || {};
+    return als.run(
+        {
+            ...prev,
+            userId: userId ? String(userId) : prev.userId || null,
+            actor: actor || prev.actor || null,
+            route: route || prev.route || null,
+        },
+        fn
+    );
 }
 
 export function getAuditUserId() {
     try {
         return als.getStore()?.userId || null;
+    } catch {
+        return null;
+    }
+}
+
+// الفاعل الحالي (الاسم + المصدر هاتف/ديسكتوب) لسلسلة الطلب — للإشعارات والنشاط.
+export function getRequestActor() {
+    try {
+        return als.getStore()?.actor || null;
+    } catch {
+        return null;
+    }
+}
+
+// المسار الحالي (METHOD path) للتشخيص — أي endpoint أطلق هذا النشاط.
+export function getRequestRoute() {
+    try {
+        return als.getStore()?.route || null;
     } catch {
         return null;
     }

@@ -51,15 +51,15 @@ export const notificationTranslations = {
         created: {
             ar: {
                 title: "طلب جديد",
-                message: (customerName, itemCount) => `طلب جديد من ${customerName} - ${itemCount} عنصر`
+                message: (customerName, itemCount, orderNumber) => `طلب جديد${orderNumber ? ' ' + orderNumber : ''} من ${customerName} - ${itemCount} عنصر`
             },
             en: {
                 title: "New Order",
-                message: (customerName, itemCount) => `New order from ${customerName} - ${itemCount} item${itemCount > 1 ? 's' : ''}`
+                message: (customerName, itemCount, orderNumber) => `New order${orderNumber ? ' ' + orderNumber : ''} from ${customerName} - ${itemCount} item${itemCount > 1 ? 's' : ''}`
             },
             fr: {
                 title: "Nouvelle Commande",
-                message: (customerName, itemCount) => `Nouvelle commande de ${customerName} - ${itemCount} article${itemCount > 1 ? 's' : ''}`
+                message: (customerName, itemCount, orderNumber) => `Nouvelle commande${orderNumber ? ' ' + orderNumber : ''} de ${customerName} - ${itemCount} article${itemCount > 1 ? 's' : ''}`
             }
         },
         ready: {
@@ -88,6 +88,48 @@ export const notificationTranslations = {
             fr: {
                 title: "Commande Annulée",
                 message: (orderNumber) => `La commande ${orderNumber} a été annulée`
+            }
+        },
+        updated: {
+            ar: {
+                title: "تعديل طلب",
+                message: (orderNumber) => `تم تعديل الطلب ${orderNumber}`
+            },
+            en: {
+                title: "Order Updated",
+                message: (orderNumber) => `Order ${orderNumber} was updated`
+            },
+            fr: {
+                title: "Commande Modifiée",
+                message: (orderNumber) => `La commande ${orderNumber} a été modifiée`
+            }
+        },
+        deleted: {
+            ar: {
+                title: "حذف طلب",
+                message: (orderNumber) => `تم حذف الطلب ${orderNumber}`
+            },
+            en: {
+                title: "Order Deleted",
+                message: (orderNumber) => `Order ${orderNumber} was deleted`
+            },
+            fr: {
+                title: "Commande Supprimée",
+                message: (orderNumber) => `La commande ${orderNumber} a été supprimée`
+            }
+        },
+        delivered: {
+            ar: {
+                title: "توصيل طلب",
+                message: (orderNumber) => `تم توصيل الطلب ${orderNumber}`
+            },
+            en: {
+                title: "Order Delivered",
+                message: (orderNumber) => `Order ${orderNumber} was delivered`
+            },
+            fr: {
+                title: "Commande Livrée",
+                message: (orderNumber) => `La commande ${orderNumber} a été livrée`
             }
         }
     },
@@ -166,6 +208,48 @@ export const notificationTranslations = {
             fr: {
                 title: "Paiement Partiel",
                 message: (billNumber, remaining, currency) => `Paiement partiel pour la facture ${billNumber} - Restant: ${remaining} ${currency}`
+            }
+        },
+        updated: {
+            ar: {
+                title: "تعديل فاتورة",
+                message: (billNumber) => `تم تعديل الفاتورة ${billNumber}`
+            },
+            en: {
+                title: "Bill Updated",
+                message: (billNumber) => `Bill ${billNumber} was updated`
+            },
+            fr: {
+                title: "Facture Modifiée",
+                message: (billNumber) => `La facture ${billNumber} a été modifiée`
+            }
+        },
+        deleted: {
+            ar: {
+                title: "حذف فاتورة",
+                message: (billNumber) => `تم حذف الفاتورة ${billNumber}`
+            },
+            en: {
+                title: "Bill Deleted",
+                message: (billNumber) => `Bill ${billNumber} was deleted`
+            },
+            fr: {
+                title: "Facture Supprimée",
+                message: (billNumber) => `La facture ${billNumber} a été supprimée`
+            }
+        },
+        transferred: {
+            ar: {
+                title: "نقل فاتورة",
+                message: (billNumber, fromTable, toTable) => `تم نقل الفاتورة ${billNumber} من طاولة ${fromTable} إلى طاولة ${toTable}`
+            },
+            en: {
+                title: "Bill Transferred",
+                message: (billNumber, fromTable, toTable) => `Bill ${billNumber} moved from table ${fromTable} to table ${toTable}`
+            },
+            fr: {
+                title: "Facture Transférée",
+                message: (billNumber, fromTable, toTable) => `Facture ${billNumber} déplacée de la table ${fromTable} vers la table ${toTable}`
             }
         }
     },

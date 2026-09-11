@@ -1,9 +1,11 @@
 import React, { useEffect, useRef } from 'react';
+import { isSoundOn as isSoundOnPref } from '../utils/notificationPrefs';
 
 interface NotificationSoundProps {
   playSound: boolean;
   soundType?: 'default' | 'success' | 'warning' | 'error' | 'urgent';
   onSoundPlayed?: () => void;
+  user?: any;
 }
 
 // AudioContext عالمي واحد فقط
@@ -20,15 +22,10 @@ const getAudioContext = () => {
 let lastSoundTime = 0;
 const SOUND_COOLDOWN = 1000; // مللي ثانية (ثانية واحدة)
 
-// دالة للتحقق من إعدادات الصوت
-const isSoundEnabled = (): boolean => {
+// دالة للتحقق من إعدادات الصوت: تفضيل المستخدم (سيرفر) AND الجهاز.
+const isSoundEnabled = (user?: any): boolean => {
   try {
-    const settings = localStorage.getItem('notificationSettings');
-    if (settings) {
-      const parsed = JSON.parse(settings);
-      return parsed.soundEnabled !== false; // افتراضياً مفعل
-    }
-    return true; // افتراضياً مفعل إذا لم توجد إعدادات
+    return isSoundOnPref(user);
   } catch {
     return true; // افتراضياً مفعل في حالة الخطأ
   }
@@ -53,14 +50,15 @@ const resumeAudioContextIfNeeded = async (): Promise<void> => {
 const NotificationSound: React.FC<NotificationSoundProps> = ({
   playSound,
   soundType = 'default',
-  onSoundPlayed
+  onSoundPlayed,
+  user
 }) => {
   const isPlayingRef = useRef(false);
 
   // تشغيل الصوت
   const playNotificationSound = async () => {
     // التحقق من تمكين الصوت
-    if (!isSoundEnabled()) {
+    if (!isSoundEnabled(user)) {
       onSoundPlayed?.();
       return;
     }
@@ -113,7 +111,7 @@ const NotificationSound: React.FC<NotificationSoundProps> = ({
           // نغمة متكررة للعاجل (مع تحكم في التكرار)
           for (let i = 0; i < 2; i++) { // تقليل التكرار من 3 إلى 2
             setTimeout(() => {
-              if (!isSoundEnabled()) return; // تحقق إضافي
+              if (!isSoundEnabled(user)) return;
               const urgentOscillator = ctx.createOscillator();
               const urgentGainNode = ctx.createGain();
               urgentOscillator.connect(urgentGainNode);

@@ -6,6 +6,9 @@ import api, { Session, Order, InventoryItem, WarehouseItem, Bill, Cost, Device, 
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from './AuthContext';
+import { buildActivityToast } from '../utils/activityToast';
+import { isToastKindEnabled, isKitchenAlarmOn } from '../utils/notificationPrefs';
+import { startKitchenAlarm, stopKitchenAlarm } from '../utils/kitchenAlarm';
 import { setDataActionsRef } from './dataActionsRef';
 
 const toArabicNumbers = (num: number | string): string => {
@@ -218,7 +221,7 @@ const DataContext = createContext<DataContextType | undefined>(undefined);
 export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const { user, setUser, setIsAuthenticated, setIsLoggingOut, setError: authSetError, setNotification: authSetNotification, setSubscriptionStatus, showNotification } = useAuth();
+  const { user, setUser, setIsAuthenticated, setIsLoggingOut, setError: authSetError, setNotification: authSetNotification, setSubscriptionStatus, showNotification, updateNotificationToast } = useAuth();
 
   // Data state
   const [sessions, setSessions] = useState<Session[]>([]);
@@ -2489,6 +2492,10 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   // ── Global real-time sync — كل الـ schemas لحظياً (أولوية قصوى + ثانوية) ──
   const globalSocketRef = useRef<Socket | null>(null);
+  // بصمة آخر توست نشاط — لمنع التكرار عند البث المزدوج (فوري + legacy).
+  const lastActivityToastRef = useRef<{ key: string; at: number }>({ key: '', at: 0 });
+  // تجميع المتتابع: نفس النوع+الإجراء خلال 60 ثانية يُحدّث توستاً واحداً (+N).
+  const activityGroupsRef = useRef<Map<string, { toastId: React.ReactText; count: number; at: number }>>(new Map());
   const debounceTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const debouncedFetch = (key: string, fn: () => void | Promise<void>) => {
     const existing = debounceTimersRef.current.get(key);
@@ -2532,6 +2539,12 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       reconnection: true, reconnectionDelay: 1000, reconnectionAttempts: Infinity, reconnectionDelayMax: 10000,
     });
     globalSocketRef.current = socket;
+    try {
+      // info (ظاهر دائماً) لحالة الرابط — debug للأحداث فقط.
+      socket.on('connect', () => { try { console.info('[socket] connected', socket.id, socketUrl); } catch {} });
+      socket.on('disconnect', (reason: any) => { try { console.info('[socket] disconnected', reason); } catch {} });
+      socket.on('connect_error', (err: any) => { try { console.info('[socket] connect_error', err?.message); } catch {} });
+    } catch {}
 
     // Helper to trigger fetch with debounce
     const on = (event: string, key: string, fn: () => void | Promise<void>) => {
@@ -2887,6 +2900,154 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (data?.session) onSessionUpdated(data.session);
       else if (data?._id) onSessionUpdated(data);
     });
+    // صفوف الإشعارات لحظياً: تحديث القائمة دائماً، والتنبيه فقط لما لا يغطيه
+    // نشاط الكيانات (طلب/فاتورة/جلسة لها توست موحد من activity:new) — كالمخزون والنظام.
+    socket.on('notification:new', (data: any) => {
+      try {
+        if (!data) return;
+        try { console.debug('[socket] notification:new received', (data as any)?._id, (data as any)?.category); } catch {}
+        // إدراج فوري في القائمة بلا انتظار GET — نفس السيرفر يعني الظهور لحظياً.
+        try {
+          const nid = String((data as any)?._id || (data as any)?.id || '');
+          if (nid) {
+            setNotifications((prev: any[]) => {
+              if (!Array.isArray(prev)) return prev;
+              if (prev.some((n: any) => String(n._id || n.id) === nid)) return prev;
+              const normalized = {
+                ...(data as any),
+                _id: (data as any)._id ?? (data as any).id,
+                id: (data as any).id ?? (data as any)._id,
+                readBy: Array.isArray((data as any).readBy) ? (data as any).readBy : [],
+              };
+              return [normalized, ...prev].slice(0, 100);
+            });
+          }
+        } catch {}
+        // مصالحة خلفية صامتة بعد 1.5 ثانية (استهداف/فلاتر السيرفر)
+        setTimeout(() => { try { void forceRefreshNotifications().catch(() => {}); } catch {} }, 1500);
+        const category = (data as any)?.category;
+        if (category === 'order' || category === 'billing' || category === 'session') return;
+        // حدث قديم بعد إعادة اتصال: القائمة تتحدث، بلا توست.
+        try {
+          const created = (data as any)?.createdAt ? new Date((data as any).createdAt).getTime() : 0;
+          if (created && Date.now() - created > 60000) return;
+        } catch {}
+        // الفاعل نفسه: بلا توست.
+        try {
+          const me = String((user as any)?._id || (user as any)?.id || '');
+          const actorId = (data as any)?.metadata?.actor?.userId ? String((data as any).metadata.actor.userId) : '';
+          if (actorId && me && actorId === me) return;
+        } catch {}
+        const actor = (data as any)?.metadata?.actor;
+        const who = actor?.name ? ` — ${actor.name}${actor.source === 'mobile' ? ' (هاتف)' : ''}` : '';
+        const text = `${(data as any)?.title || ''}: ${(data as any)?.message || ''}${who}`.trim();
+        const ntype = (data as any)?.type;
+        const toastType = ntype === 'success' ? 'success' : ntype === 'error' ? 'error' : ntype === 'warning' ? 'warning' : 'info';
+        // لا تنبيه مكرر لما خارج نطاق المستخدم المباشر
+        const targets: string[] = Array.isArray((data as any)?.targetUsers) ? (data as any).targetUsers.map((u: any) => String(u?._id || u)) : [];
+        const me = String((user as any)?._id || (user as any)?.id || '');
+        if (targets.length > 0 && me && !targets.includes(me)) return;
+        // الأولوية القصوى (نفاد مخزون...) تبقى معلقة حتى الإقفال اليدوي.
+        const sticky = (data as any)?.priority === 'urgent';
+        showNotification(text, toastType as any, sticky ? { sticky: true } : undefined);
+      } catch {}
+    });
+    // النشاط اللحظي لأي إضافة/تعديل/حذف (طلب/فاتورة/جلسة/طاولة): توست موحد
+    // بنفس شكل إشعارات النظام، بلغة المشاهِد، مع السياق العلاقي والفاعل.
+    // حارس تكرار: نفس البصمة خلال 3 ثوانٍ (بث مزدوج فوري+legacy) تُعرض مرة واحدة.
+    socket.on('activity:new', (data: any) => {
+      try {
+        if (!data || !data.kind) return;
+        try { console.debug('[socket] activity:new received', (data as any)?.kind, (data as any)?.action, (data as any)?.silent ? '(silent)' : ''); } catch {}
+        // silent: تحديث جانبي مدمج في توست أساسي — بلا توست مستقل.
+        if ((data as any)?.silent === true) return;
+        const d = data as any;
+        // 1) حدث قديم (تراكم أثناء انقطاع ثم إعادة اتصال): البيانات تصل والمزامنة تحدث، بلا توست.
+        try {
+          const at = d.at ? new Date(d.at).getTime() : 0;
+          if (at && Date.now() - at > 60000) return;
+        } catch {}
+        // 2) الفاعل نفسه على جهازه: يعرف ما فعل — بلا توست.
+        try {
+          const me = String((user as any)?._id || (user as any)?.id || '');
+          const actorId = d.actor?.userId ? String(d.actor.userId) : '';
+          if (actorId && me && actorId === me) return;
+        } catch {}
+        // 3) كتم الفئة: تفضيل المستخدم (سيرفر) AND كتم الجهاز.
+        try {
+          if (!isToastKindEnabled(user, d.kind)) return;
+        } catch {}
+        // 3ب) منبه المطبخ: طلب جديد/معدّل لدور المطبخ (أو وضع المطبخ المفعّل)
+        // = صوت متكرر + توست ثابت، يُسكت بالتأكيد (ضغط) أو تلقائياً (جاهز/ملغي/محذوف/موصّل).
+        try {
+          const terminal = ['ready', 'cancelled', 'deleted', 'delivered'].includes(String(d.action));
+          if (d.kind === 'order' && d.number) {
+            const akey = `kitchen:${d.number}`;
+            if (terminal) {
+              stopKitchenAlarm(akey);
+            } else if (d.action === 'created' || d.action === 'updated') {
+              let kitchenMode = false;
+              try { kitchenMode = isKitchenAlarmOn(user); } catch {}
+              if (kitchenMode) {
+                const lang2 = (typeof window !== 'undefined' && (window as any)?.i18n?.language) || 'ar';
+                const built2 = buildActivityToast(data, t as any, lang2);
+                startKitchenAlarm(akey);
+                showNotification(`${built2.text} — ${t('notificationCenter.kitchenAlarmAck')}`, 'warning', {
+                  sticky: true,
+                  onClick: () => {
+                    stopKitchenAlarm(akey);
+                    try { window.location.href = '/cafe?tab=orders'; } catch {}
+                  },
+                  onClose: () => { stopKitchenAlarm(akey); },
+                });
+                // حدّث البصمة حتى لا يظهر التوست العادي فوق المنبه.
+                const nowA = Date.now();
+                const seenA = lastActivityToastRef.current;
+                seenA.key = [d.kind, d.action, d.number ?? '', d.tableNumber ?? '', d.billNumber ?? '', d.deviceName ?? '', d.actor?.name || ''].join('|');
+                seenA.at = nowA;
+                return;
+              }
+            }
+          }
+        } catch {}
+        // 4) بصمة 3 ثوانٍ ضد البث المزدوج.
+        const key = [d.kind, d.action, d.number ?? '', d.tableNumber ?? '', d.billNumber ?? '', d.deviceName ?? '', d.actor?.name || ''].join('|');
+        const now = Date.now();
+        const seen = lastActivityToastRef.current;
+        if (seen.key === key && now - seen.at < 3000) return;
+        seen.key = key;
+        seen.at = now;
+        const lang = (typeof window !== 'undefined' && (window as any)?.i18n?.language) || 'ar';
+        const built = buildActivityToast(data, t as any, lang);
+        // 5) تجميع المتتابع: نفس النوع+الإجراء خلال 60 ثانية → (+N) على نفس التوست.
+        try {
+          const gkey = `${d.kind}|${d.action}`;
+          const groups = activityGroupsRef.current;
+          const g = groups.get(gkey);
+          const onClick = d.kind === 'order'
+            ? () => { try { window.location.href = '/cafe?tab=orders'; } catch {} }
+            : d.kind === 'bill'
+              ? () => { try { window.location.href = '/billing'; } catch {} }
+              : undefined;
+          if (g && now - g.at < 60000) {
+            g.count += 1;
+            g.at = now;
+            updateNotificationToast(g.toastId, `${built.text} (+${g.count - 1})`);
+            return;
+          }
+          const id = showNotification(built.text, built.toastType, onClick ? { onClick } : undefined);
+          groups.set(gkey, { toastId: id, count: 1, at: now });
+          if (groups.size > 20) {
+            for (const [k, v] of groups) {
+              if (now - v.at >= 60000) groups.delete(k);
+              if (groups.size <= 20) break;
+            }
+          }
+        } catch {
+          showNotification(built.text, built.toastType);
+        }
+      } catch {}
+    });
     // LAN mesh: doc arrives WITH the event — apply instantly, zero refetch.
     // Main collections are already handled by the specific events above;
     // this covers the rest + session deletes (nested cleanup included).
@@ -2968,7 +3129,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       socket.off('order-update'); socket.off('new-order'); socket.off('order-ready');
       socket.off('session-update'); socket.off('table-status-update');
       socket.off('inventory-update'); socket.off('low-stock-alert');
-      socket.off('menu-update'); socket.off('cost-update'); socket.off('device-update');
+      socket.off('menu-update'); socket.off('cost-update'); socket.off('device-update'); socket.off('notification:new'); socket.off('activity:new'); socket.off('connect'); socket.off('disconnect'); socket.off('connect_error');
       socket.off('table-update'); socket.off('table-section-update'); socket.off('settings-update');
       socket.off('order:created', onOrderCreated); socket.off('order:updated', onOrderUpdated); socket.off('order:deleted', onOrderDeleted);
       socket.off('bill:updated', onBillUpdated); socket.off('bill:created', onBillUpdated);

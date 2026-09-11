@@ -1148,6 +1148,13 @@ export const initializeScheduler = () => {
     cron.schedule("0 */6 * * *", checkLowStock);
     Logger.info("✅ Low stock check scheduled: every 6 hours at minute 0");
 
+    // Hourly activity digest + smart alerts every 15 min (idle tables, big open bills)
+    try {
+        import("./smartAlerts.js").then((m) => {
+            try { m.setupSmartAlertsScheduler(); } catch {}
+        }).catch(() => {});
+    } catch {}
+
     // Initialize organization-specific report schedules
     initializeOrganizationReportSchedules();
     Logger.info("✅ Organization report schedules initialized");

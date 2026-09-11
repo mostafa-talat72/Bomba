@@ -42,7 +42,8 @@ export const runAutoOrderCompleteOnce = async (io) => {
 
         if (io && typeof io.notifyOrderUpdate === "function") {
             try {
-                io.notifyOrderUpdate("item-delivered", order);
+                // نطاق المنشأة صريح (لا بث شامل) — الفاعل الافتراضي "النظام" من emitActivity.
+                io.notifyOrderUpdate("item-delivered", order, order.organization);
             } catch (err) {
                 Logger.error("[AutoComplete] Socket notify failed", err);
             }

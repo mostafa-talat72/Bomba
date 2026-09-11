@@ -1,0 +1,510 @@
+
+> bomba-desktop@1.0.0 dist
+> node scripts/prepare.js && electron-builder
+
+[prepare] Building frontend (vite build)...
+
+> bomba-management-system@1.0.0 build
+> vite build
+
+[36mvite v5.4.19 [32mbuilding for production...[36m[39m
+transforming...
+Browserslist: caniuse-lite is outdated. Please run:
+  npx update-browserslist-db@latest
+  Why you should do it regularly: https://github.com/browserslist/update-db#readme
+[32m✓[39m 7131 modules transformed.
+rendering chunks...
+[1m[33m[plugin:vite:reporter][39m[22m [33m[plugin vite:reporter] 
+(!) H:/My Work/Naruto/New folder (2)/project/src/utils/apiBase.ts is dynamically imported by H:/My Work/Naruto/New folder (2)/project/src/context/AuthContext.tsx but also statically imported by H:/My Work/Naruto/New folder (2)/project/src/components/LanStatusBadge.tsx, H:/My Work/Naruto/New folder (2)/project/src/components/Layout.tsx, H:/My Work/Naruto/New folder (2)/project/src/components/MobileConnectCard.tsx, H:/My Work/Naruto/New folder (2)/project/src/components/ServerConnectionModal.tsx, H:/My Work/Naruto/New folder (2)/project/src/context/DataContext.tsx, H:/My Work/Naruto/New folder (2)/project/src/pages/BillView.tsx, H:/My Work/Naruto/New folder (2)/project/src/pages/Costs.tsx, H:/My Work/Naruto/New folder (2)/project/src/pages/Delivery.tsx, H:/My Work/Naruto/New folder (2)/project/src/pages/EmailActions.tsx, H:/My Work/Naruto/New folder (2)/project/src/pages/Inventory.tsx, H:/My Work/Naruto/New folder (2)/project/src/pages/KitchenDisplay.tsx, H:/My Work/Naruto/New folder (2)/project/src/pages/Payroll.tsx, H:/My Work/Naruto/New folder (2)/project/src/pages/Register.tsx, H:/My Work/Naruto/New folder (2)/project/src/pages/Tables.tsx, H:/My Work/Naruto/New folder (2)/project/src/pages/Users.tsx, H:/My Work/Naruto/New folder (2)/project/src/pages/VerifyEmail.tsx, H:/My Work/Naruto/New folder (2)/project/src/pages/Warehouse.tsx, H:/My Work/Naruto/New folder (2)/project/src/services/api/client.ts, H:/My Work/Naruto/New folder (2)/project/src/services/api/inventory.ts, dynamic import will not move module into another chunk.
+[39m
+[1m[33m[plugin:vite:reporter][39m[22m [33m[plugin vite:reporter] 
+(!) H:/My Work/Naruto/New folder (2)/project/src/services/api.ts is dynamically imported by H:/My Work/Naruto/New folder (2)/project/src/pages/Menu.tsx, H:/My Work/Naruto/New folder (2)/project/src/utils/localPrintBridge.ts but also statically imported by H:/My Work/Naruto/New folder (2)/project/src/App.tsx, H:/My Work/Naruto/New folder (2)/project/src/components/CategoryManagerModal.tsx, H:/My Work/Naruto/New folder (2)/project/src/components/ConnectedDevicesCard.tsx, H:/My Work/Naruto/New folder (2)/project/src/components/CostDetailsModal.tsx, H:/My Work/Naruto/New folder (2)/project/src/components/CostFormModal.tsx, H:/My Work/Naruto/New folder (2)/project/src/components/MobileConnectCard.tsx, H:/My Work/Naruto/New folder (2)/project/src/components/payroll/EmployeeList.tsx, H:/My Work/Naruto/New folder (2)/project/src/components/payroll/EmployeeProfile.tsx, H:/My Work/Naruto/New folder (2)/project/src/components/payroll/PayrollSummary.tsx, H:/My Work/Naruto/New folder (2)/project/src/components/payroll/PendingAdvances.tsx, H:/My Work/Naruto/New folder (2)/project/src/components/tables/BillItemsEditModal.tsx, H:/My Work/Naruto/New folder (2)/project/src/components/tables/ItemPartialPayModal.tsx, H:/My Work/Naruto/New folder (2)/project/src/context/AuthContext.tsx, H:/My Work/Naruto/New folder (2)/project/src/context/DataContext.tsx, H:/My Work/Naruto/New folder (2)/project/src/context/LanguageContext.tsx, H:/My Work/Naruto/New folder (2)/project/src/context/OrganizationContext.tsx, H:/My Work/Naruto/New folder (2)/project/src/context/ThemeContext.tsx, H:/My Work/Naruto/New folder (2)/project/src/hooks/useBillAggregation.ts, H:/My Work/Naruto/New folder (2)/project/src/pages/AuditLog.tsx, H:/My Work/Naruto/New folder (2)/project/src/pages/BillView.tsx, H:/My Work/Naruto/New folder (2)/project/src/pages/ConsumptionReport.tsx, H:/My Work/Naruto/New folder (2)/project/src/pages/Costs.tsx, H:/My Work/Naruto/New folder (2)/project/src/pages/Dashboard.tsx, H:/My Work/Naruto/New folder (2)/project/src/pages/Delivery.tsx, H:/My Work/Naruto/New folder (2)/project/src/pages/GamingDevices.tsx, H:/My Work/Naruto/New folder (2)/project/src/pages/Inventory.tsx, H:/My Work/Naruto/New folder (2)/project/src/pages/KitchenDisplay.tsx, H:/My Work/Naruto/New folder (2)/project/src/pages/Payroll.tsx, H:/My Work/Naruto/New folder (2)/project/src/pages/Settings.tsx, H:/My Work/Naruto/New folder (2)/project/src/pages/Shifts.tsx, H:/My Work/Naruto/New folder (2)/project/src/pages/SoldItems.tsx, H:/My Work/Naruto/New folder (2)/project/src/pages/Subscription.tsx, H:/My Work/Naruto/New folder (2)/project/src/pages/SyncStatus.tsx, H:/My Work/Naruto/New folder (2)/project/src/pages/Tables.tsx, H:/My Work/Naruto/New folder (2)/project/src/pages/Takeaway.tsx, H:/My Work/Naruto/New folder (2)/project/src/pages/Warehouse.tsx, H:/My Work/Naruto/New folder (2)/project/src/utils/drawer.ts, H:/My Work/Naruto/New folder (2)/project/src/utils/freshPrintSettings.ts, H:/My Work/Naruto/New folder (2)/project/src/utils/printBill.ts, H:/My Work/Naruto/New folder (2)/project/src/utils/printOrder.ts, dynamic import will not move module into another chunk.
+[39m
+[1m[33m[plugin:vite:reporter][39m[22m [33m[plugin vite:reporter] 
+(!) H:/My Work/Naruto/New folder (2)/project/src/utils/currentUser.ts is dynamically imported by H:/My Work/Naruto/New folder (2)/project/src/context/AuthContext.tsx but also statically imported by H:/My Work/Naruto/New folder (2)/project/src/utils/printBill.ts, dynamic import will not move module into another chunk.
+[39m
+computing gzip size...
+[2mdist/[22m[32mindex.html                                 [39m[1m[2m    7.71 kB[22m[1m[22m[2m │ gzip:     3.28 kB[22m
+[2mdist/[22m[35massets/Tables-BjprjAMr.css                 [39m[1m[2m    2.91 kB[22m[1m[22m[2m │ gzip:     0.94 kB[22m
+[2mdist/[22m[35massets/menu-animations-Dru_BMdQ.css        [39m[1m[2m    3.48 kB[22m[1m[22m[2m │ gzip:     1.09 kB[22m
+[2mdist/[22m[35massets/Users-DERYZuA1.css                  [39m[1m[2m    6.35 kB[22m[1m[22m[2m │ gzip:     1.64 kB[22m
+[2mdist/[22m[35massets/Payroll-BbpcA610.css                [39m[1m[2m    9.90 kB[22m[1m[22m[2m │ gzip:     2.07 kB[22m
+[2mdist/[22m[35massets/vendor-DupzR0sa.css                 [39m[1m[2m   14.26 kB[22m[1m[22m[2m │ gzip:     2.68 kB[22m
+[2mdist/[22m[35massets/Costs-DPs7vNCC.css                  [39m[1m[2m   47.70 kB[22m[1m[22m[2m │ gzip:     7.99 kB[22m
+[2mdist/[22m[35massets/index-ggIuvHJC.css                  [39m[1m[2m  207.81 kB[22m[1m[22m[2m │ gzip:    28.98 kB[22m
+[2mdist/[22m[36massets/Computer-DkQQgxAM.js                [39m[1m[2m    0.18 kB[22m[1m[22m[2m │ gzip:     0.17 kB[22m
+[2mdist/[22m[36massets/PlayStation-yxMknA1t.js             [39m[1m[2m    0.19 kB[22m[1m[22m[2m │ gzip:     0.17 kB[22m
+[2mdist/[22m[36massets/LocalizedTimePicker-CRSANpdr.js     [39m[1m[2m    0.33 kB[22m[1m[22m[2m │ gzip:     0.29 kB[22m
+[2mdist/[22m[36massets/ay-DNpkDdnX.js                      [39m[1m[2m    0.36 kB[22m[1m[22m[2m │ gzip:     0.26 kB[22m
+[2mdist/[22m[36massets/as-DHPCf3aH.js                      [39m[1m[2m    0.36 kB[22m[1m[22m[2m │ gzip:     0.29 kB[22m
+[2mdist/[22m[36massets/bm-BD9HD0pY.js                      [39m[1m[2m    0.36 kB[22m[1m[22m[2m │ gzip:     0.26 kB[22m
+[2mdist/[22m[36massets/ConfirmModal-Boh9Qg_w.js            [39m[1m[2m    1.05 kB[22m[1m[22m[2m │ gzip:     0.57 kB[22m
+[2mdist/[22m[36massets/drawer-CLaqd_z2.js                  [39m[1m[2m    1.41 kB[22m[1m[22m[2m │ gzip:     0.68 kB[22m
+[2mdist/[22m[36massets/Modal-C0zF85Zs.js                   [39m[1m[2m    1.42 kB[22m[1m[22m[2m │ gzip:     0.74 kB[22m
+[2mdist/[22m[36massets/VerifyEmail-Crux9a-x.js             [39m[1m[2m    3.30 kB[22m[1m[22m[2m │ gzip:     1.20 kB[22m
+[2mdist/[22m[36massets/AuditLog-CFermJXB.js                [39m[1m[2m    5.24 kB[22m[1m[22m[2m │ gzip:     1.81 kB[22m
+[2mdist/[22m[36massets/Shifts-zLCvN3rc.js                  [39m[1m[2m    6.85 kB[22m[1m[22m[2m │ gzip:     2.24 kB[22m
+[2mdist/[22m[36massets/SyncStatus-D0ldXmR1.js              [39m[1m[2m    7.33 kB[22m[1m[22m[2m │ gzip:     2.70 kB[22m
+[2mdist/[22m[36massets/ResetPassword-DAx4SMpH.js           [39m[1m[2m    8.87 kB[22m[1m[22m[2m │ gzip:     2.20 kB[22m
+[2mdist/[22m[36massets/Subscription-D8zsV1T_.js            [39m[1m[2m    9.85 kB[22m[1m[22m[2m │ gzip:     3.23 kB[22m
+[2mdist/[22m[36massets/NotificationManagement-B7OSE6eH.js  [39m[1m[2m   10.88 kB[22m[1m[22m[2m │ gzip:     2.65 kB[22m
+[2mdist/[22m[36massets/PartialPaymentModal-Ks_mrZqH.js     [39m[1m[2m   14.45 kB[22m[1m[22m[2m │ gzip:     3.59 kB[22m
+[2mdist/[22m[36massets/CustomerMenu-CEK3LFPA.js            [39m[1m[2m   16.14 kB[22m[1m[22m[2m │ gzip:     3.72 kB[22m
+[2mdist/[22m[36massets/KitchenDisplay-BF5LbRw_.js          [39m[1m[2m   16.79 kB[22m[1m[22m[2m │ gzip:     4.87 kB[22m
+[2mdist/[22m[36massets/Dashboard-CMaD_prT.js               [39m[1m[2m   17.23 kB[22m[1m[22m[2m │ gzip:     3.98 kB[22m
+[2mdist/[22m[36massets/SoldItems-CWf_6MMc.js               [39m[1m[2m   21.25 kB[22m[1m[22m[2m │ gzip:     4.37 kB[22m
+[2mdist/[22m[36massets/BillView-BLYPKYVF.js                [39m[1m[2m   23.98 kB[22m[1m[22m[2m │ gzip:     5.70 kB[22m
+[2mdist/[22m[36massets/PaymentManagementModal-Bcy-G2vB.js  [39m[1m[2m   30.64 kB[22m[1m[22m[2m │ gzip:     7.87 kB[22m
+[2mdist/[22m[36massets/ConsumptionReport-DPDLd7pf.js       [39m[1m[2m   38.06 kB[22m[1m[22m[2m │ gzip:     9.23 kB[22m
+[2mdist/[22m[36massets/Menu-koJgXHln.js                    [39m[1m[2m   71.65 kB[22m[1m[22m[2m │ gzip:    14.62 kB[22m
+[2mdist/[22m[36massets/Reports-CdoP5Zn0.js                 [39m[1m[2m   73.63 kB[22m[1m[22m[2m │ gzip:    12.90 kB[22m
+[2mdist/[22m[36massets/zh-BUB5nE16.js                      [39m[1m[2m   74.38 kB[22m[1m[22m[2m │ gzip:    33.97 kB[22m
+[2mdist/[22m[36massets/Warehouse-CSokcuAk.js               [39m[1m[2m   79.92 kB[22m[1m[22m[2m │ gzip:    12.94 kB[22m
+[2mdist/[22m[36massets/GamingDevices-CakxKhni.js           [39m[1m[2m   80.87 kB[22m[1m[22m[2m │ gzip:    14.33 kB[22m
+[2mdist/[22m[36massets/Users-BCgLu-1T.js                   [39m[1m[2m   81.78 kB[22m[1m[22m[2m │ gzip:    13.48 kB[22m
+[2mdist/[22m[36massets/ko-BbJ1QPeo.js                      [39m[1m[2m   87.06 kB[22m[1m[22m[2m │ gzip:    35.58 kB[22m
+[2mdist/[22m[36massets/ja-BMfUoVDX.js                      [39m[1m[2m   87.35 kB[22m[1m[22m[2m │ gzip:    37.26 kB[22m
+[2mdist/[22m[36massets/Costs-s4aJ4w0x.js                   [39m[1m[2m   98.03 kB[22m[1m[22m[2m │ gzip:    16.66 kB[22m
+[2mdist/[22m[36massets/am-a2ixjU8d.js                      [39m[1m[2m   99.60 kB[22m[1m[22m[2m │ gzip:    39.18 kB[22m
+[2mdist/[22m[36massets/he-D7mKP8XT.js                      [39m[1m[2m  103.57 kB[22m[1m[22m[2m │ gzip:    35.15 kB[22m
+[2mdist/[22m[36massets/Inventory-922TYH6P.js               [39m[1m[2m  104.13 kB[22m[1m[22m[2m │ gzip:    15.31 kB[22m
+[2mdist/[22m[36massets/fa-Cch_iVwH.js                      [39m[1m[2m  114.53 kB[22m[1m[22m[2m │ gzip:    35.83 kB[22m
+[2mdist/[22m[36massets/th-DbiB0MX4.js                      [39m[1m[2m  116.05 kB[22m[1m[22m[2m │ gzip:    39.59 kB[22m
+[2mdist/[22m[36massets/sd-BYnwN7LH.js                      [39m[1m[2m  116.06 kB[22m[1m[22m[2m │ gzip:    37.09 kB[22m
+[2mdist/[22m[36massets/iu-C4_g5qIm.js                      [39m[1m[2m  116.08 kB[22m[1m[22m[2m │ gzip:    41.87 kB[22m
+[2mdist/[22m[36massets/ps-cTugHlmm.js                      [39m[1m[2m  116.54 kB[22m[1m[22m[2m │ gzip:    36.96 kB[22m
+[2mdist/[22m[36massets/ig-Trpi6Z_A.js                      [39m[1m[2m  117.40 kB[22m[1m[22m[2m │ gzip:    33.31 kB[22m
+[2mdist/[22m[36massets/lo-CFEsMv6O.js                      [39m[1m[2m  117.61 kB[22m[1m[22m[2m │ gzip:    40.53 kB[22m
+[2mdist/[22m[36massets/ht-C_Piz-jG.js                      [39m[1m[2m  118.54 kB[22m[1m[22m[2m │ gzip:    32.33 kB[22m
+[2mdist/[22m[36massets/yo-C3qE0fiO.js                      [39m[1m[2m  118.69 kB[22m[1m[22m[2m │ gzip:    33.86 kB[22m
+[2mdist/[22m[36massets/tr-DSvpQXu7.js                      [39m[1m[2m  119.41 kB[22m[1m[22m[2m │ gzip:    34.41 kB[22m
+[2mdist/[22m[36massets/mr-CjaDF34A.js                      [39m[1m[2m  119.44 kB[22m[1m[22m[2m │ gzip:    40.46 kB[22m
+[2mdist/[22m[36massets/jv-WykUA0Mr.js                      [39m[1m[2m  120.25 kB[22m[1m[22m[2m │ gzip:    32.04 kB[22m
+[2mdist/[22m[36massets/gu-BnFwbnHa.js                      [39m[1m[2m  120.28 kB[22m[1m[22m[2m │ gzip:    40.61 kB[22m
+[2mdist/[22m[36massets/et-BfCH1Y84.js                      [39m[1m[2m  120.33 kB[22m[1m[22m[2m │ gzip:    34.22 kB[22m
+[2mdist/[22m[36massets/la-BsixtOK5.js                      [39m[1m[2m  120.54 kB[22m[1m[22m[2m │ gzip:    34.55 kB[22m
+[2mdist/[22m[36massets/hi-sGRx-F94.js                      [39m[1m[2m  120.97 kB[22m[1m[22m[2m │ gzip:    41.26 kB[22m
+[2mdist/[22m[36massets/si-CEkE2PJV.js                      [39m[1m[2m  121.02 kB[22m[1m[22m[2m │ gzip:    40.76 kB[22m
+[2mdist/[22m[36massets/ur-BSamEHEi.js                      [39m[1m[2m  121.26 kB[22m[1m[22m[2m │ gzip:    37.22 kB[22m
+[2mdist/[22m[36massets/su-DbFXJ4Kf.js                      [39m[1m[2m  121.56 kB[22m[1m[22m[2m │ gzip:    33.38 kB[22m
+[2mdist/[22m[36massets/ha-DiUHj3QQ.js                      [39m[1m[2m  121.69 kB[22m[1m[22m[2m │ gzip:    32.63 kB[22m
+[2mdist/[22m[36massets/kk-B9JdsFqE.js                      [39m[1m[2m  121.75 kB[22m[1m[22m[2m │ gzip:    38.95 kB[22m
+[2mdist/[22m[36massets/pa-DtZKmho4.js                      [39m[1m[2m  121.90 kB[22m[1m[22m[2m │ gzip:    41.29 kB[22m
+[2mdist/[22m[36massets/no-DfE8WVYz.js                      [39m[1m[2m  121.94 kB[22m[1m[22m[2m │ gzip:    33.73 kB[22m
+[2mdist/[22m[36massets/bn-DaMaWLfm.js                      [39m[1m[2m  122.11 kB[22m[1m[22m[2m │ gzip:    40.28 kB[22m
+[2mdist/[22m[36massets/cs-Dok0mky4.js                      [39m[1m[2m  122.12 kB[22m[1m[22m[2m │ gzip:    36.29 kB[22m
+[2mdist/[22m[36massets/ne-CtnkDARJ.js                      [39m[1m[2m  122.16 kB[22m[1m[22m[2m │ gzip:    39.96 kB[22m
+[2mdist/[22m[36massets/sr-BqksHlP1.js                      [39m[1m[2m  122.31 kB[22m[1m[22m[2m │ gzip:    39.98 kB[22m
+[2mdist/[22m[36massets/tk-BgO5m7sP.js                      [39m[1m[2m  122.32 kB[22m[1m[22m[2m │ gzip:    34.61 kB[22m
+[2mdist/[22m[36massets/vi-B6LxwGIN.js                      [39m[1m[2m  122.34 kB[22m[1m[22m[2m │ gzip:    34.86 kB[22m
+[2mdist/[22m[36massets/az-DQ8ZpBSx.js                      [39m[1m[2m  122.93 kB[22m[1m[22m[2m │ gzip:    35.40 kB[22m
+[2mdist/[22m[36massets/eo-D-fmeRL0.js                      [39m[1m[2m  122.96 kB[22m[1m[22m[2m │ gzip:    33.81 kB[22m
+[2mdist/[22m[36massets/km-CQVkK6Z_.js                      [39m[1m[2m  123.16 kB[22m[1m[22m[2m │ gzip:    40.33 kB[22m
+[2mdist/[22m[36massets/is-Cm2OIMFe.js                      [39m[1m[2m  123.23 kB[22m[1m[22m[2m │ gzip:    35.46 kB[22m
+[2mdist/[22m[36massets/ug-Dv6CGO5A.js                      [39m[1m[2m  123.35 kB[22m[1m[22m[2m │ gzip:    38.02 kB[22m
+[2mdist/[22m[36massets/sw-DYSTM-No.js                      [39m[1m[2m  123.55 kB[22m[1m[22m[2m │ gzip:    32.78 kB[22m
+[2mdist/[22m[36massets/fi-_iEZhWPs.js                      [39m[1m[2m  123.61 kB[22m[1m[22m[2m │ gzip:    34.80 kB[22m
+[2mdist/[22m[36massets/sl-CY4s4t-K.js                      [39m[1m[2m  123.75 kB[22m[1m[22m[2m │ gzip:    34.73 kB[22m
+[2mdist/[22m[36massets/sk-Cf186qnJ.js                      [39m[1m[2m  123.81 kB[22m[1m[22m[2m │ gzip:    36.39 kB[22m
+[2mdist/[22m[36massets/ms-BH36_mex.js                      [39m[1m[2m  124.13 kB[22m[1m[22m[2m │ gzip:    32.11 kB[22m
+[2mdist/[22m[36massets/da-CQwoCViw.js                      [39m[1m[2m  124.26 kB[22m[1m[22m[2m │ gzip:    34.02 kB[22m
+[2mdist/[22m[36massets/hr-DDmxHrIG.js                      [39m[1m[2m  124.43 kB[22m[1m[22m[2m │ gzip:    34.76 kB[22m
+[2mdist/[22m[36massets/bs-D_LTwL9n.js                      [39m[1m[2m  124.49 kB[22m[1m[22m[2m │ gzip:    34.86 kB[22m
+[2mdist/[22m[36massets/mn-D3l-xSI_.js                      [39m[1m[2m  124.53 kB[22m[1m[22m[2m │ gzip:    38.98 kB[22m
+[2mdist/[22m[36massets/sn-DABjVGVc.js                      [39m[1m[2m  124.73 kB[22m[1m[22m[2m │ gzip:    33.77 kB[22m
+[2mdist/[22m[36massets/ku-CyvzPTvO.js                      [39m[1m[2m  125.05 kB[22m[1m[22m[2m │ gzip:    35.55 kB[22m
+[2mdist/[22m[36massets/rw-Btgdxydd.js                      [39m[1m[2m  125.32 kB[22m[1m[22m[2m │ gzip:    32.74 kB[22m
+[2mdist/[22m[36massets/id-CvoGUuqO.js                      [39m[1m[2m  125.37 kB[22m[1m[22m[2m │ gzip:    32.53 kB[22m
+[2mdist/[22m[36massets/uk-CfVWMGWs.js                      [39m[1m[2m  125.53 kB[22m[1m[22m[2m │ gzip:    40.84 kB[22m
+[2mdist/[22m[36massets/sv-CIt2ETPF.js                      [39m[1m[2m  125.59 kB[22m[1m[22m[2m │ gzip:    34.34 kB[22m
+[2mdist/[22m[36massets/ky-xJ6NHbFE.js                      [39m[1m[2m  125.65 kB[22m[1m[22m[2m │ gzip:    40.31 kB[22m
+[2mdist/[22m[36massets/mi-DwMTFltL.js                      [39m[1m[2m  126.11 kB[22m[1m[22m[2m │ gzip:    32.71 kB[22m
+[2mdist/[22m[36massets/lv-iCt2RtFq.js                      [39m[1m[2m  126.12 kB[22m[1m[22m[2m │ gzip:    35.43 kB[22m
+[2mdist/[22m[36massets/be-BmrcaJpw.js                      [39m[1m[2m  126.20 kB[22m[1m[22m[2m │ gzip:    41.19 kB[22m
+[2mdist/[22m[36massets/lt-BHj5qZWI.js                      [39m[1m[2m  126.65 kB[22m[1m[22m[2m │ gzip:    35.82 kB[22m
+[2mdist/[22m[36massets/ny-B9OHFRcQ.js                      [39m[1m[2m  126.78 kB[22m[1m[22m[2m │ gzip:    33.04 kB[22m
+[2mdist/[22m[36massets/ru-BdWgUu-j.js                      [39m[1m[2m  126.83 kB[22m[1m[22m[2m │ gzip:    41.20 kB[22m
+[2mdist/[22m[36massets/ar-DuWX2zXA.js                      [39m[1m[2m  127.03 kB[22m[1m[22m[2m │ gzip:    40.33 kB[22m
+[2mdist/[22m[36massets/yi-BCfxg_05.js                      [39m[1m[2m  127.16 kB[22m[1m[22m[2m │ gzip:    38.07 kB[22m
+[2mdist/[22m[36massets/pl-DcbJGiTw.js                      [39m[1m[2m  127.50 kB[22m[1m[22m[2m │ gzip:    36.18 kB[22m
+[2mdist/[22m[36massets/cy-Brc0TNKT.js                      [39m[1m[2m  127.53 kB[22m[1m[22m[2m │ gzip:    33.90 kB[22m
+[2mdist/[22m[36massets/haw-D-ghZfPE.js                     [39m[1m[2m  127.54 kB[22m[1m[22m[2m │ gzip:    32.46 kB[22m
+[2mdist/[22m[36massets/kn-C0upJwSn.js                      [39m[1m[2m  127.55 kB[22m[1m[22m[2m │ gzip:    41.34 kB[22m
+[2mdist/[22m[36massets/af-DUIleAoV.js                      [39m[1m[2m  128.06 kB[22m[1m[22m[2m │ gzip:    34.31 kB[22m
+[2mdist/[22m[36massets/bg-DNxicNoR.js                      [39m[1m[2m  128.22 kB[22m[1m[22m[2m │ gzip:    40.32 kB[22m
+[2mdist/[22m[36massets/ka-CXkta65V.js                      [39m[1m[2m  128.29 kB[22m[1m[22m[2m │ gzip:    41.42 kB[22m
+[2mdist/[22m[36massets/te-BKsd6f1Q.js                      [39m[1m[2m  128.50 kB[22m[1m[22m[2m │ gzip:    41.90 kB[22m
+[2mdist/[22m[36massets/hy-NYy-54bU.js                      [39m[1m[2m  128.51 kB[22m[1m[22m[2m │ gzip:    40.05 kB[22m
+[2mdist/[22m[36massets/mk-BaCmK2FQ.js                      [39m[1m[2m  128.66 kB[22m[1m[22m[2m │ gzip:    39.77 kB[22m
+[2mdist/[22m[36massets/pt-DfjCIb0J.js                      [39m[1m[2m  128.92 kB[22m[1m[22m[2m │ gzip:    34.15 kB[22m
+[2mdist/[22m[36massets/ro-BocRGkos.js                      [39m[1m[2m  128.99 kB[22m[1m[22m[2m │ gzip:    35.09 kB[22m
+[2mdist/[22m[36massets/mt-Bj2oUceH.js                      [39m[1m[2m  129.06 kB[22m[1m[22m[2m │ gzip:    35.06 kB[22m
+[2mdist/[22m[36massets/eu-BZ370Avr.js                      [39m[1m[2m  129.61 kB[22m[1m[22m[2m │ gzip:    33.92 kB[22m
+[2mdist/[22m[36massets/sq-CF4hm0h0.js                      [39m[1m[2m  129.85 kB[22m[1m[22m[2m │ gzip:    35.18 kB[22m
+[2mdist/[22m[36massets/fy-CCNj_pgO.js                      [39m[1m[2m  129.92 kB[22m[1m[22m[2m │ gzip:    35.11 kB[22m
+[2mdist/[22m[36massets/hu-N4UTyNE9.js                      [39m[1m[2m  129.97 kB[22m[1m[22m[2m │ gzip:    36.97 kB[22m
+[2mdist/[22m[36massets/ga-UJwU2lhL.js                      [39m[1m[2m  129.99 kB[22m[1m[22m[2m │ gzip:    35.55 kB[22m
+[2mdist/[22m[36massets/lb-DGDp5auQ.js                      [39m[1m[2m  130.46 kB[22m[1m[22m[2m │ gzip:    35.35 kB[22m
+[2mdist/[22m[36massets/tg-CJjxY1tg.js                      [39m[1m[2m  130.49 kB[22m[1m[22m[2m │ gzip:    40.30 kB[22m
+[2mdist/[22m[36massets/uz-CH4MJVZe.js                      [39m[1m[2m  130.57 kB[22m[1m[22m[2m │ gzip:    34.51 kB[22m
+[2mdist/[22m[36massets/xh-B_ipXAqs.js                      [39m[1m[2m  130.81 kB[22m[1m[22m[2m │ gzip:    34.51 kB[22m
+[2mdist/[22m[36massets/st-CzMFB2Wj.js                      [39m[1m[2m  131.45 kB[22m[1m[22m[2m │ gzip:    33.72 kB[22m
+[2mdist/[22m[36massets/gl-3SOFj0SZ.js                      [39m[1m[2m  131.62 kB[22m[1m[22m[2m │ gzip:    33.89 kB[22m
+[2mdist/[22m[36massets/nl-QVCt04kV.js                      [39m[1m[2m  131.68 kB[22m[1m[22m[2m │ gzip:    35.22 kB[22m
+[2mdist/[22m[36massets/zu-BGNbpn7K.js                      [39m[1m[2m  131.73 kB[22m[1m[22m[2m │ gzip:    34.21 kB[22m
+[2mdist/[22m[36massets/ml-BpesXcJa.js                      [39m[1m[2m  132.23 kB[22m[1m[22m[2m │ gzip:    43.11 kB[22m
+[2mdist/[22m[36massets/ta-ChdMtO6q.js                      [39m[1m[2m  132.65 kB[22m[1m[22m[2m │ gzip:    41.60 kB[22m
+[2mdist/[22m[36massets/ca-bN2yR5J1.js                      [39m[1m[2m  133.12 kB[22m[1m[22m[2m │ gzip:    34.45 kB[22m
+[2mdist/[22m[36massets/co-BekJLvz0.js                      [39m[1m[2m  133.48 kB[22m[1m[22m[2m │ gzip:    34.83 kB[22m
+[2mdist/[22m[36massets/es-4N1IVKvx.js                      [39m[1m[2m  133.82 kB[22m[1m[22m[2m │ gzip:    34.83 kB[22m
+[2mdist/[22m[36massets/mg-Bn3cJenn.js                      [39m[1m[2m  134.24 kB[22m[1m[22m[2m │ gzip:    33.99 kB[22m
+[2mdist/[22m[36massets/el-B4BS3xBr.js                      [39m[1m[2m  134.54 kB[22m[1m[22m[2m │ gzip:    42.74 kB[22m
+[2mdist/[22m[36massets/so-hmneMCm2.js                      [39m[1m[2m  134.65 kB[22m[1m[22m[2m │ gzip:    35.37 kB[22m
+[2mdist/[22m[36massets/lg-CdSNTT-s.js                      [39m[1m[2m  134.74 kB[22m[1m[22m[2m │ gzip:    35.12 kB[22m
+[2mdist/[22m[36massets/it-CPK3o1cz.js                      [39m[1m[2m  135.30 kB[22m[1m[22m[2m │ gzip:    34.61 kB[22m
+[2mdist/[22m[36massets/my-BRuhNvFp.js                      [39m[1m[2m  136.56 kB[22m[1m[22m[2m │ gzip:    43.56 kB[22m
+[2mdist/[22m[36massets/ln-BJ6deUdc.js                      [39m[1m[2m  136.69 kB[22m[1m[22m[2m │ gzip:    35.27 kB[22m
+[2mdist/[22m[36massets/tl-BZM87NB1.js                      [39m[1m[2m  137.31 kB[22m[1m[22m[2m │ gzip:    34.05 kB[22m
+[2mdist/[22m[36massets/ceb-HkD9LyP6.js                     [39m[1m[2m  137.45 kB[22m[1m[22m[2m │ gzip:    34.07 kB[22m
+[2mdist/[22m[36massets/de-DBH_bje2.js                      [39m[1m[2m  138.88 kB[22m[1m[22m[2m │ gzip:    36.18 kB[22m
+[2mdist/[22m[36massets/en-Dkk2uxTK.js                      [39m[1m[2m  140.75 kB[22m[1m[22m[2m │ gzip:    37.17 kB[22m
+[2mdist/[22m[36massets/gd-CGIgLfbf.js                      [39m[1m[2m  141.47 kB[22m[1m[22m[2m │ gzip:    35.74 kB[22m
+[2mdist/[22m[36massets/dv-CwWJu4ci.js                      [39m[1m[2m  142.79 kB[22m[1m[22m[2m │ gzip:    41.93 kB[22m
+[2mdist/[22m[36massets/kl-BGZweLM2.js                      [39m[1m[2m  148.89 kB[22m[1m[22m[2m │ gzip:    36.25 kB[22m
+[2mdist/[22m[36massets/fr-mVjZVX8Q.js                      [39m[1m[2m  151.24 kB[22m[1m[22m[2m │ gzip:    39.15 kB[22m
+[2mdist/[22m[36massets/Payroll-Dkt5fMu9.js                 [39m[1m[2m  158.96 kB[22m[1m[22m[2m │ gzip:    25.83 kB[22m
+[2mdist/[22m[36massets/Settings-DB8DAC-v.js                [39m[1m[2m  185.18 kB[22m[1m[22m[2m │ gzip:    40.43 kB[22m
+[2mdist/[22m[36massets/Tables-DS-qxbxK.js                  [39m[1m[2m  230.83 kB[22m[1m[22m[2m │ gzip:    55.65 kB[22m
+[2mdist/[22m[36massets/index-DD6N7nvp.js                   [39m[1m[2m  389.93 kB[22m[1m[22m[2m │ gzip:    96.43 kB[22m
+[2mdist/[22m[36massets/vendor-DhDztKqB.js                  [39m[1m[33m4,864.96 kB[39m[22m[2m │ gzip: 1,451.92 kB[22m
+[33m
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.[39m
+[32m✓ built in 1m 45s[39m
+
+✨ [vite-plugin-compression]:algorithm=gzip - compressed file successfully: 
+dist/H:/My Work/Naruto/New folder (2)/project/assets/BillView-BLYPKYVF.js.gz                 23.44kb / gzip: 5.56kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/ConsumptionReport-DPDLd7pf.js.gz        37.53kb / gzip: 9.00kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/CustomerMenu-CEK3LFPA.js.gz             15.77kb / gzip: 3.62kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/Dashboard-CMaD_prT.js.gz                16.83kb / gzip: 3.87kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/Costs-DPs7vNCC.css.gz                   46.58kb / gzip: 7.70kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/GamingDevices-CakxKhni.js.gz            79.04kb / gzip: 13.88kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/Inventory-922TYH6P.js.gz                102.10kb / gzip: 14.84kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/KitchenDisplay-BF5LbRw_.js.gz           16.42kb / gzip: 4.75kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/Menu-koJgXHln.js.gz                     70.95kb / gzip: 14.19kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/NotificationManagement-B7OSE6eH.js.gz   10.62kb / gzip: 2.58kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/PartialPaymentModal-Ks_mrZqH.js.gz      14.13kb / gzip: 3.49kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/PaymentManagementModal-Bcy-G2vB.js.gz   30.37kb / gzip: 7.65kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/Reports-CdoP5Zn0.js.gz                  72.02kb / gzip: 12.51kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/SoldItems-CWf_6MMc.js.gz                20.83kb / gzip: 4.25kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/Users-BCgLu-1T.js.gz                    80.28kb / gzip: 13.05kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/Warehouse-CSokcuAk.js.gz                78.39kb / gzip: 12.51kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/vendor-DupzR0sa.css.gz                  13.92kb / gzip: 2.60kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/Costs-s4aJ4w0x.js.gz                    95.94kb / gzip: 16.13kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/ha-DiUHj3QQ.js.gz                       119.95kb / gzip: 31.83kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/haw-D-ghZfPE.js.gz                      131.15kb / gzip: 31.64kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/ht-C_Piz-jG.js.gz                       118.03kb / gzip: 31.55kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/id-CvoGUuqO.js.gz                       122.66kb / gzip: 31.76kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/jv-WykUA0Mr.js.gz                       117.65kb / gzip: 31.27kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/index-ggIuvHJC.css.gz                   202.96kb / gzip: 27.92kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/mi-DwMTFltL.js.gz                       124.29kb / gzip: 31.90kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/ms-BH36_mex.js.gz                       121.42kb / gzip: 31.34kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/Payroll-Dkt5fMu9.js.gz                  156.00kb / gzip: 25.04kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/rw-Btgdxydd.js.gz                       122.48kb / gzip: 31.95kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/sw-DYSTM-No.js.gz                       120.85kb / gzip: 31.98kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/af-DUIleAoV.js.gz                       125.48kb / gzip: 33.48kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/az-DQ8ZpBSx.js.gz                       130.99kb / gzip: 34.55kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/am-a2ixjU8d.js.gz                       169.94kb / gzip: 38.20kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/ar-DuWX2zXA.js.gz                       177.44kb / gzip: 39.24kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/bs-D_LTwL9n.js.gz                       123.80kb / gzip: 34.01kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/be-BmrcaJpw.js.gz                       184.56kb / gzip: 40.16kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/ca-bN2yR5J1.js.gz                       131.93kb / gzip: 33.62kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/bg-DNxicNoR.js.gz                       187.54kb / gzip: 39.28kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/co-BekJLvz0.js.gz                       132.56kb / gzip: 34.00kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/cs-Dok0mky4.js.gz                       127.97kb / gzip: 35.42kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/ceb-HkD9LyP6.js.gz                      134.43kb / gzip: 33.21kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/cy-Brc0TNKT.js.gz                       124.95kb / gzip: 33.08kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/da-CQwoCViw.js.gz                       122.95kb / gzip: 33.20kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/de-DBH_bje2.js.gz                       137.11kb / gzip: 35.32kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/eo-D-fmeRL0.js.gz                       121.38kb / gzip: 33.00kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/bn-DaMaWLfm.js.gz                       232.65kb / gzip: 39.03kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/dv-CwWJu4ci.js.gz                       218.02kb / gzip: 40.79kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/es-4N1IVKvx.js.gz                       132.43kb / gzip: 33.97kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/en-Dkk2uxTK.js.gz                       137.69kb / gzip: 36.29kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/el-B4BS3xBr.js.gz                       199.38kb / gzip: 41.70kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/eu-BZ370Avr.js.gz                       126.77kb / gzip: 33.09kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/fa-Cch_iVwH.js.gz                       160.65kb / gzip: 34.97kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/fr-mVjZVX8Q.js.gz                       151.43kb / gzip: 38.21kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/et-BfCH1Y84.js.gz                       119.68kb / gzip: 33.40kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/fy-CCNj_pgO.js.gz                       127.88kb / gzip: 34.27kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/ga-UJwU2lhL.js.gz                       132.44kb / gzip: 34.70kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/gd-CGIgLfbf.js.gz                       141.47kb / gzip: 34.89kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/fi-_iEZhWPs.js.gz                       124.56kb / gzip: 33.97kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/gl-3SOFj0SZ.js.gz                       130.41kb / gzip: 33.07kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/hr-DDmxHrIG.js.gz                       123.83kb / gzip: 33.92kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/he-D7mKP8XT.js.gz                       142.19kb / gzip: 34.31kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/hu-N4UTyNE9.js.gz                       135.77kb / gzip: 36.09kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/hy-NYy-54bU.js.gz                       189.51kb / gzip: 39.02kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/gu-BnFwbnHa.js.gz                       226.51kb / gzip: 39.33kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/hi-sGRx-F94.js.gz                       227.05kb / gzip: 40.05kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/ig-Trpi6Z_A.js.gz                       131.94kb / gzip: 32.51kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/is-Cm2OIMFe.js.gz                       127.33kb / gzip: 34.60kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/it-CPK3o1cz.js.gz                       132.87kb / gzip: 33.76kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/ja-BMfUoVDX.js.gz                       144.82kb / gzip: 36.37kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/kk-B9JdsFqE.js.gz                       176.59kb / gzip: 38.03kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/kl-BGZweLM2.js.gz                       145.65kb / gzip: 35.36kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/ko-BbJ1QPeo.js.gz                       133.35kb / gzip: 34.75kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/iu-C4_g5qIm.js.gz                       223.02kb / gzip: 40.70kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/ky-xJ6NHbFE.js.gz                       183.78kb / gzip: 39.34kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/lb-DGDp5auQ.js.gz                       129.94kb / gzip: 34.50kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/ku-CyvzPTvO.js.gz                       129.18kb / gzip: 34.71kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/kn-C0upJwSn.js.gz                       252.50kb / gzip: 39.94kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/km-CQVkK6Z_.js.gz                       248.61kb / gzip: 39.12kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/la-BsixtOK5.js.gz                       117.81kb / gzip: 33.74kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/ln-BJ6deUdc.js.gz                       134.67kb / gzip: 34.39kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/lg-CdSNTT-s.js.gz                       132.92kb / gzip: 34.28kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/lt-BHj5qZWI.js.gz                       128.53kb / gzip: 34.95kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/lv-iCt2RtFq.js.gz                       129.35kb / gzip: 34.57kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/mg-Bn3cJenn.js.gz                       131.35kb / gzip: 33.17kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/lo-CFEsMv6O.js.gz                       231.42kb / gzip: 39.40kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/mk-BaCmK2FQ.js.gz                       188.16kb / gzip: 38.77kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/ka-CXkta65V.js.gz                       253.77kb / gzip: 40.08kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/mn-D3l-xSI_.js.gz                       181.58kb / gzip: 38.06kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/mt-Bj2oUceH.js.gz                       130.35kb / gzip: 34.21kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/nl-QVCt04kV.js.gz                       128.97kb / gzip: 34.39kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/no-DfE8WVYz.js.gz                       120.42kb / gzip: 32.91kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/ny-B9OHFRcQ.js.gz                       124.03kb / gzip: 32.22kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/mr-CjaDF34A.js.gz                       225.59kb / gzip: 39.21kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/pl-DcbJGiTw.js.gz                       129.60kb / gzip: 35.31kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/ne-CtnkDARJ.js.gz                       233.35kb / gzip: 38.70kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/pt-DfjCIb0J.js.gz                       128.79kb / gzip: 33.33kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/ml-BpesXcJa.js.gz                       266.46kb / gzip: 41.77kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/pa-DtZKmho4.js.gz                       227.50kb / gzip: 40.08kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/ps-cTugHlmm.js.gz                       163.57kb / gzip: 36.06kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/sk-Cf186qnJ.js.gz                       127.82kb / gzip: 35.50kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/ro-BocRGkos.js.gz                       130.01kb / gzip: 34.24kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/sd-BYnwN7LH.js.gz                       162.56kb / gzip: 36.20kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/ru-BdWgUu-j.js.gz                       185.81kb / gzip: 40.18kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/sl-CY4s4t-K.js.gz                       123.04kb / gzip: 33.89kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/sn-DABjVGVc.js.gz                       122.01kb / gzip: 32.95kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/so-hmneMCm2.js.gz                       131.69kb / gzip: 34.51kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/Settings-DB8DAC-v.js.gz                 187.25kb / gzip: 39.23kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/sq-CF4hm0h0.js.gz                       131.54kb / gzip: 34.31kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/si-CEkE2PJV.js.gz                       229.16kb / gzip: 39.43kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/my-BRuhNvFp.js.gz                       282.53kb / gzip: 42.33kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/su-DbFXJ4Kf.js.gz                       119.89kb / gzip: 32.57kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/sv-CIt2ETPF.js.gz                       125.42kb / gzip: 33.51kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/st-CzMFB2Wj.js.gz                       128.71kb / gzip: 32.92kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/sr-BqksHlP1.js.gz                       178.38kb / gzip: 39.00kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/tg-CJjxY1tg.js.gz                       191.57kb / gzip: 39.30kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/tl-BZM87NB1.js.gz                       134.30kb / gzip: 33.23kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/tk-BgO5m7sP.js.gz                       126.93kb / gzip: 33.78kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/uk-CfVWMGWs.js.gz                       183.34kb / gzip: 39.87kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/th-DbiB0MX4.js.gz                       228.26kb / gzip: 38.42kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/tr-DSvpQXu7.js.gz                       122.83kb / gzip: 33.58kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/uz-CH4MJVZe.js.gz                       128.46kb / gzip: 33.67kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/vi-B6LxwGIN.js.gz                       143.36kb / gzip: 34.03kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/ug-Dv6CGO5A.js.gz                       179.09kb / gzip: 37.09kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/ta-ChdMtO6q.js.gz                       267.91kb / gzip: 40.17kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/xh-B_ipXAqs.js.gz                       127.95kb / gzip: 33.68kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/yo-C3qE0fiO.js.gz                       127.80kb / gzip: 33.02kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/zu-BGNbpn7K.js.gz                       128.87kb / gzip: 33.38kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/ur-BSamEHEi.js.gz                       171.70kb / gzip: 36.29kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/zh-BUB5nE16.js.gz                       107.32kb / gzip: 33.17kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/te-BKsd6f1Q.js.gz                       254.73kb / gzip: 40.53kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/yi-BCfxg_05.js.gz                       186.62kb / gzip: 37.06kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/Tables-DS-qxbxK.js.gz                   227.99kb / gzip: 54.14kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/index-DD6N7nvp.js.gz                    389.56kb / gzip: 93.84kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/vendor-DhDztKqB.js.gz                   4759.67kb / gzip: 1413.35kb
+
+
+
+✨ [vite-plugin-compression]:algorithm=brotliCompress - compressed file successfully: 
+dist/H:/My Work/Naruto/New folder (2)/project/assets/BillView-BLYPKYVF.js.br                 23.44kb / brotliCompress: 4.94kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/Costs-s4aJ4w0x.js.br                    95.94kb / brotliCompress: 13.48kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/CustomerMenu-CEK3LFPA.js.br             15.77kb / brotliCompress: 3.19kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/ConsumptionReport-DPDLd7pf.js.br        37.53kb / brotliCompress: 7.82kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/Dashboard-CMaD_prT.js.br                16.83kb / brotliCompress: 3.39kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/Costs-DPs7vNCC.css.br                   46.58kb / brotliCompress: 6.82kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/GamingDevices-CakxKhni.js.br            79.04kb / brotliCompress: 12.00kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/Inventory-922TYH6P.js.br                102.10kb / brotliCompress: 12.43kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/KitchenDisplay-BF5LbRw_.js.br           16.42kb / brotliCompress: 4.19kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/Menu-koJgXHln.js.br                     70.95kb / brotliCompress: 12.08kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/NotificationManagement-B7OSE6eH.js.br   10.62kb / brotliCompress: 2.26kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/PartialPaymentModal-Ks_mrZqH.js.br      14.13kb / brotliCompress: 3.11kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/PaymentManagementModal-Bcy-G2vB.js.br   30.37kb / brotliCompress: 6.68kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/Reports-CdoP5Zn0.js.br                  72.02kb / brotliCompress: 10.83kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/SoldItems-CWf_6MMc.js.br                20.83kb / brotliCompress: 3.72kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/Warehouse-CSokcuAk.js.br                78.39kb / brotliCompress: 10.66kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/Users-BCgLu-1T.js.br                    80.28kb / brotliCompress: 11.03kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/vendor-DupzR0sa.css.br                  13.92kb / brotliCompress: 2.27kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/af-DUIleAoV.js.br                       125.48kb / brotliCompress: 28.40kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/az-DQ8ZpBSx.js.br                       130.99kb / brotliCompress: 29.05kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/be-BmrcaJpw.js.br                       184.56kb / brotliCompress: 31.87kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/bs-D_LTwL9n.js.br                       123.80kb / brotliCompress: 28.84kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/bg-DNxicNoR.js.br                       187.54kb / brotliCompress: 31.03kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/ca-bN2yR5J1.js.br                       131.93kb / brotliCompress: 28.39kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/ceb-HkD9LyP6.js.br                      134.43kb / brotliCompress: 28.00kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/co-BekJLvz0.js.br                       132.56kb / brotliCompress: 28.79kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/bn-DaMaWLfm.js.br                       232.65kb / brotliCompress: 30.69kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/da-CQwoCViw.js.br                       122.95kb / brotliCompress: 28.27kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/cs-Dok0mky4.js.br                       127.97kb / brotliCompress: 29.82kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/am-a2ixjU8d.js.br                       169.94kb / brotliCompress: 30.74kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/cy-Brc0TNKT.js.br                       124.95kb / brotliCompress: 28.32kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/en-Dkk2uxTK.js.br                       137.69kb / brotliCompress: 30.06kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/de-DBH_bje2.js.br                       137.11kb / brotliCompress: 29.81kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/eo-D-fmeRL0.js.br                       121.38kb / brotliCompress: 28.07kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/es-4N1IVKvx.js.br                       132.43kb / brotliCompress: 28.40kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/et-BfCH1Y84.js.br                       119.68kb / brotliCompress: 28.49kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/eu-BZ370Avr.js.br                       126.77kb / brotliCompress: 28.07kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/fa-Cch_iVwH.js.br                       160.65kb / brotliCompress: 28.38kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/fr-mVjZVX8Q.js.br                       151.43kb / brotliCompress: 31.77kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/fi-_iEZhWPs.js.br                       124.56kb / brotliCompress: 28.89kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/ga-UJwU2lhL.js.br                       132.44kb / brotliCompress: 29.35kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/fy-CCNj_pgO.js.br                       127.88kb / brotliCompress: 29.06kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/gd-CGIgLfbf.js.br                       141.47kb / brotliCompress: 29.34kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/haw-D-ghZfPE.js.br                      131.15kb / brotliCompress: 26.75kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/gl-3SOFj0SZ.js.br                       130.41kb / brotliCompress: 27.85kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/gu-BnFwbnHa.js.br                       226.51kb / brotliCompress: 31.03kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/ha-DiUHj3QQ.js.br                       119.95kb / brotliCompress: 27.04kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/he-D7mKP8XT.js.br                       142.19kb / brotliCompress: 27.98kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/hr-DDmxHrIG.js.br                       123.83kb / brotliCompress: 28.80kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/hu-N4UTyNE9.js.br                       135.77kb / brotliCompress: 30.29kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/hi-sGRx-F94.js.br                       227.05kb / brotliCompress: 31.25kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/ht-C_Piz-jG.js.br                       118.03kb / brotliCompress: 26.90kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/ig-Trpi6Z_A.js.br                       131.94kb / brotliCompress: 27.48kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/hy-NYy-54bU.js.br                       189.51kb / brotliCompress: 31.08kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/id-CvoGUuqO.js.br                       122.66kb / brotliCompress: 27.02kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/is-Cm2OIMFe.js.br                       127.33kb / brotliCompress: 29.27kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/it-CPK3o1cz.js.br                       132.87kb / brotliCompress: 28.53kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/ja-BMfUoVDX.js.br                       144.82kb / brotliCompress: 29.11kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/jv-WykUA0Mr.js.br                       117.65kb / brotliCompress: 26.68kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/kl-BGZweLM2.js.br                       145.65kb / brotliCompress: 29.75kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/ko-BbJ1QPeo.js.br                       133.35kb / brotliCompress: 28.19kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/kk-B9JdsFqE.js.br                       176.59kb / brotliCompress: 30.42kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/ka-CXkta65V.js.br                       253.77kb / brotliCompress: 31.19kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/ku-CyvzPTvO.js.br                       129.18kb / brotliCompress: 29.24kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/kn-C0upJwSn.js.br                       252.50kb / brotliCompress: 31.10kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/la-BsixtOK5.js.br                       117.81kb / brotliCompress: 28.92kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/km-CQVkK6Z_.js.br                       248.61kb / brotliCompress: 30.36kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/index-ggIuvHJC.css.br                   202.96kb / brotliCompress: 21.19kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/ky-xJ6NHbFE.js.br                       183.78kb / brotliCompress: 31.32kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/ln-BJ6deUdc.js.br                       134.67kb / brotliCompress: 29.03kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/lb-DGDp5auQ.js.br                       129.94kb / brotliCompress: 29.22kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/lg-CdSNTT-s.js.br                       132.92kb / brotliCompress: 28.98kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/mi-DwMTFltL.js.br                       124.29kb / brotliCompress: 27.05kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/lt-BHj5qZWI.js.br                       128.53kb / brotliCompress: 29.55kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/lv-iCt2RtFq.js.br                       129.35kb / brotliCompress: 29.23kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/lo-CFEsMv6O.js.br                       231.42kb / brotliCompress: 30.79kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/mg-Bn3cJenn.js.br                       131.35kb / brotliCompress: 27.86kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/mt-Bj2oUceH.js.br                       130.35kb / brotliCompress: 29.02kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/mk-BaCmK2FQ.js.br                       188.16kb / brotliCompress: 30.80kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/mn-D3l-xSI_.js.br                       181.58kb / brotliCompress: 30.39kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/ms-BH36_mex.js.br                       121.42kb / brotliCompress: 26.66kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/ar-DuWX2zXA.js.br                       177.44kb / brotliCompress: 31.20kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/no-DfE8WVYz.js.br                       120.42kb / brotliCompress: 28.00kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/nl-QVCt04kV.js.br                       128.97kb / brotliCompress: 29.14kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/mr-CjaDF34A.js.br                       225.59kb / brotliCompress: 30.94kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/ny-B9OHFRcQ.js.br                       124.03kb / brotliCompress: 27.41kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/Payroll-Dkt5fMu9.js.br                  156.00kb / brotliCompress: 19.75kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/pl-DcbJGiTw.js.br                       129.60kb / brotliCompress: 29.89kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/ne-CtnkDARJ.js.br                       233.35kb / brotliCompress: 30.53kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/pa-DtZKmho4.js.br                       227.50kb / brotliCompress: 31.45kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/ps-cTugHlmm.js.br                       163.57kb / brotliCompress: 29.26kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/pt-DfjCIb0J.js.br                       128.79kb / brotliCompress: 28.09kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/sd-BYnwN7LH.js.br                       162.56kb / brotliCompress: 29.28kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/rw-Btgdxydd.js.br                       122.48kb / brotliCompress: 27.10kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/ru-BdWgUu-j.js.br                       185.81kb / brotliCompress: 31.71kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/ro-BocRGkos.js.br                       130.01kb / brotliCompress: 28.98kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/Settings-DB8DAC-v.js.br                 187.25kb / brotliCompress: 30.81kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/sk-Cf186qnJ.js.br                       127.82kb / brotliCompress: 29.91kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/sn-DABjVGVc.js.br                       122.01kb / brotliCompress: 28.10kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/si-CEkE2PJV.js.br                       229.16kb / brotliCompress: 30.91kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/sl-CY4s4t-K.js.br                       123.04kb / brotliCompress: 28.80kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/so-hmneMCm2.js.br                       131.69kb / brotliCompress: 29.31kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/sq-CF4hm0h0.js.br                       131.54kb / brotliCompress: 28.97kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/sv-CIt2ETPF.js.br                       125.42kb / brotliCompress: 28.38kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/su-DbFXJ4Kf.js.br                       119.89kb / brotliCompress: 27.81kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/st-CzMFB2Wj.js.br                       128.71kb / brotliCompress: 27.93kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/sr-BqksHlP1.js.br                       178.38kb / brotliCompress: 31.16kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/sw-DYSTM-No.js.br                       120.85kb / brotliCompress: 27.15kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/tg-CJjxY1tg.js.br                       191.57kb / brotliCompress: 31.09kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/te-BKsd6f1Q.js.br                       254.73kb / brotliCompress: 31.44kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/tk-BgO5m7sP.js.br                       126.93kb / brotliCompress: 28.51kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/tr-DSvpQXu7.js.br                       122.83kb / brotliCompress: 28.45kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/tl-BZM87NB1.js.br                       134.30kb / brotliCompress: 27.94kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/th-DbiB0MX4.js.br                       228.26kb / brotliCompress: 30.24kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/ug-Dv6CGO5A.js.br                       179.09kb / brotliCompress: 29.71kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/uk-CfVWMGWs.js.br                       183.34kb / brotliCompress: 31.65kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/uz-CH4MJVZe.js.br                       128.46kb / brotliCompress: 28.39kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/ur-BSamEHEi.js.br                       171.70kb / brotliCompress: 29.38kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/vi-B6LxwGIN.js.br                       143.36kb / brotliCompress: 28.22kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/xh-B_ipXAqs.js.br                       127.95kb / brotliCompress: 28.58kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/yo-C3qE0fiO.js.br                       127.80kb / brotliCompress: 27.99kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/zh-BUB5nE16.js.br                       107.32kb / brotliCompress: 26.41kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/ta-ChdMtO6q.js.br                       267.91kb / brotliCompress: 31.21kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/dv-CwWJu4ci.js.br                       218.02kb / brotliCompress: 32.03kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/el-B4BS3xBr.js.br                       199.38kb / brotliCompress: 32.57kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/iu-C4_g5qIm.js.br                       223.02kb / brotliCompress: 32.10kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/Tables-DS-qxbxK.js.br                   227.99kb / brotliCompress: 43.74kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/ml-BpesXcJa.js.br                       266.46kb / brotliCompress: 32.12kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/zu-BGNbpn7K.js.br                       128.87kb / brotliCompress: 28.23kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/my-BRuhNvFp.js.br                       282.53kb / brotliCompress: 32.46kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/index-DD6N7nvp.js.br                    389.56kb / brotliCompress: 74.03kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/yi-BCfxg_05.js.br                       186.62kb / brotliCompress: 29.81kb
+dist/H:/My Work/Naruto/New folder (2)/project/assets/vendor-DhDztKqB.js.br                   4759.67kb / brotliCompress: 1110.85kb
+
+
+[prepare] Copying dist/ ...
+[prepare] Copying server/ (excluding node_modules, tests, docs, secrets)...
+[prepare] Copying shared/ ...
+[prepare] Installing production dependencies into server bundle (from server/package.json)...
+npm warn deprecated osenv@0.1.5: This package is no longer supported.
+npm warn deprecated inflight@1.0.6: This module is not supported, and leaks memory. Do not use it. Check out lru-cache if you want a good and tested way to coalesce async requests by a key value, which is much more comprehensive and powerful.
+npm warn deprecated lodash.isequal@4.5.0: This package is deprecated. Use require('node:util').isDeepStrictEqual instead.
+npm warn deprecated rimraf@2.7.1: Rimraf versions prior to v4 are no longer supported
+npm warn deprecated npmlog@4.1.2: This package is no longer supported.
+npm warn deprecated har-validator@5.1.5: this library is no longer supported
+npm warn deprecated glob@7.2.3: Old versions of glob are not supported, and contain widely publicized security vulnerabilities, which have been fixed in the current version. Please update. Support for old versions may be purchased (at exorbitant rates) by contacting i@izs.me
+npm warn deprecated are-we-there-yet@1.1.7: This package is no longer supported.
+npm warn deprecated multer@1.4.5-lts.2: Multer 1.x is impacted by a number of vulnerabilities, which have been patched in 2.x. You should upgrade to the latest 2.x version.
+npm warn deprecated gauge@2.7.4: This package is no longer supported.
+npm warn deprecated uuid@3.4.0: uuid@10 and below is no longer supported.  For ESM codebases, update to uuid@latest.  For CommonJS codebases, use uuid@11 (but be aware this version will likely be deprecated in 2028).
+npm warn deprecated request@2.88.2: request has been deprecated, see https://github.com/request/request/issues/3142
+npm warn deprecated fstream@1.0.12: This package is no longer supported.
+npm warn deprecated tar@4.4.19: Old versions of tar are not supported, and contain widely publicized security vulnerabilities, which have been fixed in the current version. Please update. Support for old versions may be purchased (at exorbitant rates) by contacting i@izs.me
+npm warn deprecated jpeg-exif@1.1.4: Package no longer supported. Contact Support at https://www.npmjs.com/support for more info.
+npm warn deprecated node-pre-gyp@0.14.0: Please upgrade to @mapbox/node-pre-gyp: the non-scoped node-pre-gyp package is deprecated and only the @mapbox scoped package will recieve updates in the future
+npm warn deprecated crypto-js@4.2.0: Active development of CryptoJS has been discontinued. This library is no longer maintained.
+npm warn deprecated uuid@8.3.2: uuid@10 and below is no longer supported.  For ESM codebases, update to uuid@latest.  For CommonJS codebases, use uuid@11 (but be aware this version will likely be deprecated in 2028).
+npm warn deprecated uuid@8.3.2: uuid@10 and below is no longer supported.  For ESM codebases, update to uuid@latest.  For CommonJS codebases, use uuid@11 (but be aware this version will likely be deprecated in 2028).
+
+added 520 packages, and audited 521 packages in 2m
+
+51 packages are looking for funding
+  run `npm fund` for details
+
+16 vulnerabilities (8 moderate, 4 high, 4 critical)
+
+To address issues that do not require attention, run:
+  npm audit fix
+
+To address all issues (including breaking changes), run:
+  npm audit fix --force
+
+Run `npm audit` for details.
+[prepare] Generating production .env ...
+[prepare] Email credentials found in source .env and encrypted for production
+[prepare] Bundling portable MongoDB ...
+[prepare] Extracting MongoDB (large archive, please wait)...
+[prepare] Bundled MongoDB -> H:\My Work\Naruto\New folder (2)\project\desktop\prepared\mongo\bin
+[prepare] Done in 350.8s -> H:\My Work\Naruto\New folder (2)\project\desktop\prepared
+  • electron-builder  version=24.13.3 os=10.0.26100
+  • loaded configuration  file=package.json ("build" field)
+  • packaging       platform=win32 arch=x64 electron=31.7.7 appOutDir=release\win-unpacked
+  • asar usage is disabled — this is strongly not recommended  solution=enable asar and use asarUnpack to unpack files that must be externally available
+  • asar usage is disabled — this is strongly not recommended  solution=enable asar and use asarUnpack to unpack files that must be externally available
+  • building        target=nsis file=release\MTE Systems Setup 1.0.0.exe archs=x64 oneClick=false perMachine=false
+  • building block map  blockMapFile=release\MTE Systems Setup 1.0.0.exe.blockmap

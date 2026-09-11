@@ -1540,7 +1540,8 @@
       "password": "password",
       "notifications": "Notifications",
       "general": "general",
-      "organization": "Facility"
+      "organization": "Facility",
+      "myNotifications": "My notifications"
     },
     "profile": {
       "title": "Profile",
@@ -4155,7 +4156,18 @@
     "messages": {
       "loading": "Loading...",
       "noNotifications": "No notifications"
-    }
+    },
+    "muteToastsTitle": "Mute alerts",
+    "muteToasts": {
+      "order": "Orders",
+      "bill": "Bills",
+      "session": "Sessions",
+      "table": "Tables"
+    },
+    "seenBy": "Seen by:",
+    "kitchenAlarmAck": "Acknowledged — stop alarm",
+    "kitchenAlarm": "Kitchen alarm",
+    "kitchenAlarmHint": "Repeating sound for every new order until acknowledged (kitchen screens)"
   },
   "notificationManagement": {
     "title": "Manage notifications",
@@ -4366,5 +4378,55 @@
     "testFail": "Cannot reach server",
     "save": "Save & reload",
     "reset": "Back to automatic"
+  },
+  "activity": {
+    "order": {
+      "created": "New order {{number}}",
+      "updated": "Order {{number}} updated",
+      "deleted": "Order {{number}} deleted",
+      "ready": "Order {{number}} is ready",
+      "delivered": "Order {{number}} delivered"
+    },
+    "bill": {
+      "created": "New bill {{number}}",
+      "updated": "Bill {{number}} updated",
+      "deleted": "Bill {{number}} deleted",
+      "paid": "Bill {{number}} paid in full",
+      "partial": "Partial payment for bill {{number}}",
+      "transferred": "Bill {{number}} moved from table {{from}} to table {{table}}"
+    },
+    "session": {
+      "started": "Session started on {{device}}",
+      "ended": "Session ended on {{device}}",
+      "updated": "Session updated on {{device}}"
+    },
+    "table": {
+      "created": "Table {{number}} added",
+      "updated": "Table {{number}} updated",
+      "deleted": "Table {{number}} deleted"
+    },
+    "tableWord": "Table",
+    "billWord": "Bill",
+    "phoneTag": "Phone"
+  },
+  "notifPrefs": {
+    "title": "User notifications",
+    "selfTitle": "My notifications",
+    "toastTitle": "Instant alerts by type",
+    "otherTitle": "Other",
+    "kinds": {
+      "order": "Orders",
+      "bill": "Bills",
+      "session": "Sessions",
+      "table": "Tables",
+      "inventory": "Inventory",
+      "system": "System"
+    },
+    "sound": "Sound",
+    "kitchenAlarm": "Kitchen alarm",
+    "save": "Save",
+    "saved": "Notification settings saved",
+    "loadError": "Could not load notification settings",
+    "selfDesc": "Your personal instant-alert, sound and kitchen-alarm preferences — follow you on any device"
   }
 }

@@ -1,5 +1,6 @@
 import { API_BASE_URL as RESOLVED_API_BASE_URL, isDesktopApp } from '../../utils/apiBase';
 import { getInstanceId } from '../../utils/instanceId';
+import { isMobileDevice } from '../../utils/deviceDetect';
 import { safeGet } from '../../utils/safeStorage';
 
 // Desktop app: use the page origin (127.0.0.1) - Chromium cannot reach

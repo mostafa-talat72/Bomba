@@ -201,6 +201,19 @@ const userSchema = new mongoose.Schema(
                 },
                 default: "ar",
             },
+            // إعدادات الإشعارات لكل مستخدم (تتبعه على أي جهاز؛ الغائب = مفعّل).
+            notifications: {
+                toastKinds: {
+                    order: { type: Boolean, default: true },
+                    bill: { type: Boolean, default: true },
+                    session: { type: Boolean, default: true },
+                    table: { type: Boolean, default: true },
+                    inventory: { type: Boolean, default: true },
+                    system: { type: Boolean, default: true },
+                },
+                sound: { type: Boolean, default: true },
+                kitchenAlarm: { type: Boolean, default: false },
+            },
         },
     },
     {

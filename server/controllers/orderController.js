@@ -11,6 +11,7 @@ import { createTombstone } from "../utils/tombstoneHelper.js";
 import mongoose from "mongoose";
 import performanceMetrics from "../utils/performanceMetrics.js";
 import { getInstanceId } from "../utils/instanceId.js";
+import { actorFromReq } from "../utils/actorInfo.js";
 import { writeToAtlas } from "../utils/atlasWrite.js";
 import { sameId } from "../utils/idUtils.js";
 import {
@@ -1043,9 +1044,11 @@ export const createOrder = async (req, res) => {
         // in the background job, leaving other clients with a stale bill for
         // several seconds after the order had already appeared.
         let realtimeBill = null;
+        let billToUseNumber = null;
         if (billToUse) {
             try {
                 const billDoc = await Bill.findById(billToUse);
+                if (billDoc) billToUseNumber = billDoc.billNumber || null;
                 if (billDoc) {
                     if (!billDoc.orders.some((orderId) => String(orderId) === String(order._id))) {
                         billDoc.orders.push(order._id);
@@ -1065,7 +1068,18 @@ export const createOrder = async (req, res) => {
         // Fire-and-forget Atlas write
         writeToAtlas('orders', 'upsert', order.toObject ? order.toObject() : order, { _id: order._id });
 
-        // Prepare minimal response data immediately
+        // Populate table for response if needed (قبل بناء responseData لاستخدامه في البدائل)
+        let responseTable = order.table;
+        if (table) {
+            const tableDoc = await Table.findById(table).select('number name').lean();
+            if (tableDoc) responseTable = tableDoc;
+        }
+
+        // Prepare minimal response data immediately — مكتملة للتوست والإشعارات:
+        // اسم العميل (أو الطاولة كبديل — لا undefined) + الفاتورة برقمها.
+        const tableLabel = responseTable && typeof responseTable === 'object' && (responseTable.number ?? responseTable.name)
+            ? `طاولة ${responseTable.number ?? responseTable.name}`
+            : null;
         const responseData = {
             _id: order._id,
             orderNumber: order.orderNumber,
@@ -1073,16 +1087,12 @@ export const createOrder = async (req, res) => {
             items: order.items,
             subtotal: order.subtotal,
             finalAmount: order.finalAmount,
-            table: order.table,
+            table: responseTable,
+            customerName: order.customerName || tableLabel || order.orderNumber,
+            bill: billToUse ? { _id: billToUse, billNumber: billToUseNumber } : (order.bill || null),
             organization: order.organization,
             createdAt: order.createdAt,
         };
-
-        // Populate table for response if needed
-        if (table) {
-            const tableDoc = await Table.findById(table).select('number name').lean();
-            responseData.table = tableDoc;
-        }
 
         // ── Real-time emit (<100ms) — immediate, before response, keep DB writes immediate ──
         if (req.io) {
@@ -1095,7 +1105,7 @@ export const createOrder = async (req, res) => {
                 // also via helper for legacy hyphen events
                 try { req.io.notifyOrderUpdate("created", responseData, req.user.organization); } catch {}
                 if (realtimeBill) {
-                    try { req.io.notifyBillUpdate("updated", realtimeBill, req.user.organization); } catch {}
+                    try { req.io.notifyBillUpdate("updated", realtimeBill, req.user.organization, { silent: true }); } catch {}
                 }
                 if (table) {
                     const tblData = { tableId: table, status: 'occupied' };
@@ -1142,7 +1152,8 @@ export const createOrder = async (req, res) => {
                         "created",
                         responseData,
                         req.user._id,
-                        userLanguage
+                        userLanguage,
+                        actorFromReq(req)
                     );
                 } catch (notificationError) {
                     // Ignore notification errors
@@ -1849,7 +1860,7 @@ export const updateOrder = async (req, res) => {
                         const bdoc = await BillModel.findById(order.bill).lean();
                         if (bdoc) {
                             req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('bill:updated', bdoc);
-                            req.io.notifyBillUpdate("updated", bdoc, getOrganizationId(req.user));
+                            req.io.notifyBillUpdate("updated", bdoc, getOrganizationId(req.user), { silent: true });
                         }
                     } catch {}
                 }
@@ -2108,7 +2119,7 @@ export const deleteOrder = async (req, res) => {
                 const orgStr = String(orgId);
                 req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('order:deleted', { _id: req.params.id });
                 req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('order:updated', { _id: req.params.id, _deleted: true });
-                req.io.notifyOrderUpdate("deleted", { _id: req.params.id }, getOrganizationId(req.user));
+                req.io.notifyOrderUpdate("deleted", { _id: req.params.id, orderNumber, table: tableIdToUpdate }, getOrganizationId(req.user));
                 if (tableIdToUpdate) {
                     const tblData = { tableId: tableIdToUpdate, status: 'empty' };
                     req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('table:statusChanged', tblData);
@@ -2499,14 +2510,16 @@ export const updateOrderStatus = async (req, res) => {
                     "ready",
                     updatedOrder,
                     req.user._id,
-                    userLanguage
+                    userLanguage,
+                    actorFromReq(req)
                 );
             } else if (status === "cancelled") {
                 await NotificationService.createOrderNotification(
                     "cancelled",
                     updatedOrder,
                     req.user._id,
-                    userLanguage
+                    userLanguage,
+                    actorFromReq(req)
                 );
             }
         } catch (notificationError) {
@@ -2704,7 +2717,8 @@ export const updateOrderItemPrepared = async (req, res) => {
                     "ready",
                     updatedOrder,
                     req.user._id,
-                    userLanguage
+                    userLanguage,
+                    actorFromReq(req)
                 );
             }
         } catch (notificationError) {
@@ -2899,7 +2913,8 @@ export const deductOrderInventory = async (req, res) => {
                 "ready",
                 updatedOrder,
                 req.user._id,
-                userLanguage
+                userLanguage,
+                actorFromReq(req)
             );
         } catch (notificationError) {
             //

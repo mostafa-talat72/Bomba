@@ -3,6 +3,7 @@ import { Users as UsersIcon, Plus, Shield, User, Crown, Search, Filter, Lock, Un
 import { useTranslation } from 'react-i18next';
 import { useLanguage } from '../context/LanguageContext';
 import { useApp } from '../context/AppContext';
+import { useAuth } from '../context/AuthContext';
 import { User as UserType } from '../services/api';
 import UserCard from '../components/UserCard';
 import UserFormModal from '../components/UserFormModal';
@@ -10,6 +11,7 @@ import UserDetailsModal from '../components/UserDetailsModal';
 import UserDeleteModal from '../components/UserDeleteModal';
 import PermissionsManagerModal from '../components/PermissionsManagerModal';
 import UserStatusModal from '../components/UserStatusModal';
+import UserNotificationPrefsModal from '../components/UserNotificationPrefsModal';
 import { formatDecimal } from '../utils/formatters';
 import { API_BASE_URL } from '../utils/apiBase';
 import '../styles/users-enhancements.css';
@@ -18,6 +20,7 @@ const Users = () => {
   const { t } = useTranslation();
   const { currentLanguage, isRTL } = useLanguage();
   const { users, fetchUsers, createUser, updateUser, deleteUser, showNotification, user } = useApp();
+  const { setUser } = useAuth();
   const [showAddUser, setShowAddUser] = useState(false);
   const [showEditUser, setShowEditUser] = useState(false);
   const [showViewUser, setShowViewUser] = useState(false);
@@ -59,6 +62,8 @@ const [formData, setFormData] = useState({
   const [showStatusModal, setShowStatusModal] = useState(false);
   const [permissionsUser, setPermissionsUser] = useState<UserType | null>(null);
   const [statusUser, setStatusUser] = useState<UserType | null>(null);
+  const [notifUser, setNotifUser] = useState<UserType | null>(null);
+  const [showNotifModal, setShowNotifModal] = useState(false);
 
   const roles = [
     { id: 'admin', name: t('users.roles.admin'), icon: Crown, color: 'text-purple-600', bgColor: 'bg-purple-100', description: t('users.roles.adminDesc') },
@@ -479,6 +484,11 @@ const [formData, setFormData] = useState({
     setShowStatusModal(true);
   };
 
+  const handleManageNotifications = (target: UserType) => {
+    setNotifUser(target);
+    setShowNotifModal(true);
+  };
+
   const updateUserPermissions = async (userId: string, permissions: string[]) => {
     try {
       const response = await fetch(`${API_BASE_URL}/api/users/${userId}/permissions`, {
@@ -848,6 +858,7 @@ const [formData, setFormData] = useState({
               onDelete={handleDelete}
               onManagePermissions={handleManagePermissions}
               onChangeStatus={handleChangeStatus}
+              onManageNotifications={handleManageNotifications}
               getRoleInfo={getRoleInfo}
               getStatusColor={getStatusColor}
               getStatusText={getStatusText}
@@ -941,6 +952,27 @@ const [formData, setFormData] = useState({
         }}
         user={statusUser}
         onUpdateStatus={updateUserStatus}
+      />
+
+      {/* Per-user Notification Settings Modal */}
+      <UserNotificationPrefsModal
+        isOpen={showNotifModal}
+        userId={notifUser ? String((notifUser as any).id || (notifUser as any)._id) : null}
+        userName={(notifUser as any)?.name}
+        onClose={() => {
+          setShowNotifModal(false);
+          setNotifUser(null);
+        }}
+        showNotification={showNotification}
+        onSaved={(savedPrefs) => {
+          try {
+            const targetId = notifUser ? String((notifUser as any).id || (notifUser as any)._id) : '';
+            const meId = String((user as any)?._id || (user as any)?.id || '');
+            if (targetId && meId && targetId === meId) {
+              setUser((prev: any) => (prev ? { ...prev, preferences: { ...(prev.preferences || {}), notifications: savedPrefs } } : prev));
+            }
+          } catch {}
+        }}
       />
 
 

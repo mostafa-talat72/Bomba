@@ -1,6 +1,5 @@
 import ExcelJS from "exceljs";
 import jsPDF from "jspdf";
-import html2canvas from "html2canvas";
 import Logger from "../middleware/logger.js";
 
 // Export to Excel

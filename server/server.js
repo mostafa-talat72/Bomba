@@ -16,6 +16,7 @@ import { requestLogger, errorLogger } from "./middleware/logger.js";
 import { apiLimiter, authLimiter } from "./middleware/rateLimiter.js";
 import { performanceMonitor } from "./middleware/performanceMonitor.js";
 import { setupSocketIO } from "./socket/socketHandler.js";
+import { setNotificationIO } from "./services/notificationService.js";
 import { startAutoOrderCompleter } from "./services/autoOrderCompleter.js";
 import { initializeScheduler } from "./utils/scheduler.js";
 import { fixAllTableStatuses } from "./utils/tableUtils.js";
@@ -23,6 +24,7 @@ import "./utils/organization.js";
 import Logger from "./middleware/logger.js";
 import jwt from "jsonwebtoken";
 import Bill from "./models/Bill.js";
+import User from "./models/User.js";
 import { validateEnv } from "./config/envValidator.js";
 
 // Sync system imports
@@ -577,7 +579,10 @@ const io = new Server(server, {
 });
 
 // [SECURITY] Socket.IO authentication middleware
-io.use((socket, next) => {
+// NOTE: JWT carries {id} only — role/organization are resolved from DB here.
+// Without this, sockets join NO org room and receive ZERO room events
+// (notifications/activity/data realtime silently dead while HTTP keeps working).
+io.use(async (socket, next) => {
     const token = socket.handshake.auth?.token || socket.handshake.query?.token;
     if (!token) {
         return next(new Error("Authentication required"));
@@ -585,8 +590,22 @@ io.use((socket, next) => {
     try {
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
         socket.data.userId = decoded.id;
-        socket.data.role = decoded.role;
-        socket.data.organization = decoded.organization;
+        let role = decoded.role || null;
+        let organization = decoded.organization || null;
+        try {
+            const dbUser = await User.findById(decoded.id).select("role organization status").lean();
+            if (dbUser) {
+                if (dbUser.status && dbUser.status !== "active") {
+                    return next(new Error("Account inactive"));
+                }
+                role = dbUser.role || role;
+                const org = dbUser.organization;
+                if (org) organization = org._id ? String(org._id) : String(org);
+            }
+        } catch {}
+        socket.data.role = role;
+        socket.data.organization = organization;
+        console.log(`[socket] auth ${socket.id} role=${role || "?"} org=${organization || "none"}`);
         next();
     } catch (err) {
         next(new Error("Invalid token"));
@@ -737,6 +756,8 @@ app.use("/organizations", express.static("public/organizations"));
 
 // Socket.IO setup
 setupSocketIO(io);
+// حقن مرجع البث في خدمة الإشعارات (إشعارات لحظية لكل إجراء)
+setNotificationIO(io);
 app.use((req, res, next) => {
     req.io = io;
     next();

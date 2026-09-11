@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import ModalPortal from './ModalPortal';
 import { Bell, X, Check, Trash2, AlertCircle, Info, CheckCircle, Clock } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import NotificationSound from './NotificationSound';
@@ -45,9 +46,10 @@ const NotificationCenter: React.FC = () => {
     markAllNotificationsAsRead,
     deleteNotification,
     user,
+    users,
     notifications, // استخدم notifications من context
     forceRefreshNotifications,
-  } = useApp();
+  } = useApp() as any;
 
   // Helper function to format numbers based on language
   const formatNumber = (num: number) => {
@@ -90,6 +92,40 @@ const NotificationCenter: React.FC = () => {
     }
   });
   const [isMarkingAllAsRead, setIsMarkingAllAsRead] = useState(false);
+  // كتم تنبيهات النشاط اللحظية حسب الفئة (لهذا الجهاز فقط) — نسخة للعرض الفوري.
+  const [mutedKinds, setMutedKinds] = useState<Record<string, boolean>>(() => {
+    try {
+      return JSON.parse(localStorage.getItem('notificationSettings') || '{}')?.mutedActivityKinds || {};
+    } catch {
+      return {};
+    }
+  });
+  const [kitchenAlarmMode, setKitchenAlarmMode] = useState<boolean>(() => {
+    try {
+      return JSON.parse(localStorage.getItem('notificationSettings') || '{}')?.kitchenAlarmMode === true;
+    } catch {
+      return false;
+    }
+  });
+  const toggleKitchenAlarmMode = (): void => {
+    try {
+      const settings = JSON.parse(localStorage.getItem('notificationSettings') || '{}');
+      const next = !(settings?.kitchenAlarmMode === true);
+      localStorage.setItem('notificationSettings', JSON.stringify({ ...settings, kitchenAlarmMode: next }));
+      setKitchenAlarmMode(next);
+    } catch {}
+  };
+  const isActivityKindMuted = (kind: string): boolean => mutedKinds?.[kind] === true;
+  const toggleActivityKindMuted = (kind: string): void => {
+    try {
+      const settings = JSON.parse(localStorage.getItem('notificationSettings') || '{}');
+      const next = { ...(settings?.mutedActivityKinds || {}) };
+      if (next[kind]) delete next[kind];
+      else next[kind] = true;
+      localStorage.setItem('notificationSettings', JSON.stringify({ ...settings, mutedActivityKinds: next }));
+      setMutedKinds(next);
+    } catch {}
+  };
 
   // احسب unreadCount دائماً من notifications في context
   const unreadCount = notifications.filter(n => !n.readBy.some((read: NotificationRead) => read.user === user?.id)).length;
@@ -364,12 +400,12 @@ const NotificationCenter: React.FC = () => {
         )}
       </button>
 
-      {/* Notification Panel */}
+      {/* Notification Panel — عبر Portal ليفلت كل سياقات التكديس (طاولات/مودالات) ويظهر في الأعلى دائماً */}
       {isOpen && (
-        <>
+        <ModalPortal>
           {/* Backdrop */}
           <div
-            className="fixed inset-0 bg-black bg-opacity-50 z-[9998]"
+            className="fixed inset-0 bg-black bg-opacity-50 z-[10000]"
             onClick={async () => {
               setIsOpen(false);
               // تحديد جميع الإشعارات كمقروءة عند إغلاق النافذة
@@ -439,6 +475,40 @@ const NotificationCenter: React.FC = () => {
                 className="text-gray-400 hover:text-gray-600"
               >
                 <X className="h-4 w-4 sm:h-5 sm:w-5" />
+              </button>
+            </div>
+          </div>
+
+          {/* كتم تنبيهات النشاط اللحظية لهذا الجهاز (القائمة لا تتأثر) */}
+          <div className="px-3 sm:px-4 py-2 border-b border-gray-200 dark:border-gray-700">
+            <div className="text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-1.5">{t('notificationCenter.muteToastsTitle')}</div>
+            <div className="flex flex-wrap gap-1.5">
+              {(['order', 'bill', 'session', 'table'] as const).map((kind) => {
+                const muted = isActivityKindMuted(kind);
+                return (
+                  <button
+                    key={kind}
+                    onClick={() => toggleActivityKindMuted(kind)}
+                    className={`text-[11px] font-bold rounded-full px-2.5 py-1 border transition-colors ${
+                      muted
+                        ? 'bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400 border-gray-300 dark:border-gray-600 line-through'
+                        : 'bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-300 border-orange-200 dark:border-orange-800'
+                    }`}
+                  >
+                    {t(`notificationCenter.muteToasts.${kind}`)}
+                  </button>
+                );
+              })}
+              <button
+                onClick={toggleKitchenAlarmMode}
+                title={t('notificationCenter.kitchenAlarmHint')}
+                className={`text-[11px] font-bold rounded-full px-2.5 py-1 border transition-colors ${
+                  kitchenAlarmMode
+                    ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 border-red-300 dark:border-red-700'
+                    : 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 border-gray-300 dark:border-gray-600'
+                }`}
+              >
+                🔔 {t('notificationCenter.kitchenAlarm')}
               </button>
             </div>
           </div>
@@ -589,6 +659,20 @@ const NotificationCenter: React.FC = () => {
                       }`}>
                         {getNotificationText(notification, 'message')}
                       </p>
+                      {((notification.metadata as any)?.tableNumber !== null && (notification.metadata as any)?.tableNumber !== undefined) ||
+                       (notification.metadata as any)?.billNumber || (notification.metadata as any)?.deviceName ? (
+                        <div className="flex flex-wrap gap-1.5 mt-1.5">
+                          {(notification.metadata as any)?.tableNumber !== null && (notification.metadata as any)?.tableNumber !== undefined && (
+                            <span className="text-[11px] font-bold bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 rounded-full px-2 py-0.5">🪑 {t('activity.tableWord')} {(notification.metadata as any).tableNumber}</span>
+                          )}
+                          {(notification.metadata as any)?.billNumber && (
+                            <span className="text-[11px] font-bold bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 rounded-full px-2 py-0.5">🧾 {(notification.metadata as any).billNumber}</span>
+                          )}
+                          {(notification.metadata as any)?.deviceName && (
+                            <span className="text-[11px] font-bold bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-full px-2 py-0.5">🎮 {(notification.metadata as any).deviceName}</span>
+                          )}
+                        </div>
+                      ) : null}
                       {notification.actionUrl && notification.actionText && (
                         <button
                           onClick={() => {
@@ -603,9 +687,27 @@ const NotificationCenter: React.FC = () => {
                       <div className={`flex flex-col sm:flex-row sm:items-center sm:justify-between mt-2 text-xs space-y-1 sm:space-y-0 ${
                         isUnread(notification) ? 'text-gray-700 dark:text-gray-300' : 'text-gray-500 dark:text-gray-400'
                       }`}>
-                        <span>{notification.createdBy?.name}</span>
+                        <span>{notification.createdBy?.name}{(notification.metadata as any)?.actor?.source === 'mobile' ? ' • 📱 هاتف' : ''}</span>
                         <span>{formatDateTime(notification.createdAt)}</span>
                       </div>
+                      {Array.isArray((notification as any).readBy) && (notification as any).readBy.length > 0 && (
+                        <div className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">
+                          {t('notificationCenter.seenBy')}{' '}
+                          {(() => {
+                            const names = (notification as any).readBy
+                              .map((r: any) => {
+                                const id = String(r?.user?._id || r?.user || '');
+                                const u = (users || []).find((x: any) => String(x._id || x.id) === id);
+                                return u?.name || null;
+                              })
+                              .filter(Boolean)
+                              .filter((v: string, i: number, a: string[]) => a.indexOf(v) === i);
+                            const shown = names.slice(0, 3).join('، ');
+                            const extra = (notification as any).readBy.length - names.slice(0, 3).length;
+                            return shown + (extra > 0 ? ` +${extra}` : '');
+                          })()}
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -637,7 +739,7 @@ const NotificationCenter: React.FC = () => {
             </button>
           </div>
         </div>
-        </>
+        </ModalPortal>
       )}
 
       {/* Notification Sound Component */}
@@ -645,6 +747,7 @@ const NotificationCenter: React.FC = () => {
         playSound={playSound}
         soundType={soundType}
         onSoundPlayed={() => setPlaySound(false)}
+        user={user}
       />
     </div>
   );

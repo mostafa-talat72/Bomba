@@ -266,7 +266,7 @@ body {
 	}
 }
 
-/* Notification panel responsive fixes */
+/* Notification panel responsive fixes — فوق كل المودالات (Portal على body) */
 .notification-panel {
 	position: fixed;
 	top: 50%;
@@ -276,7 +276,7 @@ body {
 	border-radius: 0.5rem;
 	box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
 	border: 1px solid #e5e7eb;
-	z-index: 9999;
+	z-index: 10001;
 	overflow: hidden;
 	animation: notificationSlideIn 0.3s ease-out;
 }

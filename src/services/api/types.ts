@@ -32,6 +32,15 @@ export interface User {
   profileImage?: string;
   useCustomPrintSettings?: boolean;
   printSettings?: Record<string, any>;
+  preferences?: {
+    theme?: string;
+    language?: string;
+    notifications?: {
+      toastKinds?: Partial<Record<'order' | 'bill' | 'session' | 'table' | 'inventory' | 'system', boolean>>;
+      sound?: boolean;
+      kitchenAlarm?: boolean;
+    };
+  };
   organizationName?: string;
   organization?: {
     _id: string;

@@ -12,6 +12,7 @@ import { getUserLocale, getUserLanguage } from "../utils/localeHelper.js";
 import { createTombstone, createTombstones } from "../utils/tombstoneHelper.js";
 import { getCustomerNameForDevice, getTableName, getSessionBillNote, getNewSessionBillNote, t } from "../utils/translations.js";
 import { getInstanceId } from "../utils/instanceId.js";
+import { actorFromReq } from "../utils/actorInfo.js";
 import { writeToAtlas, writeBatchToAtlas } from "../utils/atlasWrite.js";
 import { updateTableStatusIfNeeded } from "../utils/tableUtils.js";
 import { getId, sameId } from "../utils/idUtils.js";
@@ -888,7 +889,8 @@ const sessionController = {
                                 session,
                                 req.user._id,
                                 userLanguage,
-                                currency
+                                currency,
+                                actorFromReq(req)
                             );
                         } catch (notificationError) {
                             Logger.error(
@@ -910,7 +912,7 @@ const sessionController = {
 
                         if (req.io) {
                             try { req.io.notifySessionUpdate("started", session, getOrganizationId(req.user)); } catch (e) {}
-                            try { if (bill) req.io.notifyBillUpdate("updated", bill, getOrganizationId(req.user)); } catch (e) {}
+                            try { if (bill) req.io.notifyBillUpdate("updated", bill, getOrganizationId(req.user), { silent: true }); } catch (e) {}
                             try { req.io.notifyTableStatusUpdate({ tableId: table || null }, getOrganizationId(req.user)); } catch (e) {}
                         }
                     } catch (bgError) {
@@ -1892,7 +1894,8 @@ const sessionController = {
                             updatedSession,
                             req.user._id,
                             userLanguage,
-                            currency
+                            currency,
+                            actorFromReq(req)
                         );
                     } catch (notificationError) {
                         Logger.error(
@@ -1903,7 +1906,7 @@ const sessionController = {
 
                     if (req.io) {
                         try { req.io.notifySessionUpdate("ended", updatedSession, req.user.organization); } catch (e) {}
-                        try { if (updatedBill) req.io.notifyBillUpdate("updated", updatedBill, req.user.organization); } catch (e) {}
+                        try { if (updatedBill) req.io.notifyBillUpdate("updated", updatedBill, req.user.organization, { silent: true }); } catch (e) {}
                     }
                 } catch (bgError) {
                     Logger.error('Background tasks failed for endSession:', bgError);
@@ -2045,7 +2048,8 @@ const sessionController = {
                     session,
                     req.user._id,
                     userLanguage,
-                    currency
+                    currency,
+                    actorFromReq(req)
                 );
             } catch (notificationError) {
                 Logger.error(

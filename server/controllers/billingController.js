@@ -21,6 +21,7 @@ import { aggregateItemsWithPayments, expandAggregatedItemsForPayment } from "../
 import { getUserLanguage } from "../utils/localeHelper.js";
 import { getTableName } from "../utils/translations.js";
 import { getInstanceId } from "../utils/instanceId.js";
+import { actorFromReq } from "../utils/actorInfo.js";
 import { writeToAtlas } from "../utils/atlasWrite.js";
 import { getId, sameId } from "../utils/idUtils.js";
 import cache from "../utils/simpleCache.js";
@@ -38,7 +39,7 @@ const FAWRY_SECURE_KEY = process.env.FAWRY_SECURE_KEY || "YOUR_SECURE_KEY";
 const VALID_SUBSCRIPTION_AMOUNTS = { monthly: 299, yearly: 2999 };
 
 // ── Helper: instant <100ms emit for bills + table status, keeps DB writes immediate ──
-function emitBillUpdated(req, bill, type = "updated") {
+function emitBillUpdated(req, bill, type = "updated", opts) {
     // invalidate getBill cache (<50ms) — fire-and-forget
     try {
         const orgIdInv = getOrganizationId(req.user);
@@ -61,7 +62,7 @@ function emitBillUpdated(req, bill, type = "updated") {
         req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('bill-update', { type, bill });
         try {
             if (typeof req.io.notifyBillUpdate === "function") {
-                req.io.notifyBillUpdate(type, bill, req.user.organization);
+                req.io.notifyBillUpdate(type, bill, req.user.organization, opts);
             } else {
                 req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit(
                     type === "created" ? "bill:created" : type === "deleted" ? "bill:deleted" : "bill:updated",
@@ -721,7 +722,8 @@ export const recalculateBillTotals = async (req, res) => {
         await bill.calculateSubtotal();
         bill.updatedBy = req.user._id;
         await bill.save();
-        emitBillUpdated(req, bill);
+        // فحص صيانة (hover/فتح) — مزامنة بيانات فقط بلا توست ولا صف.
+        emitBillUpdated(req, bill, "updated", { silent: true });
         if (bill.table) {
             await updateTableStatusIfNeeded(bill.table, getOrganizationId(req.user), req.io);
         }
@@ -986,7 +988,8 @@ export const createBill = async (req, res) => {
                         bill,
                         req.user._id,
                         userLanguage,
-                        currency
+                        currency,
+                        actorFromReq(req)
                     );
                 } catch (notificationError) {
                     Logger.error("Failed to create bill notification:", notificationError);
@@ -1257,10 +1260,17 @@ export const updateBill = async (req, res) => {
                         .populate('createdBy', 'name')
                         .populate('updatedBy', 'name');
                     
-                    // Emit Socket.IO events
+                    // نقل مدمج: توست وصف واحد (نقل) بدل حذف+تحديث.
                     if (req.io) {
-                        req.io.notifyBillUpdate("deleted", { _id: oldBillId, billNumber: oldBillNumber }, getOrganizationId(req.user));
-                        req.io.notifyBillUpdate("updated", reloadedBill, getOrganizationId(req.user));
+                        try {
+                            const TableModel = (await import('../models/Table.js')).default;
+                            const oldT = oldTableId ? await TableModel.findById(oldTableId).select('number').lean() : null;
+                            const movedDoc = typeof reloadedBill.toObject === 'function' ? reloadedBill.toObject() : { ...reloadedBill };
+                            movedDoc.fromTableNumber = oldT?.number ?? null;
+                            req.io.notifyBillUpdate("transferred", movedDoc, getOrganizationId(req.user));
+                        } catch (e) {
+                            req.io.notifyBillUpdate("updated", reloadedBill, getOrganizationId(req.user));
+                        }
                     }
                     
                     Logger.info(`✅ تم دمج الفواتير بنجاح - الفاتورة النهائية: ${reloadedBill.billNumber}`);
@@ -1352,7 +1362,7 @@ export const updateBill = async (req, res) => {
         ]);
         const prevStatus = bill.status;
         const updatedBill = await bill.save();
-        emitBillUpdated(req, bill);
+        emitBillUpdated(req, bill, "updated", movedFromTableId ? { silent: true } : undefined);
 
         // Recalculate the source only after the bill no longer references it.
         if (movedFromTableId) {
@@ -1367,7 +1377,7 @@ export const updateBill = async (req, res) => {
         // Fire-and-forget Atlas write
         writeToAtlas('bills', 'upsert', updatedBill.toObject ? updatedBill.toObject() : updatedBill, { _id: updatedBill._id });
 
-        emitBillUpdated(req, updatedBill);
+        emitBillUpdated(req, updatedBill, "updated", movedFromTableId ? { silent: true } : undefined);
 
         // Prepare minimal response data
         const responseData = {
@@ -1404,7 +1414,17 @@ export const updateBill = async (req, res) => {
             try {
                 // Notify via Socket.IO
                 if (req.io) {
-                    req.io.notifyBillUpdate("updated", updatedBill, getOrganizationId(req.user));
+                    req.io.notifyBillUpdate("updated", updatedBill, getOrganizationId(req.user), movedFromTableId ? { silent: true } : undefined);
+                    // نقل بسيط (بلا دمج): توست وصف واحد بدل ثلاث تحديثات.
+                    if (movedFromTableId) {
+                        try {
+                            const TableModel2 = (await import('../models/Table.js')).default;
+                            const oldT2 = movedFromTableId ? await TableModel2.findById(movedFromTableId).select('number').lean() : null;
+                            const movedDoc = typeof updatedBill.toObject === 'function' ? updatedBill.toObject() : { ...updatedBill };
+                            movedDoc.fromTableNumber = oldT2?.number ?? null;
+                            req.io.notifyBillUpdate("transferred", movedDoc, getOrganizationId(req.user));
+                        } catch {}
+                    }
                 }
 
                 if (prevStatus !== "paid" && updatedBill.status === "paid") {
@@ -1418,7 +1438,8 @@ export const updateBill = async (req, res) => {
                             updatedBill,
                             req.user._id,
                             userLanguage,
-                            currency
+                            currency,
+                            actorFromReq(req)
                         );
                     } catch (notificationError) {
                         Logger.error("Failed to create bill paid notification:", notificationError);
@@ -1654,7 +1675,7 @@ export const addPayment = async (req, res) => {
             }
             
             await bill.save();
-        emitBillUpdated(req, bill);
+        emitBillUpdated(req, bill, "updated", { silent: true });
         }
 
         // Mark all items as paid if bill is fully paid
@@ -1679,7 +1700,7 @@ export const addPayment = async (req, res) => {
             await updateTableStatusIfNeeded(bill.table, getOrganizationId(req.user), req.io);
         }
 
-        emitBillUpdated(req, bill);
+        emitBillUpdated(req, bill, "updated", { silent: true });
 
         // Populate only essential fields for response (QR يُنشأ في الخلفية بلا حجب)
         await bill.populate([
@@ -1712,7 +1733,8 @@ export const addPayment = async (req, res) => {
                         bill,
                         req.user._id,
                         userLanguage,
-                        currency
+                        currency,
+                        actorFromReq(req)
                     ).catch(err => Logger.error("Failed to create payment notification:", err));
                 } else if (bill.paid > 0) {
                     NotificationService.createBillingNotification(
@@ -1720,7 +1742,8 @@ export const addPayment = async (req, res) => {
                         bill,
                         req.user._id,
                         userLanguage,
-                        currency
+                        currency,
+                        actorFromReq(req)
                     ).catch(err => Logger.error("Failed to create payment notification:", err));
                 }
             } catch (err) {
@@ -2271,7 +2294,7 @@ export const deleteBill = async (req, res) => {
         // Emit bill-deleted event — instant
         if (req.io) {
             emitBillDeleted(req, bill._id, tableId);
-            req.io.notifyBillUpdate("deleted", { _id: bill._id, billNumber: bill.billNumber }, getOrganizationId(req.user));
+            req.io.notifyBillUpdate("deleted", { _id: bill._id, billNumber: bill.billNumber, table: tableId }, getOrganizationId(req.user));
         }
 
         // Audit (fire-and-forget)
@@ -2488,7 +2511,7 @@ export const addPartialPayment = async (req, res) => {
 
         // حفظ الفاتورة
         await bill.save();
-        emitBillUpdated(req, bill);
+        emitBillUpdated(req, bill, "updated", { silent: true });
 
         Logger.info(`📊 [addPartialPayment] Bill status after save:`, {
             billId: bill._id,
@@ -2527,6 +2550,22 @@ export const addPartialPayment = async (req, res) => {
         if (req.io) {
             req.io.notifyBillUpdate("partial-payment", bill, req.user.organization);
         }
+
+        // صف إشعار الدفعة الجزئية (مراسل لتوستها) — خلفية غير حاجبة.
+        setImmediate(async () => {
+            try {
+                const userLanguage = req.user.preferences?.language || 'ar';
+                const organization = await Organization.findById(getOrganizationId(req.user)).select('currency');
+                await NotificationService.createBillingNotification(
+                    "partial_payment",
+                    bill,
+                    req.user._id,
+                    userLanguage,
+                    organization?.currency || 'EGP',
+                    actorFromReq(req)
+                );
+            } catch {}
+        });
 
     } catch (error) {
         Logger.error("خطأ في إضافة الدفع الجزئي", error);
@@ -3259,7 +3298,7 @@ export const payForItems = async (req, res) => {
                 req.user._id
             );
             await bill.save();
-        emitBillUpdated(req, bill);
+        emitBillUpdated(req, bill, "updated", { silent: true });
 
             // Update table status based on all unpaid bills
             if (bill.table) {
@@ -3297,7 +3336,8 @@ export const payForItems = async (req, res) => {
                     bill,
                     req.user._id,
                     userLanguage,
-                    currency
+                    currency,
+                    actorFromReq(req)
                 );
             } catch (notificationError) {
                 Logger.error(
@@ -3417,7 +3457,7 @@ export const paySessionPartial = async (req, res) => {
                 req.user._id
             );
             await bill.save();
-        emitBillUpdated(req, bill);
+        emitBillUpdated(req, bill, "updated", { silent: true });
 
             // Update table status based on all unpaid bills (Requirement 2.4)
             if (bill.table) {
@@ -3455,7 +3495,8 @@ export const paySessionPartial = async (req, res) => {
                     bill,
                     req.user._id,
                     userLanguage,
-                    currency
+                    currency,
+                    actorFromReq(req)
                 );
             } catch (notificationError) {
                 Logger.error(
@@ -3742,7 +3783,7 @@ export const addPartialPaymentAggregated = async (req, res) => {
 
         // حفظ الفاتورة
         await bill.save();
-        emitBillUpdated(req, bill);
+        emitBillUpdated(req, bill, "updated", { silent: true });
 
         Logger.info(`📊 [addPartialPaymentAggregated] Bill status after save:`, {
             billId: bill._id,
@@ -3781,6 +3822,22 @@ export const addPartialPaymentAggregated = async (req, res) => {
         if (req.io) {
             req.io.notifyBillUpdate("partial-payment", bill, req.user.organization);
         }
+
+        // صف إشعار الدفعة الجزئية (مراسل لتوستها) — خلفية غير حاجبة.
+        setImmediate(async () => {
+            try {
+                const userLanguage = req.user.preferences?.language || 'ar';
+                const organization = await Organization.findById(getOrganizationId(req.user)).select('currency');
+                await NotificationService.createBillingNotification(
+                    "partial_payment",
+                    bill,
+                    req.user._id,
+                    userLanguage,
+                    organization?.currency || 'EGP',
+                    actorFromReq(req)
+                );
+            } catch {}
+        });
 
     } catch (error) {
         Logger.error("خطأ في إضافة الدفع الجزئي المجمع", error);

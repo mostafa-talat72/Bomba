@@ -1,5 +1,5 @@
 import React from 'react';
-import { User, Eye, Edit, Trash2, Calendar, Shield, Crown, UserCheck, UserX } from 'lucide-react';
+import { User, Eye, Edit, Trash2, Calendar, Shield, Crown, UserCheck, UserX, Bell } from 'lucide-react';
 import { User as UserType } from '../services/api';
 import { useApp } from '../context/AppContext';
 import { useTranslation } from 'react-i18next';
@@ -28,6 +28,7 @@ interface UserCardProps {
   onDelete: (userId: string) => void;
   onManagePermissions?: (user: UserType) => void;
   onChangeStatus?: (user: UserType) => void;
+  onManageNotifications?: (user: UserType) => void;
   getRoleInfo: (roleId: string) => RoleInfo;
   getStatusColor: (status: string) => string;
   getStatusText: (status: string) => string;
@@ -41,6 +42,7 @@ const UserCard: React.FC<UserCardProps> = ({
   onDelete,
   onManagePermissions,
   onChangeStatus,
+  onManageNotifications,
   getRoleInfo,
   getStatusColor,
   getStatusText,
@@ -210,6 +212,17 @@ const UserCard: React.FC<UserCardProps> = ({
             >
               <div className="absolute inset-0 bg-white opacity-0 group-hover:opacity-20 transition-opacity"></div>
               <Shield className="h-4 w-4 relative" />
+            </button>
+          )}
+
+          {onManageNotifications && canManageUsers() && canEditUser(user) && (
+            <button
+              onClick={() => onManageNotifications(user)}
+              className="group relative overflow-hidden p-2.5 bg-gradient-to-r from-amber-500 to-yellow-600 hover:from-amber-600 hover:to-yellow-700 text-white rounded-lg transition-all duration-300 shadow-md hover:shadow-lg hover:scale-110 font-bold"
+              title={t('notifPrefs.title')}
+            >
+              <div className="absolute inset-0 bg-white opacity-0 group-hover:opacity-20 transition-opacity"></div>
+              <Bell className="h-4 w-4 relative" />
             </button>
           )}
           

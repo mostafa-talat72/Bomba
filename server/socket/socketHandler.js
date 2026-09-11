@@ -1,3 +1,18 @@
+import { emitActivity } from "../utils/activity.js";
+import Notification from "../models/Notification.js";
+import NotificationService from "../services/notificationService.js";
+import { getRequestActor } from "../middleware/auditStamping.js";
+
+// منشئ الصف من المستند نفسه (updatedBy أولاً) ثم سياق الطلب — null تعني لا صف.
+function rowCreator(doc) {
+    try {
+        if (doc && typeof doc === "object" && (doc.updatedBy || doc.createdBy)) return doc.updatedBy || doc.createdBy;
+        return getRequestActor()?.userId || null;
+    } catch {
+        return null;
+    }
+}
+
 // Debounce utility function
 const debounce = (func, delay) => {
     let timeoutId;
@@ -38,6 +53,9 @@ export const setupSocketIO = (io) => {
         if (userOrg) {
             socket.join(`org-${userOrg}`);
             socket.join(`org:${userOrg}`);
+            console.log(`[socket] client ${socket.id} joined org-${userOrg} (role=${userRole || "?"})`);
+        } else {
+            console.warn(`[socket] client ${socket.id} joined NO org room (no organization on socket)`);
         }
         
         // Join user to their role room — only if role matches actual JWT role
@@ -166,9 +184,11 @@ export const setupSocketIO = (io) => {
         doEmit("session:updated", session);
         if (type === "started") doEmit("session:created", session);
         if (type === "ended") doEmit("session:ended", session);
+        // نشاط لحظي للتوست الموحد (الفاعل من سياق الطلب تلقائياً)
+        emitActivity(io, org, { kind: "session", action: type, doc: session, number: session && typeof session === "object" ? session.deviceName || null : null });
     };
 
-    io.notifyOrderUpdate = (type, order, organizationId) => {
+    io.notifyOrderUpdate = (type, order, organizationId, opts = {}) => {
         const org = normalizeOrg(organizationId);
         const targetDash = org ? `org-${org}` : undefined;
         const targetColon = org ? `org:${org}` : undefined;
@@ -192,6 +212,33 @@ export const setupSocketIO = (io) => {
         } else if (order.status === "ready") {
             emit("order-ready", order);
         }
+        // نشاط لحظي للتوست الموحد (الفاعل من سياق الطلب تلقائياً)
+        emitActivity(io, org, { kind: "order", action: type, doc: order, number: order && typeof order === "object" ? order.orderNumber || null : null, silent: opts && opts.silent === true });
+        // صف إشعار تلقائي للأنواع بلا منشئ صف (updated/deleted/delivered) — created/ready/cancelled لها صفوفها.
+        // silent = تحديث جانبي مدمج: بلا توست وبلا صف. منع التكرار: نفس الصف خلال 90 ثانية يُنشأ مرة واحدة.
+        if ((type === "updated" || type === "deleted" || type === "item-delivered") && order && typeof order === "object" && !(opts && opts.silent)) {
+            (async () => {
+                try {
+                    // حمولات الحذف المختصرة بلا منظمة (حقل مطلوب) — كمّلها من الغرفة.
+                    if (!order.organization && org) {
+                        try { order.organization = org; } catch {}
+                    }
+                    const rowType = type === "item-delivered" ? "delivered" : type;
+                    const entityId = String(order._id || order.id || "");
+                    if (entityId && org) {
+                        const dup = await Notification.exists({
+                            organization: org,
+                            category: "order",
+                            "metadata.rowType": rowType,
+                            "metadata.orderId": entityId,
+                            createdAt: { $gte: new Date(Date.now() - 90000) },
+                        }).catch(() => false);
+                        if (dup) return;
+                    }
+                    await NotificationService.createOrderNotification(rowType, order, rowCreator(order), "ar").catch(() => {});
+                } catch {}
+            })();
+        }
     };
 
     io.notifyInventoryUpdate = (item, organizationId) => {
@@ -205,7 +252,7 @@ export const setupSocketIO = (io) => {
         }
     };
 
-    io.notifyBillUpdate = (type, bill, organizationId) => {
+    io.notifyBillUpdate = (type, bill, organizationId, opts = {}) => {
         const org = normalizeOrg(organizationId);
         const targetDash = org ? `org-${org}` : undefined;
         const targetColon = org ? `org:${org}` : undefined;
@@ -228,6 +275,36 @@ export const setupSocketIO = (io) => {
         if (type === "payment-received" || type === "partial-payment" || type === "paid") {
             doEmit("payment-received", { bill, type });
             doEmit("partial-payment-received", { bill, type });
+        }
+        // النقل يُوزع كتحديث بيانات (لا إحياء) + نشاط وصف خاصين.
+        if (type === "transferred") {
+            doEmit("bill:updated", bill);
+        }
+        // نشاط لحظي للتوست الموحد (الفاعل من سياق الطلب تلقائياً)
+        emitActivity(io, org, { kind: "bill", action: type, doc: bill, number: bill && typeof bill === "object" ? bill.billNumber || null : null, silent: opts && opts.silent === true });
+        // صف إشعار تلقائي للأنواع بلا منشئ صف (updated/deleted/transferred) — created/paid/partial لها صفوفها.
+        // silent = تحديث جانبي مدمج: بلا توست وبلا صف. منع التكرار: نفس الصف خلال 90 ثانية يُنشأ مرة واحدة.
+        if ((type === "updated" || type === "deleted" || type === "transferred") && bill && typeof bill === "object" && !(opts && opts.silent)) {
+            (async () => {
+                try {
+                    // حمولات الحذف المختصرة بلا منظمة (حقل مطلوب) — كمّلها من الغرفة.
+                    if (!bill.organization && org) {
+                        try { bill.organization = org; } catch {}
+                    }
+                    const entityId = String(bill._id || bill.id || "");
+                    if (entityId && org) {
+                        const dup = await Notification.exists({
+                            organization: org,
+                            category: "billing",
+                            "metadata.rowType": type,
+                            "metadata.billId": entityId,
+                            createdAt: { $gte: new Date(Date.now() - 90000) },
+                        }).catch(() => false);
+                        if (dup) return;
+                    }
+                    await NotificationService.createBillingNotification(type, bill, rowCreator(bill), "ar").catch(() => {});
+                } catch {}
+            })();
         }
     };
 
@@ -292,6 +369,8 @@ export const setupSocketIO = (io) => {
         else if (type === "deleted") doEmit("table:deleted", { _id: (table && (table._id || table.id)) || table });
         // generic table:updated for all mutations
         doEmit("table:updated", table);
+        // نشاط لحظي للتوست الموحد (الفاعل من سياق الطلب تلقائياً)
+        emitActivity(io, org, { kind: "table", action: type, doc: table, number: table && typeof table === "object" ? table.number ?? null : null });
     };
     io.notifyTableSectionUpdate = (type, section, organizationId) => {
         const org = normalizeOrg(organizationId);

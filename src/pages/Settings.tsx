@@ -1,5 +1,5 @@
 ﻿import { useState, useEffect, FC, useRef } from 'react';
-import { Settings as SettingsIcon, Save, Bell, User, Lock, Eye, EyeOff, Building2, LucideIcon, Facebook, Instagram, Twitter, Linkedin, Youtube, MessageCircle, Send, Globe, Phone, Mail, MapPin, Users, Check, X, Clock, Search } from 'lucide-react';
+import { Settings as SettingsIcon, Save, Bell, BellRing, User, Lock, Eye, EyeOff, Building2, LucideIcon, Facebook, Instagram, Twitter, Linkedin, Youtube, MessageCircle, Send, Globe, Phone, Mail, MapPin, Users, Check, X, Clock, Search } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
 import { clearFreshPrintSettingsCache } from '../utils/freshPrintSettings';
@@ -10,6 +10,7 @@ import { useOrganization } from '../context/OrganizationContext';
 import { ReportSettingsSection } from '../components/ReportSettingsSection';
 import { PayrollPermissionsSection } from '../components/PayrollPermissionsSection';
 import PrinterSettingsForm from '../components/settings/PrinterSettingsForm';
+import UserNotificationPrefsForm from '../components/UserNotificationPrefsForm';
 import MobileConnectCard from '../components/MobileConnectCard';
 import ConnectedDevicesCard from '../components/ConnectedDevicesCard';
 import { WORLD_TIMEZONES } from '../../shared/timezones';
@@ -148,7 +149,7 @@ const Settings: FC = () => {
   const { refreshOrganizationSettings, setCurrency, setTimezone } = useOrganization();
   const folderInputRef = useRef<HTMLInputElement>(null);
 
-  const { user, updateUserProfile, updateMyPrintSettings, changePassword, updateNotificationSettings, updateGeneralSettings, getNotificationSettings, getGeneralSettings, getOrganization, updateOrganization, updateOrganizationPermissions, canEditOrganization, getAvailableManagers, getReportSettings, updateReportSettings, canManageReports, sendReportNow, canManagePayroll, updatePayrollPermissions } = useApp();
+  const { user, updateUserProfile, updateMyPrintSettings, changePassword, updateGeneralSettings, getGeneralSettings, getOrganization, updateOrganization, updateOrganizationPermissions, canEditOrganization, getAvailableManagers, getReportSettings, updateReportSettings, canManageReports, sendReportNow, canManagePayroll, updatePayrollPermissions } = useApp();
   const { setUser } = useAuth();
 
   // UI State
@@ -157,7 +158,6 @@ const Settings: FC = () => {
   // Loading states
   const [profileSaving, setProfileSaving] = useState(false);
   const [passwordSaving, setPasswordSaving] = useState(false);
-  const [notificationsSaving, setNotificationsSaving] = useState(false);
   const [generalSaving, setGeneralSaving] = useState(false);
   const [showServerModal, setShowServerModal] = useState(false);
   const serverUrlDisplay = apiClient.baseURL.replace(/\/api$/, '');
@@ -205,18 +205,6 @@ const Settings: FC = () => {
     current: false,
     new: false,
     confirm: false,
-  });
-
-  // Notification settings state
-  const [notificationSettings, setNotificationSettings] = useState<NotificationSettings>({
-    sessionNotifications: true,
-    orderNotifications: true,
-    inventoryNotifications: true,
-    billingNotifications: true,
-    soundEnabled: true,
-    emailNotifications: false,
-    showNotificationCount: true,
-    autoMarkAsRead: false,
   });
 
   // General settings state
@@ -288,6 +276,10 @@ const Settings: FC = () => {
   });
   const [myPrintLoading, setMyPrintLoading] = useState(true);
   const [myPrintSaving, setMyPrintSaving] = useState(false);
+  // My notification settings state (per-user, follows the user on any device)
+  const [myNotif, setMyNotif] = useState<Record<string, any>>({});
+  const [myNotifLoading, setMyNotifLoading] = useState(true);
+  const [myNotifSaving, setMyNotifSaving] = useState(false);
   const [typeAuditRunning, setTypeAuditRunning] = useState(false);
   const [typeAuditResult, setTypeAuditResult] = useState<string | null>(null);
 
@@ -366,15 +358,6 @@ const Settings: FC = () => {
     const loadSettings = async () => {
       if (user) {
         try {
-          // Load notification settings
-          const notifSettings = await getNotificationSettings();
-          if (notifSettings) {
-            setNotificationSettings(prev => ({
-              ...prev,
-              ...notifSettings
-            }));
-          }
-
           // Load general settings
           const genSettings = await getGeneralSettings();
           if (genSettings) {
@@ -393,7 +376,7 @@ const Settings: FC = () => {
     };
 
     loadSettings();
-  }, [user, getNotificationSettings, getGeneralSettings]);
+  }, [user, getGeneralSettings]);
 
   // Load organization data and permissions
   useEffect(() => {
@@ -476,9 +459,22 @@ const Settings: FC = () => {
       }
     };
 
+    const loadMyNotifSettings = async () => {
+      setMyNotifLoading(true);
+      try {
+        const res = await (api as any).getMyNotificationSettings();
+        if (res?.success && res.data) setMyNotif(res.data);
+      } catch (error) {
+        console.error('Error loading my notification settings:', error);
+      } finally {
+        setMyNotifLoading(false);
+      }
+    };
+
     if (user) {
       loadOrganizationData();
       loadMyPrintSettings();
+      loadMyNotifSettings();
     }
   }, [user, getOrganization, canEditOrganization, getAvailableManagers]);
 
@@ -647,23 +643,6 @@ const Settings: FC = () => {
       showAlertMessage(t('settings.password.errors.unexpected'), 'error');
     } finally {
       setPasswordSaving(false);
-    }
-  };
-
-  const handleNotificationSettingsUpdate = async () => {
-    setNotificationsSaving(true);
-    try {
-      const success = await updateNotificationSettings(notificationSettings);
-      if (success) {
-        showAlertMessage(t('settings.notifications.success'));
-      } else {
-        showAlertMessage(t('settings.notifications.errors.saveFailed'), 'error');
-      }
-    } catch (error) {
-      console.error('Error updating notification settings:', error);
-      showAlertMessage(t('settings.notifications.errors.unexpected'), 'error');
-    } finally {
-      setNotificationsSaving(false);
     }
   };
 
@@ -1154,6 +1133,27 @@ const Settings: FC = () => {
     }
   };
 
+  // ── My notification settings (per-user, follows the user on any device) ──
+  const handleMyNotifSave = async () => {
+    setMyNotifSaving(true);
+    try {
+      const res = await (api as any).updateMyNotificationSettings(myNotif);
+      if (res?.success) {
+        // حدّث نسخة المستخدم فوراً حتى تُطبق التفضيلات بلا إعادة دخول.
+        try {
+          setUser((prev: any) => (prev ? { ...prev, preferences: { ...(prev.preferences || {}), notifications: res.data } } : prev));
+        } catch {}
+        showAlertMessage(t('notifPrefs.saved'), 'success');
+      } else {
+        showAlertMessage(t('notifPrefs.loadError'), 'error');
+      }
+    } catch {
+      showAlertMessage(t('notifPrefs.loadError'), 'error');
+    } finally {
+      setMyNotifSaving(false);
+    }
+  };
+
   const handleMyPrintImport = () => {
     const defaults = myPrint.orgDefaults && Object.keys(myPrint.orgDefaults).length
       ? myPrint.orgDefaults
@@ -1272,7 +1272,8 @@ const Settings: FC = () => {
   const tabs: TabType[] = [
     { id: 'profile', name: t('settings.tabs.profile'), icon: User },
     { id: 'password', name: t('settings.tabs.password'), icon: Lock },
-    { id: 'notifications', name: t('settings.tabs.notifications'), icon: Bell },
+
+    { id: 'mynotifications', name: t('settings.tabs.myNotifications'), icon: BellRing },
     { id: 'general', name: t('settings.tabs.general'), icon: SettingsIcon },
     { id: 'organization', name: t('settings.tabs.organization'), icon: Building2 },
   ];
@@ -1520,165 +1521,6 @@ const Settings: FC = () => {
             )}
 
             {/* Notifications Tab */}
-            {activeTab === 'notifications' && (
-                  <div className="space-y-6">
-                  <div>
-                  <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">{t('settings.notifications.title')}</h3>
-                    <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100">{t('settings.notifications.sessionNotifications')}</h4>
-                        <p className="text-sm text-gray-500 dark:text-gray-400">{t('settings.notifications.sessionNotificationsDesc')}</p>
-                      </div>
-                      <label className="relative inline-flex items-center cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={notificationSettings.sessionNotifications}
-                          onChange={(e) => setNotificationSettings({ ...notificationSettings, sessionNotifications: e.target.checked })}
-                          className="sr-only peer"
-                        />
-                        <div className="w-11 h-6 bg-gray-200 dark:bg-gray-700 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                      </label>
-                      </div>
-
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100">{t('settings.notifications.orderNotifications')}</h4>
-                        <p className="text-sm text-gray-500 dark:text-gray-400">{t('settings.notifications.orderNotificationsDesc')}</p>
-                      </div>
-                      <label className="relative inline-flex items-center cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={notificationSettings.orderNotifications}
-                          onChange={(e) => setNotificationSettings({ ...notificationSettings, orderNotifications: e.target.checked })}
-                          className="sr-only peer"
-                        />
-                        <div className="w-11 h-6 bg-gray-200 dark:bg-gray-700 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                      </label>
-                      </div>
-
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100">{t('settings.notifications.inventoryNotifications')}</h4>
-                        <p className="text-sm text-gray-500 dark:text-gray-400">{t('settings.notifications.inventoryNotificationsDesc')}</p>
-                      </div>
-                      <label className="relative inline-flex items-center cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={notificationSettings.inventoryNotifications}
-                          onChange={(e) => setNotificationSettings({ ...notificationSettings, inventoryNotifications: e.target.checked })}
-                          className="sr-only peer"
-                        />
-                        <div className="w-11 h-6 bg-gray-200 dark:bg-gray-700 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                      </label>
-                    </div>
-
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100">{t('settings.notifications.billingNotifications')}</h4>
-                        <p className="text-sm text-gray-500 dark:text-gray-400">{t('settings.notifications.billingNotificationsDesc')}</p>
-                      </div>
-                      <label className="relative inline-flex items-center cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={notificationSettings.billingNotifications}
-                          onChange={(e) => setNotificationSettings({ ...notificationSettings, billingNotifications: e.target.checked })}
-                          className="sr-only peer"
-                        />
-                        <div className="w-11 h-6 bg-gray-200 dark:bg-gray-700 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                      </label>
-                  </div>
-
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100">{t('settings.notifications.soundEnabled')}</h4>
-                        <p className="text-sm text-gray-500 dark:text-gray-400">{t('settings.notifications.soundEnabledDesc')}</p>
-                      </div>
-                      <label className="relative inline-flex items-center cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={notificationSettings.soundEnabled}
-                          onChange={(e) => setNotificationSettings({ ...notificationSettings, soundEnabled: e.target.checked })}
-                          className="sr-only peer"
-                        />
-                        <div className="w-11 h-6 bg-gray-200 dark:bg-gray-700 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                      </label>
-                  </div>
-
-                    <div className="flex items-center justify-between">
-                  <div>
-                        <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100">{t('settings.notifications.emailNotifications')}</h4>
-                        <p className="text-sm text-gray-500 dark:text-gray-400">{t('settings.notifications.emailNotificationsDesc')}</p>
-                      </div>
-                      <label className="relative inline-flex items-center cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={notificationSettings.emailNotifications}
-                          onChange={(e) => setNotificationSettings({ ...notificationSettings, emailNotifications: e.target.checked })}
-                          className="sr-only peer"
-                        />
-                        <div className="w-11 h-6 bg-gray-200 dark:bg-gray-700 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                      </label>
-                    </div>
-
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100">{t('settings.notifications.showNotificationCount')}</h4>
-                        <p className="text-sm text-gray-500 dark:text-gray-400">{t('settings.notifications.showNotificationCountDesc')}</p>
-                      </div>
-                      <label className="relative inline-flex items-center cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={notificationSettings.showNotificationCount}
-                          onChange={(e) => setNotificationSettings({ ...notificationSettings, showNotificationCount: e.target.checked })}
-                          className="sr-only peer"
-                        />
-                        <div className="w-11 h-6 bg-gray-200 dark:bg-gray-700 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                      </label>
-                    </div>
-
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100">{t('settings.notifications.autoMarkAsRead')}</h4>
-                        <p className="text-sm text-gray-500 dark:text-gray-400">{t('settings.notifications.autoMarkAsReadDesc')}</p>
-                      </div>
-                      <label className="relative inline-flex items-center cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={notificationSettings.autoMarkAsRead}
-                          onChange={(e) => setNotificationSettings({ ...notificationSettings, autoMarkAsRead: e.target.checked })}
-                          className="sr-only peer"
-                        />
-                        <div className="w-11 h-6 bg-gray-200 dark:bg-gray-700 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                      </label>
-                    </div>
-
-                    <div className="mt-6">
-                      <button
-                        onClick={handleNotificationSettingsUpdate}
-                        disabled={notificationsSaving}
-                        className="flex items-center space-x-2 bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 text-white px-4 py-2 rounded-md disabled:opacity-50 min-w-48 justify-center"
-                      >
-                        {notificationsSaving ? (
-                          <>
-                            <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                            </svg>
-                            <span>{t('common.saving')}</span>
-                          </>
-                        ) : (
-                          <>
-                            <Save className="h-4 w-4" />
-                            <span>{t('settings.notifications.saveSettings')}</span>
-                          </>
-                        )}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
 
             {/* General Tab */}
             {activeTab === 'general' && (
@@ -2863,6 +2705,34 @@ const Settings: FC = () => {
                 <div className="text-center py-12">
                   <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-600 dark:border-orange-400 mx-auto mb-4"></div>
                   <p className="text-gray-600 dark:text-gray-400">{t('settings.organization.loading')}</p>
+                </div>
+              </div>
+            )}
+
+            {/* My notifications — قسم شخصي منفصل (تفضيلات المستخدم على أي جهاز) */}
+            {activeTab === 'mynotifications' && (
+              <div className="space-y-6">
+                <div>
+                  <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">{t('notifPrefs.selfTitle')}</h3>
+                  <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">{t('notifPrefs.selfDesc')}</p>
+                  {myNotifLoading ? (
+                    <p className="text-gray-500 dark:text-gray-400">{t('settings.organization.loading')}</p>
+                  ) : (
+                    <div className="space-y-4">
+                      <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg">
+                        <UserNotificationPrefsForm value={myNotif} onChange={setMyNotif} disabled={myNotifSaving} />
+                      </div>
+                      <div>
+                        <button
+                          onClick={handleMyNotifSave}
+                          disabled={myNotifSaving}
+                          className="flex items-center space-x-2 bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 text-white px-4 py-2 rounded-md disabled:opacity-50 min-w-40 justify-center"
+                        >
+                          {myNotifSaving ? <span>{t('common.saving')}</span> : <span>{t('notifPrefs.save')}</span>}
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             )}

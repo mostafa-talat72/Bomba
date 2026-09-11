@@ -5,6 +5,7 @@ import CostCategory from "../models/CostCategory.js";
 import Logger from "../middleware/logger.js";
 import NotificationService from "../services/notificationService.js";
 import { writeToAtlas } from "../utils/atlasWrite.js";
+import { actorFromReq } from "../utils/actorInfo.js";
 
 export const getWarehouseItems = async (req, res) => {
     try {
@@ -285,9 +286,9 @@ export const updateWarehouseStock = async (req, res) => {
         try {
             const userLanguage = req.user.preferences?.language || "ar";
             if (item.currentStock === 0) {
-                await NotificationService.createInventoryNotification("out_of_stock", item, req.user._id, userLanguage);
+                await NotificationService.createInventoryNotification("out_of_stock", item, req.user._id, userLanguage, actorFromReq(req));
             } else if (item.isLowStock) {
-                await NotificationService.createInventoryNotification("low_stock", item, req.user._id, userLanguage);
+                await NotificationService.createInventoryNotification("low_stock", item, req.user._id, userLanguage, actorFromReq(req));
             }
         } catch (notificationError) {
             Logger.error("Failed to create notification:", notificationError);

@@ -1,8 +1,59 @@
 import Notification from "../models/Notification.js";
 import User from "../models/User.js";
 import Logger from "../middleware/logger.js";
+import { resolveActivityContext } from "../utils/activity.js";
+import { getRequestActor } from "../middleware/auditStamping.js";
+
+// مرجع سوكت البث اللحظي — يُحقن مرة واحدة من server.js بعد setupSocketIO.
+let ioRef = null;
+export function setNotificationIO(io) {
+    ioRef = io;
+}
 
 class NotificationService {
+    // بث لحظي لغرف المنشأة (dash + colon) — لا يرمي أبداً حتى لا يكسر إجراء العمل.
+    static emitNotification(doc) {
+        try {
+            if (!ioRef || !doc) {
+                if (!ioRef) console.warn("[notification] emit skipped: io not wired (server restart needed?)");
+                return;
+            }
+            const payload = typeof doc.toJSON === "function" ? doc.toJSON() : doc;
+            console.log(`[notification] emit ${payload.category || ""}:${payload.type || ""} → org ${payload.organization ? String(payload.organization) : "all"}`);
+            const org = payload.organization ? String(payload.organization) : null;
+            if (org) {
+                ioRef.to(`org-${org}`).emit("notification:new", payload);
+                ioRef.to(`org:${org}`).emit("notification:new", payload);
+            } else {
+                ioRef.emit("notification:new", payload);
+            }
+        } catch {}
+    }
+
+    // الفاعل الفعال: الصريح أولاً ثم سياق الطلب (ALS) — يغطي أي منادٍ بلا req.
+    static resolveActor(actor = {}) {
+        try {
+            if (actor && (actor.name || actor.source || actor.userId)) return actor;
+            return getRequestActor() || {};
+        } catch {
+            return actor || {};
+        }
+    }
+
+    // دمج معلومات الفاعل (الاسم/الجهاز) في metadata قبل الحفظ.
+    static attachActor(notification, actor = {}) {
+        try {
+            if (!notification || !actor || (!actor.name && !actor.source && !actor.userId)) return;
+            notification.metadata = {
+                ...(notification.metadata || {}),
+                actor: {
+                    name: actor.name || null,
+                    source: actor.source || null,
+                    userId: actor.userId || null,
+                },
+            };
+        } catch {}
+    }
     // إنشاء إشعار جديد
     static async createNotification(notificationData, user) {
         try {
@@ -11,7 +62,8 @@ class NotificationService {
                 organization: user.organization,
             });
             await notification.save();
-
+            try { await notification.populate("createdBy", "name"); } catch {}
+            this.emitNotification(notification);
             return notification;
         } catch (error) {
             Logger.error("Error creating notification:", error);
@@ -20,18 +72,22 @@ class NotificationService {
     }
 
     // إنشاء إشعار للجلسات
-    static async createSessionNotification(type, session, createdBy, language = 'ar', currency = 'EGP') {
+    static async createSessionNotification(type, session, createdBy, language = 'ar', currency = 'EGP', actor = {}) {
         try {
+            const relations = await resolveActivityContext(session, 'session').catch(() => ({}));
             const notification = Notification.createSessionNotification(
                 type,
                 session,
                 createdBy,
                 language,
-                currency
+                currency,
+                relations
             );
             if (notification) {
+                this.attachActor(notification, this.resolveActor(actor));
                 await notification.save();
-
+                try { await notification.populate("createdBy", "name"); } catch {}
+                this.emitNotification(notification);
                 return notification;
             }
             return null;
@@ -42,17 +98,21 @@ class NotificationService {
     }
 
     // إنشاء إشعار للطلبات
-    static async createOrderNotification(type, order, createdBy, language = 'ar') {
+    static async createOrderNotification(type, order, createdBy, language = 'ar', actor = {}) {
         try {
+            const relations = await resolveActivityContext(order, 'order').catch(() => ({}));
             const notification = Notification.createOrderNotification(
                 type,
                 order,
                 createdBy,
-                language
+                language,
+                relations
             );
             if (notification) {
+                this.attachActor(notification, this.resolveActor(actor));
                 await notification.save();
-
+                try { await notification.populate("createdBy", "name"); } catch {}
+                this.emitNotification(notification);
                 return notification;
             }
             return null;
@@ -63,7 +123,7 @@ class NotificationService {
     }
 
     // إنشاء إشعار للمخزون
-    static async createInventoryNotification(type, item, createdBy, language = 'ar') {
+    static async createInventoryNotification(type, item, createdBy, language = 'ar', actor = {}) {
         try {
             const notification = Notification.createInventoryNotification(
                 type,
@@ -72,8 +132,10 @@ class NotificationService {
                 language
             );
             if (notification) {
+                this.attachActor(notification, this.resolveActor(actor));
                 await notification.save();
-
+                try { await notification.populate("createdBy", "name"); } catch {}
+                this.emitNotification(notification);
                 return notification;
             }
             return null;
@@ -84,18 +146,22 @@ class NotificationService {
     }
 
     // إنشاء إشعار للفواتير
-    static async createBillingNotification(type, bill, createdBy, language = 'ar', currency = 'EGP') {
+    static async createBillingNotification(type, bill, createdBy, language = 'ar', currency = 'EGP', actor = {}) {
         try {
+            const relations = await resolveActivityContext(bill, 'bill').catch(() => ({}));
             const notification = Notification.createBillingNotification(
                 type,
                 bill,
                 createdBy,
                 language,
-                currency
+                currency,
+                relations
             );
             if (notification) {
+                this.attachActor(notification, this.resolveActor(actor));
                 await notification.save();
-
+                try { await notification.populate("createdBy", "name"); } catch {}
+                this.emitNotification(notification);
                 return notification;
             }
             return null;
@@ -300,6 +366,7 @@ class NotificationService {
 
             if (notifications.length > 0) {
                 await Notification.insertMany(notifications);
+                notifications.forEach((n) => this.emitNotification(n));
             }
 
             return notifications;
@@ -317,6 +384,8 @@ class NotificationService {
                 targetUsers: [userId],
             });
             await notification.save();
+            try { await notification.populate("createdBy", "name"); } catch {}
+            this.emitNotification(notification);
             return notification;
         } catch (error) {
             Logger.error("Error sending notification to user:", error);
@@ -332,6 +401,8 @@ class NotificationService {
                 targetRoles: [role],
             });
             await notification.save();
+            try { await notification.populate("createdBy", "name"); } catch {}
+            this.emitNotification(notification);
             return notification;
         } catch (error) {
             Logger.error("Error sending notification to role:", error);
@@ -347,6 +418,8 @@ class NotificationService {
                 targetPermissions: [permission],
             });
             await notification.save();
+            try { await notification.populate("createdBy", "name"); } catch {}
+            this.emitNotification(notification);
             return notification;
         } catch (error) {
             Logger.error("Error sending notification to permission:", error);

@@ -198,7 +198,8 @@ notificationSchema.statics.createSessionNotification = function (
     session,
     createdBy,
     language = 'ar',
-    currency = 'EGP'
+    currency = 'EGP',
+    relations = {}
 ) {
     const currencySymbol = getCurrencySymbol(currency, language);
     
@@ -239,12 +240,18 @@ notificationSchema.statics.createSessionNotification = function (
         priority: type === 'paused' ? 'low' : 'medium',
         targetRoles: ['admin', 'staff'],
         targetPermissions: ['playstation', 'computer'],
-        metadata: { 
-            sessionId: session._id, 
+        metadata: {
+            sessionId: session._id,
             deviceType: session.deviceType,
             language,
             currency,
-            translations
+            translations,
+            // الربط العلاقي: الجلسة ← طاولة ← فاتورة
+            tableId: relations.tableId || null,
+            tableNumber: relations.tableNumber ?? null,
+            billId: relations.billId || null,
+            billNumber: relations.billNumber || null,
+            deviceName: relations.deviceName || session.deviceName || null,
         },
         createdBy,
         // Always get organization from session (session always has organization)
@@ -257,7 +264,8 @@ notificationSchema.statics.createOrderNotification = function (
     type,
     order,
     createdBy,
-    language = 'ar'
+    language = 'ar',
+    relations = {}
 ) {
     // التحقق من وجود organization
     if (!order.organization) {
@@ -275,9 +283,11 @@ notificationSchema.statics.createOrderNotification = function (
     let actionText;
     
     if (type === 'created') {
-        translations.ar = getNotificationTranslation('order', 'created', 'ar', order.customerName, order.items.length);
-        translations.en = getNotificationTranslation('order', 'created', 'en', order.customerName, order.items.length);
-        translations.fr = getNotificationTranslation('order', 'created', 'fr', order.customerName, order.items.length);
+        const safeCustomer = order.customerName || order.orderNumber || '';
+        const itemCount = Array.isArray(order.items) ? order.items.length : 0;
+        translations.ar = getNotificationTranslation('order', 'created', 'ar', safeCustomer, itemCount, order.orderNumber);
+        translations.en = getNotificationTranslation('order', 'created', 'en', safeCustomer, itemCount, order.orderNumber);
+        translations.fr = getNotificationTranslation('order', 'created', 'fr', safeCustomer, itemCount, order.orderNumber);
         actionText = getActionTranslation('viewOrder', language);
     } else if (type === 'ready') {
         translations.ar = getNotificationTranslation('order', 'ready', 'ar', order.orderNumber);
@@ -289,6 +299,13 @@ notificationSchema.statics.createOrderNotification = function (
         translations.en = getNotificationTranslation('order', 'cancelled', 'en', order.orderNumber);
         translations.fr = getNotificationTranslation('order', 'cancelled', 'fr', order.orderNumber);
         actionText = null;
+    } else if (type === 'updated' || type === 'deleted' || type === 'delivered') {
+        // صفوف تلقائية من طبقة السوكت (تعديل/حذف/توصيل) — الرقم آمن حتى بعد الحذف.
+        const orderNo = order.orderNumber || '';
+        translations.ar = getNotificationTranslation('order', type, 'ar', orderNo);
+        translations.en = getNotificationTranslation('order', type, 'en', orderNo);
+        translations.fr = getNotificationTranslation('order', type, 'fr', orderNo);
+        actionText = null;
     } else {
         return null;
     }
@@ -299,7 +316,7 @@ notificationSchema.statics.createOrderNotification = function (
     const notificationData = {
         title: currentTranslation.title,
         message: currentTranslation.message,
-        type: type === 'cancelled' ? 'error' : type === 'ready' ? 'success' : 'order',
+        type: type === 'cancelled' || type === 'deleted' ? 'error' : type === 'ready' || type === 'delivered' ? 'success' : 'order',
         category: 'order',
         priority: type === 'created' ? 'high' : 'medium',
         targetRoles: type === 'created' ? ['kitchen', 'admin'] : type === 'ready' ? ['staff', 'admin'] : ['admin', 'kitchen'],
@@ -307,11 +324,17 @@ notificationSchema.statics.createOrderNotification = function (
         actionRequired: type !== 'cancelled',
         actionUrl: type !== 'cancelled' ? `/cafe?tab=orders` : null,
         actionText,
-        metadata: { 
-            orderId: order._id, 
+        metadata: {
+            orderId: order._id,
             orderNumber: order.orderNumber,
             language,
-            translations
+            translations,
+            // الربط العلاقي: الطلب ← طاولة + فاتورة (+ مفتاح منع تكرار الصفوف)
+            tableId: relations.tableId || null,
+            tableNumber: relations.tableNumber ?? null,
+            billId: relations.billId || null,
+            billNumber: relations.billNumber || null,
+            rowType: type,
         },
         createdBy,
         // Always get organization from order (order always has organization)
@@ -383,7 +406,8 @@ notificationSchema.statics.createBillingNotification = function (
     bill,
     createdBy,
     language = 'ar',
-    currency = 'EGP'
+    currency = 'EGP',
+    relations = {}
 ) {
     // Get translations for all languages
     const translations = {
@@ -412,6 +436,22 @@ notificationSchema.statics.createBillingNotification = function (
         translations.en = getNotificationTranslation('billing', 'partial_payment', 'en', bill.billNumber, bill.remaining, enSymbol);
         translations.fr = getNotificationTranslation('billing', 'partial_payment', 'fr', bill.billNumber, bill.remaining, frSymbol);
         actionText = null;
+    } else if (type === 'updated' || type === 'deleted') {
+        // صفوف تلقائية من طبقة السوكت — الرقم آمن حتى بعد الحذف.
+        const billNo = bill.billNumber || '';
+        translations.ar = getNotificationTranslation('billing', type, 'ar', billNo);
+        translations.en = getNotificationTranslation('billing', type, 'en', billNo);
+        translations.fr = getNotificationTranslation('billing', type, 'fr', billNo);
+        actionText = null;
+    } else if (type === 'transferred') {
+        // نقل بين طاولتين بدل حذف+إنشاء — يُستدعى من طبقة السوكت فقط.
+        const billNo = bill.billNumber || '';
+        const fromT = relations.fromTableNumber ?? '';
+        const toT = relations.tableNumber ?? '';
+        translations.ar = getNotificationTranslation('billing', type, 'ar', billNo, fromT, toT);
+        translations.en = getNotificationTranslation('billing', type, 'en', billNo, fromT, toT);
+        translations.fr = getNotificationTranslation('billing', type, 'fr', billNo, fromT, toT);
+        actionText = null;
     } else {
         return null;
     }
@@ -422,7 +462,7 @@ notificationSchema.statics.createBillingNotification = function (
     return new this({
         title: currentTranslation.title,
         message: currentTranslation.message,
-        type: type === 'paid' ? 'success' : type === 'partial_payment' ? 'info' : 'billing',
+        type: type === 'paid' ? 'success' : type === 'partial_payment' ? 'info' : type === 'deleted' ? 'error' : 'billing',
         category: 'billing',
         priority: type === 'paid' ? 'low' : 'medium',
         targetRoles: ['admin', 'cashier'],
@@ -430,12 +470,18 @@ notificationSchema.statics.createBillingNotification = function (
         actionRequired: type === 'created',
         actionUrl: type === 'created' ? `/billing` : null,
         actionText,
-        metadata: { 
-            billId: bill._id, 
+        // transferred يُخزن نوعاً عاماً (enum) ويُميز عبر metadata.rowType لمنع التكرار.
+        metadata: {
+            billId: bill._id,
             billNumber: bill.billNumber,
             language,
             currency,
-            translations
+            translations,
+            // الربط العلاقي: الفاتورة ← طاولة (+ مفتاح منع تكرار الصفوف)
+            tableId: relations.tableId || null,
+            tableNumber: relations.tableNumber ?? null,
+            fromTableNumber: relations.fromTableNumber ?? null,
+            rowType: type,
         },
         createdBy,
         // Always get organization from bill (bill always has organization)

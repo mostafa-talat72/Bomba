@@ -827,3 +827,109 @@ export const updateMyPrintSettings = async (req, res) => {
         res.status(500).json({ success: false, message: "خطأ في حفظ إعدادات الطباعة", error: error.message });
     }
 };
+
+// ── إعدادات الإشعارات لكل مستخدم ──────────────────────────────────
+const NOTIF_KINDS = ["order", "bill", "session", "table", "inventory", "system"];
+
+function sanitizeNotificationPrefs(input = {}) {
+    const clean = { toastKinds: {}, sound: undefined, kitchenAlarm: undefined };
+    const kinds = input.toastKinds && typeof input.toastKinds === "object" ? input.toastKinds : {};
+    for (const k of NOTIF_KINDS) {
+        if (kinds[k] !== undefined) clean.toastKinds[k] = kinds[k] === true;
+    }
+    if (input.sound !== undefined) clean.sound = input.sound === true;
+    if (input.kitchenAlarm !== undefined) clean.kitchenAlarm = input.kitchenAlarm === true;
+    return clean;
+}
+
+function readNotificationPrefs(user) {
+    const p = (user.preferences && user.preferences.notifications) || {};
+    const kinds = {};
+    for (const k of NOTIF_KINDS) kinds[k] = p.toastKinds ? p.toastKinds[k] !== false : true;
+    return {
+        toastKinds: kinds,
+        sound: p.sound !== false,
+        kitchenAlarm: p.kitchenAlarm === true,
+    };
+}
+
+export const getMyNotificationSettings = async (req, res) => {
+    try {
+        const user = await User.findById(req.user._id);
+        if (!user) {
+            return res.status(404).json({ success: false, message: "المستخدم غير موجود" });
+        }
+        res.json({ success: true, data: readNotificationPrefs(user) });
+    } catch (error) {
+        res.status(500).json({ success: false, message: "خطأ في جلب إعدادات الإشعارات", error: error.message });
+    }
+};
+
+export const updateMyNotificationSettings = async (req, res) => {
+    try {
+        const user = await User.findById(req.user._id);
+        if (!user) {
+            return res.status(404).json({ success: false, message: "المستخدم غير موجود" });
+        }
+        const clean = sanitizeNotificationPrefs(req.body || {});
+        user.preferences = user.preferences || {};
+        user.preferences.notifications = user.preferences.notifications || {};
+        if (!user.preferences.notifications.toastKinds) {
+            user.preferences.notifications.toastKinds = {};
+        }
+        Object.assign(user.preferences.notifications.toastKinds, clean.toastKinds);
+        if (clean.sound !== undefined) user.preferences.notifications.sound = clean.sound;
+        if (clean.kitchenAlarm !== undefined) user.preferences.notifications.kitchenAlarm = clean.kitchenAlarm;
+        user.markModified("preferences");
+        await user.save();
+        res.json({ success: true, message: "تم حفظ إعدادات الإشعارات بنجاح", data: readNotificationPrefs(user) });
+    } catch (error) {
+        res.status(500).json({ success: false, message: "خطأ في حفظ إعدادات الإشعارات", error: error.message });
+    }
+};
+
+function canManageTargetUser(req, user) {
+    if (!sameObjectId(user.organization, req.user)) return false;
+    return req.user.role === "admin" || req.user.hasPermission("users") || req.user.hasPermission("all");
+}
+
+export const getUserNotificationSettings = async (req, res) => {
+    try {
+        const user = await User.findById(req.params.id);
+        if (!user) {
+            return res.status(404).json({ success: false, message: "المستخدم غير موجود" });
+        }
+        if (!canManageTargetUser(req, user)) {
+            return res.status(403).json({ success: false, message: "ليس لديك صلاحية" });
+        }
+        res.json({ success: true, data: readNotificationPrefs(user) });
+    } catch (error) {
+        res.status(500).json({ success: false, message: "خطأ في جلب إعدادات الإشعارات", error: error.message });
+    }
+};
+
+export const updateUserNotificationSettings = async (req, res) => {
+    try {
+        const user = await User.findById(req.params.id);
+        if (!user) {
+            return res.status(404).json({ success: false, message: "المستخدم غير موجود" });
+        }
+        if (!canManageTargetUser(req, user)) {
+            return res.status(403).json({ success: false, message: "ليس لديك صلاحية" });
+        }
+        const clean = sanitizeNotificationPrefs(req.body || {});
+        user.preferences = user.preferences || {};
+        user.preferences.notifications = user.preferences.notifications || {};
+        if (!user.preferences.notifications.toastKinds) {
+            user.preferences.notifications.toastKinds = {};
+        }
+        Object.assign(user.preferences.notifications.toastKinds, clean.toastKinds);
+        if (clean.sound !== undefined) user.preferences.notifications.sound = clean.sound;
+        if (clean.kitchenAlarm !== undefined) user.preferences.notifications.kitchenAlarm = clean.kitchenAlarm;
+        user.markModified("preferences");
+        await user.save();
+        res.json({ success: true, message: "تم حفظ إعدادات الإشعارات بنجاح", data: readNotificationPrefs(user) });
+    } catch (error) {
+        res.status(500).json({ success: false, message: "خطأ في حفظ إعدادات الإشعارات", error: error.message });
+    }
+};

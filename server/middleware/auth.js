@@ -2,6 +2,7 @@ import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
 import { touchDevice } from './deviceTracker.js';
 import { runWithAuditUser } from './auditStamping.js';
+import { getRequestSource } from '../utils/actorInfo.js';
 
 export const authenticateToken = async (req, res, next) => {
   try {
@@ -51,8 +52,9 @@ export const authenticateToken = async (req, res, next) => {
     req.user = user;
     // Track connected device (fire-and-forget, never blocks).
     touchDevice(req);
-    // Carry the actor for audit stamping (Order/Bill updatedBy hooks).
-    return runWithAuditUser(user._id, () => next());
+    // Carry the actor for audit stamping (Order/Bill updatedBy hooks)
+    // + live activity/notifications (name + phone/desktop source + route for diagnostics).
+    return runWithAuditUser(user._id, () => next(), { name: user.name, source: getRequestSource(req), userId: String(user._id) }, `${req.method} ${req.path}`);
   } catch (error) {
     return res.status(401).json({
       success: false,

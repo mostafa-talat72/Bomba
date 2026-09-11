@@ -6,6 +6,7 @@ import NotificationService from "../services/notificationService.js";
 import Cost from "../models/Cost.js";
 import CostCategory from "../models/CostCategory.js";
 import { writeToAtlas } from "../utils/atlasWrite.js";
+import { actorFromReq } from "../utils/actorInfo.js";
 
 // @desc    Get all inventory items
 // @route   GET /api/inventory
@@ -770,14 +771,16 @@ export const updateStock = async (req, res) => {
                             "out_of_stock",
                             item,
                             req.user._id,
-                            userLanguage
+                            userLanguage,
+                            actorFromReq(req)
                         );
                     } else if (item.isLowStock) {
                         await NotificationService.createInventoryNotification(
                             "low_stock",
                             item,
                             req.user._id,
-                            userLanguage
+                            userLanguage,
+                            actorFromReq(req)
                         );
                     }
                 } catch (notificationError) {

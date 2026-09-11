@@ -99,6 +99,47 @@ async function updateMyPrintSettings(data: {
   });
 }
 
+export interface UserNotificationPrefs {
+  toastKinds: {
+    order: boolean;
+    bill: boolean;
+    session: boolean;
+    table: boolean;
+    inventory: boolean;
+    system: boolean;
+  };
+  sound: boolean;
+  kitchenAlarm: boolean;
+}
+
+async function getMyNotificationSettings(): Promise<ApiResponse<UserNotificationPrefs>> {
+  return apiClient.request('/users/me/notification-settings');
+}
+
+export interface UserNotificationPrefsDraft {
+  toastKinds?: Partial<Record<'order' | 'bill' | 'session' | 'table' | 'inventory' | 'system', boolean>>;
+  sound?: boolean;
+  kitchenAlarm?: boolean;
+}
+
+async function updateMyNotificationSettings(data: UserNotificationPrefsDraft): Promise<ApiResponse<UserNotificationPrefs>> {
+  return apiClient.request('/users/me/notification-settings', {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
+}
+
+async function getUserNotificationSettings(id: string): Promise<ApiResponse<UserNotificationPrefs>> {
+  return apiClient.request(`/users/${id}/notification-settings`);
+}
+
+async function updateUserNotificationSettings(id: string, data: UserNotificationPrefsDraft): Promise<ApiResponse<UserNotificationPrefs>> {
+  return apiClient.request(`/users/${id}/notification-settings`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
+}
+
 export const usersApi = {
   getUsers,
   getUser,
@@ -108,4 +149,8 @@ export const usersApi = {
   getUserStats,
   getMyPrintSettings,
   updateMyPrintSettings,
+  getMyNotificationSettings,
+  updateMyNotificationSettings,
+  getUserNotificationSettings,
+  updateUserNotificationSettings,
 };
