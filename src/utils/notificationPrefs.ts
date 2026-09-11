@@ -8,6 +8,7 @@ export const DEFAULT_NOTIF_PREFS: UserNotificationPrefs = {
   toastKinds: { order: true, bill: true, session: true, table: true, inventory: true, system: true },
   sound: true,
   kitchenAlarm: false,
+  smartAlerts: true,
 };
 
 function readLocalSettings(): any {
@@ -31,6 +32,7 @@ export function getServerNotifPrefs(user?: any): UserNotificationPrefs {
     toastKinds: kinds,
     sound: p.sound !== undefined ? p.sound !== false : true,
     kitchenAlarm: p.kitchenAlarm === true,
+    smartAlerts: p.smartAlerts !== undefined ? p.smartAlerts !== false : true,
   };
 }
 
@@ -53,6 +55,16 @@ export function isSoundOn(user?: any): boolean {
     if (getServerNotifPrefs(user).sound === false) return false;
     const local = readLocalSettings();
     return local?.soundEnabled !== false;
+  } catch {
+    return true;
+  }
+}
+
+/** التنبيهات الذكية (طاولة خاملة) لهذا المستخدم؟ الغائب = مفعّل. */
+export function isSmartAlertsOn(user?: any): boolean {
+  try {
+    const p = (user as any)?.preferences?.notifications;
+    return p?.smartAlerts !== false;
   } catch {
     return true;
   }

@@ -39,6 +39,7 @@ export interface User {
       toastKinds?: Partial<Record<'order' | 'bill' | 'session' | 'table' | 'inventory' | 'system', boolean>>;
       sound?: boolean;
       kitchenAlarm?: boolean;
+      smartAlerts?: boolean;
     };
   };
   organizationName?: string;

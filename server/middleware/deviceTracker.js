@@ -5,6 +5,10 @@ const lastTouch = new Map(); // instanceId -> timestamp ms
 const TOUCH_INTERVAL_MS = 60 * 1000;
 // Considered "online" when seen within this window (socket-free heuristic).
 export const ONLINE_WINDOW_MS = 90 * 1000;
+// Adoption window: a "new" id matching a recently-seen same context device
+// (phones that wipe storage every visit) reuses that row instead of
+// duplicating — keeps the admin's label + print permission.
+const ADOPT_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 function parseClient(uaRaw) {
     const ua = String(uaRaw || "");
@@ -55,6 +59,57 @@ function isLoopback(ip) {
     return ip === "127.0.0.1" || ip === "::1" || ip === "::ffff:127.0.0.1";
 }
 
+// Find by instanceId, else adopt a recently-seen row from the same context
+// (same deviceType + ip + platform + browser + user). Returns the doc or null.
+async function findOrAdoptDevice({ instanceId, deviceType, platform, browser, ip, userId, orgId, defaultAllow }) {
+    let doc = await ConnectedDevice.findOne({ instanceId });
+    if (doc) return doc;
+    const since = new Date(Date.now() - ADOPT_WINDOW_MS);
+    const sib = await ConnectedDevice.findOne({
+        instanceId: { $ne: instanceId },
+        deviceType,
+        ip: ip || "",
+        platform: platform || "",
+        browser: browser || "",
+        user: userId || null,
+        lastSeen: { $gte: since },
+    }).sort({ lastSeen: -1 });
+    if (sib) {
+        // Same physical context with a fresh random id (wiped storage):
+        // adopt the row — admin's label + canPrint survive, no duplicate.
+        sib.instanceId = instanceId;
+        sib.deviceType = deviceType;
+        if (platform) sib.platform = platform;
+        if (browser) sib.browser = browser;
+        if (ip) sib.ip = ip;
+        if (userId) sib.user = userId;
+        if (orgId && !sib.organization) sib.organization = orgId;
+        sib.lastSeen = new Date();
+        try {
+            await sib.save();
+        } catch {
+            return null; // unique race lost -> caller treats as unknown
+        }
+        return sib;
+    }
+    try {
+        doc = await ConnectedDevice.create({
+            instanceId,
+            deviceType,
+            platform,
+            browser,
+            ip,
+            user: userId,
+            organization: orgId,
+            canPrint: defaultAllow,
+            lastSeen: new Date(),
+        });
+    } catch {
+        return null; // create race lost -> caller treats as unknown
+    }
+    return doc;
+}
+
 // Fire-and-forget device touch. Called from authenticateToken (has req.user).
 // NEVER throws, NEVER delays the request.
 export function touchDevice(req) {
@@ -72,23 +127,13 @@ export function touchDevice(req) {
 
         // Allowlist default: desktops (and loopback) auto-allowed so the admin
         // never locks their own printing; phones/browsers start blocked.
+        // Adoption: same context + fresh random id (wiped storage) reuses the
+        // row instead of duplicating it.
         const defaultAllow = deviceType === "desktop" || isLoopback(ip);
 
-        ConnectedDevice.findOne({ instanceId })
+        findOrAdoptDevice({ instanceId, deviceType, platform, browser, ip, userId, orgId, defaultAllow })
             .then((doc) => {
-                if (!doc) {
-                    return ConnectedDevice.create({
-                        instanceId,
-                        deviceType,
-                        platform,
-                        browser,
-                        ip,
-                        user: userId,
-                        organization: orgId,
-                        canPrint: defaultAllow,
-                        lastSeen: new Date(),
-                    });
-                }
+                if (!doc || doc.instanceId !== instanceId) return doc; // adopted/created already fresh
                 doc.deviceType = deviceType;
                 if (platform) doc.platform = platform;
                 if (browser) doc.browser = browser;
@@ -116,27 +161,20 @@ export async function requireDevicePrintPermission(req, res, next) {
     try {
         const instanceId = String(req.headers?.["x-instance-id"] || "").trim();
         if (!instanceId || instanceId === "UNKNOWN") return next();
-        let doc = await ConnectedDevice.findOne({ instanceId });
-        if (!doc) {
-            const { deviceType, platform, browser } = parseClient(req.headers?.["user-agent"]);
-            const ip = clientIp(req);
-            const defaultAllow = deviceType === "desktop" || isLoopback(ip);
-            try {
-                doc = await ConnectedDevice.create({
-                    instanceId,
-                    deviceType,
-                    platform,
-                    browser,
-                    ip,
-                    user: req.user?._id || null,
-                    organization: req.user?.organization || null,
-                    canPrint: defaultAllow,
-                    lastSeen: new Date(),
-                });
-            } catch {
-                return next(); // create race lost -> let the request through
-            }
-        }
+        const { deviceType, platform, browser } = parseClient(req.headers?.["user-agent"]);
+        const ip = clientIp(req);
+        const defaultAllow = deviceType === "desktop" || isLoopback(ip);
+        const doc = await findOrAdoptDevice({
+            instanceId,
+            deviceType,
+            platform,
+            browser,
+            ip,
+            userId: req.user?._id || null,
+            orgId: req.user?.organization || null,
+            defaultAllow,
+        });
+        // null = lost a create race -> let the request through (fail-open).
         if (doc && doc.canPrint === false) return blocked();
         return next();
     } catch {

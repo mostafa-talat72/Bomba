@@ -202,7 +202,9 @@ const userSchema = new mongoose.Schema(
                 default: "ar",
             },
             // إعدادات الإشعارات لكل مستخدم (تتبعه على أي جهاز؛ الغائب = مفعّل).
+            // smartAlerts: استقبال التنبيهات الذكية (طاولة خاملة) — إيقافها شخصي.
             notifications: {
+                smartAlerts: { type: Boolean, default: true },
                 toastKinds: {
                     order: { type: Boolean, default: true },
                     bill: { type: Boolean, default: true },

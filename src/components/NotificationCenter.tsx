@@ -6,6 +6,7 @@ import NotificationSound from './NotificationSound';
 import { getLocaleFromLanguage } from '../utils/localeMapper';
 import { useTranslation } from 'react-i18next';
 import { useOrganization } from '../context/OrganizationContext';
+import { isSmartAlertsOn } from '../utils/notificationPrefs';
 
 interface Notification {
   _id: string;
@@ -378,6 +379,10 @@ const NotificationCenter: React.FC = () => {
   };
 
   const filteredNotifications = notifications.filter(notification => {
+    // إخفاء التنبيهات الذكية لمن أطفأها من إشعاراتي.
+    try {
+      if ((notification as any)?.metadata?.smartAlert && !isSmartAlertsOn(user)) return false;
+    } catch {}
     if (filter === 'unread') return isUnread(notification);
     if (filter === 'read') return notification.readBy.some((read: NotificationRead) => read.user === user?.id);
     if (filter === 'high') return notification.priority === 'high' || notification.priority === 'urgent';

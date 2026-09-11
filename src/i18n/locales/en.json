@@ -1918,6 +1918,7 @@
       "scanHint": "Point the phone camera at the code to open the app",
       "chromeOnly": "Open in Chrome only (Android)",
       "chromeHint": "The code opens Chrome directly on Android. On iPhone, copy the link and paste it in Chrome.",
+      "multiNet": "This device is on multiple networks — each has its own code. If one code doesn't open on your phone, try the other.",
       "copy": "Copy link",
       "copied": "Copied!",
       "refresh": "Refresh",
@@ -4427,6 +4428,13 @@
     "save": "Save",
     "saved": "Notification settings saved",
     "loadError": "Could not load notification settings",
-    "selfDesc": "Your personal instant-alert, sound and kitchen-alarm preferences — follow you on any device"
+    "selfDesc": "Your personal instant-alert, sound and kitchen-alarm preferences — follow you on any device",
+    "smartAlerts": "Smart alerts (idle table)"
+  },
+  "smartCfg": {
+    "title": "Smart alerts",
+    "desc": "Idle occupied-table alert — organization-wide",
+    "minutes": "Minutes before alert",
+    "excludeActive": "Exclude tables with active sessions"
   }
 }

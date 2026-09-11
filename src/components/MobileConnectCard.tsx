@@ -12,10 +12,12 @@ function apiBase(): string {
   }
 }
 
+interface LanEntry {
+  ip: string;
+  iface: string;
+}
+
 // App URL for phones: same origin, hostname swapped to the server LAN IP.
-// Phones ALWAYS use the frontend port :3000 (installed builds serve a
-// dedicated frontend entry there; dev uses vite :3000). Only when NOT in the
-// desktop app do we probe first and fall back to the current port.
 function buildAppUrl(lanIp: string, port: string): string | null {
   try {
     if (typeof window === 'undefined' || !lanIp) return null;
@@ -28,20 +30,6 @@ function buildAppUrl(lanIp: string, port: string): string | null {
     return u.toString().replace(/\/+$/, '');
   } catch {
     return null;
-  }
-}
-
-// Reachability probe for the phone's exact path (LAN IP + port).
-// no-cors: an opaque response still proves something is listening.
-async function isPortReachable(lanIp: string, port: string, timeoutMs = 3000): Promise<boolean> {
-  try {
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), timeoutMs);
-    await fetch(`http://${lanIp}:${port}/`, { mode: 'no-cors', signal: ctrl.signal });
-    clearTimeout(timer);
-    return true;
-  } catch {
-    return false;
   }
 }
 
@@ -62,40 +50,36 @@ function buildChromeIntentUrl(httpUrl: string): string | null {
   }
 }
 
-const MobileConnectCard: React.FC = () => {
+// Reachability probe for the phone's exact path (LAN IP + port).
+// no-cors: an opaque response still proves something is listening.
+async function isPortReachable(lanIp: string, port: string, timeoutMs = 3000): Promise<boolean> {
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+    await fetch(`http://${lanIp}:${port}/`, { mode: 'no-cors', signal: ctrl.signal });
+    clearTimeout(timer);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+interface QrEntry extends LanEntry {
+  url: string;
+  port: string;
+  qr: string | null;
+}
+
+const MobileConnectCard: React.FC<{ showChromeOption?: boolean }> = ({ showChromeOption = true }) => {
   const { t } = useTranslation();
   const [loading, setLoading] = useState(true);
-  const [lanIp, setLanIp] = useState<string | null>(null);
-  const [appUrl, setAppUrl] = useState<string | null>(null);
-  const [qr, setQr] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
+  const [entries, setEntries] = useState<QrEntry[]>([]);
   const [chromeOnly, setChromeOnly] = useState(false);
-  const [port, setPort] = useState<string | null>(null);
-
-  const qrPayload = chromeOnly && appUrl ? (buildChromeIntentUrl(appUrl) || appUrl) : appUrl;
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      if (!qrPayload) {
-        setQr(null);
-        return;
-      }
-      try {
-        const img = await QRCode.toDataURL(qrPayload, { width: 220, margin: 1 });
-        if (!cancelled) setQr(img);
-      } catch {
-        if (!cancelled) setQr(null);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [qrPayload]);
+  const [copiedIp, setCopiedIp] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
-    setQr(null);
+    setEntries([]);
     try {
       const base = apiBase();
       if (!base) return;
@@ -105,44 +89,72 @@ const MobileConnectCard: React.FC = () => {
       clearTimeout(timer);
       if (!res.ok) return;
       const data = await res.json().catch(() => null);
-      const ip = data?.discovery?.localIP || data?.lan?.localIP || null;
-      if (!ip || ip === '127.0.0.1' || ip === 'localhost') {
-        setLanIp(null);
-        return;
-      }
-      setLanIp(ip);
-      // Desktop/installed: :3000 is guaranteed (same-process frontend entry).
-      // Browser/dev: probe :3000, fall back to the serving port if silent.
-      let usePort = '3000';
-      try {
-        const currentPort = new URL(window.location.href).port || '5000';
-        if (!isDesktopApp && currentPort !== '3000' && !(await isPortReachable(ip, '3000'))) {
-          usePort = currentPort;
+      const rawList: LanEntry[] = [];
+      const all = data?.discovery?.allLocalIPs;
+      if (Array.isArray(all)) {
+        for (const e of all) {
+          const ip = typeof e === 'string' ? e : e?.ip;
+          if (ip && ip !== '127.0.0.1' && ip !== 'localhost') {
+            rawList.push({ ip, iface: typeof e === 'object' ? String(e?.iface || '') : '' });
+          }
         }
-      } catch {
-        usePort = '3000';
       }
-      setPort(usePort);
-      const url = buildAppUrl(ip, usePort);
-      setAppUrl(url);
+      if (!rawList.length) {
+        const ip = data?.discovery?.localIP || data?.lan?.localIP || null;
+        if (ip && ip !== '127.0.0.1' && ip !== 'localhost') rawList.push({ ip, iface: '' });
+      }
+      if (!rawList.length) return;
+
+      const currentPort = (() => {
+        try {
+          return new URL(window.location.href).port || '5000';
+        } catch {
+          return '5000';
+        }
+      })();
+      const built: QrEntry[] = [];
+      for (const entry of rawList) {
+        // Desktop/installed: :3000 is guaranteed (same-process frontend entry).
+        // Browser/dev: probe :3000, fall back to the serving port if silent.
+        let usePort = '3000';
+        try {
+          if (!isDesktopApp && currentPort !== '3000' && !(await isPortReachable(entry.ip, '3000'))) {
+            usePort = currentPort;
+          }
+        } catch {
+          usePort = '3000';
+        }
+        const url = buildAppUrl(entry.ip, usePort);
+        if (!url) continue;
+        built.push({ ...entry, url, port: usePort, qr: null });
+      }
+      // QR images (sequential, cheap)
+      for (const b of built) {
+        const payload = chromeOnly ? buildChromeIntentUrl(b.url) || b.url : b.url;
+        try {
+          b.qr = await QRCode.toDataURL(payload, { width: 220, margin: 1 });
+        } catch {
+          b.qr = null;
+        }
+      }
+      setEntries(built);
     } catch {
-      setLanIp(null);
+      setEntries([]);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [chromeOnly]);
 
   useEffect(() => {
     load();
   }, [load]);
 
-  const handleCopy = async () => {
-    if (!appUrl) return;
+  const handleCopy = async (entry: QrEntry) => {
     try {
-      await navigator.clipboard.writeText(appUrl);
+      await navigator.clipboard.writeText(entry.url);
     } catch {
       const ta = document.createElement('textarea');
-      ta.value = appUrl;
+      ta.value = entry.url;
       document.body.appendChild(ta);
       ta.select();
       try {
@@ -150,8 +162,8 @@ const MobileConnectCard: React.FC = () => {
       } catch {}
       document.body.removeChild(ta);
     }
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    setCopiedIp(entry.ip);
+    setTimeout(() => setCopiedIp(null), 2000);
   };
 
   return (
@@ -160,7 +172,7 @@ const MobileConnectCard: React.FC = () => {
       <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">{t('settings.mobile.desc')}</p>
       {loading ? (
         <p className="text-gray-500 dark:text-gray-400">{t('settings.organization.loading')}</p>
-      ) : !lanIp || !appUrl ? (
+      ) : entries.length === 0 ? (
         <div className="flex items-center gap-2">
           <p className="text-sm text-amber-600 dark:text-amber-400 flex-1">{t('settings.mobile.noLan')}</p>
           <button
@@ -172,50 +184,64 @@ const MobileConnectCard: React.FC = () => {
           </button>
         </div>
       ) : (
-        <div className="flex flex-col sm:flex-row items-center gap-4 bg-gray-50 dark:bg-gray-700 p-4 rounded-lg">
-          {qr ? (
-            <img src={qr} alt="QR" className="w-44 h-44 rounded-lg border border-gray-200 dark:border-gray-600 bg-white p-1" />
-          ) : (
-            <div className="w-44 h-44 rounded-lg bg-gray-200 dark:bg-gray-600 flex items-center justify-center text-sm text-gray-500">QR</div>
+        <div className="space-y-4">
+          <div className="flex items-center gap-2 flex-wrap">
+            {showChromeOption && (
+              <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-200 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={chromeOnly}
+                  onChange={(e) => setChromeOnly(e.target.checked)}
+                  className="w-4 h-4 accent-blue-600"
+                />
+                {t('settings.mobile.chromeOnly')}
+              </label>
+            )}
+            <button
+              type="button"
+              onClick={load}
+              className="px-3 py-1.5 bg-gray-100 dark:bg-gray-600 hover:bg-gray-200 dark:hover:bg-gray-500 text-gray-700 dark:text-gray-200 text-sm rounded-lg"
+            >
+              {t('settings.mobile.refresh')}
+            </button>
+          </div>
+          {showChromeOption && chromeOnly && (
+            <p className="text-xs text-gray-500 dark:text-gray-400 -mt-2">{t('settings.mobile.chromeHint')}</p>
           )}
-          <div className="flex-1 min-w-0 text-center sm:text-right">
-            <p className="text-sm text-gray-600 dark:text-gray-300 mb-2">{t('settings.mobile.scanHint')}</p>
-            <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-200 mb-2 justify-center sm:justify-start cursor-pointer">
-              <input
-                type="checkbox"
-                checked={chromeOnly}
-                onChange={(e) => setChromeOnly(e.target.checked)}
-                className="w-4 h-4 accent-blue-600"
-              />
-              {t('settings.mobile.chromeOnly')}
-            </label>
-            {chromeOnly && (
-              <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">{t('settings.mobile.chromeHint')}</p>
-            )}
-            <p className="text-sm font-mono bg-white dark:bg-gray-800 rounded-lg px-3 py-2 mb-1 break-all" dir="ltr">
-              {appUrl}
+          {entries.length > 1 && (
+            <p className="text-sm text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg px-3 py-2">
+              {t('settings.mobile.multiNet')}
             </p>
-            {port && (
-              <p className="text-xs text-gray-500 dark:text-gray-400 mb-3" dir="ltr">
-                port: {port}
-              </p>
-            )}
-            <div className="flex gap-2 justify-center sm:justify-start">
-              <button
-                type="button"
-                onClick={handleCopy}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded-lg"
-              >
-                {copied ? t('settings.mobile.copied') : t('settings.mobile.copy')}
-              </button>
-              <button
-                type="button"
-                onClick={load}
-                className="px-4 py-2 bg-gray-100 dark:bg-gray-600 hover:bg-gray-200 dark:hover:bg-gray-500 text-gray-700 dark:text-gray-200 text-sm rounded-lg"
-              >
-                {t('settings.mobile.refresh')}
-              </button>
-            </div>
+          )}
+          <div className={`grid gap-4 ${entries.length > 1 ? 'sm:grid-cols-2' : ''}`}>
+            {entries.map((entry) => (
+              <div key={entry.ip} className="flex flex-col sm:flex-row items-center gap-4 bg-gray-50 dark:bg-gray-700 p-4 rounded-lg">
+                {entry.qr ? (
+                  <img src={entry.qr} alt="QR" className="w-44 h-44 rounded-lg border border-gray-200 dark:border-gray-600 bg-white p-1 flex-shrink-0" />
+                ) : (
+                  <div className="w-44 h-44 rounded-lg bg-gray-200 dark:bg-gray-600 flex items-center justify-center text-sm text-gray-500 flex-shrink-0">QR</div>
+                )}
+                <div className="flex-1 min-w-0 text-center sm:text-right w-full">
+                  <p className="text-sm font-bold text-gray-800 dark:text-gray-100 mb-1" dir="ltr">
+                    {entry.ip}:{entry.port}
+                  </p>
+                  {entry.iface && (
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-2" dir="ltr">{entry.iface}</p>
+                  )}
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">{t('settings.mobile.scanHint')}</p>
+                  <p className="text-xs font-mono bg-white dark:bg-gray-800 rounded-lg px-2 py-1.5 mb-3 break-all" dir="ltr">
+                    {entry.url}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => handleCopy(entry)}
+                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded-lg"
+                  >
+                    {copiedIp === entry.ip ? t('settings.mobile.copied') : t('settings.mobile.copy')}
+                  </button>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       )}

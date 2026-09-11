@@ -1,9 +1,9 @@
 /**
  * الملخص والتنبيهات الذكية للإشعارات:
  * 1) ملخص كل ساعة: أعداد الطلبات/الفواتير المدفوعة/الجلسات (صف واحد، يُتجاهل عند خلو الساعة).
- * 2) تنبيهات ذكية كل 15 دقيقة: طاولة مشغولة بلا نشاط + فاتورة مفتوحة كبيرة.
- * العتبات من إعدادات الإشعارات (Settings/category=notifications): idleTableMinutes (45)،
- * bigBillAmount (500). منع التكرار بالاستعلام عن صف حديث مماثل. لا ترمي أبداً.
+ * 2) تنبيهات ذكية كل 15 دقيقة: طاولة مشغولة بلا نشاط.
+ * العتبة من إعدادات الإشعارات (Settings/category=notifications): idleTableMinutes (45).
+ * منع التكرار بالاستعلام عن صف حديث مماثل. لا ترمي أبداً.
  */
 import cron from "node-cron";
 import Logger from "../middleware/logger.js";
@@ -31,13 +31,13 @@ async function orgAdminId(orgId) {
 }
 
 async function readThresholds(orgId) {
-    const defaults = { idleTableMinutes: 45, bigBillAmount: 500 };
+    const defaults = { idleTableMinutes: 45, idleExcludeActiveSessions: true };
     try {
         const doc = await Settings.findOne({ category: "notifications", organization: orgId }).lean();
         const s = doc?.settings || {};
         return {
             idleTableMinutes: Number(s.idleTableMinutes) > 0 ? Number(s.idleTableMinutes) : defaults.idleTableMinutes,
-            bigBillAmount: Number(s.bigBillAmount) > 0 ? Number(s.bigBillAmount) : defaults.bigBillAmount,
+            idleExcludeActiveSessions: s.idleExcludeActiveSessions !== false,
         };
     } catch {
         return defaults;
@@ -72,6 +72,12 @@ export async function runHourlyDigest() {
                 if (!orders && !paidCount && !sessions) continue; // ساعة خالية — بلا صف
                 const createdBy = await orgAdminId(orgId);
                 if (!createdBy) continue;
+                // الملخص للمديرين ومالك المنشأة فقط.
+                let ownerId = null;
+                try {
+                    const org = await Organization.findById(orgId).select("owner").lean();
+                    if (org?.owner) ownerId = org.owner;
+                } catch {}
                 const range = new Date(since);
                 const hh = String(range.getHours()).padStart(2, "0");
                 const title = { ar: `ملخص الساعة ${hh}`, en: `Hour ${hh} summary` };
@@ -86,8 +92,9 @@ export async function runHourlyDigest() {
                         type: "info",
                         category: "system",
                         priority: "low",
-                        targetRoles: ["admin", "cashier"],
-                        targetPermissions: ["dashboard"],
+                        targetRoles: ["admin"],
+                        targetUsers: ownerId ? [ownerId] : [],
+                        targetPermissions: [],
                         metadata: {
                             digest: { orders, paidCount, paidTotal, sessions, hour: hh },
                             translations: {
@@ -112,7 +119,7 @@ export async function runSmartAlerts() {
     try {
         for (const orgId of await allOrgIds()) {
             try {
-                const { idleTableMinutes, bigBillAmount } = await readThresholds(orgId);
+                const { idleTableMinutes, idleExcludeActiveSessions } = await readThresholds(orgId);
                 const createdBy = await orgAdminId(orgId);
                 if (!createdBy) continue;
                 const now = Date.now();
@@ -124,6 +131,11 @@ export async function runSmartAlerts() {
                         .lean();
                     for (const t of tables) {
                         try {
+                            // استثناء طاولات الجلسات النشطة (بلايستيشن/كمبيوتر شغال = ليست خاملة).
+                            if (idleExcludeActiveSessions) {
+                                const live = await Session.exists({ organization: orgId, table: t._id, status: "active" }).catch(() => null);
+                                if (live) continue;
+                            }
                             const lastOrder = await Order.findOne({ organization: orgId, table: t._id })
                                 .sort({ createdAt: -1 })
                                 .select("createdAt")
@@ -167,60 +179,6 @@ export async function runSmartAlerts() {
                     }
                 } catch {}
 
-                // ب) فاتورة مفتوحة كبيرة
-                try {
-                    const bills = await Bill.find({
-                        organization: orgId,
-                        status: { $in: ["draft", "partial", "overdue"] },
-                        total: { $gte: bigBillAmount },
-                    })
-                        .select("_id billNumber total table")
-                        .lean();
-                    for (const b of bills) {
-                        try {
-                            const recent = await Notification.exists({
-                                organization: orgId,
-                                category: "system",
-                                "metadata.smartAlert": "big-bill",
-                                "metadata.billId": String(b._id),
-                                createdAt: { $gte: new Date(now - 4 * HOUR) },
-                            });
-                            if (recent) continue;
-                            let tableNumber = null;
-                            try {
-                                const t = b.table
-                                    ? await Table.findById(b.table).select("number").lean()
-                                    : null;
-                                tableNumber = t?.number ?? null;
-                            } catch {}
-                            await NotificationService.createNotification(
-                                {
-                                    title: "فاتورة مفتوحة كبيرة",
-                                    message: `فاتورة ${b.billNumber} مفتوحة بمبلغ ${b.total}${tableNumber !== null ? ` — طاولة ${tableNumber}` : ""}`,
-                                    type: "warning",
-                                    category: "system",
-                                    priority: "high",
-                                    targetRoles: ["admin", "cashier"],
-                                    targetPermissions: ["billing"],
-                                    metadata: {
-                                        smartAlert: "big-bill",
-                                        billId: String(b._id),
-                                        billNumber: b.billNumber,
-                                        amount: b.total,
-                                        tableNumber,
-                                        translations: {
-                                            ar: { title: "فاتورة مفتوحة كبيرة", message: `فاتورة ${b.billNumber} مفتوحة بمبلغ ${b.total}` },
-                                            en: { title: "Large open bill", message: `Bill ${b.billNumber} open at ${b.total}` },
-                                        },
-                                    },
-                                    expiresAt: new Date(now + 24 * HOUR),
-                                    createdBy,
-                                },
-                                { organization: orgId }
-                            );
-                        } catch {}
-                    }
-                } catch {}
             } catch {}
         }
     } catch (error) {

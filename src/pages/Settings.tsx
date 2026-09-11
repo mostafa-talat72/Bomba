@@ -151,6 +151,9 @@ const Settings: FC = () => {
 
   const { user, updateUserProfile, updateMyPrintSettings, changePassword, updateGeneralSettings, getGeneralSettings, getOrganization, updateOrganization, updateOrganizationPermissions, canEditOrganization, getAvailableManagers, getReportSettings, updateReportSettings, canManageReports, sendReportNow, canManagePayroll, updatePayrollPermissions } = useApp();
   const { setUser } = useAuth();
+  // Sensitive sections (backups, server address, DB maintenance, device
+  // management, chrome-only QR): owner + admins only.
+  const isManager = user?.role === 'admin' || user?.role === 'owner';
 
   // UI State
   const [activeTab, setActiveTab] = useState('profile');
@@ -1133,6 +1136,47 @@ const Settings: FC = () => {
     }
   };
 
+  // ── Smart alerts thresholds (org-wide) ──
+  const [smartCfg, setSmartCfg] = useState({ idleTableMinutes: 45, idleExcludeActiveSessions: true });
+  const [smartCfgLoading, setSmartCfgLoading] = useState(true);
+  const [smartCfgSaving, setSmartCfgSaving] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      setSmartCfgLoading(true);
+      try {
+        const res: any = await (api as any).getNotificationSettings?.();
+        const s = res?.success && res.data ? res.data : res?.data || {};
+        setSmartCfg({
+          idleTableMinutes: Number(s.idleTableMinutes) > 0 ? Number(s.idleTableMinutes) : 45,
+          idleExcludeActiveSessions: s.idleExcludeActiveSessions !== false,
+        });
+      } catch {}
+      finally {
+        setSmartCfgLoading(false);
+      }
+    })();
+  }, []);
+
+  const handleSmartCfgSave = async () => {
+    setSmartCfgSaving(true);
+    try {
+      const cur: any = await (api as any).getNotificationSettings?.().catch(() => null);
+      const base = cur?.success && cur.data ? cur.data : {};
+      const res: any = await (api as any).updateNotificationSettings?.({
+        ...base,
+        idleTableMinutes: smartCfg.idleTableMinutes,
+        idleExcludeActiveSessions: smartCfg.idleExcludeActiveSessions,
+      });
+      if (res?.success) showAlertMessage(t('notifPrefs.saved'), 'success');
+      else showAlertMessage(t('notifPrefs.loadError'), 'error');
+    } catch {
+      showAlertMessage(t('notifPrefs.loadError'), 'error');
+    } finally {
+      setSmartCfgSaving(false);
+    }
+  };
+
   // ── My notification settings (per-user, follows the user on any device) ──
   const handleMyNotifSave = async () => {
     setMyNotifSaving(true);
@@ -1560,6 +1604,8 @@ const Settings: FC = () => {
                         </select>
                       </div>
 
+                    {/* Backup settings (owner/admins only) */}
+                    {isManager && (
                     <div>
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                         مسار النسخ الاحتياطي
@@ -1691,7 +1737,9 @@ const Settings: FC = () => {
                         </p>
                       </div>
                     </div>
+                    )}
 
+                    {isManager && (
                     <div>
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                         {t('serverConnection.title')}
@@ -1716,6 +1764,7 @@ const Settings: FC = () => {
                         {t('serverConnection.desc')}
                       </p>
                     </div>
+                    )}
 
                     <div className="mt-6">
                       <button
@@ -1830,8 +1879,51 @@ const Settings: FC = () => {
                   )}
                 </div>
 
-                {/* Database maintenance (admin only) */}
-                {user?.role === 'admin' && (
+                {/* Smart alerts thresholds (org-wide, managers only) */}
+                {isManager && (
+                  <div>
+                    <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">{t('smartCfg.title')}</h3>
+                    <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">{t('smartCfg.desc')}</p>
+                    {smartCfgLoading ? (
+                      <p className="text-gray-500 dark:text-gray-400">{t('settings.organization.loading')}</p>
+                    ) : (
+                      <div className="space-y-3 bg-gray-50 dark:bg-gray-700 p-4 rounded-lg">
+                        <label className="flex items-center justify-between gap-3">
+                          <span className="text-sm font-medium text-gray-700 dark:text-gray-200">{t('smartCfg.minutes')}</span>
+                          <input
+                            type="number"
+                            min={5}
+                            max={480}
+                            value={smartCfg.idleTableMinutes}
+                            onChange={(e) => setSmartCfg((p) => ({ ...p, idleTableMinutes: Math.max(5, Number(e.target.value) || 45) }))}
+                            className="w-24 px-2 py-1 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                          />
+                        </label>
+                        <label className="flex items-center justify-between gap-3 cursor-pointer">
+                          <span className="text-sm font-medium text-gray-700 dark:text-gray-200">{t('smartCfg.excludeActive')}</span>
+                          <input
+                            type="checkbox"
+                            checked={smartCfg.idleExcludeActiveSessions}
+                            onChange={(e) => setSmartCfg((p) => ({ ...p, idleExcludeActiveSessions: e.target.checked }))}
+                            className="h-4 w-4"
+                          />
+                        </label>
+                        <div>
+                          <button
+                            onClick={handleSmartCfgSave}
+                            disabled={smartCfgSaving}
+                            className="bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 text-white px-4 py-2 rounded-md disabled:opacity-50 min-w-40"
+                          >
+                            {smartCfgSaving ? <span>{t('common.saving')}</span> : <span>{t('notifPrefs.save')}</span>}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Database maintenance (owner/admins only) */}
+                {isManager && (
                   <div>
                     <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">{t('settings.maintenance.title')}</h3>
                     <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">{t('settings.maintenance.desc')}</p>
@@ -1852,11 +1944,11 @@ const Settings: FC = () => {
 
                 {/* Connect mobile over LAN */}
                 <div>
-                  <MobileConnectCard />
+                  <MobileConnectCard showChromeOption={isManager} />
                 </div>
 
-                {/* Connected devices + per-device print permission (admin/owner only) */}
-                {(user?.role === 'admin' || user?.role === 'owner') && (
+                {/* Connected devices + per-device print permission (owner/admins only) */}
+                {isManager && (
                   <div>
                     <ConnectedDevicesCard />
                   </div>

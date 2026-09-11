@@ -7,7 +7,7 @@ import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from './AuthContext';
 import { buildActivityToast } from '../utils/activityToast';
-import { isToastKindEnabled, isKitchenAlarmOn } from '../utils/notificationPrefs';
+import { isToastKindEnabled, isKitchenAlarmOn, isSmartAlertsOn } from '../utils/notificationPrefs';
 import { startKitchenAlarm, stopKitchenAlarm } from '../utils/kitchenAlarm';
 import { setDataActionsRef } from './dataActionsRef';
 
@@ -2927,6 +2927,10 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         setTimeout(() => { try { void forceRefreshNotifications().catch(() => {}); } catch {} }, 1500);
         const category = (data as any)?.category;
         if (category === 'order' || category === 'billing' || category === 'session') return;
+        // التنبيهات الذكية مطفأة لهذا المستخدم: بلا توست (القائمة تُخفى من المركز).
+        try {
+          if ((data as any)?.metadata?.smartAlert && !isSmartAlertsOn(user)) return;
+        } catch {}
         // حدث قديم بعد إعادة اتصال: القائمة تتحدث، بلا توست.
         try {
           const created = (data as any)?.createdAt ? new Date((data as any).createdAt).getTime() : 0;

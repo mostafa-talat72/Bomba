@@ -832,13 +832,14 @@ export const updateMyPrintSettings = async (req, res) => {
 const NOTIF_KINDS = ["order", "bill", "session", "table", "inventory", "system"];
 
 function sanitizeNotificationPrefs(input = {}) {
-    const clean = { toastKinds: {}, sound: undefined, kitchenAlarm: undefined };
+    const clean = { toastKinds: {}, sound: undefined, kitchenAlarm: undefined, smartAlerts: undefined };
     const kinds = input.toastKinds && typeof input.toastKinds === "object" ? input.toastKinds : {};
     for (const k of NOTIF_KINDS) {
         if (kinds[k] !== undefined) clean.toastKinds[k] = kinds[k] === true;
     }
     if (input.sound !== undefined) clean.sound = input.sound === true;
     if (input.kitchenAlarm !== undefined) clean.kitchenAlarm = input.kitchenAlarm === true;
+    if (input.smartAlerts !== undefined) clean.smartAlerts = input.smartAlerts === true;
     return clean;
 }
 
@@ -850,6 +851,7 @@ function readNotificationPrefs(user) {
         toastKinds: kinds,
         sound: p.sound !== false,
         kitchenAlarm: p.kitchenAlarm === true,
+        smartAlerts: p.smartAlerts !== false,
     };
 }
 
@@ -880,6 +882,7 @@ export const updateMyNotificationSettings = async (req, res) => {
         Object.assign(user.preferences.notifications.toastKinds, clean.toastKinds);
         if (clean.sound !== undefined) user.preferences.notifications.sound = clean.sound;
         if (clean.kitchenAlarm !== undefined) user.preferences.notifications.kitchenAlarm = clean.kitchenAlarm;
+        if (clean.smartAlerts !== undefined) user.preferences.notifications.smartAlerts = clean.smartAlerts;
         user.markModified("preferences");
         await user.save();
         res.json({ success: true, message: "تم حفظ إعدادات الإشعارات بنجاح", data: readNotificationPrefs(user) });
@@ -926,6 +929,7 @@ export const updateUserNotificationSettings = async (req, res) => {
         Object.assign(user.preferences.notifications.toastKinds, clean.toastKinds);
         if (clean.sound !== undefined) user.preferences.notifications.sound = clean.sound;
         if (clean.kitchenAlarm !== undefined) user.preferences.notifications.kitchenAlarm = clean.kitchenAlarm;
+        if (clean.smartAlerts !== undefined) user.preferences.notifications.smartAlerts = clean.smartAlerts;
         user.markModified("preferences");
         await user.save();
         res.json({ success: true, message: "تم حفظ إعدادات الإشعارات بنجاح", data: readNotificationPrefs(user) });

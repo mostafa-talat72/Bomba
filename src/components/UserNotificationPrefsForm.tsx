@@ -2,7 +2,7 @@ import React from 'react';
 import { useTranslation } from 'react-i18next';
 import type { UserNotificationPrefsDraft } from '../services/api/users';
 
-export type NotifPrefsDraft = UserNotificationPrefsDraft;
+export type NotifPrefsDraft = UserNotificationPrefsDraft & { smartAlerts?: boolean };
 
 interface Props {
   value: NotifPrefsDraft;
@@ -74,6 +74,12 @@ const UserNotificationPrefsForm: React.FC<Props> = ({ value, onChange, disabled 
         value.kitchenAlarm === true,
         (v) => onChange({ ...value, kitchenAlarm: v }),
         'kitchenAlarm'
+      )}
+      {row(
+        t('notifPrefs.smartAlerts'),
+        (value as any).smartAlerts !== false,
+        (v) => onChange({ ...value, smartAlerts: v }),
+        'smartAlerts'
       )}
     </div>
   );

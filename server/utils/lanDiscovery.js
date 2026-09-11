@@ -27,13 +27,25 @@ export const LAN_ANNOUNCE_INTERVAL_MS = 5000;
 export const LAN_PEER_TIMEOUT_MS = 15000;
 
 function getLocalIP() {
+    const all = getAllLocalIPs();
+    return all.length ? all[0].ip : "127.0.0.1";
+}
+
+// Every usable LAN IPv4 (Wi-Fi + Ethernet + ...). Used by the mobile QR card
+// so dual-homed machines offer one code per network.
+function getAllLocalIPs() {
+    const out = [];
+    const seen = new Set();
     const ifaces = os.networkInterfaces();
     for (const name of Object.keys(ifaces)) {
         for (const iface of ifaces[name] || []) {
-            if (iface.family === "IPv4" && !iface.internal) return iface.address;
+            if (iface.family === "IPv4" && !iface.internal && !seen.has(iface.address)) {
+                seen.add(iface.address);
+                out.push({ ip: iface.address, iface: name });
+            }
         }
     }
-    return "127.0.0.1";
+    return out;
 }
 
 function getBroadcastAddresses() {
@@ -190,6 +202,7 @@ class LanMeshDiscovery extends EventEmitter {
             deviceId: this.deviceId,
             name: this.name,
             localIP: getLocalIP(),
+            allLocalIPs: getAllLocalIPs(),
             port: this.httpPort,
             timeSource: isTimeSourcePinned(),
             peers: this.getPeers(),

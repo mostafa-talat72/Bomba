@@ -110,6 +110,7 @@ export interface UserNotificationPrefs {
   };
   sound: boolean;
   kitchenAlarm: boolean;
+  smartAlerts: boolean;
 }
 
 async function getMyNotificationSettings(): Promise<ApiResponse<UserNotificationPrefs>> {
@@ -120,6 +121,7 @@ export interface UserNotificationPrefsDraft {
   toastKinds?: Partial<Record<'order' | 'bill' | 'session' | 'table' | 'inventory' | 'system', boolean>>;
   sound?: boolean;
   kitchenAlarm?: boolean;
+  smartAlerts?: boolean;
 }
 
 async function updateMyNotificationSettings(data: UserNotificationPrefsDraft): Promise<ApiResponse<UserNotificationPrefs>> {

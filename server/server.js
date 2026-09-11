@@ -841,6 +841,14 @@ if (process.env.DESKTOP_DIST_PATH) {
                 try {
                     headers.host = `127.0.0.1:${port}`;
                 } catch {}
+                // Preserve the real LAN client IP (else every proxied phone
+                // looks like 127.0.0.1: breaks device list + loopback trust).
+                try {
+                    const fwd = String(req.headers["x-forwarded-for"] || "").trim();
+                    const peer = String(req.socket?.remoteAddress || "").replace(/^::ffff:/, "");
+                    const chain = [fwd, peer].filter(Boolean).join(", ");
+                    if (chain) headers["x-forwarded-for"] = chain;
+                } catch {}
                 // socket.io long-polling hangs requests for tens of seconds by
                 // design — never time those out or live events die mid-flight.
                 const isSocketIo = (req.originalUrl || '').startsWith('/socket.io');
@@ -1002,9 +1010,17 @@ if (process.env.DESKTOP_DIST_PATH) {
                                 `${req.method} ${req.url} HTTP/${req.httpVersion}`,
                                 `Host: 127.0.0.1:${backendPort()}`,
                             ];
+                            let forwarded = false;
                             for (const [k, v] of Object.entries(req.headers)) {
                                 if (["host", "connection"].includes(String(k).toLowerCase())) continue;
+                                if (String(k).toLowerCase() === "x-forwarded-for") forwarded = true;
                                 lines.push(`${k}: ${v}`);
+                            }
+                            if (!forwarded) {
+                                try {
+                                    const peer = String(req.socket?.remoteAddress || "").replace(/^::ffff:/, "");
+                                    if (peer) lines.push(`X-Forwarded-For: ${peer}`);
+                                } catch {}
                             }
                             lines.push("Connection: Upgrade", "", "");
                             backend.write(lines.join("\r\n"));
