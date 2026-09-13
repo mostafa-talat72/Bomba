@@ -208,7 +208,18 @@ export const DailyReportPDFDocument = ({ reportData, t, currentLanguage, isRTL, 
     topProducts: reportData?.topProducts || [],
     soldItemsBySection: reportData?.soldItemsBySection || [],
     allSoldItems: reportData?.allSoldItems || [],
+    // Per-recipient scope flags (absent = legacy full report -> show all).
+    _scope: reportData?._scope || {
+      sectionIds: [],
+      includeEmployees: true,
+      includeCosts: true,
+      includePlaystation: true,
+      includeComputer: true,
+    },
   };
+  const showCosts = safeReportData._scope.includeCosts !== false;
+  const showPS = safeReportData._scope.includePlaystation !== false;
+  const showPC = safeReportData._scope.includeComputer !== false;
 
   const safeT = t || {};
   const safeCurrency = currencySymbol || 'EGP';
@@ -229,11 +240,11 @@ export const DailyReportPDFDocument = ({ reportData, t, currentLanguage, isRTL, 
         h(Text, { key: 'period', style: styles.subtitle }, cleanText(safeReportData.reportPeriod))
       ]),
       
-      // صافي الربح
-      h(View, { key: 'profit', style: styles.profitBox }, [
+      // صافي الربح (يُخفى عند استبعاد التكاليف — الرقم سيكون الإيراد فقط)
+      ...(showCosts ? [h(View, { key: 'profit', style: styles.profitBox }, [
         h(Text, { key: 'profit-label', style: styles.profitLabel }, cleanText(safeT.dailyReport?.netProfit || 'صافي الربح')),
         h(Text, { key: 'profit-value', style: styles.profitValue }, `${formatNumber(safeReportData.netProfit.toFixed(2), currentLanguage)} ${cleanText(safeCurrency)}`)
-      ]),
+      ])] : []),
       
       // الملخص المالي - 3 كروت بجانب بعضهم
       h(View, { key: 'financial', style: styles.section }, [
@@ -256,8 +267,8 @@ export const DailyReportPDFDocument = ({ reportData, t, currentLanguage, isRTL, 
               h(Text, { key: 'margin-label', style: styles.statLabel }, cleanText(safeT.dailyReport?.profitMargin || 'هامش الربح')),
               h(Text, { key: 'margin-value', style: styles.statValue }, `${formatNumber(safeReportData.profitMargin.toFixed(1), currentLanguage)}%`)
             ])
-          ])
-        ])
+          ]),
+        ].filter((_, i) => i === 0 || showCosts))
       ]),
       // ملخص العمليات - 3 كروت بجانب بعضهم
       h(View, { key: 'operations', style: styles.section }, [
@@ -281,7 +292,7 @@ export const DailyReportPDFDocument = ({ reportData, t, currentLanguage, isRTL, 
               h(Text, { key: 'bills-value', style: styles.statValue }, formatNumber(safeReportData.totalBills, currentLanguage))
             ])
           ])
-        ])
+        ].filter((_, i) => i !== 1 || showPS || showPC))
       ]),
       
       // الإيرادات حسب النوع - 3 كروت بجانب بعضهم
@@ -294,18 +305,18 @@ export const DailyReportPDFDocument = ({ reportData, t, currentLanguage, isRTL, 
               h(Text, { key: 'cafe-value', style: styles.statValue }, `${formatNumber(safeReportData.revenueByType.cafe.toFixed(2), currentLanguage)} ${cleanText(safeCurrency)}`)
             ])
           ]),
-          h(View, { key: 'ps', style: styles.statCard }, [
+          ...(showPS ? [h(View, { key: 'ps', style: styles.statCard }, [
             h(View, { key: 'ps-box', style: styles.statBox }, [
               h(Text, { key: 'ps-label', style: styles.statLabel }, cleanText(safeT.dailyReport?.playstationRevenue || 'إيرادات البلايستيشن')),
               h(Text, { key: 'ps-value', style: styles.statValue }, `${formatNumber(safeReportData.revenueByType.playstation.toFixed(2), currentLanguage)} ${cleanText(safeCurrency)}`)
             ])
-          ]),
-          h(View, { key: 'pc', style: styles.statCard }, [
+          ])] : []),
+          ...(showPC ? [h(View, { key: 'pc', style: styles.statCard }, [
             h(View, { key: 'pc-box', style: styles.statBox }, [
               h(Text, { key: 'pc-label', style: styles.statLabel }, cleanText(safeT.dailyReport?.computerRevenue || 'إيرادات الكمبيوتر')),
               h(Text, { key: 'pc-value', style: styles.statValue }, `${formatNumber(safeReportData.revenueByType.computer.toFixed(2), currentLanguage)} ${cleanText(safeCurrency)}`)
             ])
-          ])
+          ])] : []),
         ])
       ]),
       

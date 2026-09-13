@@ -108,7 +108,6 @@ export const openCashDrawerThroughAgent = async (printerName?: string, requestKe
       if (now - timestamp >= 3000) recentDrawerOpens.delete(key);
     }
   }
-  console.log(`[drawer-agent] sending key=${requestKey} printer=${printerName || 'default'}`);
   const job = (async (): Promise<boolean> => {
     const response = await fetch(LOCAL_DRAWER_URL, {
       method: 'POST',

@@ -110,6 +110,35 @@ const PaymentManagementModal: React.FC<PaymentManagementModalProps> = ({
   // إعادة ضبط التقسيم عند تغيير الفاتورة
   React.useEffect(() => { setSplitEnabled(false); setSplitAmount2(''); setSplitMethod2('card'); }, [selectedBill?._id, selectedBill?.id]);
 
+  // تأكيد الدفع: مراجعة المبلغ والطريقة قبل التنفيذ (يعمل في كل الصفحات).
+  const [confirmPay, setConfirmPay] = React.useState<null | { mode: 'submit' | 'split' }>(null);
+  React.useEffect(() => { setConfirmPay(null); }, [selectedBill?._id, selectedBill?.id, isOpen]);
+  const methodLabel = (m: string) => (m === 'cash' ? 'نقدي' : m === 'card' ? 'كارت' : m === 'transfer' ? 'تحويل' : m);
+  const confirmAmount = confirmPay?.mode === 'split'
+    ? (parseFloat(paymentAmount) || 0) + (parseFloat(splitAmount2) || 0)
+    : parseFloat(paymentAmount) || 0;
+  const confirmMethodText = confirmPay?.mode === 'split'
+    ? `${methodLabel(paymentMethod)} + ${methodLabel(splitMethod2)}`
+    : methodLabel(paymentMethod);
+  const openPayConfirm = () => {
+    if (hasActiveSession(selectedBill) || isProcessingPayment) return;
+    if (splitEnabled) {
+      if (!onSplitSubmit || !splitAmount2) return;
+      setConfirmPay({ mode: 'split' });
+    } else {
+      if (!paymentAmount) return;
+      setConfirmPay({ mode: 'submit' });
+    }
+  };
+  const execConfirmedPay = async () => {
+    const mode = confirmPay?.mode;
+    setConfirmPay(null);
+    try {
+      if (mode === 'split') await onSplitSubmit?.(splitAmount2, splitMethod2);
+      else await handlePaymentSubmit();
+    } catch (e) { console.error(e); }
+  };
+
   // الدفع بالكامل عند الطباعة — إعداد ثابت من الإعدادات (printMarksPaid) يطبق
   // على جميع الفواتير، بلا خيار لكل فاتورة.
   // ملاحظة: user.organization لقطة من تسجيل الدخول وقد تكون قديمة بعد حفظ
@@ -472,7 +501,7 @@ const PaymentManagementModal: React.FC<PaymentManagementModalProps> = ({
                       {t('common.close')}
                     </button>
                     {selectedBill?.status !== 'paid' && paymentAmount && (
-                      <button onClick={() => { if (splitEnabled && onSplitSubmit) { void submitSplit(); } else { void handlePaymentSubmit(); } }}
+                      <button onClick={openPayConfirm}
                         disabled={hasActiveSession(selectedBill) || isProcessingPayment || (splitEnabled && !splitAmount2)}
                         className={`px-4 py-1.5 rounded-lg text-base font-bold transition-all flex items-center gap-1.5 ${
                           hasActiveSession(selectedBill) || isProcessingPayment || (splitEnabled && !splitAmount2)
@@ -738,6 +767,41 @@ const PaymentManagementModal: React.FC<PaymentManagementModalProps> = ({
             </div>
           </div>
         </div>
+        {/* نافذة تأكيد الدفع — مراجعة المبلغ والطريقة قبل التنفيذ */}
+        {confirmPay && (
+          <div className="fixed inset-0 z-[400] flex items-center justify-center bg-black/60 p-4" onClick={() => setConfirmPay(null)}>
+            <div
+              className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-xs border border-gray-200 dark:border-gray-700 p-5 text-center"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="text-4xl mb-2">💵</div>
+              <h4 className="text-lg font-extrabold text-gray-900 dark:text-gray-100 mb-1">تأكيد الدفع</h4>
+              <p className="text-2xl font-black text-emerald-600 dark:text-emerald-400 my-2">
+                {formatCurrency(confirmAmount)}
+              </p>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+                {confirmMethodText}
+                {selectedBill?.billNumber ? ` — ${selectedBill.billNumber}` : ''}
+              </p>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setConfirmPay(null)}
+                  disabled={isProcessingPayment}
+                  className="flex-1 py-2.5 rounded-xl bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 font-bold"
+                >
+                  تراجع
+                </button>
+                <button
+                  onClick={execConfirmedPay}
+                  disabled={isProcessingPayment}
+                  className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold disabled:opacity-50"
+                >
+                  {isProcessingPayment ? 'جاري...' : 'تأكيد الدفع'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
         </ModalPortal>
   );
 };

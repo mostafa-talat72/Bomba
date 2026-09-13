@@ -1,4 +1,5 @@
 import React from 'react';
+import Logger from "../middleware/logger.js";
 import { renderToBuffer } from '@react-pdf/renderer';
 import { Document, Page, Text, View, StyleSheet, Font } from '@react-pdf/renderer';
 import { pdfTranslations } from './pdfTranslations.js';
@@ -180,7 +181,7 @@ const styles = StyleSheet.create({
  */
 export const generateDailyReportPDF = async (reportData, language = 'ar', currency = 'EGP') => {
     try {
-        console.log('📄 Generating Daily Report PDF...', { language, currency });
+        Logger.info('📄 Generating Daily Report PDF...', { language, currency });
         
         // Import the DailyReportPDFDocument template
         const { DailyReportPDFDocument } = await import('./DailyReportPDFTemplate.js');
@@ -206,7 +207,7 @@ export const generateDailyReportPDF = async (reportData, language = 'ar', curren
         
         // Render to buffer
         const pdfBuffer = await renderToBuffer(doc);
-        console.log('✅ Daily Report PDF generated successfully, size:', pdfBuffer.length, 'bytes');
+        Logger.info('✅ Daily Report PDF generated successfully, size:', pdfBuffer.length, 'bytes');
         return pdfBuffer;
         
     } catch (error) {
@@ -441,7 +442,7 @@ export const generatePayrollSummaryPDF = async (payrollData, language = 'ar', cu
                 
         // Render to buffer
         const pdfBuffer = await renderToBuffer(doc);
-        console.log('✅ Payroll Summary PDF generated successfully, size:', pdfBuffer.length, 'bytes');
+        Logger.info('✅ Payroll Summary PDF generated successfully, size:', pdfBuffer.length, 'bytes');
         return pdfBuffer;
         
     } catch (error) {
@@ -461,7 +462,7 @@ export const generatePayrollSummaryPDF = async (payrollData, language = 'ar', cu
  */
 export const generateAllEmployeesPDF = async (employeesData, monthName, language = 'ar', currency = 'EGP') => {
     try {
-        console.log('📄 Generating All Employees PDF...', { 
+        Logger.info('📄 Generating All Employees PDF...', { 
             employeeCount: employeesData.length, 
             language, 
             currency 
@@ -570,14 +571,14 @@ export const generateAllEmployeesPDF = async (employeesData, monthName, language
             currency: getCurrencySymbol(currency, language)
         });
         
-        console.log('📊 All employees data being sent to PDF:', {
+        Logger.info('📊 All employees data being sent to PDF:', {
             totalEmployees: employeesData.length,
             firstEmployee: employeesData[0]?.employee?.personalInfo?.name || 'none'
         });
         
         // Render to buffer
         const pdfBuffer = await renderToBuffer(doc);
-        console.log('✅ All Employees PDF generated successfully, size:', pdfBuffer.length, 'bytes');
+        Logger.info('✅ All Employees PDF generated successfully, size:', pdfBuffer.length, 'bytes');
         return pdfBuffer;
         
     } catch (error) {

@@ -383,11 +383,7 @@ const BonusManagement: React.FC<BonusManagementProps> = ({ preSelectedEmployeeId
                 disabledDate={(current) => {
                   if (!current) return false;
                   // منع اختيار تواريخ في المستقبل
-                  const today = dayjs().startOf('day');
-                  const currentDate = current.startOf('day');
-                  const isDisabled = currentDate.isAfter(today);
-                  console.log('🔍 [Bonus] Checking:', current.format('YYYY-MM-DD'), 'Disabled:', isDisabled);
-                  return isDisabled;
+                  return current.startOf('day').isAfter(dayjs().startOf('day'));
                 }}
               />
             </Form.Item>

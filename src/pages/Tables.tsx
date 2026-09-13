@@ -14,7 +14,7 @@ import { useOrganization } from '../context/OrganizationContext';
 import { useTablesHeader } from '../context/TablesHeaderContext';
 import { MenuItem, MenuSection, MenuCategory, TableSection, Table, Order, Bill, Session } from '../services/api';
 import { api } from '../services/api';
-import { formatCurrency as formatCurrencyUtil, formatDecimal } from '../utils/formatters';
+import { formatCurrency as formatCurrencyUtil, formatDecimal, getShortBillNumber } from '../utils/formatters';
 import { getId, sameId } from '../utils/id';
 import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
 import { printOrder } from '../utils/printOrder';
@@ -22,6 +22,7 @@ import { preloadBillReceipt, printBill } from '../utils/printBill';
 import { getCachedDevicePrinter, printThroughLocalBridge } from '../utils/localPrintBridge';
 import { getPrintFlagFresh } from '../utils/freshPrintSettings';
 import { useBillAggregation } from '../hooks/useBillAggregation';
+import { useInfiniteList } from '../hooks/useInfiniteList';
 import {
   canAddOrder, canEditOrder, canDeleteOrder,
   canPartialPayment, canPayFullBill, canDeleteBill,
@@ -33,6 +34,7 @@ import { io, Socket } from 'socket.io-client';
 import { API_BASE_URL } from '../utils/apiBase';
 import '../styles/billing-animations.css';
 import TableButton from '../components/tables/TableButton';
+import ChangeTableModal from '../components/tables/ChangeTableModal';
 import PlaystationBillItem from '../components/tables/PlaystationBillItem';
 import { ItemCard, OrderItemRow } from '../components/tables/OrderItems';
 import { getTableDisplay } from '../components/tables/tableHelpers';
@@ -470,9 +472,10 @@ const loadInitialData = async () => {
     let cancelled = false;
     void (async () => {
       try {
+        // وضع القائمة الخفيف: صفوف بلا أصناف (التفاصيل تُجلب عند الفتح/الدفع/الطباعة).
         const params: any = tableBillsFilter === 'all'
-          ? { all: true, limit: 500, table: modalTableId }
-          : { status: tableBillsFilter, limit: 500, table: modalTableId };
+          ? { all: true, limit: 200, table: modalTableId, mode: 'list' }
+          : { status: tableBillsFilter, limit: 200, table: modalTableId, mode: 'list' };
         const r = await api.getBills(params);
         if (!cancelled && r?.success && Array.isArray(r.data)) mergeFetchedBills(r.data as Bill[]);
       } catch {}
@@ -483,6 +486,25 @@ const loadInitialData = async () => {
   // للتوافق مع الكود القديم الذي يستدعي fetchAllTableStatuses
   const fetchAllTableStatuses = useCallback(() => { /* no-op — tableDataMap يتحدث تلقائياً */ }, []);
 
+  // ── نافذة فواتير الطاولة: عرض صفحي محلي (20/دفعة) من نفس البيانات —
+  // الملخص يبقى على الكل، والعرض يتحمّل عند النزول (بلا جلب إضافي).
+  const modalTableId = selectedTable ? String(selectedTable._id || (selectedTable as any).id) : '';
+  const modalBillsFiltered = useMemo(() => {
+    const src = searchResults !== null ? searchResults : ((tableBillsMap as any)[modalTableId]?.bills || []);
+    const arr = (src || []).filter((b: Bill) => {
+      if (tableBillsFilter === 'all') return true;
+      if (tableBillsFilter === 'unpaid') return ['draft', 'partial', 'overdue'].includes(b.status);
+      return b.status === tableBillsFilter;
+    });
+    return arr;
+  }, [modalTableId, tableBillsFilter, searchResults, tableBillsMap, selectedTable]);
+  const modalBillsFeed = useInfiniteList<Bill>({
+    pageSize: 20,
+    depsKey: `${modalTableId}|${tableBillsFilter}|${searchQuery}|${showUnifiedTableModal ? 'open' : 'shut'}`,
+    localItems: modalBillsFiltered,
+    getId: (b: any) => String(b._id || b.id),
+  });
+
   // ── Search bills ─────────────────────────────────────────────────────────
   useEffect(() => {
     const query = searchQuery.trim();
@@ -490,7 +512,7 @@ const loadInitialData = async () => {
     const timer = setTimeout(async () => {
       try {
         const tableId = selectedTable?._id || (selectedTable as any)?.id;
-        const response = await api.getBills({ q: query, table: tableId, all: true, limit: 10000 });
+        const response = await api.getBills({ q: query, table: tableId, all: true, limit: 200, mode: 'list' });
         setSearchResults(response.success ? (response.data || []) : null);
       } catch { setSearchResults(null); }
     }, 400);
@@ -1700,7 +1722,7 @@ const loadInitialData = async () => {
     // التقرير يحتاج مدفوعة اليوم أيضاً: جلب عند الطلب فقط ودمجها (الجلب الأساسي غير مدفوعة).
     let reportPool: Bill[] = bills;
     try {
-      const paidRes = await api.getBills({ status: 'paid', limit: 500 });
+      const paidRes = await api.getBills({ status: 'paid', limit: 500, mode: 'list' });
       if (paidRes?.success && Array.isArray(paidRes.data) && paidRes.data.length > 0) {
         const map = new Map(bills.map((b: any) => [String(b._id || b.id), b]));
         (paidRes.data as Bill[]).forEach((b: any) => { map.set(String(b._id || b.id), b); });
@@ -2770,11 +2792,12 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
     setSelectedBill(bill); setShowChangeTableModal(true); setNewTableNumber(null); setTableChangeSearch('');
   };
 
-  const handleChangeTable = async () => {
-    if (!selectedBill || newTableNumber === null) return;
+  const handleChangeTable = async (overrideTableId?: string) => {
+    const wantedId = overrideTableId || newTableNumber;
+    if (!selectedBill || wantedId === null) return;
     setIsChangingTable(true);
     try {
-      const targetTable = tables.find((t: any) => t._id === newTableNumber);
+      const targetTable = tables.find((t: any) => t._id === wantedId);
       if (!targetTable) { showNotification(t('billing.notifications.tableNotFound'), 'error'); return; }
       const oldTableId = String((selectedBill.table as any)?._id || (selectedBill.table as any)?.id || selectedBill.table || '');
       const targetTableId = String(targetTable._id || targetTable.id);
@@ -3017,7 +3040,7 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
       {/* -- Sticky Departments Bar: ??????? ????? ???? ?????? ?? ????? -- */}
       <div className="sticky top-0 z-30 px-4 sm:px-6 py-2.5 bg-white/95 dark:bg-gray-900/95 backdrop-blur-md border-b border-orange-200 dark:border-orange-800 shadow-sm">
         <div className="flex flex-col items-center gap-1.5">
-          <div className="flex flex-wrap items-center justify-between gap-2 sm:gap-3 w-full">
+          <div className="flex flex-nowrap overflow-x-auto lg:flex-wrap items-center justify-between gap-2 sm:gap-3 w-full pb-1">
             <button
               onClick={() => { scrollToTop(); setActiveSectionFilter('all'); }}
               className={"flex-shrink-0 w-20 sm:w-24 h-20 sm:h-24 flex flex-col items-center justify-center gap-1 rounded-xl border-2 text-xs sm:text-sm font-bold transition-all " + (activeSectionFilter === 'all'
@@ -3618,12 +3641,7 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
 
                     {/* إجماليات شرطية: تظهر فقط إذا الفلتر مش "unpaid" أو عند البحث */}
                     {(() => {
-                      const src = searchResults !== null ? searchResults : ((tableBillsMap as any)[tableId]?.bills || []);
-                      const filtered = src.filter((b: Bill) => {
-                        if (tableBillsFilter === 'all') return true;
-                        if (tableBillsFilter === 'unpaid') return ['draft','partial','overdue'].includes(b.status);
-                        return b.status === tableBillsFilter;
-                      });
+                      const filtered = modalBillsFiltered;
                       const showSummary = (tableBillsFilter !== 'unpaid' || searchResults !== null) && filtered.length > 0;
                       if (!showSummary) return null;
                       void tick;
@@ -3656,13 +3674,8 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
 
                     <div className="flex-1 overflow-y-auto p-2 sm:p-3 min-h-0">
                       {(() => {
-                        const src = searchResults !== null ? searchResults : ((tableBillsMap as any)[tableId]?.bills || []);
-                        const filtered = src.filter((b: Bill) => {
-                          if (tableBillsFilter === 'all') return true;
-                          if (tableBillsFilter === 'unpaid') return ['draft','partial','overdue'].includes(b.status);
-                          return b.status === tableBillsFilter;
-                        });
-                        if (!filtered.length) return (
+                        const filtered = modalBillsFeed.items;
+                        if (!filtered.length && !modalBillsFeed.hasMore) return (
                           <div className="flex flex-col items-center justify-center h-full py-12 text-gray-400">
                             <div className="w-14 h-14 bg-blue-50 dark:bg-blue-900/20 rounded-2xl flex items-center justify-center mb-3 border border-blue-100 dark:border-blue-800">
                               <Receipt className="h-7 w-7 text-blue-300" />
@@ -3672,7 +3685,7 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
                         );
                         return (
                           <div className="space-y-2">
-                            {filtered.map((bill: Bill) => {
+                            {modalBillsFeed.items.map((bill: Bill) => {
                               const isUnpaid = ['draft','partial','overdue'].includes(bill.status);
                               const hasSessions = ((bill as any).sessions?.length || 0) > 0;
                               const billTime = (bill as any).createdAt ? formatDateTime((bill as any).createdAt) : '';
@@ -3737,6 +3750,20 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
                                 </div>
                               );
                             })}
+                            <div ref={modalBillsFeed.sentinelRef} className="h-2" />
+                            {modalBillsFeed.loading && (
+                              <div className="space-y-2">
+                                {[0, 1].map((i) => (
+                                  <div key={i} className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-3 animate-pulse">
+                                    <div className="h-4 w-32 bg-gray-200 dark:bg-gray-700 rounded mb-2" />
+                                    <div className="h-3 w-48 bg-gray-200 dark:bg-gray-700 rounded" />
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                            {!modalBillsFeed.hasMore && modalBillsFeed.items.length > 0 && (
+                              <div className="text-center text-[10px] text-gray-400 py-1">— تم عرض الكل ({modalBillsFeed.total}) —</div>
+                            )}
                           </div>
                         );
                       })()}
@@ -4287,50 +4314,16 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
         </ModalPortal>
       )}
 
-      {/* ── Change Table Modal ── */}
       {showChangeTableModal && selectedBill && (
-        <ModalPortal>
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-2 sm:p-4 z-[300]">
-          <div className="bg-white dark:bg-gray-800 rounded-lg w-full max-w-md p-3 sm:p-6 mx-2 sm:mx-0">
-            <h3 className="text-xl sm:text-2xl font-semibold text-gray-900 dark:text-gray-100 mb-3 sm:mb-4">{t('billing.changeTableTitle')}</h3>
-            <div className="mb-4">
-              {newTableNumber && (() => { const st = tables.find((t: any) => t._id === newTableNumber); return st ? (<div className="mb-2 px-3 py-2 bg-blue-100 dark:bg-blue-900/40 border border-blue-300 rounded-lg flex items-center justify-between"><span className="text-lg font-semibold text-blue-800 dark:text-blue-200">{t('billing.tableWithNumber', { number: getTableDisplay(st.number, i18n.language) })}{getTableSectionName(st) ? ` (${getTableSectionName(st)})` : ''} ✓</span><button onClick={() => { setNewTableNumber(null); setTableChangeSearch(''); }} className="text-base text-blue-600 dark:text-blue-400 hover:underline font-semibold">{t('common.cancel')}</button></div>) : null; })()}
-              <div className="relative">
-                <Search className={`absolute top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 ${isRTL ? 'right-3' : 'left-3'}`} />
-                <input type="text" value={tableChangeSearch} onChange={e => setTableChangeSearch(e.target.value)} placeholder={t('billing.searchTable') || 'بحث...'}
-                  className={`w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-gray-100 text-lg ${isRTL ? 'pr-10' : 'pl-10'}`} disabled={isChangingTable} />
-              </div>
-              <div className="mt-2 max-h-40 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-lg">
-                {tables.filter((t: any) => t.isActive && t._id !== (selectedBill.table as any)?._id)
-                  .filter((t: any) => !tableChangeSearch || String(t.number).toLowerCase().includes(tableChangeSearch.toLowerCase()))
-                  .sort((a: any, b: any) => String(a.number).localeCompare(String(b.number), 'ar', { numeric: true }))
-                  .map((table: any) => (
-                    <button key={table._id} onClick={() => { setNewTableNumber(table._id); setTableChangeSearch(''); }} disabled={isChangingTable}
-                      className={`w-full text-right px-3 py-2 text-lg transition-colors hover:bg-blue-50 dark:hover:bg-blue-900/30 border-b border-gray-100 dark:border-gray-800 last:border-b-0 flex items-center justify-between gap-2 ${newTableNumber === table._id ? 'bg-blue-100 dark:bg-blue-900/50 font-semibold text-blue-800 dark:text-blue-200' : 'text-gray-700 dark:text-gray-300'}`}>
-                      <span>{t('billing.tableWithNumber', { number: getTableDisplay(table.number, i18n.language) })}</span>
-                      {(() => {
-                        const sn = typeof table.section === 'object'
-                          ? table.section?.name
-                          : tableSections.find((s: any) => s._id === table.section || s.id === table.section)?.name;
-                        return sn ? <span className="text-sm text-gray-400 dark:text-gray-500 text-right">{sn}</span> : null;
-                      })()}
-                    </button>
-                  ))}
-              </div>
-            </div>
-            <div className="flex flex-col sm:flex-row justify-end gap-2 sm:gap-3">
-              <button onClick={() => { setShowChangeTableModal(false); setNewTableNumber(null); setTableChangeSearch(''); }} disabled={isChangingTable}
-                className="px-4 py-2 bg-gray-200 dark:bg-gray-600 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-500 text-gray-900 dark:text-gray-100 transition-colors text-lg sm:text-xl">
-                {t('common.cancel')}
-              </button>
-              <button onClick={handleChangeTable} disabled={isChangingTable || !newTableNumber}
-                className={`px-4 sm:px-6 py-2 rounded-lg flex items-center justify-center transition-all text-white text-lg sm:text-xl ${isChangingTable || !newTableNumber ? 'bg-blue-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}>
-                {isChangingTable ? <><svg className="animate-spin h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>{t('billing.changing')}</> : t('billing.confirmChange')}
-              </button>
-            </div>
-          </div>
-        </div>
-        </ModalPortal>
+        <ChangeTableModal
+          billLabel={(selectedBill as any).billNumber ? getShortBillNumber((selectedBill as any).billNumber) : String((selectedBill as any)._id || (selectedBill as any).id || '').slice(-6)}
+          tables={tables}
+          excludeTableId={String((selectedBill.table as any)?._id || (selectedBill.table as any)?.id || selectedBill.table || "")}
+          getSectionName={getTableSectionName}
+          changing={isChangingTable}
+          onConfirm={(id) => { setNewTableNumber(id); void handleChangeTable(id); }}
+          onClose={() => { setShowChangeTableModal(false); setNewTableNumber(null); setTableChangeSearch(""); }}
+        />
       )}
 
       {/* ── Edit Session Time Modal ── */}

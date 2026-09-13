@@ -935,27 +935,30 @@ export const sendDailyReport = async (reportData, adminEmails, pdfBuffer = null,
     }
 };
 
-// Send monthly report
+// Send monthly report (per-recipient language; accepts legacy strings or
+// { email, language } objects — passing objects as `to:` used to fail silently).
 export const sendMonthlyReport = async (reportData, adminEmails, language = 'ar', currency = 'EGP') => {
-    if (!adminEmails || adminEmails.length === 0) return;
+    if (!adminEmails || adminEmails.length === 0) return [];
+    const normalized = adminEmails
+        .map((item) => {
+            if (typeof item === 'string') return { email: item, language };
+            if (item && typeof item === 'object' && item.email)
+                return { email: item.email, language: item.language || language };
+            return null;
+        })
+        .filter(Boolean);
+    if (!normalized.length) return [];
 
-    const template = emailTemplates.monthlyReport({
-        ...reportData,
-        language,
-        currency
-    });
-
-    for (const email of adminEmails) {
+    const results = [];
+    for (const { email, language: lang } of normalized) {
         try {
-            await sendEmail({
-                to: email,
-                ...template,
-            });
+            const template = emailTemplates.monthlyReport({ ...reportData, language: lang, currency });
+            await sendEmail({ to: email, ...template });
+            results.push({ email, language: lang, success: true });
         } catch (error) {
-            Logger.error("Failed to send monthly report", {
-                email,
-                error: error.message,
-            });
+            Logger.error("Failed to send monthly report", { email, error: error.message });
+            results.push({ email, language: lang, success: false, error: error.message });
         }
     }
+    return results;
 };

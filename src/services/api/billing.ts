@@ -2,7 +2,7 @@ import { apiClient } from './client';
 import { getCachedBill, setCachedBill } from './client';
 import type { ApiResponse, Bill, PayForItemsRequest, Payment } from './types';
 
-async function getBills(params?: { status?: string; table?: string; page?: number; limit?: number; customerName?: string; q?: string; all?: boolean; fresh?: boolean }): Promise<ApiResponse<Bill[]>> {
+async function getBills(params?: { status?: string; table?: string; page?: number; limit?: number; customerName?: string; q?: string; all?: boolean; fresh?: boolean; fulfillmentType?: 'dine_in' | 'takeaway' | 'delivery'; mode?: 'list' }): Promise<ApiResponse<Bill[]>> {
   const searchParams = new URLSearchParams();
   if (params) {
     Object.entries(params).forEach(([key, value]) => {

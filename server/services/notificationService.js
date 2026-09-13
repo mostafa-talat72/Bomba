@@ -19,7 +19,7 @@ class NotificationService {
                 return;
             }
             const payload = typeof doc.toJSON === "function" ? doc.toJSON() : doc;
-            console.log(`[notification] emit ${payload.category || ""}:${payload.type || ""} → org ${payload.organization ? String(payload.organization) : "all"}`);
+            Logger.info(`[notification] emit ${payload.category || ""}:${payload.type || ""} → org ${payload.organization ? String(payload.organization) : "all"}`);
             const org = payload.organization ? String(payload.organization) : null;
             if (org) {
                 ioRef.to(`org-${org}`).emit("notification:new", payload);

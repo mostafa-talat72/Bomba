@@ -103,8 +103,15 @@ const OrganizationSchema = new mongoose.Schema({
                     message: props => `${props.value} is not a valid language code!`
                 },
                 default: 'ar'
-            }
-        }], // قائمة الإيميلات المستقبلة مع اللغة المفضلة لكل مستلم
+            },
+            // Per-recipient mini-report scope. Empty sectionIds = ALL sections.
+            // Missing flags default to true (backward compatible: full report).
+            sectionIds: { type: [String], default: [] },
+            includeEmployees: { type: Boolean, default: true },
+            includeCosts: { type: Boolean, default: true },
+            includePlaystation: { type: Boolean, default: true },
+            includeComputer: { type: Boolean, default: true }
+        }], // قائمة الإيميلات المستقبلة مع اللغة ونطاق التقرير لكل مستلم
         lastReportSentAt: { type: Date }, // آخر مرة تم فيها إرسال التقرير اليومي
         lastMonthlyReportSentAt: { type: Date }, // آخر مرة تم فيها إرسال التقرير الشهري
         authorizedToManageReports: [{ // المستخدمون المصرح لهم بإدارة إعدادات التقارير

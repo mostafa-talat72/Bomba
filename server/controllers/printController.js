@@ -5,6 +5,7 @@ import { aggregateItemsWithPayments } from '../utils/billAggregation.js';
 import { relayHtmlToLocalAgent } from '../utils/localAgentRelay.js';
 import { resolvePrintSettingsForUser } from '../utils/organization.js';
 import { organizationFilter, resolvePrintSettings } from '../utils/organization.js';
+import Logger from "../middleware/logger.js";
 
 // نفس getDisplayNumber في الواجهة: إخفاء مقطع التاريخ من العرض/الطباعة فقط
 // (BILL-426D13-260909-001 → BILL-426D13-001). التخزين لا يتغير أبداً.
@@ -89,7 +90,7 @@ class PrintController {
         // ensureConnected حتى لا تعيد printJob التهيئة مرة ثانية.
         const connected = await printerService.ensureConnected(auto);
         if (connected) {
-          console.log('No printer configured — auto-detected USB printer:', sel.name);
+          Logger.info('No printer configured — auto-detected USB printer:', sel.name);
           return { ok: true, settings: auto, autoDetected: true, printerUsed: sel.name };
         }
       }
@@ -743,7 +744,7 @@ class PrintController {
       }
 
       // 1. كشف الطابعات المتصلة
-      console.log('Auto-detecting thermal printer...');
+      Logger.info('Auto-detecting thermal printer...');
       const detectedPrinters = orderPrintersStably(await printerDetectionService.detectUSBPrinters());
 
       if (!detectedPrinters || detectedPrinters.length === 0) {
@@ -753,11 +754,11 @@ class PrintController {
         });
       }
 
-      console.log('Detected printers:', detectedPrinters);
+      Logger.info('Detected printers:', detectedPrinters);
 
       // 2. اختيار أول طابعة متصلة (يفترض أنها طابعة حرارية)
       const selectedPrinter = detectedPrinters[0];
-      console.log('Selected printer:', selectedPrinter.name, 'at port:', selectedPrinter.path);
+      Logger.info('Selected printer:', selectedPrinter.name, 'at port:', selectedPrinter.path);
 
       // 3. إعداد إعدادات الطابعة المكتشفة تلقائياً
       const printSettings = await loadPrintSettings(organization, req.user);
@@ -845,7 +846,7 @@ class PrintController {
       }
 
       // 1. كشف الطابعات المتصلة
-      console.log('Auto-detecting thermal printer for order...');
+      Logger.info('Auto-detecting thermal printer for order...');
       const detectedPrinters = orderPrintersStably(await printerDetectionService.detectUSBPrinters());
 
       if (!detectedPrinters || detectedPrinters.length === 0) {
@@ -855,11 +856,11 @@ class PrintController {
         });
       }
 
-      console.log('Detected printers:', detectedPrinters);
+      Logger.info('Detected printers:', detectedPrinters);
 
       // 2. اختيار أول طابعة متصلة
       const selectedPrinter = detectedPrinters[0];
-      console.log('Selected printer for order:', selectedPrinter.name, 'at port:', selectedPrinter.path);
+      Logger.info('Selected printer for order:', selectedPrinter.name, 'at port:', selectedPrinter.path);
 
       // 3. إعداد إعدادات الطابعة المكتشفة تلقائياً
       const autoDetectedSettings = {

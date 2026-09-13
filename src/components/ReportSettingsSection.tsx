@@ -8,6 +8,16 @@ import 'dayjs/locale/ar';
 import 'dayjs/locale/en';
 import 'dayjs/locale/fr';
 
+interface ReportRecipient {
+  email: string;
+  language: string;
+  sectionIds?: string[];
+  includeEmployees?: boolean;
+  includeCosts?: boolean;
+  includePlaystation?: boolean;
+  includeComputer?: boolean;
+}
+
 interface ReportSettingsSectionProps {
   canManage: boolean;
   isOwner: boolean;
@@ -15,15 +25,34 @@ interface ReportSettingsSectionProps {
   onSendNow: () => Promise<void>;
   initialSettings?: ReportSettings;
   availableManagers: Array<{ _id: string; name: string; email: string }>;
+  menuSections?: Array<{ _id?: string; id?: string; name: string }>;
 }
 
 interface ReportSettings {
   dailyReportEnabled: boolean;
   dailyReportStartTime: string;
   dailyReportSendTime: string;
-  dailyReportEmails: Array<{ email: string; language: string }>;
+  dailyReportEmails: ReportRecipient[];
   authorizedToManageReports: string[];
 }
+
+const fullScope = (): Pick<ReportRecipient, 'sectionIds' | 'includeEmployees' | 'includeCosts' | 'includePlaystation' | 'includeComputer'> => ({
+  sectionIds: [],
+  includeEmployees: true,
+  includeCosts: true,
+  includePlaystation: true,
+  includeComputer: true,
+});
+
+const normalizeRecipient = (item: any): ReportRecipient => ({
+  email: item?.email || '',
+  language: item?.language || 'ar',
+  sectionIds: Array.isArray(item?.sectionIds) ? item.sectionIds.map(String) : [],
+  includeEmployees: item?.includeEmployees !== false,
+  includeCosts: item?.includeCosts !== false,
+  includePlaystation: item?.includePlaystation !== false,
+  includeComputer: item?.includeComputer !== false,
+});
 
 export const ReportSettingsSection: React.FC<ReportSettingsSectionProps> = ({
   canManage,
@@ -31,7 +60,8 @@ export const ReportSettingsSection: React.FC<ReportSettingsSectionProps> = ({
   onSave,
   onSendNow,
   initialSettings,
-  availableManagers
+  availableManagers,
+  menuSections = []
 }) => {
   const { t } = useTranslation();
   const { language } = useLanguage();
@@ -49,6 +79,7 @@ export const ReportSettingsSection: React.FC<ReportSettingsSectionProps> = ({
   const [emailError, setEmailError] = useState('');
   const [saving, setSaving] = useState(false);
   const [sending, setSending] = useState(false);
+  const [expandedEmail, setExpandedEmail] = useState<string | null>(null);
 
   useEffect(() => {
     dayjs.locale(language);
@@ -62,12 +93,12 @@ export const ReportSettingsSection: React.FC<ReportSettingsSectionProps> = ({
         // Convert old format to new format
         emails = emails.map((email: any) => ({ email, language: 'ar' }));
       }
-      
+
       setSettings({
         dailyReportEnabled: initialSettings.dailyReportEnabled ?? true,
         dailyReportStartTime: initialSettings.dailyReportStartTime || '08:00',
         dailyReportSendTime: initialSettings.dailyReportSendTime || '09:00',
-        dailyReportEmails: emails,
+        dailyReportEmails: (emails as any[]).map(normalizeRecipient),
         authorizedToManageReports: initialSettings.authorizedToManageReports || []
       });
     }
@@ -96,11 +127,46 @@ export const ReportSettingsSection: React.FC<ReportSettingsSectionProps> = ({
 
     setSettings(prev => ({
       ...prev,
-      dailyReportEmails: [...prev.dailyReportEmails, { email: newEmail, language: newEmailLanguage }]
+      dailyReportEmails: [...prev.dailyReportEmails, { email: newEmail, language: newEmailLanguage, ...fullScope() }]
     }));
     setNewEmail('');
     setNewEmailLanguage('ar');
     setEmailError('');
+  };
+
+  const handleUpdateRecipient = (email: string, patch: Partial<ReportRecipient>) => {
+    setSettings(prev => ({
+      ...prev,
+      dailyReportEmails: prev.dailyReportEmails.map(item =>
+        item.email === email ? { ...item, ...patch } : item
+      )
+    }));
+  };
+
+  const handleToggleSection = (email: string, sectionId: string) => {
+    const item = settings.dailyReportEmails.find(i => i.email === email);
+    if (!item) return;
+    const current = item.sectionIds || [];
+    const next = current.includes(sectionId)
+      ? current.filter(id => id !== sectionId)
+      : [...current, sectionId];
+    handleUpdateRecipient(email, { sectionIds: next });
+  };
+
+  const scopeSummary = (item: ReportRecipient): string => {
+    const parts: string[] = [];
+    const total = menuSections.length;
+    const sel = (item.sectionIds || []).length;
+    parts.push(sel === 0 || (total > 0 && sel >= total)
+      ? t('settings.organization.dailyReports.scopeAllSections')
+      : t('settings.organization.dailyReports.scopeSections', { count: sel }));
+    const mods: string[] = [];
+    if (item.includeEmployees === false) mods.push(t('settings.organization.dailyReports.modEmployees'));
+    if (item.includeCosts === false) mods.push(t('settings.organization.dailyReports.modCosts'));
+    if (item.includePlaystation === false) mods.push(t('settings.organization.dailyReports.modPS'));
+    if (item.includeComputer === false) mods.push(t('settings.organization.dailyReports.modPC'));
+    if (mods.length) parts.push(t('settings.organization.dailyReports.scopeExcept', { items: mods.join('، ') }));
+    return parts.join(' • ');
   };
 
   const handleRemoveEmail = (email: string) => {
@@ -336,7 +402,11 @@ export const ReportSettingsSection: React.FC<ReportSettingsSectionProps> = ({
                 <p className="text-xs text-gray-600 dark:text-gray-400 mb-3">
                   {t('settings.organization.dailyReports.emailCount', { count: settings.dailyReportEmails.length })}
                 </p>
-                {settings.dailyReportEmails.map((item, index) => (
+                {settings.dailyReportEmails.map((item, index) => {
+                  const expanded = expandedEmail === item.email;
+                  const selCount = (item.sectionIds || []).length;
+                  const allSelected = selCount === 0 || (menuSections.length > 0 && selCount >= menuSections.length);
+                  return (
                   <div
                     key={index}
                     className="bg-white dark:bg-gray-800 p-3 rounded-lg border border-gray-200 dark:border-gray-600 hover:border-orange-300 dark:hover:border-orange-700 transition-colors"
@@ -346,9 +416,14 @@ export const ReportSettingsSection: React.FC<ReportSettingsSectionProps> = ({
                         <div className="w-8 h-8 rounded-full bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center flex-shrink-0">
                           <Mail className="h-4 w-4 text-orange-600 dark:text-orange-400" />
                         </div>
-                        <span className="text-sm text-gray-900 dark:text-gray-100 font-medium break-all">
-                          {item.email}
-                        </span>
+                        <div className="min-w-0">
+                          <span className="text-sm text-gray-900 dark:text-gray-100 font-medium break-all block">
+                            {item.email}
+                          </span>
+                          <span className="text-[11px] text-gray-500 dark:text-gray-400 block truncate">
+                            {scopeSummary(item)}
+                          </span>
+                        </div>
                       </div>
                       <div className="flex items-center gap-2 flex-shrink-0">
                         <select
@@ -361,6 +436,13 @@ export const ReportSettingsSection: React.FC<ReportSettingsSectionProps> = ({
                           <option value="fr">🇫🇷 FR</option>
                         </select>
                         <button
+                          type="button"
+                          onClick={() => setExpandedEmail(expanded ? null : item.email)}
+                          className="px-3 py-1.5 text-xs font-bold border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:border-orange-400"
+                        >
+                          {t('settings.organization.dailyReports.scopeTitle')}
+                        </button>
+                        <button
                           onClick={() => handleRemoveEmail(item.email)}
                           className="text-red-600 hover:text-white dark:text-red-400 hover:bg-red-600 dark:hover:bg-red-500 p-1.5 rounded transition-colors"
                           title={t('common.delete')}
@@ -369,8 +451,67 @@ export const ReportSettingsSection: React.FC<ReportSettingsSectionProps> = ({
                         </button>
                       </div>
                     </div>
+                    {expanded && (
+                      <div className="mt-3 pt-3 border-t border-gray-100 dark:border-gray-700 space-y-3">
+                        <div>
+                          <p className="text-xs font-bold text-gray-700 dark:text-gray-300 mb-2">
+                            {t('settings.organization.dailyReports.sectionsLabel')}
+                          </p>
+                          <div className="flex flex-wrap gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => handleUpdateRecipient(item.email, { sectionIds: [] })}
+                              className={`px-3 py-1.5 rounded-full text-xs font-bold border transition-all ${allSelected ? 'bg-orange-600 text-white border-orange-600' : 'bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 border-gray-300 dark:border-gray-600'}`}
+                            >
+                              {t('settings.organization.dailyReports.allSections')}
+                            </button>
+                            {menuSections.map(sec => {
+                              const id = String(sec._id || (sec as any).id);
+                              const on = (item.sectionIds || []).includes(id);
+                              return (
+                                <button
+                                  key={id}
+                                  type="button"
+                                  onClick={() => handleToggleSection(item.email, id)}
+                                  className={`px-3 py-1.5 rounded-full text-xs font-bold border transition-all ${on ? 'bg-orange-600 text-white border-orange-600' : 'bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 border-gray-300 dark:border-gray-600'}`}
+                                >
+                                  {sec.name}
+                                </button>
+                              );
+                            })}
+                          </div>
+                          <p className="text-[11px] text-gray-400 mt-1.5">
+                            {t('settings.organization.dailyReports.sectionsHint')}
+                          </p>
+                        </div>
+                        <div className="grid grid-cols-2 gap-1.5">
+                          {([
+                            ['includeEmployees', 'modEmployeesFull'],
+                            ['includeCosts', 'modCostsFull'],
+                            ['includePlaystation', 'modPSFull'],
+                            ['includeComputer', 'modPCFull'],
+                          ] as const).map(([key, labelKey]) => {
+                            const on = (item as any)[key] !== false;
+                            return (
+                              <button
+                                key={key}
+                                type="button"
+                                onClick={() => handleUpdateRecipient(item.email, { [key]: !on } as any)}
+                                className={`flex items-center justify-between px-3 py-2 rounded-lg text-xs font-bold border transition-all ${on ? 'bg-green-50 dark:bg-green-900/20 border-green-300 dark:border-green-700 text-green-700 dark:text-green-300' : 'bg-gray-50 dark:bg-gray-700/50 border-gray-200 dark:border-gray-600 text-gray-400'}`}
+                              >
+                                <span>{t(`settings.organization.dailyReports.${labelKey}`)}</span>
+                                <span className={`relative w-9 h-5 rounded-full transition-colors flex-shrink-0 ${on ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600'}`}>
+                                  <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${on ? 'right-0.5' : 'left-0.5'}`} />
+                                </span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
                   </div>
-                ))}
+                  );
+                })}
               </div>
             ) : (
               <div className="text-center py-8 text-gray-500 dark:text-gray-400">

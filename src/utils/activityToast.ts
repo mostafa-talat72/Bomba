@@ -11,6 +11,7 @@ export interface ActivityPayload {
   billId?: string | null;
   billNumber?: string | null;
   deviceName?: string | null;
+  fulfillment?: string | null;
   actor?: { name?: string | null; source?: string | null; userId?: string | null } | null;
   at?: string;
 }
@@ -60,6 +61,18 @@ export function buildActivityToast(
     }
   }
   let text = parts.filter(Boolean).join(' — ') || (t('activity.updatedGeneric', { defaultValue: '' }) as string) || '•';
+  // نوع الفاتورة/الطلب (دليفري/تيك أوي/طاولة) — بادئة مميزة.
+  if (kind === 'bill' && payload.fulfillment && payload.fulfillment !== 'dine_in') {
+    const icon = payload.fulfillment === 'delivery' ? '🛵' : '🥡';
+    const word = t(`activity.fulfill.${payload.fulfillment}`, { defaultValue: '' }) as string;
+    if (word) text = `${icon} ${word} — ${text}`;
+  } else if (kind === 'bill' && payload.tableNumber !== null && payload.tableNumber !== undefined && payload.tableNumber !== '') {
+    // فاتورة طاولة: أيقونة تمييز مع الرقم (بدل كلمة طاولة العادية).
+    text = text.replace(
+      `${t('activity.tableWord', { defaultValue: '' })} ${payload.tableNumber}`.trim(),
+      `🪑 ${t('activity.tableWord', { defaultValue: '' })} ${payload.tableNumber}`.trim()
+    );
+  }
   const actorName = payload.actor?.name || '';
   if (actorName) {
     const suffix = payload.actor?.source === 'mobile'

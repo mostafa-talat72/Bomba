@@ -9,17 +9,18 @@ export function resolveUserPrintSettings(user: Partial<User> | any): Record<stri
 }
 
 /**
- * Effective print settings resolution (mirrors server resolvePrintSettingsForUser):
- * user custom settings over organization settings. Device-specific printer
- * path keeps resolving from devicePrinters on the caller side.
+ * Effective print settings resolution (STRICT, no merge — mirrors server
+ * resolvePrintSettingsForUser): user custom settings over organization
+ * settings. Device-specific printer path keeps resolving from
+ * devicePrinters on the caller side.
  */
 export function resolveEffectivePrintSettings(
   user: Partial<User> | any,
   organization?: any
 ): Record<string, any> {
+  const userPs = resolveUserPrintSettings(user);
+  if (userPs) return { ...userPs };
   const org = organization || user?.organization;
   const orgPs = org?.printSettings && typeof org.printSettings === 'object' ? org.printSettings : {};
-  const userPs = resolveUserPrintSettings(user);
-  if (!userPs) return { ...orgPs };
-  return { ...orgPs, ...userPs };
+  return { ...orgPs };
 }

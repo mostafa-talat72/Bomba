@@ -5,6 +5,8 @@
  * يعمل فقط عندما يكون السيرفر على نفس جهاز الوكيل (الجهاز الرئيسي)؛
  * وعند غيابه يُترك القرار لمسار RAW النصي كملاذ أخير.
  */
+import Logger from "../middleware/logger.js";
+
 const LOCAL_AGENT_URL = process.env.LOCAL_PRINT_AGENT_URL || 'http://127.0.0.1:9100/print';
 
 export async function relayHtmlToLocalAgent({
@@ -29,7 +31,7 @@ export async function relayHtmlToLocalAgent({
     });
     const data = await res.json().catch(() => ({}));
     if (res.ok && data && data.success) {
-      console.log(
+      Logger.info(
         `HTML relayed to local print agent (${data.printerName || 'auto'}${data.duplicate ? ', duplicate' : ''}) — desktop-identical design`
       );
       return { ok: true, printerName: data.printerName, duplicate: !!data.duplicate };

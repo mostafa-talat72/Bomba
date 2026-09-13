@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef, useCallback, ReactNode } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { API_BASE_URL } from '../utils/apiBase';
 import { getId, sameId } from '../utils/id';
@@ -359,9 +359,19 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   // كان يشغّل نفس الجلب عدة مرات بالتوازي (كل نسخة ~1 ثانية/1.6MB للطلبات) —
   // المتزامنون الآن يتشاركون نفس الوعد بدل ضرب السيرفر.
   const inFlightRef = useRef<Map<string, Promise<unknown>>>(new Map());
+  // كبح التكرار: نفس المفتاح لا يُجلب أكثر من مرة كل 1.5 ثانية — أي حلقة
+  // render/effect أو فيض أحداث تنهار هنا بدل قصف السيرفر (429). السوكت يغطي اللحظية.
+  const lastFetchAtRef = useRef<Map<string, number>>(new Map());
+  const FETCH_MIN_INTERVAL_MS = 1500;
   const withInFlight = <T,>(key: string, fn: () => Promise<T>): Promise<T> => {
     const existing = inFlightRef.current.get(key);
     if (existing) return existing as Promise<T>;
+    const now = Date.now();
+    const last = lastFetchAtRef.current.get(key) || 0;
+    if (now - last < FETCH_MIN_INTERVAL_MS) {
+      return Promise.resolve(undefined as unknown as T);
+    }
+    lastFetchAtRef.current.set(key, now);
     const p: Promise<T> = fn().finally(() => {
       if (inFlightRef.current.get(key) === p) inFlightRef.current.delete(key);
     });
@@ -383,7 +393,8 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setSessions([]);
     }
   };
-  const fetchSessions = (): Promise<void> => withInFlight("sessions", fetchSessionsInner);
+  // هوية ثابتة (تتغير مع المستخدم فقط) — useEffect(..., [fetchX]) في الصفحات كان يعيد الجلب كل render = فيض 429.
+  const fetchSessions = useCallback((): Promise<void> => withInFlight("sessions", fetchSessionsInner), [user]);
 
   const fetchOrdersInner = async (): Promise<void> => {
     if (!user) return;
@@ -411,7 +422,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
     }
   };
-  const fetchOrders = (): Promise<void> => withInFlight("orders", fetchOrdersInner);
+  const fetchOrders = useCallback((): Promise<void> => withInFlight("orders", fetchOrdersInner), [user]);
 
   const fetchInventory = async (): Promise<void> => {
     try {
@@ -426,24 +437,52 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   // الجلب الأساسي: الفواتير غير المدفوعة فقط (draft/partial/overdue) —
   // بدون all/limit/_fresh. السيرفر يرجعها افتراضياً مع كاش 10 ثوانٍ (سريع).
   // المدفوعة/الكل تُجلب عند الطلب فقط (فلتر النافذة، التقرير اليومي).
+  // دمج لا استبدال: نحتفظ بالمدفوعة/الملغاة المدمجة من النوافذ، ونسخة السيرفر
+  // أحدث دائماً عند التعارض. وعند الفشل نُبقي القديم (لا مسح!).
+  const UNPAID_BILL_STATUSES = ['draft', 'partial', 'overdue'];
   const fetchBillsInner = async (): Promise<void> => {
     if (!user) return;
 
     try {
       const response = await api.getBills({});
       if (response.success && response.data) {
-        setBills(response.data);
-      } else {
-        setBills([]);
+        const fresh = response.data;
+        setBills((prev: any[]) => {
+          if (!Array.isArray(prev) || prev.length === 0) return fresh;
+          const freshIds = new Set(fresh.map((b: any) => String(b._id || b.id)));
+          const kept = prev.filter((b: any) => {
+            const id = String(b._id || b.id);
+            if (freshIds.has(id)) return false;
+            return !UNPAID_BILL_STATUSES.includes((b as any).status);
+          });
+          return [...fresh, ...kept];
+        });
       }
     } catch (error) {
       if (user) {
         console.warn('Failed to fetch bills:', error);
-        setBills([]);
       }
     }
   };
-  const fetchBills = (): Promise<void> => withInFlight("bills", fetchBillsInner);
+  // كاشف الحلقات: أكثر من 20 طلب فواتير/دقيقة = حلقة render/effect — اطبع المصدر مرة واحدة.
+  const billsFloodRef = useRef<{ count: number; windowStart: number; reported: boolean }>({ count: 0, windowStart: 0, reported: false });
+  const fetchBills = useCallback((): Promise<void> => {
+    try {
+      const now = Date.now();
+      const w = billsFloodRef.current;
+      if (now - w.windowStart > 60000) {
+        w.count = 0;
+        w.windowStart = now;
+        w.reported = false;
+      }
+      w.count += 1;
+      if (w.count > 20 && !w.reported) {
+        w.reported = true;
+        console.error(`[flood-guard] fetchBills called ${w.count}x within a minute — probable render/effect loop. Stack:`, new Error('trace').stack);
+      }
+    } catch {}
+    return withInFlight("bills", fetchBillsInner);
+  }, [user]);
 
   const fetchCosts = async (): Promise<void> => {
     try {
@@ -2238,8 +2277,8 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       throw error;
     }
   };
-  const fetchTables = (sectionId?: string) =>
-    withInFlight(`tables:${sectionId || "all"}`, () => fetchTablesInner(sectionId));
+  const fetchTables = useCallback((sectionId?: string) =>
+    withInFlight(`tables:${sectionId || "all"}`, () => fetchTablesInner(sectionId)), []);
 
   const getTableStatus = async (id: string): Promise<{ table: any; hasUnpaidOrders: boolean; orders: Order[]; bills?: Bill[] } | null> => {
     try {
@@ -2905,7 +2944,6 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     socket.on('notification:new', (data: any) => {
       try {
         if (!data) return;
-        try { console.debug('[socket] notification:new received', (data as any)?._id, (data as any)?.category); } catch {}
         // إدراج فوري في القائمة بلا انتظار GET — نفس السيرفر يعني الظهور لحظياً.
         try {
           const nid = String((data as any)?._id || (data as any)?.id || '');
@@ -2942,6 +2980,12 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           const actorId = (data as any)?.metadata?.actor?.userId ? String((data as any).metadata.actor.userId) : '';
           if (actorId && me && actorId === me) return;
         } catch {}
+        // كتم النوع (تفضيل المستخدم + كتم الجهاز) — يسري على توستات الصفوف أيضاً (مخزون/نظام).
+        try {
+          const kindMap: Record<string, string> = { order: 'order', billing: 'bill', session: 'session', table: 'table', inventory: 'inventory', system: 'system' };
+          const kk = kindMap[(data as any)?.category] || (data as any)?.category;
+          if (!isToastKindEnabled(user, kk)) return;
+        } catch {}
         const actor = (data as any)?.metadata?.actor;
         const who = actor?.name ? ` — ${actor.name}${actor.source === 'mobile' ? ' (هاتف)' : ''}` : '';
         const text = `${(data as any)?.title || ''}: ${(data as any)?.message || ''}${who}`.trim();
@@ -2962,7 +3006,6 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     socket.on('activity:new', (data: any) => {
       try {
         if (!data || !data.kind) return;
-        try { console.debug('[socket] activity:new received', (data as any)?.kind, (data as any)?.action, (data as any)?.silent ? '(silent)' : ''); } catch {}
         // silent: تحديث جانبي مدمج في توست أساسي — بلا توست مستقل.
         if ((data as any)?.silent === true) return;
         const d = data as any;

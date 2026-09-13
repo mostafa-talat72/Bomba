@@ -50,13 +50,13 @@ export const runAutoOrderCompleteOnce = async (io) => {
         }
 
         completed++;
-        console.log(
+        Logger.info(
             `[AutoComplete] Order #${order.orderNumber} auto-prepared & delivered (${order.items.length} items, older than 24h)`
         );
     }
 
     if (completed > 0) {
-        console.log(`[AutoComplete] Pass finished: ${completed} order(s) completed`);
+        Logger.info(`[AutoComplete] Pass finished: ${completed} order(s) completed`);
     }
     return completed;
 };
@@ -72,5 +72,5 @@ export const startAutoOrderCompleter = (io) => {
 
     setTimeout(run, FIRST_RUN_DELAY_MS);
     setInterval(run, CHECK_INTERVAL_MS);
-    console.log("[AutoComplete] Scheduled job started (every 10 minutes, threshold 24h)");
+    Logger.info("[AutoComplete] Scheduled job started (every 10 minutes, threshold 24h)");
 };

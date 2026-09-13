@@ -55,7 +55,8 @@ class ApiClient {
   async request<T>(
     endpoint: string,
     options: RequestInit = {},
-    retryOn401: boolean = true
+    retryOn401: boolean = true,
+    retry429: boolean = true
   ): Promise<ApiResponse<T>> {
     try {
       const url = `${this.baseURL}${endpoint}`;
@@ -81,6 +82,14 @@ class ApiClient {
       const response = await fetch(url, config);
           if (!response.ok && response.status === 0) {
             return { success: false, message: 'خطأ في الاتصال بالخادم، تأكد من أن الخادم يعمل' };
+          }
+          // 429: احترم المهلة ثم أعد المحاولة مرة واحدة فقط (مع jitter ضد التزامن).
+          if (response.status === 429 && retry429) {
+            try { await response.clone().arrayBuffer().catch(() => null); } catch {}
+            const retryAfter = Number(response.headers.get('Retry-After')) || 5;
+            const waitMs = Math.min(30000, Math.max(1000, retryAfter * 1000)) + Math.floor(Math.random() * 2000);
+            await new Promise((r) => setTimeout(r, waitMs));
+            return this.request<T>(endpoint, options, retryOn401, false);
           }
           let data;
           try {

@@ -64,6 +64,10 @@ const orderItemSchema = new mongoose.Schema({
         ref: "MenuSection",
         default: null,
     },
+    sectionName: {
+        type: String,
+        default: null,
+    },
     deliveredCount: {
         type: Number,
         default: 0,

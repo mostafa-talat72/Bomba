@@ -493,6 +493,22 @@ export const updateReportSettings = async (req, res) => {
                     if (item.language && !['ar', 'en', 'fr'].includes(item.language)) {
                         invalidEmails.push({ index, email, reason: 'Invalid language. Must be ar, en, or fr' });
                     }
+                    // Sanitize per-recipient report scope (mini-reports)
+                    if (item.sectionIds !== undefined) {
+                        if (!Array.isArray(item.sectionIds)) {
+                            invalidEmails.push({ index, email, reason: 'sectionIds must be an array' });
+                        } else {
+                            item.sectionIds = item.sectionIds
+                                .map(String)
+                                .filter((id) => /^[0-9a-fA-F]{24}$/.test(id) || id === 'other')
+                                .slice(0, 100);
+                        }
+                    }
+                    for (const flag of ['includeEmployees', 'includeCosts', 'includePlaystation', 'includeComputer']) {
+                        if (item[flag] !== undefined && typeof item[flag] !== 'boolean') {
+                            invalidEmails.push({ index, email, reason: `${flag} must be boolean` });
+                        }
+                    }
                 } else {
                     invalidEmails.push({ index, item, reason: 'Invalid format' });
                     return;
@@ -771,7 +787,7 @@ export const generateAndSendDailyReport = async (organizationId, userLocale = 'a
 
     // Check if report is enabled
     if (organization.reportSettings?.dailyReportEnabled === false) {
-        console.log(`⏭️ Daily report is disabled for organization: ${organization.name}`);
+        Logger.info(`⏭️ Daily report is disabled for organization: ${organization.name}`);
         return {
             success: false,
             skipped: true,
@@ -813,9 +829,9 @@ export const generateAndSendDailyReport = async (organizationId, userLocale = 'a
     const startOfReport = new Date(endOfReport);
     startOfReport.setDate(startOfReport.getDate() - 1);
 
-    console.log('📊 ===== GENERATE AND SEND REPORT =====');
-    console.log('Organization:', organization.name);
-    console.log('Report Period:', {
+    Logger.info('📊 ===== GENERATE AND SEND REPORT =====');
+    Logger.info('Organization:', organization.name);
+    Logger.info('Report Period:', {
         start: startOfReport.toLocaleString(userLocale),
         end: endOfReport.toLocaleString(userLocale)
     });
@@ -1001,7 +1017,7 @@ export const generateAndSendDailyReport = async (organizationId, userLocale = 'a
     let allEmployeesPDFData = null;
     
     try {
-        console.log('🔍 Starting payroll summary generation using shared function...');
+        Logger.info('🔍 Starting payroll summary generation using shared function...');
         
         // استيراد دالة getPayrollSummary
         const { getPayrollSummaryData } = await import('./payrollController.js');
@@ -1013,7 +1029,7 @@ export const generateAndSendDailyReport = async (organizationId, userLocale = 'a
         // استدعاء الدالة المشتركة
         payrollSummaryData = await getPayrollSummaryData(organizationId, currentMonth, currentYear);
         
-        console.log('✅ Payroll summary generated successfully:', {
+        Logger.info('✅ Payroll summary generated successfully:', {
             totalEmployees: payrollSummaryData?.totalEmployees || 0,
             totalAdvances: payrollSummaryData?.statistics?.totalAdvances || 0,
             totalDeductions: payrollSummaryData?.statistics?.totalDeductions || 0
@@ -1135,17 +1151,88 @@ export const generateAndSendDailyReport = async (organizationId, userLocale = 'a
         console.error('All employees error stack:', allEmpError.stack);
     }
 
-    await sendDailyReport(reportData, reportEmails, pdfBuffer, ownerLanguage, organizationCurrency, payrollSummaryData, allEmployeesPDFData);
+    // Group recipients by scope: the default (full) group reuses the pipeline
+    // above byte-for-byte; custom groups get filtered mini-reports below.
+    const { groupRecipients, scopeKey } = await import('../utils/dailyReportBuilder.js');
+    const FULL_KEY = 'ALL|1|1|1|1';
+    const allGroups = groupRecipients(reportEmails, ownerLanguage);
+    const defaultGroup = (allGroups.find(g => scopeKey(g.scope) === FULL_KEY)?.recipients) || [];
+    const customGroups = allGroups.filter(g => scopeKey(g.scope) !== FULL_KEY);
+
+    await sendDailyReport(reportData, defaultGroup, pdfBuffer, ownerLanguage, organizationCurrency, payrollSummaryData, allEmployeesPDFData);
+
+    // Per-recipient mini-reports: groups with custom scope get their own
+    // filtered build (shared builder) + payroll only when wanted.
+    let customSent = 0;
+    if (customGroups.length > 0) {
+        const { buildDailyReportData, buildPayrollBlock } = await import('../utils/dailyReportBuilder.js');
+        const { generateDailyReportPDF: genPdf } = await import('../utils/pdfGenerator.js');
+        const menuItemMap = {};
+        menuItems.forEach(item => { menuItemMap[item.name] = item; });
+        for (const group of customGroups) {
+            try {
+                const scoped = buildDailyReportData({
+                    organization, raw: { orders, sessions, costs, menuItemMap },
+                    startOfReport, endOfReport, startTimeStr, userLocale, scope: group.scope,
+                });
+                let ppay = null;
+                let pemp = null;
+                if (group.scope.includeEmployees) {
+                    ({ payrollSummaryData: ppay, allEmployeesPDFData: pemp } = await buildPayrollBlock(organizationId, organization.name));
+                }
+                const pdf = await genPdf(scoped);
+                const results = await sendDailyReport(scoped, group.recipients, pdf, ownerLanguage, organizationCurrency, ppay, pemp);
+                if (Array.isArray(results)) customSent += results.filter(r => r?.success).length;
+            } catch (groupError) {
+                console.error(`❌ Failed scoped report group:`, groupError);
+            }
+        }
+    }
 
     if (!organization.reportSettings) {
         organization.reportSettings = {};
     }
     organization.reportSettings.lastReportSentAt = new Date();
+
+    // Monthly report (1st of month only, once per calendar month): same
+    // per-recipient mini-report semantics. Previously monthly lived only in
+    // the manual button AND passed recipient objects as `to:` (silent fail).
+    let monthlySentCount = 0;
+    try {
+        const nowMonthly = new Date();
+        const { isSameCalendarMonth } = await import('../utils/dailyReportBuilder.js');
+        if (nowMonthly.getDate() === 1 && !isSameCalendarMonth(organization.reportSettings.lastMonthlyReportSentAt, nowMonthly)) {
+            const { sendGroupedMonthlyReports, groupRecipients: groupMonthly } = await import('../utils/dailyReportBuilder.js');
+            const { findReportEligibleOrders: findMonthlyOrders } = await import('../utils/reportOrderFilter.js');
+            const mEnd = new Date(nowMonthly.getFullYear(), nowMonthly.getMonth(), 1);
+            mEnd.setHours(startHour, startMinute || 0, 0, 0);
+            const mStart = new Date(mEnd);
+            mStart.setMonth(mStart.getMonth() - 1);
+            const mGroups = groupMonthly(reportEmails, ownerLanguage);
+            monthlySentCount = await sendGroupedMonthlyReports({
+                organization,
+                groups: mGroups,
+                month: { start: mStart, end: mEnd },
+                startTimeStr,
+                userLocale,
+                currency: organizationCurrency,
+                ownerLanguage,
+                findReportEligibleOrders: findMonthlyOrders,
+            });
+            if (monthlySentCount > 0) {
+                organization.reportSettings.lastMonthlyReportSentAt = new Date();
+            }
+        }
+    } catch (monthlyError) {
+        console.error('❌ Scheduled monthly report failed:', monthlyError);
+    }
+
     await organization.save();
 
     return {
         success: true,
-        emailsSent: reportEmails.length,
+        emailsSent: defaultGroup.length + customSent,
+        monthlySent: monthlySentCount,
         emails: reportEmails,
         reportData: reportData
     };
@@ -1225,8 +1312,8 @@ export const sendReportNow = async (req, res) => {
         const startOfReport = new Date(endOfReport);
         startOfReport.setDate(startOfReport.getDate() - 1);
 
-        console.log('📊 ===== SEND REPORT NOW =====');
-        console.log('Organization:', organization.name);
+        Logger.info('📊 ===== SEND REPORT NOW =====');
+        Logger.info('Organization:', organization.name);
         const userLocale = getUserLocale(req.user);
     
         // Fetch data using the SAME logic as Reports page
@@ -1422,7 +1509,7 @@ export const sendReportNow = async (req, res) => {
         // ✅ استخدام دالة getPayrollSummary المشتركة بدلاً من تكرار الكود
         let payrollSummaryData = null;
         try {
-            console.log('🔍 Starting payroll summary generation using shared function...');
+            Logger.info('🔍 Starting payroll summary generation using shared function...');
             
             // استيراد دالة getPayrollSummary
             const { getPayrollSummaryData } = await import('./payrollController.js');
@@ -1433,7 +1520,7 @@ export const sendReportNow = async (req, res) => {
             // استدعاء الدالة المشتركة
             payrollSummaryData = await getPayrollSummaryData(organizationId, currentMonth, currentYear);
             
-            console.log('✅ Payroll summary generated successfully:', {
+            Logger.info('✅ Payroll summary generated successfully:', {
                 totalEmployees: payrollSummaryData?.totalEmployees || 0,
                 totalAdvances: payrollSummaryData?.statistics?.totalAdvances || 0,
                 totalDeductions: payrollSummaryData?.statistics?.totalDeductions || 0
@@ -1558,169 +1645,72 @@ export const sendReportNow = async (req, res) => {
             console.error('All employees error stack:', allEmpError.stack);
         }
 
-        // Send report via email with PDF attachment
-        await sendDailyReport(reportData, reportEmails, pdfBuffer, ownerLanguage, organizationCurrency, payrollSummaryData, allEmployeesPDFData);
+        // Send report via email with PDF attachment (grouped per-recipient scope;
+        // the default group reuses the full pipeline above byte-for-byte).
+        const { groupRecipients: groupRecipientsNow, scopeKey: scopeKeyNow } = await import('../utils/dailyReportBuilder.js');
+        const FULL_KEY_NOW = 'ALL|1|1|1|1';
+        const allGroupsNow = groupRecipientsNow(reportEmails, ownerLanguage);
+        const defaultGroupNow = (allGroupsNow.find(g => scopeKeyNow(g.scope) === FULL_KEY_NOW)?.recipients) || [];
+        const customGroupsNow = allGroupsNow.filter(g => scopeKeyNow(g.scope) !== FULL_KEY_NOW);
+        await sendDailyReport(reportData, defaultGroupNow, pdfBuffer, ownerLanguage, organizationCurrency, payrollSummaryData, allEmployeesPDFData);
+        if (customGroupsNow.length > 0) {
+            const { buildDailyReportData: buildScoped, buildPayrollBlock: buildPayrollNow } = await import('../utils/dailyReportBuilder.js');
+            const { generateDailyReportPDF: genPdfNow } = await import('../utils/pdfGenerator.js');
+            const menuItemMapNow = {};
+            menuItems.forEach(item => { menuItemMapNow[item.name] = item; });
+            for (const group of customGroupsNow) {
+                try {
+                    const scoped = buildScoped({
+                        organization, raw: { orders, sessions, costs, menuItemMap: menuItemMapNow },
+                        startOfReport, endOfReport, startTimeStr, userLocale, scope: group.scope,
+                    });
+                    let ppay = null;
+                    let pemp = null;
+                    if (group.scope.includeEmployees) {
+                        ({ payrollSummaryData: ppay, allEmployeesPDFData: pemp } = await buildPayrollNow(organizationId, organization.name));
+                    }
+                    const pdf = await genPdfNow(scoped);
+                    await sendDailyReport(scoped, group.recipients, pdf, ownerLanguage, organizationCurrency, ppay, pemp);
+                } catch (groupError) {
+                    console.error(`❌ Failed scoped report group (send-now):`, groupError);
+                }
+            }
+        }
 
-        // Check if today is the 1st of the month - send monthly report too
+        // Monthly report (1st of month, once per calendar month): same grouped
+        // mini-report semantics as the scheduled flow ( deduped via
+        // lastMonthlyReportSentAt so manual + scheduled can't double-send).
         const today = new Date();
         const isFirstDayOfMonth = today.getDate() === 1;
         let monthlySent = false;
-        
-        if (isFirstDayOfMonth) {
+        const { isSameCalendarMonth: sameMonthNow } = await import('../utils/dailyReportBuilder.js');
+        if (isFirstDayOfMonth && !sameMonthNow(organization.reportSettings?.lastMonthlyReportSentAt, today)) {
             try {
-                console.log('📅 First day of month detected - sending monthly report too...');
-                
-                const { sendMonthlyReport } = await import('../utils/email.js');
-                
-                // Calculate last month's period
+                Logger.info('📅 First day of month detected - sending grouped monthly reports...');
+                const { sendGroupedMonthlyReports: sendMonthlyNow, groupRecipients: groupMonthlyNow } = await import('../utils/dailyReportBuilder.js');
+                const { findReportEligibleOrders: findMonthlyOrdersNow } = await import('../utils/reportOrderFilter.js');
                 const lastMonthEnd = new Date(today.getFullYear(), today.getMonth(), 1);
                 lastMonthEnd.setHours(startHour, startMinute || 0, 0, 0);
-                
                 const lastMonthStart = new Date(lastMonthEnd);
                 lastMonthStart.setMonth(lastMonthStart.getMonth() - 1);
-                
-                console.log('📊 Monthly report period:', {
-                    start: lastMonthStart.toLocaleString(userLocale),
-                    end: lastMonthEnd.toLocaleString(userLocale)
+                const mGroupsNow = groupMonthlyNow(reportEmails, ownerLanguage);
+                const mSent = await sendMonthlyNow({
+                    organization,
+                    groups: mGroupsNow,
+                    month: { start: lastMonthStart, end: lastMonthEnd },
+                    startTimeStr,
+                    userLocale,
+                    currency: organizationCurrency,
+                    ownerLanguage,
+                    findReportEligibleOrders: findMonthlyOrdersNow,
                 });
-                
-                // Fetch monthly data
-                const [monthlyOrders, monthlySessions, monthlyCosts] = await Promise.all([
-                    findReportEligibleOrders(organizationId, {
-                        createdAt: { $gte: lastMonthStart, $lt: lastMonthEnd },
-                    }),
-                    Session.find({
-                        endTime: { $gte: lastMonthStart, $lt: lastMonthEnd },
-                        status: "completed",
-                        organization: organizationId,
-                    }).lean(),
-                    Cost.find({
-                        date: { $gte: lastMonthStart, $lt: lastMonthEnd },
-                        organization: organizationId,
-                    }).lean(),
-                ]);
-                
-                // Calculate monthly revenues
-                const monthlyCafeRevenue = monthlyOrders.reduce((sum, order) => sum + (Number(order.finalAmount) || 0), 0);
-                const monthlyPlaystationSessions = monthlySessions.filter(s => s.deviceType === "playstation");
-                const monthlyComputerSessions = monthlySessions.filter(s => s.deviceType === "computer");
-                const monthlyPlaystationRevenue = monthlyPlaystationSessions.reduce((sum, s) => sum + (Number(s.finalCost) || 0), 0);
-                const monthlyComputerRevenue = monthlyComputerSessions.reduce((sum, s) => sum + (Number(s.finalCost) || 0), 0);
-                const monthlyTotalRevenue = monthlyCafeRevenue + monthlyPlaystationRevenue + monthlyComputerRevenue;
-                const monthlyTotalCosts = monthlyCosts.reduce((sum, cost) => sum + (Number(cost.paidAmount) || Number(cost.amount) || 0), 0);
-                const monthlyNetProfit = monthlyTotalRevenue - monthlyTotalCosts;
-                
-                // Get monthly top products - variant-aware (size separate)
-                const monthlyProductSales = {};
-                monthlyOrders.forEach((order) => {
-                    if (!order.items || !Array.isArray(order.items)) return;
-                    order.items.forEach((item) => {
-                        if (!item.name) return;
-                        const variant = item.variant || '';
-                        const key = `${item.name}|${variant}`;
-                        const variantText = variant && variant !== 'عادي' ? ` (${variant})` : '';
-                        const displayName = `${item.name}${variantText}`;
-                        if (!monthlyProductSales[key]) {
-                            monthlyProductSales[key] = { name: displayName, variant, quantity: 0, revenue: 0 };
-                        }
-                        const itemQuantity = Number(item.quantity) || 0;
-                        const itemPrice = Number(item.price) || 0;
-                        const itemTotal = Number(item.itemTotal) || (itemPrice * itemQuantity);
-                        monthlyProductSales[key].quantity += itemQuantity;
-                        monthlyProductSales[key].revenue += itemTotal;
-                    });
-                });
-                
-                const monthlyTopProducts = Object.values(monthlyProductSales)
-                    .sort((a, b) => b.revenue - a.revenue)
-                    .slice(0, 10);
-                
-                // Get monthly top products by section
-                const monthlySectionData = {};
-                monthlyOrders.forEach(order => {
-                    if (!order.items || !Array.isArray(order.items)) return;
-                    order.items.forEach(item => {
-                        if (!item.name) return;
-                        const menuItem = menuItemMap[item.name];
-                        let sectionId = 'other';
-                        let sectionName = 'أخرى';
-                        if (menuItem && menuItem.category && menuItem.category.section) {
-                            const section = menuItem.category.section;
-                            sectionId = section._id ? section._id.toString() : 'other';
-                            sectionName = section.name || 'أخرى';
-                        }
-                        if (!monthlySectionData[sectionId]) {
-                            monthlySectionData[sectionId] = {
-                                sectionId, sectionName, products: {}, totalRevenue: 0, totalQuantity: 0
-                            };
-                        }
-                        const itemPrice = Number(item.price) || 0;
-                        const itemQuantity = Number(item.quantity) || 0;
-                        const itemTotal = Number(item.itemTotal) || (itemPrice * itemQuantity);
-                        const variant = item.variant || '';
-                        const variantText = variant && variant !== 'عادي' ? ` (${variant})` : '';
-                        const displayName = `${item.name}${variantText}`;
-                        const productKey = `${item.name}|${variant}`;
-                        if (!monthlySectionData[sectionId].products[productKey]) {
-                            monthlySectionData[sectionId].products[productKey] = { name: displayName, variant, quantity: 0, revenue: 0 };
-                        }
-                        monthlySectionData[sectionId].products[productKey].quantity += itemQuantity;
-                        monthlySectionData[sectionId].products[productKey].revenue += itemTotal;
-                        monthlySectionData[sectionId].totalRevenue += itemTotal;
-                        monthlySectionData[sectionId].totalQuantity += itemQuantity;
-                    });
-                });
-                
-                const monthlyTopProductsBySection = Object.values(monthlySectionData).map(section => ({
-                    sectionId: section.sectionId,
-                    sectionName: section.sectionName,
-                    totalRevenue: section.totalRevenue,
-                    totalQuantity: section.totalQuantity,
-                    products: Object.values(section.products).sort((a, b) => b.revenue - a.revenue).slice(0, 10)
-                })).sort((a, b) => b.totalRevenue - a.totalRevenue);
-                
-                const daysInPeriod = Math.ceil((lastMonthEnd - lastMonthStart) / (1000 * 60 * 60 * 24));
-                const avgDailyRevenue = daysInPeriod > 0 ? monthlyTotalRevenue / daysInPeriod : 0;
-                
-                const monthlyReportData = {
-                    month: lastMonthStart.toLocaleDateString(userLocale, { month: "long", year: "numeric" }),
-                    organizationName: organization.name,
-                    totalRevenue: monthlyTotalRevenue || 0,
-                    totalCosts: monthlyTotalCosts || 0,
-                    netProfit: monthlyNetProfit || 0,
-                    profitMargin: monthlyTotalRevenue > 0 ? ((monthlyNetProfit / monthlyTotalRevenue) * 100) : 0,
-                    totalBills: monthlyOrders.length + monthlySessions.length,
-                    totalOrders: monthlyOrders.length || 0,
-                    totalSessions: monthlySessions.length || 0,
-                    topProducts: monthlyTopProducts,
-                    topProductsBySection: monthlyTopProductsBySection,
-                    revenueByType: {
-                        playstation: monthlyPlaystationRevenue || 0,
-                        computer: monthlyComputerRevenue || 0,
-                        cafe: monthlyCafeRevenue || 0
-                    },
-                    avgDailyRevenue: avgDailyRevenue || 0,
-                    daysInPeriod: daysInPeriod,
-                    startOfReport: lastMonthStart,
-                    endOfReport: lastMonthEnd,
-                    reportPeriod: `من ${startTimeStr} يوم ${lastMonthStart.toLocaleDateString(userLocale, {day: 'numeric', month: 'long', year: 'numeric'})} 
-                                 إلى ${startTimeStr} يوم ${lastMonthEnd.toLocaleDateString(userLocale, {day: 'numeric', month: 'long', year: 'numeric'})}`,
-                    language: ownerLanguage,
-                    currency: organizationCurrency
-                };
-                
-                // Send monthly report
-                await sendMonthlyReport(monthlyReportData, reportEmails, ownerLanguage, organizationCurrency);
-                
-                // Update lastMonthlyReportSentAt
-                if (!organization.reportSettings) {
-                    organization.reportSettings = {};
+                if (mSent > 0) {
+                    if (!organization.reportSettings) organization.reportSettings = {};
+                    organization.reportSettings.lastMonthlyReportSentAt = new Date();
+                    await organization.save();
                 }
-                organization.reportSettings.lastMonthlyReportSentAt = new Date();
-                await organization.save();
-                
-                monthlySent = true;
-                console.log('✅ Monthly report sent successfully');
+                monthlySent = mSent > 0;
+                Logger.info(`✅ Monthly reports sent: ${mSent}`);
             } catch (monthlyError) {
                 console.error('❌ Error sending monthly report:', monthlyError);
                 // Don't fail the whole request if monthly report fails

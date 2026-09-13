@@ -305,6 +305,7 @@ const Settings: FC = () => {
     isOwner: false,
   });
   const [reportSettingsLoading, setReportSettingsLoading] = useState(true);
+  const [menuSectionsForReports, setMenuSectionsForReports] = useState<any[]>([]);
 
   // Payroll permissions state
   const [payrollPermissions, setPayrollPermissions] = useState({
@@ -505,6 +506,15 @@ const Settings: FC = () => {
             dailyReportEmails: settings.dailyReportEmails || [],
             authorizedToManageReports: settings.authorizedToManageReports?.map((m: any) => m._id || m) || [],
           });
+        }
+
+        // Menu sections for per-recipient report scope
+        try {
+          const secs: any = await api.getMenuSections();
+          const list = secs?.data || secs || [];
+          setMenuSectionsForReports(Array.isArray(list) ? list : []);
+        } catch {
+          setMenuSectionsForReports([]);
         }
       } catch (error) {
         console.error('Error loading report settings:', error);
@@ -2664,6 +2674,7 @@ const Settings: FC = () => {
                         onSendNow={handleSendReportNow}
                         initialSettings={reportSettings}
                         availableManagers={availableManagers}
+                        menuSections={menuSectionsForReports}
                       />
                     </div>
                   )}

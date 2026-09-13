@@ -544,8 +544,11 @@ export const getOrders = async (req, res) => {
             query.bill = { $in: visibleBillIds };
         }
 
-        // إزالة الحد - جلب جميع الطلبات بدون pagination
-        // تم إزالة effectiveLimit لعرض جميع الطلبات القديمة والجديدة
+        // Pagination is OPT-IN via explicit ?page= (infinite-scroll views).
+        // Without it: legacy unlimited fetch (DataContext needs the full set).
+        const paged = req.query.page !== undefined;
+        const pageNum = Math.max(1, parseInt(page, 10) || 1);
+        const limitNum = Math.min(500, Math.max(1, parseInt(limit, 10) || 25));
 
         // Selective field projection - only essential fields + bill status + items
         // minimal=true (report/consumption callers): skip the 3 populates — they add
@@ -553,7 +556,10 @@ export const getOrders = async (req, res) => {
         let ordersQuery = Order.find(query)
             .select('orderNumber table status total createdAt bill items organization finalAmount fulfillmentType createdBy updatedBy')
             .sort({ createdAt: -1 })
-            .lean(); // Convert to plain JS objects for better performance - جلب جميع الطلبات بدون حد
+            .lean();
+        if (paged) {
+            ordersQuery = ordersQuery.skip((pageNum - 1) * limitNum).limit(limitNum);
+        }
         if (minimal !== "true") {
             ordersQuery = ordersQuery
                 .populate('table', 'number name')
@@ -564,10 +570,10 @@ export const getOrders = async (req, res) => {
         }
         const orders = await ordersQuery;
 
-        // No countDocuments: no frontend caller consumes `total` (all use data only),
-        // and it rescanned the whole match on every call. `total` keeps its key
-        // for compatibility.
-        const total = orders.length;
+        // No countDocuments by default (no caller consumed `total`); only in paged
+        // mode where the client needs total/hasMore for infinite scroll.
+        // `total` keeps its key for compatibility.
+        const total = paged ? await Order.countDocuments(query) : orders.length;
 
         const queryExecutionTime = Date.now() - queryStartTime;
 
@@ -794,7 +800,7 @@ export const createOrder = async (req, res) => {
         if (menuItemIds.length > 0) {
             const menuItems = await MenuItem.find({ _id: { $in: menuItemIds } })
                 .select('_id name arabicName price variants isAvailable preparationTime category')
-                .populate({ path: 'category', select: 'section', populate: { path: 'section', select: '_id' } })
+                .populate({ path: 'category', select: 'section', populate: { path: 'section', select: '_id name' } })
                 .lean();
             
             menuItems.forEach(mi => {
@@ -848,6 +854,7 @@ export const createOrder = async (req, res) => {
                 const itemTotal = effectivePrice * (item.quantity || 1);
                 subtotal += itemTotal;
                 const sectionId = menuItem.category?.section?._id || null;
+                const sectionName = menuItem.category?.section?.name || null;
                 processedItems.push({
                     menuItem: menuItem._id,
                     name: menuItem.name,
@@ -859,6 +866,7 @@ export const createOrder = async (req, res) => {
                     notes: item.notes,
                     preparationTime: menuItem.preparationTime || 5,
                     section: sectionId,
+                    sectionName: sectionName,
                 });
             } else {
                 // إذا لم يوجد menuItem، استخدم بيانات العنصر كما هي

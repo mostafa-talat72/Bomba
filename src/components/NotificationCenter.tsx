@@ -6,7 +6,7 @@ import NotificationSound from './NotificationSound';
 import { getLocaleFromLanguage } from '../utils/localeMapper';
 import { useTranslation } from 'react-i18next';
 import { useOrganization } from '../context/OrganizationContext';
-import { isSmartAlertsOn } from '../utils/notificationPrefs';
+import { isNotificationVisible } from '../utils/notificationPrefs';
 
 interface Notification {
   _id: string;
@@ -128,14 +128,16 @@ const NotificationCenter: React.FC = () => {
     } catch {}
   };
 
-  // احسب unreadCount دائماً من notifications في context
-  const unreadCount = notifications.filter(n => !n.readBy.some((read: NotificationRead) => read.user === user?.id)).length;
+  // الرؤية أولاً (المكتوم/المطفأ لا شارة ولا صوت ولا قائمة له)، ثم unreadCount من المرئي فقط.
+  const visibleNotifications = notifications.filter((n) => isNotificationVisible(n, user));
+  // احسب unreadCount دائماً من الإشعارات المرئية فقط
+  const unreadCount = visibleNotifications.filter(n => !n.readBy.some((read: NotificationRead) => read.user === user?.id)).length;
 
   // عند تحديث notifications من context، شغل الصوت فقط إذا زاد العدد
   useEffect(() => {
     if (!isOpen && unreadCount > prevUnreadCount && prevUnreadCount > 0) { // تأكد من أن هذا ليس التحميل الأولي
       // تحديد نوع الصوت حسب أولوية الإشعارات الجديدة
-      const newNotifications = notifications.filter(n => !n.readBy.some((read: NotificationRead) => read.user === user?.id));
+      const newNotifications = visibleNotifications.filter(n => !n.readBy.some((read: NotificationRead) => read.user === user?.id));
       const urgentNotification = newNotifications.find(n => n.priority === 'urgent');
       const highPriorityNotification = newNotifications.find(n => n.priority === 'high');
       if (urgentNotification) {
@@ -378,11 +380,7 @@ const NotificationCenter: React.FC = () => {
     return !notification.readBy.some((read: NotificationRead) => read.user === user?.id);
   };
 
-  const filteredNotifications = notifications.filter(notification => {
-    // إخفاء التنبيهات الذكية لمن أطفأها من إشعاراتي.
-    try {
-      if ((notification as any)?.metadata?.smartAlert && !isSmartAlertsOn(user)) return false;
-    } catch {}
+  const filteredNotifications = visibleNotifications.filter(notification => {
     if (filter === 'unread') return isUnread(notification);
     if (filter === 'read') return notification.readBy.some((read: NotificationRead) => read.user === user?.id);
     if (filter === 'high') return notification.priority === 'high' || notification.priority === 'urgent';
@@ -672,6 +670,11 @@ const NotificationCenter: React.FC = () => {
                           )}
                           {(notification.metadata as any)?.billNumber && (
                             <span className="text-[11px] font-bold bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 rounded-full px-2 py-0.5">🧾 {(notification.metadata as any).billNumber}</span>
+                          )}
+                          {((notification.metadata as any)?.fulfillmentType === 'delivery' || (notification.metadata as any)?.fulfillmentType === 'takeaway') && (
+                            <span className="text-[11px] font-bold bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300 rounded-full px-2 py-0.5">
+                              {(notification.metadata as any).fulfillmentType === 'delivery' ? '🛵 دليفري' : '🥡 تيك أوي'}
+                            </span>
                           )}
                           {(notification.metadata as any)?.deviceName && (
                             <span className="text-[11px] font-bold bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-full px-2 py-0.5">🎮 {(notification.metadata as any).deviceName}</span>

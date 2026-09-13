@@ -40,6 +40,7 @@ interface Order {
     name?: string;
   };
   customerName?: string;
+  customerPhone?: string;
   items: OrderItem[];
   totalAmount?: number;
   finalAmount?: number;
@@ -106,11 +107,30 @@ export const buildOrderPrintHTML = async (
 
   // Group items by menu section
   const itemsBySection = new Map<string, OrderItem[]>();
+  // Names stamped on items (no menu permission needed)
+  const stampedNames = new Map<string, string>();
 
   order.items.forEach(item => {
     // Get menu section for item
     let sectionId: string | null = null;
     let sectionName: string | null = null;
+
+    // First: stamped snapshot on the item itself (works with zero menu permission)
+    const stampedSection: any = (item as any).section;
+    const stampedName: any = (item as any).sectionName;
+    if (stampedSection) {
+      sectionId = String(stampedSection._id || stampedSection.id || stampedSection);
+    }
+    if (stampedName && typeof stampedName === 'string' && stampedName.trim()) {
+      sectionName = stampedName.trim();
+    }
+    if (sectionId && sectionName) {
+      const key = sectionId;
+      if (!itemsBySection.has(key)) itemsBySection.set(key, []);
+      if (!stampedNames.has(key)) stampedNames.set(key, sectionName);
+      itemsBySection.get(key)!.push(item);
+      return;
+    }
 
     // Try to get menuItem from item.menuItem (could be string ID or object)
     const menuItemFromOrder = typeof item.menuItem === 'object' && item.menuItem !== null 
@@ -194,15 +214,15 @@ export const buildOrderPrintHTML = async (
   const sectionsArray = Array.from(itemsBySection.entries()).filter(([sectionId]) =>
     !selectedSectionIds || selectedSectionIds.includes(sectionId)
   ).map(([sectionId, items]) => {
-    const sectionName = sectionId === 'other' 
+    const sectionName = sectionId === 'other'
       ? t('orderPrint.otherSection')
-      : menuSections.find(s => 
-          s._id === sectionId || 
+      : menuSections.find(s =>
+          s._id === sectionId ||
           s.id === sectionId ||
           String(s._id) === String(sectionId) ||
           String(s.id) === String(sectionId)
-        )?.name || t('orderPrint.unspecifiedSection');
-    
+        )?.name || stampedNames.get(sectionId) || t('orderPrint.unspecifiedSection');
+
     return { sectionId, sectionName, items };
   });
 
@@ -276,7 +296,11 @@ const printAllSectionsInOnePage = (
               <div style="font-size: 1.15em; font-weight: 900; margin: 2px 0; text-align: center;">
                 ${t('orderPrint.table')}: <strong style="font-size: 1.3em;">${order.table.number}</strong>${tableSectionName ? `—(${tableSectionName})` : ''}
               </div>
-            ` : ''}
+            ` : ((order.customerName || order.customerPhone) ? `
+              <div style="font-size: 1.15em; font-weight: 900; margin: 2px 0; text-align: center;">
+                ${t('orderPrint.customer')}: <strong style="font-size: 1.2em;">${order.customerName || ''}${order.customerPhone ? ` — ${order.customerPhone}` : ''}</strong>
+              </div>
+            ` : '')}
           </div>
         </div>
 

@@ -1810,7 +1810,22 @@
         "sending": "جاري الإرسال...",
         "saveSettings": "حفظ إعدادات التقارير",
         "noPermission": "لا توجد صلاحية",
-        "noPermissionMessage": "ليس لديك صلاحية لإدارة إعدادات التقارير. يرجى التواصل مع صاحب المنشأة."
+        "noPermissionMessage": "ليس لديك صلاحية لإدارة إعدادات التقارير. يرجى التواصل مع صاحب المنشأة.",
+        "scopeTitle": "تخصيص التقرير",
+        "scopeAllSections": "كل الأقسام",
+        "scopeSections": "{{count}} أقسام",
+        "scopeExcept": "بدون: {{items}}",
+        "sectionsLabel": "أقسام المنيو في التقرير",
+        "allSections": "الكل",
+        "sectionsHint": "فارغ = كل الأقسام. الأرقام تُحسب من الأقسام المحددة فقط.",
+        "modEmployees": "الموظفين",
+        "modCosts": "التكاليف",
+        "modPS": "البلايستيشن",
+        "modPC": "الكمبيوتر",
+        "modEmployeesFull": "تقرير الموظفين",
+        "modCostsFull": "التكاليف",
+        "modPSFull": "البلايستيشن",
+        "modPCFull": "الكمبيوتر"
       },
       "printSettings": {
         "title": "إعدادات الطباعة",
@@ -4399,7 +4414,12 @@
     },
     "tableWord": "طاولة",
     "billWord": "فاتورة",
-    "phoneTag": "هاتف"
+    "phoneTag": "هاتف",
+    "fulfill": {
+      "dine_in": "طاولة",
+      "takeaway": "تيك أوي",
+      "delivery": "دليفري"
+    }
   },
   "notifPrefs": {
     "title": "إشعارات المستخدم",

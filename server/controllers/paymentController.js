@@ -6,6 +6,7 @@ import Deduction from '../models/Deduction.js';
 import Bonus from '../models/Bonus.js';
 import Settings from '../models/Settings.js';
 import { createTombstone } from '../utils/tombstoneHelper.js';
+import Logger from "../middleware/logger.js";
 
 // Get employee salary summary (cumulative)
 export const getEmployeeSalarySummary = async (req, res) => {
@@ -57,7 +58,7 @@ export const getEmployeeSalarySummary = async (req, res) => {
         workHoursPerDay = payrollSettings.settings.workHoursPerDay;
       }
     } catch (error) {
-      console.log('Using default work hours:', workHoursPerDay);
+      Logger.info('Using default work hours:', workHoursPerDay);
     }
     
     // تنسيق سجلات الحضور مع إعادة حساب البيانات المفقودة

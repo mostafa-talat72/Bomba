@@ -179,35 +179,22 @@ const AttendanceManagement: React.FC<AttendanceManagementProps> = ({ preSelected
     // منع اختيار تواريخ في المستقبل
     const today = dayjs().startOf('day');
     const currentDate = current.startOf('day');
-    
-    console.log('🔍 Checking date:', current.format('YYYY-MM-DD'), {
-      isAfterToday: currentDate.isAfter(today),
-      attendanceCount: attendance.length,
-      isEditing: !!editingRecord
-    });
-    
+
     if (currentDate.isAfter(today)) {
-      console.log('❌ DISABLED: Future date');
       return true; // تاريخ في المستقبل
     }
-    
+
     // منع اختيار تواريخ محفوظة مسبقاً (فقط في وضع الإضافة)
     if (!editingRecord) {
       const dateStr = current.format('YYYY-MM-DD');
       const isRecorded = attendance.some(record => {
-        const match = record.date === dateStr;
-        if (match) {
-          console.log('🔍 Found duplicate:', dateStr, 'in record:', record.date);
-        }
-        return match;
+        return record.date === dateStr;
       });
       if (isRecorded) {
-        console.log('❌ DISABLED: Duplicate date');
         return true; // تاريخ مكرر
       }
     }
-    
-    console.log('✅ ENABLED');
+
     return false;
   }, [attendance, editingRecord]);
 

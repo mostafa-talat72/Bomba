@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { X, Search, Save, ShoppingCart, Table as TableIcon, AlertTriangle, CheckCircle, Printer, Plus, Trash2, Edit } from 'lucide-react';
+import { X, Search, Save, ShoppingCart, Table as TableIcon, AlertTriangle, CheckCircle, Printer, Plus, Trash2, Edit, ChefHat } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Bill, MenuItem, MenuSection, MenuCategory } from '../../services/api';
 import { api } from '../../services/api';
@@ -26,6 +26,8 @@ interface Props {
   onSuccess: (updatedBill: Bill) => void;
   getCategoriesForSection?: (sectionId: string) => MenuCategory[];
   getItemsForCategory?: (categoryId: string) => MenuItem[];
+  // طباعة التحضير بعد الحفظ (تيك أوي/دليفري) — الزر يظهر فقط عند تمريرها.
+  onPrepPrint?: (bill: Bill) => void | Promise<void>;
 }
 
 function createItemKey(name: string, price: number, menuItem?: string, variant?: string | null) {
@@ -33,7 +35,7 @@ function createItemKey(name: string, price: number, menuItem?: string, variant?:
   return `name:${name}|${price}|${variant || ''}`;
 }
 
-const BillItemsEditModal: React.FC<Props> = ({ isOpen, onClose, bill, menuItems, menuSections, menuCategories, onSuccess, getCategoriesForSection: propGetCats, getItemsForCategory: propGetItems }) => {
+const BillItemsEditModal: React.FC<Props> = ({ isOpen, onClose, bill, menuItems, menuSections, menuCategories, onSuccess, getCategoriesForSection: propGetCats, getItemsForCategory: propGetItems, onPrepPrint }) => {
   const { t, i18n } = useTranslation();
   const { isRTL } = useLanguage();
   const [items, setItems] = useState<AggregatedEditItem[]>([]);
@@ -256,7 +258,7 @@ const BillItemsEditModal: React.FC<Props> = ({ isOpen, onClose, bill, menuItems,
     });
   };
 
-  const doSave = async ({ shouldPrint = false, shouldPayFull = false }: { shouldPrint?: boolean; shouldPayFull?: boolean } = {}) => {
+  const doSave = async ({ shouldPrint = false, shouldPayFull = false, shouldPrepPrint = false }: { shouldPrint?: boolean; shouldPayFull?: boolean; shouldPrepPrint?: boolean } = {}) => {
     const targetBill = fullBill || bill;
     if (!targetBill) return;
     setSaving(true);
@@ -315,6 +317,9 @@ const BillItemsEditModal: React.FC<Props> = ({ isOpen, onClose, bill, menuItems,
       if (shouldPrint) {
         try { await printBill(finalBill, (user as any)?.organizationName || '', i18n.language, t); } catch {}
       }
+      if (shouldPrepPrint) {
+        try { await onPrepPrint?.(finalBill); } catch {}
+      }
       onClose();
     } catch (e: any) {
       const msg = e?.message || e?.data?.message || 'خطأ في حفظ التعديلات';
@@ -329,6 +334,7 @@ const BillItemsEditModal: React.FC<Props> = ({ isOpen, onClose, bill, menuItems,
   const handleSave = () => doSave({ shouldPrint: false, shouldPayFull: false });
   const handleSaveAndPrint = () => doSave({ shouldPrint: true, shouldPayFull: false });
   const handleSaveAndPayFull = () => doSave({ shouldPrint: false, shouldPayFull: true });
+  const handleSaveAndPrepPrint = () => doSave({ shouldPrint: false, shouldPayFull: false, shouldPrepPrint: true });
   const saveService = () => {
     const amount = Number(serviceAmount);
     if (!serviceName.trim() || !Number.isFinite(amount) || amount < 0) return;
@@ -619,6 +625,12 @@ const BillItemsEditModal: React.FC<Props> = ({ isOpen, onClose, bill, menuItems,
 
               <div className="sticky bottom-0 z-10 px-3 py-3 flex-shrink-0 bg-white/95 dark:bg-gray-800/95 border-t border-gray-200 dark:border-gray-700">
                 <div className="space-y-3">
+                  {onPrepPrint && (
+                    <button onClick={handleSaveAndPrepPrint} disabled={saving || loadingBill}
+                      className="w-full min-h-[46px] py-2.5 bg-white hover:bg-orange-50 dark:bg-gray-900 dark:hover:bg-gray-800 text-orange-600 dark:text-orange-400 font-bold text-sm rounded-xl flex items-center justify-center gap-1.5 shadow-md border border-orange-300 dark:border-orange-800 transition-all active:scale-[0.98] disabled:opacity-50">
+                      <ChefHat className="h-4 w-4" />حفظ وطباعة طلبات
+                    </button>
+                  )}
                   <div className="grid grid-cols-2 gap-2">
                     <button onClick={handleSave} disabled={saving || loadingBill}
                       className="min-h-[46px] py-2.5 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold text-sm rounded-xl flex items-center justify-center gap-1.5 shadow-md border border-blue-700 transition-all active:scale-[0.98] disabled:opacity-50">
@@ -626,7 +638,7 @@ const BillItemsEditModal: React.FC<Props> = ({ isOpen, onClose, bill, menuItems,
                     </button>
                     <button onClick={handleSaveAndPrint} disabled={saving || loadingBill}
                       className="min-h-[46px] py-2.5 bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 active:from-orange-700 active:to-red-700 text-white font-bold text-sm rounded-xl flex items-center justify-center gap-1.5 shadow-md border border-orange-600 transition-all active:scale-[0.98] disabled:opacity-50">
-                      <Printer className="h-4 w-4" />حفظ وطباعة
+                      <Printer className="h-4 w-4" />حفظ وطباعة الفاتورة
                     </button>
                   </div>
                   <button onClick={handleSaveAndPayFull} disabled={saving || loadingBill}

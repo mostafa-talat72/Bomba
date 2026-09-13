@@ -6,6 +6,7 @@
 import Table from "../models/Table.js";
 import Bill from "../models/Bill.js";
 import { getRequestActor, getRequestRoute } from "../middleware/auditStamping.js";
+import Logger from "../middleware/logger.js";
 
 function pickId(v) {
     try {
@@ -49,6 +50,8 @@ export async function resolveActivityContext(doc = {}, kind = "") {
             ctx.billId = String(bill);
         }
         if (d.deviceName) ctx.deviceName = d.deviceName;
+        // نوع الفاتورة/الطلب للعرض (دليفري/تيك أوي/صالة).
+        if (d.fulfillmentType) ctx.fulfillment = d.fulfillmentType;
         // رقم طاولة المصدر (النقل) — يُمرر صريحاً ويُعرض في التوست والصف.
         if (d.fromTableNumber !== null && d.fromTableNumber !== undefined) {
             ctx.fromTableNumber = d.fromTableNumber;
@@ -124,7 +127,7 @@ export function emitActivity(io, organizationId, { kind, action, doc = {}, numbe
                             },
                             at: new Date().toISOString(),
                         };
-                        console.log(`[activity] ${kind}:${action} ${number || ""} → org ${org || "all"} by ${payload.actor?.name || "?"} (${payload.actor?.source || "?"})${silent ? " (silent)" : ""} via ${getRequestRoute() || "?"}`);
+                        Logger.info(`[activity] ${kind}:${action} ${number || ""} → org ${org || "all"} by ${payload.actor?.name || "?"} (${payload.actor?.source || "?"})${silent ? " (silent)" : ""} via ${getRequestRoute() || "?"}`);
                         if (org) {
                             io.to(`org-${org}`).emit("activity:new", payload);
                             io.to(`org:${org}`).emit("activity:new", payload);

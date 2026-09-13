@@ -216,6 +216,8 @@ export const getBills = async (req, res) => {
             customerName,
             q,  // Search by bill number or ID - bypasses the default visibility filter
             all, // if all=true fetch all bills (paginated), otherwise unpaid only
+            fulfillmentType, // dine_in | takeaway | delivery — server-side filter for paged views
+            mode, // mode=list → صفوف خفيفة للقوائم (بلا أصناف/مدفوعات مفصلة) — التفاصيل عبر getBill
         } = req.query;
 
         const query = {};
@@ -245,21 +247,40 @@ export const getBills = async (req, res) => {
         if (customerName) {
             query.customerName = { $regex: customerName, $options: "i" };
         }
+
+        if (['dine_in', 'takeaway', 'delivery'].includes(fulfillmentType)) {
+            query.fulfillmentType = fulfillmentType;
+        }
         
         // Default: fetch ONLY unpaid bills for Tables page logic
         // status: { $in: ['draft','partial','overdue'] }
         // Keep ability to fetch all if query ?all=true or ?status=paid is passed
         const isAll = all === 'true' || all === true;
         const unpaidStatuses = ['draft', 'partial', 'overdue'];
+        // status accepts a single value or a comma-separated list (e.g. draft,partial,overdue)
+        const statusList = typeof status === 'string'
+            ? status.split(',').map((s) => s.trim()).filter(Boolean)
+            : [];
         if (q && q.trim()) {
-            const qOr = [{ billNumber: { $regex: q.trim(), $options: "i" } }];
-            if (mongoose.Types.ObjectId.isValid(q.trim())) {
-                qOr.push({ _id: q.trim() });
+            const qt = q.trim();
+            const qOr = [
+                { billNumber: { $regex: qt, $options: "i" } },
+                { customerName: { $regex: qt, $options: "i" } },
+                { customerPhone: { $regex: qt, $options: "i" } },
+                { 'deliveryInfo.customerName': { $regex: qt, $options: "i" } },
+                { 'deliveryInfo.phone': { $regex: qt, $options: "i" } },
+                { 'deliveryInfo.address': { $regex: qt, $options: "i" } },
+            ];
+            if (mongoose.Types.ObjectId.isValid(qt)) {
+                qOr.push({ _id: qt });
             }
             query.$or = qOr;
-            if (status) query.status = status;
-        } else if (status) {
-            query.status = status;
+            if (statusList.length === 1) query.status = statusList[0];
+            else if (statusList.length > 1) query.status = { $in: statusList };
+        } else if (statusList.length === 1) {
+            query.status = statusList[0];
+        } else if (statusList.length > 1) {
+            query.status = { $in: statusList };
         } else if (isAll) {
             // no status filter - fetch all
         } else {
@@ -270,19 +291,26 @@ export const getBills = async (req, res) => {
 
         // ── SimpleCache 10s TTL for getBills — fast fetch (<50ms) ──
         const billsOrgId = String(getOrganizationId(req.user));
-        const billsCacheKey = `bills:${billsOrgId}:${JSON.stringify({ status, table, tableNumber, customerName, q, all, page, limit })}`;
+        const billsCacheKey = `bills:${billsOrgId}:${JSON.stringify({ status, table, tableNumber, customerName, q, all, page, limit, fulfillmentType, mode })}`;
         const cachedBills = cache.get(billsCacheKey);
         if (cachedBills && !q) {
             return res.json(cachedBills);
         }
 
-        // Pagination: default no limit for unpaid (<200), if all=true then paginate with limit 50
+        // Pagination: default no limit for unpaid (<200); paginate when all=true
+        // OR when the client sends an explicit page (infinite-scroll views).
+        // Limit capped at 500 per page (largest legitimate use: table modal fetch).
         const pageNum = Math.max(1, parseInt(page, 10) || 1);
-        const limitNum = Math.max(1, parseInt(limit, 10) || 50);
-        const shouldPaginate = isAll;
+        const limitNum = Math.min(500, Math.max(1, parseInt(limit, 10) || 50));
+        const shouldPaginate = isAll || req.query.page !== undefined;
 
+        // وضع القوائم: صفوف خفيفة (أرقام/حالات/إجماليات) — الأصناف والمدفوعات
+        // المفصلة تُجلب عبر getBill عند فتح الفاتورة/الدفع/الطباعة. يقلص الحمولة ~90%.
+        const isListMode = mode === 'list';
         let billQuery = Bill.find(query)
-            .select('billNumber table status total remaining paid subtotal discount discountPercentage tax billType fulfillmentType deliveryInfo customerName customerPhone sessions orders itemPayments sessionPayments createdAt updatedAt createdBy updatedBy')
+            .select(isListMode
+                ? 'billNumber table status total remaining paid subtotal discount discountPercentage tax billType fulfillmentType deliveryInfo customerName customerPhone sessions orders createdAt updatedAt createdBy updatedBy'
+                : 'billNumber table status total remaining paid subtotal discount discountPercentage tax billType fulfillmentType deliveryInfo customerName customerPhone sessions orders itemPayments sessionPayments createdAt updatedAt createdBy updatedBy')
             .populate({
                 path: "table",
                 select: "number name",
@@ -291,16 +319,24 @@ export const getBills = async (req, res) => {
             .populate("updatedBy", "name")
             .populate({
                 path: "sessions",
-                select: "deviceName deviceNumber deviceType status startTime endTime controllers controllersHistory discount totalCost finalCost deviceId",
+                select: isListMode
+                    ? "_id deviceName deviceNumber status startTime endTime finalCost"
+                    : "deviceName deviceNumber deviceType status startTime endTime controllers controllersHistory discount totalCost finalCost deviceId",
             })
-            .populate({
-                path: "orders",
-                select: "items totalAmount finalAmount status createdAt",
-                populate: {
-                    path: "items.menuItem",
-                    select: "name arabicName preparationTime price",
-                },
-            })
+            .populate(isListMode
+                ? {
+                    // الأصناف خاماً للعدّ والعرض — بلا تعبئة menuItem (الأثقل).
+                    path: "orders",
+                    select: "_id orderNumber status totalAmount finalAmount createdAt items",
+                }
+                : {
+                    path: "orders",
+                    select: "items totalAmount finalAmount status createdAt",
+                    populate: {
+                        path: "items.menuItem",
+                        select: "name arabicName preparationTime price",
+                    },
+                })
             .sort({ createdAt: -1 })
             .lean();
 
@@ -429,6 +465,7 @@ export const getBills = async (req, res) => {
                 page: pageNum,
                 limit: limitNum,
                 totalPages: Math.ceil(total / limitNum),
+                hasMore: pageNum * limitNum < total,
                 data: bills
             };
         } else {
@@ -3890,7 +3927,7 @@ export const updateBillAggregatedItems = async (req, res) => {
         const menuItemIds = finalRaw.filter((it) => it.menuItem && !it.isService).map((it) => it.menuItem);
         const menuItemsMap = new Map();
         if (menuItemIds.length > 0) {
-            const menuItems = await MenuItem.find({ _id: { $in: menuItemIds }, ...organizationFilter(req.user) }).populate({ path: 'category', select: 'section' }).lean();
+            const menuItems = await MenuItem.find({ _id: { $in: menuItemIds }, ...organizationFilter(req.user) }).populate({ path: 'category', select: 'section', populate: { path: 'section', select: '_id name' } }).lean();
             menuItems.forEach((mi) => menuItemsMap.set(mi._id.toString(), mi));
         }
 
@@ -3936,7 +3973,7 @@ export const updateBillAggregatedItems = async (req, res) => {
                 }
                 const itemTotal = price * qty;
                 subtotal += itemTotal;
-                // Preserve section snapshot (drives section discounts) — was always null before
+                // Preserve section snapshot (also feeds order printing without menu permission)
                 const secRef = mi.category ? mi.category.section : null;
                 processedItems.push({
                     menuItem: mi._id,
@@ -3951,6 +3988,7 @@ export const updateBillAggregatedItems = async (req, res) => {
                     isService: false,
                     showInPrint: raw.showInPrint !== false,
                     section: secRef ? (secRef._id || secRef) : null,
+                    sectionName: secRef && typeof secRef === 'object' ? (secRef.name || null) : null,
                 });
             } else {
                 if (!raw.name || raw.price === undefined || raw.price === null) {

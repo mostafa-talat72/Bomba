@@ -4,6 +4,7 @@ import { applySyncMiddleware } from "../middleware/sync/syncMiddleware.js";
 import { stampUpdatedBy } from "../middleware/auditStamping.js";
 import { auditPlugin } from "../utils/audit.js";
 import { getInstanceId } from "../utils/instanceId.js";
+import Logger from "../middleware/logger.js";
 
 // Helper function to get item redistribution key
 // Uses menuItem ID if available, falls back to name|price for backward compatibility
@@ -1302,12 +1303,12 @@ billSchema.methods.upgradeItemPaymentsToNewFormat = async function() {
         
         // If there are still items needing upgrade, continue with upgrade regardless of recent upgrade
         if (recentUpgrade && needsUpgrade) {
-            console.log(`🔄 [Auto-Upgrade] Bill ${this.billNumber} was recently upgraded but still has ${this.itemPayments.filter(ip => !ip.menuItemId).length} items needing upgrade`);
+            Logger.info(`🔄 [Auto-Upgrade] Bill ${this.billNumber} was recently upgraded but still has ${this.itemPayments.filter(ip => !ip.menuItemId).length} items needing upgrade`);
         }
     }
 
-    console.log(`🔄 [Auto-Upgrade] Upgrading bill ${this.billNumber} to new format...`);
-    console.log(`📊 [Auto-Upgrade] Total itemPayments: ${this.itemPayments.length}, Need upgrade: ${this.itemPayments.filter(ip => !ip.menuItemId).length}`);
+    Logger.info(`🔄 [Auto-Upgrade] Upgrading bill ${this.billNumber} to new format...`);
+    Logger.info(`📊 [Auto-Upgrade] Total itemPayments: ${this.itemPayments.length}, Need upgrade: ${this.itemPayments.filter(ip => !ip.menuItemId).length}`);
 
     let upgradedCount = 0;
     let failedCount = 0;
@@ -1406,14 +1407,14 @@ billSchema.methods.upgradeItemPaymentsToNewFormat = async function() {
             const remainingItems = this.itemPayments.filter(ip => !ip.menuItemId).length;
             const isFullyUpgraded = remainingItems === 0;
             
-            console.log(`✅ [Auto-Upgrade] Successfully upgraded ${upgradedCount} itemPayments in bill ${this.billNumber} (${Date.now() - startTime}ms)`);
-            console.log(`📊 [Auto-Upgrade] Status: ${totalItems - remainingItems}/${totalItems} items upgraded${isFullyUpgraded ? ' - FULLY UPGRADED! 🎉' : `, ${remainingItems} remaining`}`);
+            Logger.info(`✅ [Auto-Upgrade] Successfully upgraded ${upgradedCount} itemPayments in bill ${this.billNumber} (${Date.now() - startTime}ms)`);
+            Logger.info(`📊 [Auto-Upgrade] Status: ${totalItems - remainingItems}/${totalItems} items upgraded${isFullyUpgraded ? ' - FULLY UPGRADED! 🎉' : `, ${remainingItems} remaining`}`);
         } else {
             const totalItems = this.itemPayments.length;
             const remainingItems = this.itemPayments.filter(ip => !ip.menuItemId).length;
-            console.log(`⚠️ [Auto-Upgrade] No items were upgraded in bill ${this.billNumber}. Status: ${totalItems - remainingItems}/${totalItems} items upgraded, ${remainingItems} remaining`);
+            Logger.warn(`⚠️ [Auto-Upgrade] No items were upgraded in bill ${this.billNumber}. Status: ${totalItems - remainingItems}/${totalItems} items upgraded, ${remainingItems} remaining`);
             if (failedCount > 0) {
-                console.log(`❌ [Auto-Upgrade] ${failedCount} items failed to upgrade. Check logs for details.`);
+                Logger.warn(`❌ [Auto-Upgrade] ${failedCount} items failed to upgrade. Check logs for details.`);
             }
         }
 
@@ -1526,31 +1527,41 @@ billSchema.methods.calculateRemainingAmount = function () {
     // 3. حساب المدفوع من الدفعات الكاملة (payments array)
     // نحسب الدفعات الكاملة فقط إذا لم يكن هناك itemPayments/sessionPayments
     // لأن الدفعات الكاملة يتم تحويلها تلقائياً إلى itemPayments/sessionPayments
+    let pendingFullPayments = 0;
     if (hasFullPayments) {
         this.payments.forEach((payment) => {
             const amount = payment.amount || 0;
             const paymentType = payment.type || 'full';
-            
+
             // نحسب الدفعة فقط في الحالات التالية:
             // 1. إذا كانت من نوع 'credit-from-deleted-items' (رصيد من عناصر محذوفة)
             // 2. إذا لم يكن هناك itemPayments/sessionPayments (للتوافق مع البيانات القديمة)
-            // تجاهل الدفعات من نوع: full, partial-items, partial-session, converted-to-items
+            // تجاهل الدفعات من نوع: partial-items, partial-session, converted-to-items
             const isCredit = paymentType === 'credit-from-deleted-items' || paymentType === 'credit';
             const shouldCountFullPayment = !hasItemPayments && !hasSessionPayments;
-            
+
             if (isCredit || shouldCountFullPayment) {
                 totalPaidFromFullPayments += amount;
+            } else if (paymentType === 'full' || paymentType === 'partial') {
+                // دفعة حقيقية غير محوّلة بوجود دفعات أصناف/جلسات: علّقها جانباً —
+                // تُحتسب أدناه فقط لسد العجز حتى الإجمالي (لا ازدواج ولا ضياع).
+                pendingFullPayments += amount;
             }
         });
     }
 
     // 4. جمع جميع المدفوعات
-    const totalPaid = totalPaidFromItems + totalPaidFromSessions + totalPaidFromFullPayments;
+    let totalPaid = totalPaidFromItems + totalPaidFromSessions + totalPaidFromFullPayments;
+    // سد العجز فقط: دفعات حقيقية كانت تُسقط تماماً (نجاح وهمي بلا أثر).
+    // لا يتجاوز الإجمالي أبداً — فالمحوّلة مسبقاً (المغطاة بالأصناف) لا تتأثر.
+    if (pendingFullPayments > 0 && totalPaid < this.total) {
+        totalPaid = Math.min(this.total, totalPaid + pendingFullPayments);
+    }
 
     // 5. تحديث المبلغ المدفوع والمتبقي
     this.paid = totalPaid;
     this.remaining = Math.max(0, this.total - totalPaid);
-    
+
     return this.remaining;
 };
 
@@ -1883,6 +1894,7 @@ billSchema.index({ table: 1, status: 1 }); // Index for table-status queries
 
 // Compound indexes for common query patterns (optimized for performance)
 billSchema.index({ organization: 1, status: 1, createdAt: -1 });
+billSchema.index({ organization: 1, fulfillmentType: 1, status: 1, createdAt: -1 }); // infinite-scroll lists
 billSchema.index({ organization: 1, table: 1, createdAt: -1 });
 billSchema.index({ organization: 1, createdAt: -1 });
 billSchema.index({ billType: 1, organization: 1 });

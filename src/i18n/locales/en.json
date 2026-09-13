@@ -1820,7 +1820,22 @@
         "sending": "Sending...",
         "saveSettings": "Save report settings",
         "noPermission": "No validity",
-        "noPermissionMessage": "You do not have permission to manage report settings. "
+        "noPermissionMessage": "You do not have permission to manage report settings. ",
+        "scopeTitle": "Customize report",
+        "scopeAllSections": "All sections",
+        "scopeSections": "{{count}} sections",
+        "scopeExcept": "Without: {{items}}",
+        "sectionsLabel": "Menu sections in report",
+        "allSections": "All",
+        "sectionsHint": "Empty = all sections. Numbers are computed from selected sections only.",
+        "modEmployees": "Employees",
+        "modCosts": "Costs",
+        "modPS": "PlayStation",
+        "modPC": "Computer",
+        "modEmployeesFull": "Employees report",
+        "modCostsFull": "Costs",
+        "modPSFull": "PlayStation",
+        "modPCFull": "Computer"
       },
       "printSettings": {
         "title": "Print settings",
@@ -4408,7 +4423,12 @@
     },
     "tableWord": "Table",
     "billWord": "Bill",
-    "phoneTag": "Phone"
+    "phoneTag": "Phone",
+    "fulfill": {
+      "dine_in": "Table",
+      "takeaway": "Takeaway",
+      "delivery": "Delivery"
+    }
   },
   "notifPrefs": {
     "title": "User notifications",

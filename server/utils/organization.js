@@ -104,18 +104,17 @@ export function resolveUserPrintSettings(user) {
 }
 
 /**
- * Effective print settings resolution order:
- *   1. user's own settings (when useCustomPrintSettings is on)
- *   2. organization settings (incl. per-device printer merge)
+ * Effective print settings resolution (STRICT, no merge):
+ *   - useCustomPrintSettings ON (+ non-empty) -> ONLY the user's settings.
+ *   - otherwise -> organization settings (incl. per-device printer merge).
  * Device-specific printer path keeps resolving from devicePrinters via
  * resolvePrintSettings(), so a user on another LAN device still lands on
  * a reachable printer.
  */
 export function resolvePrintSettingsForUser(user, organization, fallback = {}) {
-    const base = resolvePrintSettings(organization, fallback);
     const userPs = resolveUserPrintSettings(user);
-    if (!userPs) return base;
-    return { ...base, ...userPs };
+    if (userPs) return userPs;
+    return resolvePrintSettings(organization, fallback);
 }
 
 function isObjectIdValue(value) {

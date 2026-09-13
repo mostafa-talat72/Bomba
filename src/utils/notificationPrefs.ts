@@ -60,11 +60,39 @@ export function isSoundOn(user?: any): boolean {
   }
 }
 
-/** التنبيهات الذكية (طاولة خاملة) لهذا المستخدم؟ الغائب = مفعّل. */
+/** التنبيهات الذكية (طاولة خاملة)؟ تفضيل المستخدم AND عدم كتم الجهاز. */
 export function isSmartAlertsOn(user?: any): boolean {
   try {
     const p = (user as any)?.preferences?.notifications;
-    return p?.smartAlerts !== false;
+    if (p?.smartAlerts === false) return false;
+    const local = readLocalSettings();
+    if (local?.smartAlertsMuted === true) return false;
+    return true;
+  } catch {
+    return true;
+  }
+}
+
+const CATEGORY_KIND: Record<string, ToastKind> = {
+  order: 'order',
+  billing: 'bill',
+  session: 'session',
+  table: 'table',
+  inventory: 'inventory',
+  system: 'system',
+};
+
+/**
+ * هل يظهر هذا الصف لهذا المستخدم؟ (شارة + صوت + قائمة)
+ * - التنبيهات الذكية: مفتاح إشعاراتي.
+ * - الباقي: تفضيل النوع (سيرفر AND كتم الجهاز).
+ */
+export function isNotificationVisible(n: any, user?: any): boolean {
+  try {
+    if ((n as any)?.metadata?.smartAlert) return isSmartAlertsOn(user);
+    const kind = CATEGORY_KIND[(n as any)?.category];
+    if (!kind) return true;
+    return isToastKindEnabled(user, kind);
   } catch {
     return true;
   }

@@ -331,10 +331,42 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     if (subscriptionStatus === 'expired' && isAuthenticated && !isLoggingOut) {
       const currentPath = window.location.pathname;
       if (currentPath !== '/subscription' && currentPath !== '/login' && currentPath !== '/register') {
-        navigate('/subscription');
+        navigate('/subscription', { replace: true });
       }
     }
   }, [subscriptionStatus, navigate, isAuthenticated, isLoggingOut]);
+
+  // تفضيلات الإشعارات قد تتغير من جهاز/جلسة أخرى — حدّث نسخة المستخدم تلقائياً
+  // (عند التركيز + كل 5 دقائق). تُدمج فقط عند الاختلاف الفعلي حتى لا يعاد الاشتراك عبثاً.
+  useEffect(() => {
+    if (!isAuthenticated || isLoggingOut) return;
+    let cancelled = false;
+    const refreshPrefs = async () => {
+      try {
+        const r: any = await (api as any).getMyNotificationSettings?.();
+        if (cancelled || !r?.success || !r.data) return;
+        setUser((prev: any) => {
+          try {
+            const cur = prev?.preferences?.notifications;
+            if (JSON.stringify(cur || null) === JSON.stringify(r.data)) return prev;
+            if (!prev) return prev;
+            return { ...prev, preferences: { ...(prev.preferences || {}), notifications: r.data } };
+          } catch {
+            return prev;
+          }
+        });
+      } catch {}
+    };
+    refreshPrefs();
+    const onFocus = () => { refreshPrefs(); };
+    window.addEventListener('focus', onFocus);
+    const timer = setInterval(refreshPrefs, 5 * 60 * 1000);
+    return () => {
+      cancelled = true;
+      window.removeEventListener('focus', onFocus);
+      clearInterval(timer);
+    };
+  }, [isAuthenticated, isLoggingOut]);
 
   const login = async (email: string, password: string): Promise<{ success: boolean; message?: string }> => {
     try {

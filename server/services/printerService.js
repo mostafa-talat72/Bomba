@@ -6,6 +6,7 @@ import path from 'path';
 import fs from 'fs';
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import Logger from "../middleware/logger.js";
 const execPromise = promisify(exec);
 const ThermalPrinter = pkg.ThermalPrinter || pkg.printer || pkg.default?.ThermalPrinter || pkg.default?.printer;
 const PrinterTypes = pkg.types || pkg.Types || pkg.default?.types || { EPSON: 'epson' };
@@ -139,7 +140,7 @@ class PrinterService {
    */
   async initializePrinter(printSettings) {
     if (!printSettings || printSettings.printerType === 'none') {
-      console.log('Printer not configured or disabled');
+      Logger.info('Printer not configured or disabled');
       return false;
     }
     try {
@@ -167,10 +168,10 @@ class PrinterService {
             .filter((n, i, a) => a.indexOf(n) === i);
           iface = path.join(os.tmpdir(), `mte-print-${Date.now()}.bin`);
           this.winUseRawFallback = true;
-          console.log(`Windows raw fallback: buffer -> ${iface} -> Out-Printer "${this.winPrinterNames.join('", "')}"`);
+          Logger.info(`Windows raw fallback: buffer -> ${iface} -> Out-Printer "${this.winPrinterNames.join('", "')}"`);
         }
       } else if (!iface) {
-        console.log('Printer device not configured, skipping direct print');
+        Logger.info('Printer device not configured, skipping direct print');
         return false;
       }
       this.printer = new ThermalPrinter({
@@ -197,16 +198,16 @@ class PrinterService {
       if (this.winUseRawFallback) {
         // لا نتحقق من وجود الملف قبل الكتابة
         this.isConnected = true;
-        console.log('Printer initialized in Windows raw fallback mode');
+        Logger.info('Printer initialized in Windows raw fallback mode');
         return true;
       }
       const connected = await this.printer.isPrinterConnected();
       this.isConnected = connected;
       if (connected) {
-        console.log('Printer connected successfully');
+        Logger.info('Printer connected successfully');
         return true;
       } else {
-        console.log('Failed to connect to printer');
+        console.error('Failed to connect to printer');
         return false;
       }
     } catch (error) {
@@ -329,7 +330,7 @@ if (-not $sent) { throw 'Raw print failed' }
 
   async printText(text, options = {}) {
     if (!this.isConnected || !this.printer) {
-      console.log('Printer not connected');
+      console.error('Printer not connected');
       return false;
     }
 
@@ -446,7 +447,7 @@ if (-not $sent) { throw 'Raw print failed' }
    */
   async openCashDrawer(executeNow = true) {
     if (!this.isConnected || !this.printer) {
-      console.log('Printer not connected, cannot open cash drawer');
+      console.error('Printer not connected, cannot open cash drawer');
       return false;
     }
     // وضع RAW الاحتياطي (بدون حزمة printer الأصلية): نبضة درج عبر winspool مباشرة.
@@ -454,7 +455,7 @@ if (-not $sent) { throw 'Raw print failed' }
       try {
         const drawerBuffer = this.buildWindowsRawPrintBuffer('', { openDrawer: true, autoCut: false, language: 'ar' });
         await this._sendBufferViaWindowsRaw(drawerBuffer, 'Cash Drawer');
-        console.log('Cash drawer opened successfully (Windows raw fallback)');
+        Logger.info('Cash drawer opened successfully (Windows raw fallback)');
         return true;
       } catch (error) {
         console.error('Error opening cash drawer (Windows raw fallback):', error.message);
@@ -468,7 +469,7 @@ if (-not $sent) { throw 'Raw print failed' }
       ]));
       if (executeNow) {
         await this.printer.execute();
-        console.log('Cash drawer opened successfully');
+        Logger.info('Cash drawer opened successfully');
       }
       return true;
     } catch (error) {
@@ -516,7 +517,7 @@ if (-not $sent) { throw 'Raw print failed' }
    */
   async printDocument(content, openDrawer = false, autoCut = false, docName = 'MTE Receipt') {
     if (!this.isConnected || !this.printer) {
-      console.log('Printer not connected');
+      console.error('Printer not connected');
       return { success: false, error: 'Printer not connected' };
     }
     try {
@@ -531,8 +532,8 @@ if (-not $sent) { throw 'Raw print failed' }
 
         await this._sendBufferViaWindowsRaw(rawBuffer, docName);
 
-        if (openDrawer) console.log('Cash drawer opened successfully');
-        console.log('Document printed successfully');
+        if (openDrawer) Logger.info('Cash drawer opened successfully');
+        Logger.info('Document printed successfully');
         return { success: true, cashDrawerTried: openDrawer };
       }
 
@@ -542,8 +543,8 @@ if (-not $sent) { throw 'Raw print failed' }
       if (autoCut) await this.cutPaper();
       else await this.feedLines(3);
       await this.printer.execute();
-      if (openDrawer) console.log('Cash drawer opened successfully');
-      console.log('Document printed successfully');
+      if (openDrawer) Logger.info('Cash drawer opened successfully');
+      Logger.info('Document printed successfully');
       return { success: true, cashDrawerTried: openDrawer };
     } catch (error) {
       console.error('Error printing document:', error);
@@ -560,7 +561,7 @@ if (-not $sent) { throw 'Raw print failed' }
         await this.printer.clear();
         this.isConnected = false;
         this._cachedKey = null;
-        console.log('Printer disconnected');
+        Logger.info('Printer disconnected');
       } catch (error) {
         console.error('Error disconnecting printer:', error);
       }

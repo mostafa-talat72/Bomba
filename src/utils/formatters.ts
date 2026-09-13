@@ -36,6 +36,14 @@ export const getDisplayNumber = (num: string): string => {
     return num?.replace(/-\d{6}(-\d+)$/, '$1') || num;
 };
 
+/** الرقم المختصر للعرض على الكروت (#BILL-426D13-260909-002 → 426D13-002).
+ *  يزيل # والبادئة والتاريخ. التخزين لا يتغير. */
+export const getShortBillNumber = (num: any): string => {
+    if (num === null || num === undefined) return '';
+    const display = getDisplayNumber(String(num).replace(/^#/, ''));
+    return display.replace(/^(BILL|ORD|SES|INV)-/i, '');
+};
+
 /**
  * Get currency symbol based on currency code and language
  */

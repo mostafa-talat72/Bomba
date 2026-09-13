@@ -7,12 +7,18 @@ import api from '../services/api';
 import { Bill } from '../services/api';
 import { printBill } from '../utils/printBill';
 import BillItemsEditModal from '../components/tables/BillItemsEditModal';
+import BillTableCard from '../components/tables/BillTableCard';
+import { getShortBillNumber } from '../utils/formatters';
+import ChangeTableModal from '../components/tables/ChangeTableModal';
+import OrderPrintSectionsModal from '../components/tables/OrderPrintSectionsModal';
+import { startBillPrep, confirmBillPrep } from '../utils/orderSectionPrint';
 import ItemPartialPayModal from '../components/tables/ItemPartialPayModal';
 import { canDeleteBill } from '../utils/permissionHelper';
-import { Search, Plus, Truck, Phone, MapPin, DollarSign, Clock, ChevronLeft, ChevronRight, MessageCircle, Wallet, User } from 'lucide-react';
+import { Search, Plus, Phone, User } from 'lucide-react';
 import { isSoundEnabled, playWarnBeep, playDangerBeep } from '../utils/sound';
 import { canViewCustomerContacts } from '../utils/permissionHelper';
 import { toast } from 'react-toastify';
+import { useInfiniteList } from '../hooks/useInfiniteList';
 
 // In-app notice (replaces blocking browser alert): error by default.
 const palert = (msg: string, ok = false) => (ok ? toast.success(msg) : toast.error(msg));
@@ -43,88 +49,24 @@ const buildWhatsAppText = (bill: any) => {
 };
 
 
-const DeliveryCard = memo(({ bill, onStatus, onCollect, onWhatsApp, onCustomer, onAddItems, onPartial, onDiscount, onDelete, onPrint, onMove, onPayItems, compact, canSeeContacts }: {
-  bill: any; onStatus: (b: any, s: string, extra?: any) => void;
-  onCollect: (b: any, method: string) => void; onWhatsApp: (b: any) => void; onCustomer: (b: any) => void;
-  onAddItems: (b: any) => void; onPartial: (b: any, amount: number, method: string) => void; onDiscount: (b: any, discount: number, type: 'amount' | 'percent') => void; onDelete: (b: any) => void;
-  onPrint: (b: any) => void; onMove: (b: any) => void; onPayItems: (b: any) => void;
-  compact?: boolean; canSeeContacts?: boolean;
+// شريط مالي صغير تحت كارت الطاولة الموحد (جزئي/خصم/دفع أصناف)
+const FinanceStrip = memo(({ bill, method, onPartial, onDiscount, onPayItems }: {
+  bill: any; method: string;
+  onPartial: (b: any, amount: number, method: string) => void;
+  onDiscount: (b: any, discount: number, type: 'amount' | 'percent') => void;
+  onPayItems: (b: any) => void;
 }) => {
-  const [method, setMethod] = useState('cash');
-  const [driver, setDriver] = useState(bill.deliveryInfo?.driver || '');
-  const [showMore, setShowMore] = useState(false);
+  const [open, setOpen] = useState(false);
   const [partAmount, setPartAmount] = useState('');
   const [disc, setDisc] = useState('');
   const [discType, setDiscType] = useState<'amount' | 'percent'>('amount');
-  const [confirmDel, setConfirmDel] = useState(false);
-  const st = bill.deliveryInfo?.status || 'preparing';
-  const hasItems = (bill.orders?.length || 0) > 0;
   const remaining = Number(bill.remaining) || 0;
-  // خطوة واحدة مثل الفاتورة: أصناف ← طباعة ← تحصيل (الحالة تُختم تلقائياً في الخلفية)
-  const primary = !hasItems
-    ? { label: '+ أضف أصناف', cls: 'bg-purple-600 hover:bg-purple-700', act: () => onAddItems(bill) }
-    : remaining > 0
-      ? { label: `تحصيل ${remaining.toFixed(0)} ج.م`, cls: 'bg-emerald-600 hover:bg-emerald-700', act: () => onCollect(bill, method) }
-      : null;
+  if (remaining <= 0) return null;
   return (
-    <div className={`group ${compact ? 'p-2' : 'p-4'} border-2 border-gray-100 dark:border-gray-700 rounded-2xl bg-white dark:bg-gray-800 hover:border-blue-200 hover:shadow-lg transition-all will-change-transform`}>
-      <div className="flex justify-between items-start">
-        <span className="font-mono font-bold text-gray-900 dark:text-white">#{String(bill.billNumber || bill._id).slice(-6)}</span>
-        <span className={`text-xs px-2.5 py-1 rounded-full font-bold border ${bill.status==='paid'?'bg-green-100 text-green-700 border-green-200 dark:bg-green-900/30 dark:text-green-300 dark:border-green-800': bill.status==='partial'?'bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-800':'bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800'}`}>{bill.status==='paid'?'مدفوع': bill.status==='partial'?'جزئي':'جديد'}</span>
-      </div>
-      <button onClick={() => onCustomer(bill)} className="mt-2 font-semibold text-gray-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400 hover:underline flex items-center gap-1"><User className="h-4 w-4 text-gray-400" />{bill.deliveryInfo?.customerName || bill.customerName || '—'}</button>
-      <div className="text-sm text-gray-600 dark:text-gray-300 flex items-center gap-1">
-        <Phone className="h-3.5 w-3.5 text-gray-400" />
-        {bill.deliveryInfo?.phone
-          ? (canSeeContacts
-            ? <><a href={`tel:${bill.deliveryInfo.phone}`} className="text-blue-600 dark:text-blue-400 hover:underline">{bill.deliveryInfo.phone}</a><a href={`https://wa.me/${String(bill.deliveryInfo.phone).replace(/[^0-9]/g,'')}`} target="_blank" rel="noreferrer" className="ml-2 text-green-600 hover:underline text-xs">واتساب</a></>
-            : <span className="text-gray-400 tracking-widest">•••••••••••</span>)
-          : '—'}
-      </div>
-      {!compact && (
-        <div className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1 truncate"><MapPin className="h-3 w-3" />{bill.deliveryInfo?.address
-          ? (canSeeContacts
-            ? <a href={`https://maps.google.com/?q=${encodeURIComponent(bill.deliveryInfo.address)}`} target="_blank" rel="noreferrer" className="text-blue-600 dark:text-blue-400 hover:underline truncate">{bill.deliveryInfo.address}</a>
-            : <span className="text-gray-400 tracking-widest">••••••</span>)
-          : '—'}</div>
-      )}
-      <div className="mt-2 flex items-center gap-2 text-sm">
-        <span className="flex items-center gap-1 font-bold text-blue-600 dark:text-blue-400"><DollarSign className="h-4 w-4" />{(bill.total||0).toFixed(2)} ج.م</span>
-        <span className="text-xs text-gray-400">متبقي {(bill.remaining||0).toFixed(2)} {bill.deliveryInfo?.deliveryFee ? `· توصيل ${bill.deliveryInfo.deliveryFee}` : ''}</span>
-      </div>
-      {!compact && (
-        <div className="mt-1 flex items-center gap-1 text-xs text-gray-400"><Clock className="h-3 w-3" />{fmtDT(bill.createdAt)}{bill.deliveryInfo?.driver ? ` — ${bill.deliveryInfo.driver}` : ''}</div>
-      )}
-      <div className="flex items-center gap-1 mt-2">
-        <Truck className="h-3.5 w-3.5 text-gray-400" />
-        <input defaultValue={driver} placeholder="السائق" onBlur={e => { const v = e.target.value.trim(); setDriver(v); if (v !== (bill.deliveryInfo?.driver || '')) onStatus(bill, st, { driver: v }); }} className="flex-1 px-2 py-1.5 min-h-9 text-xs border border-gray-200 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 text-gray-700 dark:text-gray-200" />
-      </div>
-      {primary ? (
-        <button onClick={primary.act} className={`mt-2 w-full py-2.5 rounded-xl text-sm font-extrabold text-white shadow ${primary.cls}`}>{primary.label}</button>
-      ) : (
-        <div className="mt-2 w-full py-2.5 rounded-xl text-sm font-extrabold bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 text-center border border-green-200 dark:border-green-800">✓ تم التحصيل بالكامل</div>
-      )}
-      {hasItems && (
-        <button onClick={() => onPrint(bill)} className="mt-1.5 w-full py-2 rounded-xl text-sm font-extrabold bg-white dark:bg-gray-700 border-2 border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:border-blue-300 hover:shadow">🖨 طباعة الفاتورة</button>
-      )}
-      <div className="flex gap-1 mt-1.5">
-        <select value={method} onChange={e => setMethod(e.target.value)} title="طريقة الدفع" className="px-1.5 py-1.5 text-xs border border-gray-200 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 text-gray-700 dark:text-gray-200">
-          <option value="cash">نقدي</option>
-          <option value="card">كارت</option>
-          <option value="transfer">تحويل</option>
-          <option value="e_wallet">محفظة</option>
-        </select>
-        {remaining > 0 && hasItems && (
-          <button onClick={() => onCollect(bill, method)} className="flex-1 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white flex items-center justify-center gap-1"><Wallet className="h-3.5 w-3.5" />تحصيل {remaining.toFixed(0)}</button>
-        )}
-        <button onClick={() => setShowMore(v => !v)} title="المزيد" className="px-2.5 py-1.5 rounded-lg text-xs font-bold bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-500">⋯</button>
-      </div>
-      {showMore && (
-        <div className="mt-1.5 p-2 rounded-lg bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600 space-y-2">
-          <div className="flex gap-1">
-            <button onClick={() => onAddItems(bill)} className="flex-1 py-1.5 text-xs font-bold bg-purple-600 hover:bg-purple-700 text-white rounded-lg flex items-center justify-center gap-1"><Plus className="h-3.5 w-3.5" />إضافة أصناف</button>
-            <button onClick={() => onWhatsApp(bill)} className="flex-1 py-1.5 text-xs font-bold border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300 rounded-lg flex items-center justify-center gap-1"><MessageCircle className="h-3.5 w-3.5" />واتساب</button>
-          </div>
+    <div className="mt-1">
+      <button onClick={() => setOpen(v => !v)} className="w-full py-1 text-[11px] font-bold bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-gray-500">💰 جزئي / خصم / أصناف</button>
+      {open && (
+        <div className="mt-1 p-1.5 rounded-lg bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600 space-y-1.5">
           <div className="flex gap-1">
             <input type="number" min="1" placeholder={`جزئي (متبقي ${remaining.toFixed(0)})`} value={partAmount} onChange={e => setPartAmount(e.target.value)} className="flex-1 px-2 py-1.5 text-xs border rounded-lg bg-white dark:bg-gray-700" />
             <button onClick={() => { const a = Number(partAmount); if (a > 0) { onPartial(bill, a, method); setPartAmount(''); } }} className="px-3 py-1.5 text-xs font-bold bg-amber-600 hover:bg-amber-700 text-white rounded-lg">دفع</button>
@@ -137,25 +79,77 @@ const DeliveryCard = memo(({ bill, onStatus, onCollect, onWhatsApp, onCustomer, 
             <button onClick={() => setDiscType(t => t === 'amount' ? 'percent' : 'amount')} title="تبديل مبلغ/نسبة" className="px-2.5 py-1.5 text-xs font-bold bg-white dark:bg-gray-700 border rounded-lg text-gray-600">{discType === 'amount' ? 'ج.م' : '%'}</button>
             <button onClick={() => { const d = Number(disc); if (disc === '' || d < 0 || (discType === 'percent' && d > 100)) return; onDiscount(bill, d, discType); setDisc(''); }} className="px-3 py-1.5 text-xs font-bold bg-gray-600 hover:bg-gray-700 text-white rounded-lg">خصم</button>
           </div>
-          <div className="flex gap-1">
-            <button onClick={() => onPrint(bill)} className="flex-1 py-1.5 text-xs font-bold bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-100">🖨 طباعة</button>
-            <button onClick={() => onMove(bill)} className="flex-1 py-1.5 text-xs font-bold bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-100">🪑 نقل لطاولة</button>
-          </div>
-          <button onClick={() => { if (confirmDel) { setConfirmDel(false); onDelete(bill); } else { setConfirmDel(true); setTimeout(() => setConfirmDel(false), 3000); } }} className={`w-full py-1.5 text-xs font-bold rounded-lg border ${confirmDel ? 'bg-red-600 hover:bg-red-700 text-white border-red-700' : 'bg-white dark:bg-gray-700 border-red-200 dark:border-red-800 text-red-600 dark:text-red-400'}`}>{confirmDel ? 'تأكيد الحذف؟' : '🗑 حذف الفاتورة'}</button>
         </div>
       )}
     </div>
   );
 });
-DeliveryCard.displayName = 'DeliveryCard';
+FinanceStrip.displayName = 'FinanceStrip';
 
 const loadZonesLocal = (): Array<{ name: string; fee: number }> => {
   try { const r = JSON.parse(localStorage.getItem('deliveryZones') || '[]'); return Array.isArray(r) ? r : []; } catch { return []; }
 };
 
+// دليل عملاء هذا الجهاز فقط: كل عميل يُطلب له مرة يُحفظ محلياً ويُقترح عند الكتابة.
+interface DeviceCustomer { name: string; phone: string; address: string; count: number; lastUsed: number }
+const loadDeviceCustomers = (): DeviceCustomer[] => {
+  try {
+    const r = JSON.parse(localStorage.getItem('deliveryCustomers') || '[]');
+    return Array.isArray(r) ? r : [];
+  } catch { return []; }
+};
+const saveDeviceCustomer = (name: string, phone: string, address: string): void => {
+  try {
+    const p = phone.replace(/\D/g, '');
+    if (!p) return;
+    const list = loadDeviceCustomers();
+    const idx = list.findIndex((c) => c.phone.replace(/\D/g, '') === p);
+    if (idx >= 0) {
+      list[idx] = {
+        name: name || list[idx].name,
+        phone: list[idx].phone,
+        address: address || list[idx].address,
+        count: (list[idx].count || 1) + 1,
+        lastUsed: Date.now(),
+      };
+    } else {
+      list.push({ name, phone, address, count: 1, lastUsed: Date.now() });
+    }
+    list.sort((a, b) => (b.lastUsed || 0) - (a.lastUsed || 0));
+    localStorage.setItem('deliveryCustomers', JSON.stringify(list.slice(0, 100)));
+  } catch {}
+};
+
 const Delivery = () => {
   const { bills, fetchBills, setBills, refreshSingleBill, user, tables, menuItems, menuSections, menuCategories, fetchMenuItems, fetchMenuSections, fetchMenuCategories } = useApp() as any;
   const [moveBill, setMoveBill] = useState<any | null>(null);
+  // طباعة أقسام التحضير (مطبخ/مشويات...) لكل طلبات الفاتورة — نفس قواعد الطاولات.
+  const [prepSelection, setPrepSelection] = useState<{ bill: any; orders: any[]; sections: { id: string; name: string }[]; menuItemsMap: Map<string, any> } | null>(null);
+  const [prepSelected, setPrepSelected] = useState<string[]>([]);
+  const prepCtx = () => ({
+    menuItems: menuItems || [],
+    menuSections: menuSections || [],
+    user,
+    organizationName: (user as any)?.organizationName || '',
+    language: i18n.language,
+    t,
+  });
+  const handlePrepPrint = async (bill: any) => {
+    try {
+      const r = await startBillPrep(bill, prepCtx());
+      if (r.status === 'error') { palert(r.message); return; }
+      if (r.status === 'prompt') {
+        setPrepSelected(r.sections.map((s) => s.id));
+        setPrepSelection({ bill, orders: r.orders, sections: r.sections, menuItemsMap: r.menuItemsMap });
+      }
+    } catch { palert('فشل طباعة التحضير'); }
+  };
+  const confirmPrepPrint = async () => {
+    if (!prepSelection || prepSelected.length === 0) return;
+    const sel = prepSelection;
+    setPrepSelection(null);
+    await confirmBillPrep(sel.orders, prepSelected, sel.menuItemsMap, prepCtx()).catch(() => palert('فشل طباعة التحضير'));
+  };
 
   const handlePrint = async (bill: any) => {
     try {
@@ -176,26 +170,33 @@ const Delivery = () => {
       const res: any = await (api as any).updateBill(id, { table: tableId, fulfillmentType: 'dine_in' });
       setMoveBill(null);
       setBills((prev: any[]) => prev.filter((b: any) => String(b._id || b.id) !== String(id)));
+      feedRef.current?.remove(String(id));
         palert(res?.message || 'تم نقل الفاتورة إلى الطاولة', true);
       void fetchBills();
     } catch (e: any) { palert(e?.message || 'فشل النقل'); }
   };
   const canSeeContacts = canViewCustomerContacts(user);
 
-  // تحديث فاتورة واحدة لحظياً (optimistic + تأكيد) بدل جلب المئات كل مرة
+  // تحديث فاتورة واحدة لحظياً (optimistic + تأكيد) بدل جلب المئات كل مرة —
+  // يحدّث السياق العام (للطاولات) وقائمة العرض الصفحية معاً.
   const applyBill = (id: any, updated: any) => {
-    if (updated) setBills((prev: any[]) => prev.map((b: any) => String(b._id || b.id) === String(id) ? updated : b));
-    else if (refreshSingleBill) refreshSingleBill({ _id: id });
+    const sid = String(id);
+    if (updated) {
+      setBills((prev: any[]) => prev.map((b: any) => String(b._id || b.id) === sid ? updated : b));
+      // القائمة غير المدفوعة فقط: المدفوعة/الملغاة تخرج من العرض
+      if (updated.status === 'paid' || updated.status === 'cancelled') feedRef.current?.remove(sid);
+      else feedRef.current?.upsert(updated);
+    } else if (refreshSingleBill) refreshSingleBill({ _id: id });
   };
   const { t, i18n } = useTranslation();
   const [autoPrint, setAutoPrint] = useState(() => { try { return localStorage.getItem('deliveryAutoPrint') !== '0'; } catch { return true; } });
   const [density, setDensity] = useState(() => { try { return localStorage.getItem('deliveryDensity') || 'comfortable'; } catch { return 'comfortable'; } });
   const compact = density === 'compact';
-  const [filter, setFilter] = useState<'all' | 'draft' | 'partial' | 'paid'>('all');
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [page, setPage] = useState(1);
-  const pageSize = 12;
+  const [billFilter, setBillFilter] = useState<'unpaid' | 'paid' | 'all'>('unpaid');
+  const billFilterRef = useRef(billFilter);
+  billFilterRef.current = billFilter;
   const [showForm, setShowForm] = useState(false);
   const [draft, setDraft] = useState({ customerName: '', phone: '', address: '', deliveryFee: '', zone: '' });
   const [creating, setCreating] = useState(false);
@@ -233,10 +234,50 @@ const Delivery = () => {
       socket.on('lan:remote-change', (evt: any) => {
         if (evt?.collection === 'deliveryzones') fetchZones();
       });
+      // ── دمج فواتير الدليفري لحظياً (إنشاء/تحديث/حذف) دون إعادة الصفحات ──
+      const feedMatches = (b: any) => {
+        if (!b || (b.fulfillmentType || 'dine_in') !== 'delivery') return false;
+        const f = billFilterRef.current;
+        if (f === 'paid') return b.status === 'paid';
+        if (f === 'all') return true;
+        return !['paid', 'cancelled'].includes(b.status);
+      };
+      const onCreated = (b: any) => { try { if (b && feedMatches(b)) feedRef.current?.prepend(b); } catch {} };
+      const onUpdated = (b: any) => {
+        try {
+          if (!b) return;
+          const id = String(b._id || b.id || '');
+          if (!id) return;
+          if (feedMatches(b)) feedRef.current?.upsert(b);
+          else feedRef.current?.remove(id);
+        } catch {}
+      };
+      const onDeleted = (b: any) => {
+        try {
+          const id = String(b?._id || b?.id || b || '');
+          if (id) feedRef.current?.remove(id);
+        } catch {}
+      };
+      const onBillUpdate = (evt: any) => {
+        try {
+          if (!evt) return;
+          if (evt.type === 'created') onCreated(evt.bill);
+          else if (evt.type === 'deleted') onDeleted(evt.bill);
+          else onUpdated(evt.bill);
+        } catch {}
+      };
+      socket.on('bill:created', onCreated);
+      socket.on('bill:updated', onUpdated);
+      socket.on('bill:deleted', onDeleted);
+      socket.on('bill-update', onBillUpdate);
       return () => {
         try {
           socket.off('delivery-zones-changed', onZonesChanged);
           socket.off('lan:remote-change');
+          socket.off('bill:created', onCreated);
+          socket.off('bill:updated', onUpdated);
+          socket.off('bill:deleted', onDeleted);
+          socket.off('bill-update', onBillUpdate);
           socket.disconnect();
         } catch {}
         zonesSocketRef.current = null;
@@ -249,6 +290,7 @@ const Delivery = () => {
   const [loyal, setLoyal] = useState<any | null>(null);
   const [billToEdit, setBillToEdit] = useState<any | null>(null);
   const [pendingNewId, setPendingNewId] = useState<string | null>(null);
+  const [payMethods, setPayMethods] = useState<Record<string, string>>({});
 
   // إغلاق نافذة الأصناف: الفاتورة المنشأة حديثاً بلا أصناف ولا مدفوع تُحذف تلقائياً
   const closeItemsModal = async () => {
@@ -263,6 +305,7 @@ const Delivery = () => {
       if (b && itemsCount === 0 && Number(b.paid || 0) === 0) {
         await (api as any).deleteBill(id).catch(() => {});
         setBills((prev: any[]) => prev.filter((x: any) => String(x._id || x.id) !== String(id)));
+        feedRef.current?.remove(String(id));
       }
     } catch {}
   };
@@ -272,6 +315,7 @@ const Delivery = () => {
     if (!canDeleteBill(user)) { palert('غير مصرح — تحتاج صلاحية حذف الفواتير'); return; }
     const id = bill._id || bill.id;
     setBills((prev: any[]) => prev.filter((b: any) => String(b._id || b.id) !== String(id)));
+    feedRef.current?.remove(String(id));
     try {
       const res: any = await (api as any).deleteBill(id);
       if (res?.success) {
@@ -293,7 +337,27 @@ const Delivery = () => {
     })();
   }, []);
   useEffect(() => { const t = setTimeout(() => setDebouncedSearch(search), 300); return () => clearTimeout(t); }, [search]);
-  useEffect(() => { setPage(1); }, [filter, debouncedSearch]);
+
+  // ── Infinite scroll من السيرفر (25/صفحة) بدل الجلب الكامل ──
+  const feed = useInfiniteList<any>({
+    pageSize: 25,
+    depsKey: `${debouncedSearch.trim()}|${billFilter}`,
+    getId: (b: any) => String(b?._id || b?.id || ''),
+    fetchPage: async (pageNum, limitNum) => {
+      const res: any = await (api as any).getBills({
+        fulfillmentType: 'delivery',
+        status: billFilter === 'paid' ? 'paid' : billFilter === 'all' ? undefined : 'draft,partial,overdue',
+        all: billFilter === 'all' ? true : undefined,
+        q: debouncedSearch.trim() || undefined,
+        page: pageNum,
+        limit: limitNum,
+        mode: 'list',
+      });
+      return { items: res?.data || [], total: res?.total ?? 0, hasMore: res?.hasMore ?? false };
+    },
+  });
+  const feedRef = useRef<any>(null);
+  feedRef.current = feed;
 
   useEffect(() => { fetchBills(); }, [fetchBills]);
   useEffect(() => {
@@ -305,7 +369,8 @@ const Delivery = () => {
     return () => window.removeEventListener('keydown', h);
   }, []);
 
-  const list: Bill[] = useMemo(() => (bills || []).filter((b: any) => (b.fulfillmentType || 'dine_in') === 'delivery'), [bills]);
+  // دائماً: غير مدفوع فقط (جديد + جزئي) — المدفوع بالكامل لا يظهر هنا أبداً
+  const list: Bill[] = useMemo(() => (bills || []).filter((b: any) => (b.fulfillmentType || 'dine_in') === 'delivery' && b.status !== 'paid' && b.status !== 'cancelled'), [bills]);
 
   // تنبيه التأخر: فاتورة غير مدفوعة أقدم من 20د تحذير، ومن 45د خطر — كل 30 ثانية
   useEffect(() => {
@@ -320,16 +385,7 @@ const Delivery = () => {
     return () => clearInterval(id);
   }, [list]);
 
-  const filtered = useMemo(() => {
-    let r = filter === 'all' ? list : list.filter((b: any) => b.status === filter);
-    if (debouncedSearch.trim()) {
-      const q = debouncedSearch.trim().toLowerCase();
-      r = r.filter((b: any) => String(b.billNumber || b._id).toLowerCase().includes(q) || String(b.deliveryInfo?.phone || b.customerPhone || '').includes(q) || String(b.deliveryInfo?.customerName || b.customerName || '').toLowerCase().includes(q) || String(b.deliveryInfo?.address || '').toLowerCase().includes(q));
-    }
-    return r.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  }, [list, filter, debouncedSearch]);
-  const paginated = useMemo(() => filtered.slice((page - 1) * pageSize, page * pageSize), [filtered, page]);
-  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  // القائمة نفسها من السيرفر صفحات (feed) — أما list السياقية فللإحصائيات/الولاء/التنبيه فقط
 
   const stats = useMemo(() => ({
     total: list.length,
@@ -394,11 +450,23 @@ const Delivery = () => {
     setCreating(true);
     try {
       const body: any = { fulfillmentType: 'delivery', billType: 'cafe', deliveryInfo: { phone: draft.phone.trim(), address: draft.address.trim(), customerName: draft.customerName.trim() || 'عميل دليفري', deliveryFee: Number(draft.deliveryFee) || 0 } };
-      const res: any = await (api as any).createBill?.(body) || await (api as any).request('/bills', { method: 'POST', body: JSON.stringify(body) });
+      // فشل الإنشاء يجب أن يظهر رسالته — لا بديل صامت يبتلع الخطأ.
+      const res: any = await (api as any).createBill(body);
+      if (!res?.success) {
+        palert(res?.message || 'فشل الإنشاء');
+        return;
+      }
+      // حفظ العميل في دليل الجهاز للاقتراح لاحقاً.
+      saveDeviceCustomer(draft.customerName.trim(), draft.phone.trim(), draft.address.trim());
       const created = res?.data || res;
       setShowForm(false); setDraft({ customerName: '', phone: '', address: '', deliveryFee: '', zone: '' });
       const newId = created?._id || created?.id;
-      if (newId && refreshSingleBill) refreshSingleBill({ _id: newId });
+      if (newId) {
+        if (refreshSingleBill) refreshSingleBill({ _id: newId });
+        // إدراج فوري أعلى القائمة + مزامنة الصفحة الأولى (بلا قفز سكرول)
+        if (created) feedRef.current?.prepend(created._id ? created : { ...created, _id: newId });
+        void feedRef.current?.refreshFirstPage();
+      }
       // فتح المنيو فوراً — لا بحث عن الكارت (وتُحذف تلقائياً لو أُغلقت فارغة)
       if (newId) { setPendingNewId(String(newId)); setBillToEdit(created._id ? created : { ...created, _id: created.id }); }
     } catch (e: any) { palert(e?.message || 'فشل الإنشاء'); }
@@ -430,6 +498,7 @@ const Delivery = () => {
     }));
   };
 
+  // تحصيل مباشر (التأكيد داخل الكارت نفسه — بلا نافذة دفع).
   const handleCollect = async (bill: any, method: string) => {
     const amount = Number(bill.remaining) || 0;
     if (amount <= 0) return;
@@ -438,9 +507,15 @@ const Delivery = () => {
     try {
       const res: any = await (api as any).addPayment(id, { amount, method, reference: method === 'e_wallet' ? 'محفظة إلكترونية' : undefined });
       applyBill(id, res?.success ? res.data : null);
-      // ختم التسليم تلقائياً عند اكتمال التحصيل (خطوة واحدة مثل الفاتورة)
-      if (res?.success && (bill.deliveryInfo?.status || 'preparing') !== 'delivered') {
-        await updateStatus(res.data || { ...bill, paid: (Number(bill.paid) || 0) + amount, remaining: 0 }, 'delivered');
+      if (res?.success) {
+        palert('تم التحصيل بنجاح', true);
+        // ختم التسليم تلقائياً عند اكتمال التحصيل (خطوة واحدة مثل الفاتورة)
+        try {
+          const done = res.data || { ...bill, paid: (Number(bill.paid) || 0) + amount, remaining: 0 };
+          if ((done.deliveryInfo?.status || 'preparing') !== 'delivered') {
+            await updateStatus(done, 'delivered');
+          }
+        } catch {}
       }
     } catch (e: any) { refreshSingleBill?.({ _id: id }); }
   };
@@ -513,6 +588,8 @@ const Delivery = () => {
       await (api as any).updateBillAggregatedItems(newId, { items: payloadItems });
       setLoyal(null);
       if (refreshSingleBill) refreshSingleBill({ _id: newId });
+      feedRef.current?.prepend(created._id ? created : { ...created, _id: newId });
+      void feedRef.current?.refreshFirstPage();
       setBillToEdit(created._id ? created : { ...created, _id: created.id });
     } catch (e: any) { palert(e?.message || 'فشل إعادة الطلب'); }
   };
@@ -582,9 +659,15 @@ const Delivery = () => {
       </div>
 
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow border border-gray-200 dark:border-gray-700 p-3 flex flex-wrap gap-2 items-center">
-        <div className="flex gap-2 flex-wrap">
-          {(['all','draft','partial','paid'] as const).map(s => (
-            <button key={s} onClick={() => setFilter(s as any)} className={`px-3.5 py-1.5 rounded-full border text-sm font-bold ${filter===s?'bg-blue-600 text-white border-blue-700 shadow':'bg-white dark:bg-gray-700 border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:border-blue-300'}`}>{s==='all'?'الكل': s==='draft'?'جديد': s==='partial'?'جزئي':'مدفوع'}</button>
+        <div className="flex gap-1.5">
+          {([['unpaid', 'غير مدفوعة'], ['paid', 'مدفوعة'], ['all', 'الكل']] as const).map(([v, label]) => (
+            <button
+              key={v}
+              onClick={() => setBillFilter(v)}
+              className={`px-3 py-1.5 text-xs font-bold rounded-xl border transition-colors ${billFilter === v ? 'bg-blue-600 text-white border-blue-600' : 'bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-600'}`}
+            >
+              {label}
+            </button>
           ))}
         </div>
         <div className="ml-auto relative w-full sm:w-64">
@@ -594,32 +677,62 @@ const Delivery = () => {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-        {paginated.map((bill: any) => <DeliveryCard key={bill._id || bill.id} bill={bill} compact={compact} onStatus={updateStatus} onCollect={handleCollect} onWhatsApp={handleWhatsApp} onCustomer={openLoyalty} onAddItems={setBillToEdit} onPartial={handlePartial} onDiscount={handleDiscount} onDelete={handleDelete} onPrint={handlePrint} onMove={setMoveBill} onPayItems={setPayItemsBill} canSeeContacts={canSeeContacts} />)}
-        {filtered.length===0 && <div className="col-span-full text-center py-12 bg-white dark:bg-gray-800 rounded-2xl border border-dashed border-gray-200 dark:border-gray-700 text-gray-400">لا توجد طلبات — اضغط "دليفري جديد"</div>}
+            {feed.items.map((bill: any) => (
+              <div key={String(bill._id || bill.id)}>
+                <BillTableCard bill={bill} kind="delivery" compact={compact} showPhone={canSeeContacts}
+                  method={payMethods[String(bill._id || bill.id)] || 'cash'} onMethodChange={(m) => setPayMethods(p => ({ ...p, [String(bill._id || bill.id)]: m }))}
+                  onOpen={setBillToEdit} onAddItems={setBillToEdit} onEditItems={setBillToEdit}
+                  onCollect={handleCollect} onPrint={handlePrint} onMove={setMoveBill} onWhatsApp={handleWhatsApp}
+                  onDelete={handleDelete} onCustomer={openLoyalty} onPayItems={setPayItemsBill} onPrepPrint={handlePrepPrint}
+                  onDriverSave={(b, name) => updateStatus(b, b.deliveryInfo?.status || 'preparing', { driver: name })}>
+                  <FinanceStrip bill={bill} method={payMethods[String(bill._id || bill.id)] || 'cash'} onPartial={handlePartial} onDiscount={handleDiscount} onPayItems={setPayItemsBill} />
+                </BillTableCard>
+              </div>
+            ))}
+        {feed.items.length===0 && !feed.refreshing && !feed.loading && <div className="col-span-full text-center py-12 bg-white dark:bg-gray-800 rounded-2xl border border-dashed border-gray-200 dark:border-gray-700 text-gray-400">لا توجد طلبات — اضغط "دليفري جديد"</div>}
       </div>
-      {filtered.length > pageSize && (
-        <div className="flex items-center justify-center gap-2">
-          <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page===1} className="p-2 rounded-lg border bg-white dark:bg-gray-800 disabled:opacity-40"><ChevronRight className="h-4 w-4" /></button>
-          <span className="text-sm text-gray-600 dark:text-gray-300">صفحة {page} / {totalPages} — {filtered.length} طلب</span>
-          <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page===totalPages} className="p-2 rounded-lg border bg-white dark:bg-gray-800 disabled:opacity-40"><ChevronLeft className="h-4 w-4" /></button>
+      <div ref={feed.sentinelRef} className="h-2" />
+      {feed.loading && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4 animate-pulse">
+              <div className="h-5 w-24 bg-gray-200 dark:bg-gray-700 rounded mb-2" />
+              <div className="h-4 w-40 bg-gray-200 dark:bg-gray-700 rounded mb-2" />
+              <div className="h-9 w-full bg-gray-200 dark:bg-gray-700 rounded-xl" />
+            </div>
+          ))}
         </div>
       )}
-
-      {moveBill && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setMoveBill(null)}>
-          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-4 sm:p-5 w-full max-w-md border" onClick={e => e.stopPropagation()}>
-            <h3 className="text-lg font-extrabold text-gray-900 dark:text-white mb-1">🪑 نقل لطاولة</h3>
-            <p className="text-xs text-gray-500 mb-3">فاتورة #{String(moveBill.billNumber || moveBill._id).slice(-6)} — الطاولة الفارغة تنقل مباشرة، والمشغولة تدمج فيها (نفس الطاولات)</p>
-            <div className="grid grid-cols-4 gap-2 max-h-64 overflow-y-auto">
-              {(tables || []).map((tb: any) => (
-                <button key={tb._id || tb.id} onClick={() => handleMoveToTable(String(tb._id || tb.id))} className="py-2.5 rounded-xl border text-sm font-extrabold bg-white dark:bg-gray-700 border-gray-200 dark:border-gray-600 hover:border-orange-400 hover:shadow">
-                  {tb.number ?? '?'}
-                </button>
-              ))}
-            </div>
-            <button onClick={() => setMoveBill(null)} className="mt-3 w-full py-2 bg-gray-100 dark:bg-gray-700 rounded-xl font-bold">إلغاء</button>
-          </div>
+      {feed.error && (
+        <div className="text-center py-3">
+          <span className="text-sm text-red-500">{feed.error}</span>
+          <button onClick={() => feed.loadMore()} className="ml-2 text-sm font-bold text-blue-600 underline">إعادة المحاولة</button>
         </div>
+      )}
+      {!feed.hasMore && feed.items.length > 0 && (
+        <div className="text-center text-xs text-gray-400 py-2">— تم عرض الكل ({feed.total}) —</div>
+      )}
+
+      {prepSelection && (
+        <OrderPrintSectionsModal
+          billLabel={(prepSelection.bill as any)?.billNumber ? getShortBillNumber((prepSelection.bill as any).billNumber) : String((prepSelection.bill as any)?._id || '').slice(-6)}
+          sections={prepSelection.sections}
+          selected={prepSelected}
+          onToggle={(id) => setPrepSelected((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]))}
+          onToggleAll={() => setPrepSelected((cur) => (cur.length === prepSelection.sections.length ? [] : prepSelection.sections.map((s) => s.id)))}
+          onConfirm={confirmPrepPrint}
+          onClose={() => setPrepSelection(null)}
+        />
+      )}
+      {moveBill && (
+        <ChangeTableModal
+          billLabel={moveBill.billNumber ? getShortBillNumber(moveBill.billNumber) : String(moveBill._id).slice(-6)}
+          tables={tables || []}
+          getSectionName={(t: any) => (typeof t.section === 'object' ? t.section?.name : '') || ''}
+          changing={false}
+          onConfirm={(id) => handleMoveToTable(String(id))}
+          onClose={() => setMoveBill(null)}
+        />
       )}
 
       {payItemsBill && (
@@ -638,6 +751,7 @@ const Delivery = () => {
         menuSections={menuSections || []}
         menuCategories={menuCategories || []}
         onSuccess={(updated: any) => { applyBill(updated?._id || updated?.id || billToEdit?._id || billToEdit?.id, updated); setBillToEdit(null); setPendingNewId(null); }}
+        onPrepPrint={handlePrepPrint}
       />
 
       {loyal && (
@@ -673,6 +787,32 @@ const Delivery = () => {
             <div className="space-y-3">
               <input type="text" placeholder="اسم العميل" value={draft.customerName} onChange={e => setDraft({ ...draft, customerName: e.target.value })} className="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none" />
               <input type="text" placeholder="رقم الهاتف *" value={draft.phone} onChange={e => setDraft({ ...draft, phone: e.target.value })} className="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none" />
+              {(() => {
+                const q = draft.phone.replace(/\D/g, '');
+                const qn = draft.customerName.trim();
+                if (q.length < 2 && qn.length < 2) return null;
+                const matches = loadDeviceCustomers().filter((c) => {
+                  const cp = c.phone.replace(/\D/g, '');
+                  return (q.length >= 2 && cp.includes(q) && cp !== q) || (qn.length >= 2 && (c.name || '').includes(qn));
+                }).slice(0, 5);
+                if (matches.length === 0) return null;
+                return (
+                  <div className="rounded-xl border border-violet-200 dark:border-violet-800 bg-violet-50 dark:bg-violet-900/20 overflow-hidden">
+                    {matches.map((c) => (
+                      <button
+                        key={c.phone}
+                        type="button"
+                        onClick={() => setDraft((d) => ({ ...d, customerName: d.customerName || c.name, phone: c.phone, address: d.address || c.address }))}
+                        className="w-full text-right px-3 py-2 hover:bg-violet-100 dark:hover:bg-violet-900/40 text-sm border-b border-violet-100 dark:border-violet-800 last:border-b-0"
+                      >
+                        <span className="font-bold text-gray-800 dark:text-gray-100">📱 {c.name || c.phone}</span>
+                        <span className="text-gray-500 dark:text-gray-400 text-xs mr-2" dir="ltr">{c.phone}</span>
+                        {c.count > 1 && <span className="text-violet-600 dark:text-violet-300 text-xs mr-2">({c.count} طلبات)</span>}
+                      </button>
+                    ))}
+                  </div>
+                );
+              })()}
               {knownCustomer && (
                 <button onClick={fillKnown} className="w-full text-right text-xs bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-green-700 dark:text-green-300 rounded-xl px-3 py-2 hover:bg-green-100">
                   ✓ عميل معروف ({knownCustomer.count} طلبات) — اضغط لتعبئة الاسم والعنوان والرسوم
