@@ -69,9 +69,9 @@ export async function resolveActivityContext(doc = {}, kind = "") {
 }
 
 // منع التوست المكرر: بعض التدفقات تبث نفس الحدث مرتين (فوري + legacy مكرر
-// لعملاء اتصلوا أثناء الاستجابة) — نفس البصمة خلال 3 ثوانٍ تُبث مرة واحدة فقط.
+// لعملاء اتصلوا أثناء الاستجابة) — نفس البصمة خلال 500ms تُبث مرة واحدة فقط.
 const recentActivity = new Map();
-const ACTIVITY_DEDUPE_MS = 3000;
+const ACTIVITY_DEDUPE_MS = 500;
 
 function activityKey(kind, action, number, ctx, actorName) {
     return [kind, action, number ?? "", ctx.tableNumber ?? "", ctx.billNumber ?? "", ctx.deviceName ?? "", actorName || ""].join("|");
@@ -87,9 +87,9 @@ function pruneActivityCache() {
     } catch {}
 }
 
-const HELD_ACTIONS = new Set(["updated", "status-changed", "controllers-changed"]);
-const pendingHeld = new Map(); // holdKey -> timeout — updated مؤجل يُلغى عند حدث مهم لنفس الكيان
-const HELD_MS = 1200;
+const HELD_ACTIONS = new Set(); // فارغ — لا تأخير إطلاقاً: كل الأحداث تُبث فوراً
+const pendingHeld = new Map();
+const HELD_MS = 0;
 
 function holdKeyFor(kind, number, ctx) {
     return [kind, number ?? "", ctx.tableNumber ?? "", ctx.billNumber ?? "", ctx.deviceName ?? ""].join("|");
@@ -136,7 +136,7 @@ export function emitActivity(io, organizationId, { kind, action, doc = {}, numbe
                         }
                     } catch {}
                 }
-                // حدث مهم: يلغي أي updated معلق لنفس الكيان (دفعة تلغي "تعديل" المكرر معها) ويُبث فوراً.
+                // كل الأحداث تُبث فوراً — بدون تأخير (HELD_ACTIONS فارغ).
                 if (!HELD_ACTIONS.has(action)) {
                     const pending = pendingHeld.get(holdKey);
                     if (pending) {
@@ -145,16 +145,8 @@ export function emitActivity(io, organizationId, { kind, action, doc = {}, numbe
                     }
                     doEmit();
                 } else if (!silent) {
-                    // updated منخفض الأولوية: يُمهل 1.2ث لعل حدثاً مهماً يلغه (دمج الضجيج).
-                    if (pendingHeld.has(holdKey)) return; // معلق بالفعل — لا تمديد
-                    pendingHeld.set(
-                        holdKey,
-                        setTimeout(() => {
-                            pendingHeld.delete(holdKey);
-                            doEmit();
-                        }, HELD_MS)
-                    );
-                    return;
+                    if (pendingHeld.has(holdKey)) return;
+                    doEmit();
                 } else {
                     return; // silent: بيانات فقط بلا توست
                 }

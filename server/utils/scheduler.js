@@ -1155,6 +1155,15 @@ export const initializeScheduler = () => {
         }).catch(() => {});
     } catch {}
 
+    // Expire old reservations every hour
+    cron.schedule("0 * * * *", async () => {
+        try {
+            const { expireOldReservations } = await import("../controllers/reservationController.js");
+            await expireOldReservations();
+        } catch {}
+    });
+    Logger.info("✅ Reservation expiration scheduled: every hour");
+
     // Initialize organization-specific report schedules
     initializeOrganizationReportSchedules();
     Logger.info("✅ Organization report schedules initialized");

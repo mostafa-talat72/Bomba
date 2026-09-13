@@ -64,6 +64,7 @@ import menuRoutes from "./routes/menuRoutes.js";
 import notificationRoutes from "./routes/notificationRoutes.js";
 import upgradeRoutes from "./routes/upgradeRoutes.js";
 import tableRoutes from "./routes/tableRoutes.js";
+import reservationRoutes from "./routes/reservationRoutes.js";
 import performanceRoutes from "./routes/performanceRoutes.js";
 import syncRoutes from "./routes/syncRoutes.js";
 import lanRoutes from "./routes/lanRoutes.js";
@@ -798,6 +799,7 @@ app.use("/api/menu", menuRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/upgrades", upgradeRoutes);
 app.use("/api/tables", tableRoutes);
+app.use("/api/reservations", reservationRoutes);
 app.use("/api/performance", performanceRoutes);
 app.use("/api/sync", syncRoutes);
 app.use("/api/lan", lanRoutes); // mesh peer-sync: /peers, /receive, /sync-missing (no auth, LAN-trusted)

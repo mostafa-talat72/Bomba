@@ -63,121 +63,115 @@ function formatNumber(num, req) {
 async function deductInventoryForOrder(order, userId, billNumber = null) {
     const allIngredientsNeeded = new Map();
 
-    for (const item of order.items) {
-        if (item.menuItem) {
-            const menuItem = await MenuItem.findById(item.menuItem);
-            if (menuItem && menuItem.ingredients && menuItem.ingredients.length > 0) {
-                for (const ingredient of menuItem.ingredients) {
-                    const key = ingredient.item.toString();
-                    const currentQuantity = allIngredientsNeeded.get(key)?.quantity || 0;
-                    const totalQuantity = currentQuantity + (ingredient.quantity * item.quantity);
+    // Batch fetch all menuItems at once (no N+1)
+    const menuItemIds = [...new Set(order.items.filter(i => i.menuItem).map(i => String(i.menuItem)))];
+    const menuMap = new Map();
+    if (menuItemIds.length > 0) {
+        const docs = await MenuItem.find({ _id: { $in: menuItemIds } }).lean();
+        docs.forEach(d => menuMap.set(String(d._id), d));
+    }
 
-                    allIngredientsNeeded.set(key, {
-                        quantity: totalQuantity,
-                        unit: ingredient.unit,
-                        itemName: menuItem.name,
-                    });
-                }
+    for (const item of order.items) {
+        const menuItem = item.menuItem ? menuMap.get(String(item.menuItem)) : null;
+        if (menuItem && menuItem.ingredients && menuItem.ingredients.length > 0) {
+            for (const ingredient of menuItem.ingredients) {
+                const key = ingredient.item.toString();
+                const currentQuantity = allIngredientsNeeded.get(key)?.quantity || 0;
+                const totalQuantity = currentQuantity + (ingredient.quantity * item.quantity);
+                allIngredientsNeeded.set(key, {
+                    quantity: totalQuantity,
+                    unit: ingredient.unit,
+                    itemName: menuItem.name,
+                });
             }
         }
     }
 
+    if (allIngredientsNeeded.size === 0) return;
+
+    // Batch fetch all inventory items at once (no N+1)
+    const inventoryIds = [...allIngredientsNeeded.keys()];
+    const inventoryDocs = await InventoryItem.find({ _id: { $in: inventoryIds } }).lean();
+    const inventoryMap = new Map();
+    inventoryDocs.forEach(d => inventoryMap.set(String(d._id), d));
+
     // خصم جميع المكونات مع حساب السعر باستخدام FIFO
     for (const [inventoryItemId, ingredientData] of allIngredientsNeeded) {
-        const inventoryItem = await InventoryItem.findById(inventoryItemId);
-        if (inventoryItem) {
-            const convertedQuantityNeeded = convertQuantity(
-                ingredientData.quantity,
-                ingredientData.unit,
-                inventoryItem.unit
-            );
+        const inventoryItem = inventoryMap.get(inventoryItemId);
+        if (!inventoryItem) continue;
 
-            // حساب السعر باستخدام FIFO
-            const movementDate = new Date();
-            
-            // Get all movements sorted by timestamp (oldest first)
-            const allMovements = inventoryItem.stockMovements
-                .map(m => ({
-                    type: m.type,
-                    quantity: m.quantity,
-                    price: m.price,
-                    timestamp: new Date(m.timestamp || m.date)
-                }))
-                .sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
-            
-            // Build batches with remaining quantities (FIFO simulation)
-            const batches = [];
-            
-            for (const movement of allMovements) {
-                // Only process movements before the current movement date
-                if (movement.timestamp >= movementDate) break;
-                
-                if (movement.type === 'in' && movement.price) {
-                    // Add new batch
-                    batches.push({
-                        quantity: movement.quantity,
-                        price: movement.price,
-                        remaining: movement.quantity
-                    });
-                } else if (movement.type === 'out') {
-                    // Deduct from oldest batches first (FIFO)
-                    let toDeduct = movement.quantity;
-                    
-                    for (const batch of batches) {
-                        if (toDeduct <= 0) break;
-                        
-                        const deductFromBatch = Math.min(batch.remaining, toDeduct);
-                        batch.remaining -= deductFromBatch;
-                        toDeduct -= deductFromBatch;
-                    }
-                } else if (movement.type === 'adjustment') {
-                    // For adjustment, recalculate all batches proportionally
-                    const totalRemaining = batches.reduce((sum, b) => sum + b.remaining, 0);
-                    
-                    if (totalRemaining > 0) {
-                        const ratio = movement.quantity / totalRemaining;
-                        batches.forEach(batch => {
-                            batch.remaining = batch.remaining * ratio;
-                        });
-                    }
+        const convertedQuantityNeeded = convertQuantity(
+            ingredientData.quantity,
+            ingredientData.unit,
+            inventoryItem.unit
+        );
+
+        // حساب السعر باستخدام FIFO
+        const movementDate = new Date();
+        const allMovements = (inventoryItem.stockMovements || [])
+            .map(m => ({
+                type: m.type,
+                quantity: m.quantity,
+                price: m.price,
+                timestamp: new Date(m.timestamp || m.date)
+            }))
+            .sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+
+        const batches = [];
+        for (const movement of allMovements) {
+            if (movement.timestamp >= movementDate) break;
+            if (movement.type === 'in' && movement.price) {
+                batches.push({ quantity: movement.quantity, price: movement.price, remaining: movement.quantity });
+            } else if (movement.type === 'out') {
+                let toDeduct = movement.quantity;
+                for (const batch of batches) {
+                    if (toDeduct <= 0) break;
+                    const deductFromBatch = Math.min(batch.remaining, toDeduct);
+                    batch.remaining -= deductFromBatch;
+                    toDeduct -= deductFromBatch;
+                }
+            } else if (movement.type === 'adjustment') {
+                const totalRemaining = batches.reduce((sum, b) => sum + b.remaining, 0);
+                if (totalRemaining > 0) {
+                    const ratio = movement.quantity / totalRemaining;
+                    batches.forEach(batch => { batch.remaining = batch.remaining * ratio; });
                 }
             }
-            
-            // Now calculate cost for current deduction using remaining quantities
-            let remainingToDeduct = Math.abs(convertedQuantityNeeded);
-            let totalCost = 0;
-            
-            for (const batch of batches) {
-                if (remainingToDeduct <= 0) break;
-                if (batch.remaining <= 0) continue;
-                
-                const qtyFromThisBatch = Math.min(remainingToDeduct, batch.remaining);
-                totalCost += qtyFromThisBatch * batch.price;
-                remainingToDeduct -= qtyFromThisBatch;
-            }
-            
-            // Calculate totalCost and price
-            const finalTotalCost = Math.round(totalCost * 100) / 100;
-            const finalPrice = Math.abs(convertedQuantityNeeded) > 0 && finalTotalCost > 0
-                ? Math.round((finalTotalCost / Math.abs(convertedQuantityNeeded)) * 100) / 100
-                : null;
-
-            // بناء السبب مع رقم الفاتورة إذا كان متاحاً
-            const reason = billNumber 
-                ? `خصم لطلب رقم ${order.orderNumber} - فاتورة ${billNumber}`
-                : `خصم لطلب رقم ${order.orderNumber}`;
-
-            await inventoryItem.addStockMovement(
-                "out",
-                convertedQuantityNeeded,
-                reason,
-                userId,
-                order._id.toString(),
-                finalPrice,
-                null,
-                finalTotalCost
-            );
         }
+
+        let remainingToDeduct = Math.abs(convertedQuantityNeeded);
+        let totalCost = 0;
+        for (const batch of batches) {
+            if (remainingToDeduct <= 0) break;
+            if (batch.remaining <= 0) continue;
+            const qtyFromThisBatch = Math.min(remainingToDeduct, batch.remaining);
+            totalCost += qtyFromThisBatch * batch.price;
+            remainingToDeduct -= qtyFromThisBatch;
+        }
+
+        const finalTotalCost = Math.round(totalCost * 100) / 100;
+        const finalPrice = Math.abs(convertedQuantityNeeded) > 0 && finalTotalCost > 0
+            ? Math.round((finalTotalCost / Math.abs(convertedQuantityNeeded)) * 100) / 100
+            : null;
+
+        const reason = billNumber
+            ? `خصم لطلب رقم ${order.orderNumber} - فاتورة ${billNumber}`
+            : `خصم لطلب رقم ${order.orderNumber}`;
+
+        await InventoryItem.updateOne(
+            { _id: inventoryItemId },
+            { $push: { stockMovements: {
+                type: "out",
+                quantity: convertedQuantityNeeded,
+                reason,
+                user: userId,
+                orderId: order._id.toString(),
+                price: finalPrice,
+                warehouse: null,
+                totalCost: finalTotalCost,
+                timestamp: new Date(),
+            }}}
+        );
     }
 }
 
@@ -1102,6 +1096,19 @@ export const createOrder = async (req, res) => {
             createdAt: order.createdAt,
         };
 
+        // ── Deduct inventory BEFORE response (was in setImmediate — caused ghost stock) ──
+        try {
+            let billNumber = null;
+            if (order.bill) {
+                const billDoc = await Bill.findById(order.bill).select('billNumber');
+                if (billDoc) billNumber = billDoc.billNumber;
+            }
+            await deductInventoryForOrder(order, req.user._id, billNumber);
+            Logger.info(`✓ تم خصم المخزون للطلب ${order.orderNumber}`);
+        } catch (deductErr) {
+            Logger.error('deductInventoryForOrder failed (order saved anyway)', deductErr);
+        }
+
         // ── Real-time emit (<100ms) — immediate, before response, keep DB writes immediate ──
         if (req.io) {
             try {
@@ -1131,19 +1138,10 @@ export const createOrder = async (req, res) => {
             data: responseData,
         });
 
-        // All background work in setImmediate - non-blocking
+        // Background work — inventory deduction already done above, only notifications left
         setImmediate(async () => {
             try {
-                // 1. Deduct inventory
-                let billNumber = null;
-                if (order.bill) {
-                    const Bill = (await import("../models/Bill.js")).default;
-                    const billDoc = await Bill.findById(order.bill).select('billNumber');
-                    if (billDoc) billNumber = billDoc.billNumber;
-                }
-                await deductInventoryForOrder(order, req.user._id, billNumber);
-                Logger.info(`✓ تم خصم المخزون للطلب ${order.orderNumber}`);
-
+                // Notify inventory update
                 if (req.io) {
                     req.io.notifyInventoryUpdate({
                         type: 'deducted',
@@ -1153,7 +1151,7 @@ export const createOrder = async (req, res) => {
                     }, getOrganizationId(req.user));
                 }
 
-                // 2. Create notification for new order
+                // Create notification for new order
                 try {
                     const userLanguage = req.user.preferences?.language || 'ar';
                     await NotificationService.createOrderNotification(
@@ -1163,13 +1161,9 @@ export const createOrder = async (req, res) => {
                         userLanguage,
                         actorFromReq(req)
                     );
-                } catch (notificationError) {
-                    // Ignore notification errors
-                }
+                } catch (notificationError) {}
 
-                // 3. Emit the legacy order event again for clients that
-                // connected during the response (the bill was already emitted
-                // synchronously above).
+                // Re-emit order event for late-connecting clients
                 if (req.io) {
                     try {
                         req.io.notifyOrderUpdate("created", responseData, getOrganizationId(req.user));

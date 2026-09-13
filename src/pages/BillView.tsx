@@ -280,11 +280,7 @@ const BillView = () => {
 	useEffect(() => {
 		// فرض إعادة رسم المكون عند تحديث itemPayments
 		if (bill?.itemPayments) {
-			// تحديث فوري للبيانات
-			const timer = setTimeout(() => {
-				fetchBill(false);
-			}, 200);
-			return () => clearTimeout(timer);
+			fetchBill(false);
 		}
 	}, [bill?.itemPayments?.length, bill?.paid, bill?.remaining]);
 

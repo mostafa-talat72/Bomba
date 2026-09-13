@@ -78,7 +78,7 @@ export const getInventoryItem = async (req, res) => {
             });
         }
 
-        const item = await InventoryItem.findById(req.params.id)
+        const item = await InventoryItem.findOne({ _id: req.params.id, ...organizationFilter(req.user) })
             .populate("recipe.ingredient", "name unit")
             .populate("stockMovements.user", "name");
 
@@ -278,29 +278,22 @@ export const createInventoryItem = async (req, res) => {
             createdAt: item.createdAt,
         };
 
+        // Emit socket update BEFORE response
+        if (req.io) {
+            try {
+                req.io.notifyInventoryUpdate(item, getOrganizationId(req.user));
+            } catch (ioError) {
+                Logger.error("فشل في إرسال إشعار تحديث المخزون", {
+                    error: ioError.message,
+                });
+            }
+        }
+
         // Return response IMMEDIATELY
         res.status(201).json({
             success: true,
             message: "تم إضافة المنتج بنجاح",
             data: responseData,
-        });
-
-        // All background work in setImmediate - non-blocking
-        setImmediate(async () => {
-            try {
-                // Emit inventory update on every create (not only low-stock) — لحظية لكل الأجهزة
-                if (req.io) {
-                    try {
-                        req.io.notifyInventoryUpdate(item, getOrganizationId(req.user));
-                    } catch (ioError) {
-                        Logger.error("فشل في إرسال إشعار تحديث المخزون", {
-                            error: ioError.message,
-                        });
-                    }
-                }
-            } catch (bgError) {
-                Logger.error('Background tasks failed for createInventoryItem:', bgError);
-            }
         });
     } catch (error) {
         Logger.error("خطأ في إضافة المنتج", {
@@ -363,7 +356,7 @@ export const updateInventoryItem = async (req, res) => {
             warehouseItem,
         } = req.body;
 
-        const item = await InventoryItem.findById(req.params.id);
+        const item = await InventoryItem.findOne({ _id: req.params.id, ...organizationFilter(req.user) });
 
         if (!item) {
             return res.status(404).json({
@@ -409,29 +402,22 @@ export const updateInventoryItem = async (req, res) => {
             updatedAt: item.updatedAt,
         };
 
+        // Emit socket update BEFORE response
+        if (req.io) {
+            try {
+                req.io.notifyInventoryUpdate(item, getOrganizationId(req.user));
+            } catch (ioError) {
+                Logger.error("فشل في إرسال إشعار تحديث المخزون", {
+                    error: ioError.message,
+                });
+            }
+        }
+
         // Return response IMMEDIATELY
         res.json({
             success: true,
             message: "تم تحديث المنتج بنجاح",
             data: responseData,
-        });
-
-        // All background work in setImmediate - non-blocking
-        setImmediate(async () => {
-            try {
-                // Emit inventory update on every update (لحظية)
-                if (req.io) {
-                    try {
-                        req.io.notifyInventoryUpdate(item, getOrganizationId(req.user));
-                    } catch (ioError) {
-                        Logger.error("فشل في إرسال إشعار تحديث المخزون", {
-                            error: ioError.message,
-                        });
-                    }
-                }
-            } catch (bgError) {
-                Logger.error('Background tasks failed for updateInventoryItem:', bgError);
-            }
         });
     } catch (error) {
         Logger.error("خطأ في تحديث المنتج", {
@@ -487,7 +473,7 @@ export const updateStock = async (req, res) => {
             paidAmount = 0,
         } = req.body;
 
-        const item = await InventoryItem.findById(req.params.id);
+        const item = await InventoryItem.findOne({ _id: req.params.id, ...organizationFilter(req.user) });
 
         if (!item) {
             return res.status(404).json({
@@ -712,6 +698,17 @@ export const updateStock = async (req, res) => {
             updatedAt: item.updatedAt,
         };
 
+        // Emit socket update BEFORE response
+        if (req.io) {
+            try {
+                req.io.notifyInventoryUpdate(item, getOrganizationId(req.user));
+            } catch (ioError) {
+                Logger.error("فشل في إرسال إشعار تحديث المخزون", {
+                    error: ioError.message,
+                });
+            }
+        }
+
         // Return response IMMEDIATELY
         res.json({
             success: true,
@@ -789,17 +786,6 @@ export const updateStock = async (req, res) => {
                         notificationError
                     );
                 }
-
-                // Emit inventory update on every stock change (لحظية — ليس فقط low-stock)
-                if (req.io) {
-                    try {
-                        req.io.notifyInventoryUpdate(item, getOrganizationId(req.user));
-                    } catch (ioError) {
-                        Logger.error("فشل في إرسال إشعار تحديث المخزون", {
-                            error: ioError.message,
-                        });
-                    }
-                }
             } catch (bgError) {
                 Logger.error('Background tasks failed for updateStock:', bgError);
             }
@@ -827,6 +813,7 @@ export const getLowStockItems = async (req, res) => {
         }
 
         const items = await InventoryItem.find({
+            ...organizationFilter(req.user),
             isActive: true,
             $expr: { $lte: ["$currentStock", "$minStock"] },
         }).sort({ currentStock: 1 });
@@ -858,7 +845,7 @@ export const getStockMovements = async (req, res) => {
             });
         }
 
-        const item = await InventoryItem.findById(req.params.id)
+        const item = await InventoryItem.findOne({ _id: req.params.id, ...organizationFilter(req.user) })
             .populate("stockMovements.user", "name");
 
         if (!item) {
@@ -921,7 +908,7 @@ export const deleteInventoryItem = async (req, res) => {
             });
         }
 
-        const item = await InventoryItem.findById(req.params.id);
+        const item = await InventoryItem.findOne({ _id: req.params.id, ...organizationFilter(req.user) });
 
         if (!item) {
             return res.status(404).json({
@@ -937,27 +924,21 @@ export const deleteInventoryItem = async (req, res) => {
         // Fire-and-forget Atlas write
         writeToAtlas('inventoryitems', 'upsert', item.toObject ? item.toObject() : item, { _id: item._id });
 
+        // Emit socket update BEFORE response
+        if (req.io) {
+            try {
+                req.io.notifyInventoryUpdate(item, getOrganizationId(req.user));
+            } catch (ioError) {
+                Logger.error("فشل في إرسال إشعار تحديث المخزون عند الحذف", {
+                    error: ioError.message,
+                });
+            }
+        }
+
         // Return response IMMEDIATELY
         res.json({
             success: true,
             message: "تم حذف المنتج بنجاح",
-        });
-
-        // All background work in setImmediate - non-blocking
-        setImmediate(async () => {
-            try {
-                if (req.io) {
-                    try {
-                        req.io.notifyInventoryUpdate(item, getOrganizationId(req.user));
-                    } catch (ioError) {
-                        Logger.error("فشل في إرسال إشعار تحديث المخزون عند الحذف", {
-                            error: ioError.message,
-                        });
-                    }
-                }
-            } catch (bgError) {
-                Logger.error('Background tasks failed for deleteInventoryItem:', bgError);
-            }
         });
     } catch (error) {
         res.status(500).json({
@@ -1119,29 +1100,22 @@ export const deleteStockMovement = async (req, res) => {
             updatedAt: item.updatedAt,
         };
 
+        // Emit socket update BEFORE response
+        if (req.io) {
+            try {
+                req.io.notifyInventoryUpdate(item);
+            } catch (ioError) {
+                Logger.error("فشل في إرسال إشعار تحديث المخزون", {
+                    error: ioError.message,
+                });
+            }
+        }
+
         // Return response IMMEDIATELY
         res.json({
             success: true,
             message: "تم حذف الحركة بنجاح",
             data: responseData,
-        });
-
-        // All background work in setImmediate - non-blocking
-        setImmediate(async () => {
-            try {
-                // Emit Socket.IO event for inventory update
-                if (req.io) {
-                    try {
-                        req.io.notifyInventoryUpdate(item);
-                    } catch (ioError) {
-                        Logger.error("فشل في إرسال إشعار تحديث المخزون", {
-                            error: ioError.message,
-                        });
-                    }
-                }
-            } catch (bgError) {
-                Logger.error('Background tasks failed for deleteStockMovement:', bgError);
-            }
         });
     } catch (error) {
         Logger.error("خطأ في حذف الحركة", error);

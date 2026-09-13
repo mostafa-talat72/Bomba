@@ -289,10 +289,6 @@ export const createTable = async (req, res) => {
             try {
                 await table.populate("section", "name");
                 await table.populate("createdBy", "name");
-
-                if (req.io) {
-                    try { req.io.notifyTableUpdate("created", table, getOrganizationId(req.user)); } catch (e) {}
-                }
             } catch (bgError) {
                 Logger.error('Background tasks failed for createTable:', bgError);
             }
@@ -310,7 +306,7 @@ export const createTable = async (req, res) => {
 export const updateTable = async (req, res) => {
     try {
         const { id } = req.params;
-        const { number, section, isActive } = req.body;
+        const { number, section } = req.body;
 
         const updateData = {
             updatedBy: req.user.id,
@@ -322,9 +318,6 @@ export const updateTable = async (req, res) => {
         }
         if (section !== undefined) {
             updateData.section = section;
-        }
-        if (isActive !== undefined) {
-            updateData.isActive = isActive;
         }
 
         // If number or section is being updated, check for duplicates
@@ -387,7 +380,6 @@ export const updateTable = async (req, res) => {
             number: table.number,
             section: table.section,
             status: table.status,
-            isActive: table.isActive,
             updatedAt: table.updatedAt,
         };
 
@@ -404,10 +396,6 @@ export const updateTable = async (req, res) => {
                 await table.populate("section", "name");
                 await table.populate("createdBy", "name");
                 await table.populate("updatedBy", "name");
-
-                if (req.io) {
-                    try { req.io.notifyTableUpdate("updated", table, getOrganizationId(req.user)); } catch (e) {}
-                }
             } catch (bgError) {
                 Logger.error('Background tasks failed for updateTable:', bgError);
             }
@@ -483,9 +471,7 @@ export const deleteTable = async (req, res) => {
         // All background work in setImmediate - non-blocking
         setImmediate(async () => {
             try {
-                if (req.io) {
-                    try { req.io.notifyTableUpdate("deleted", { _id: id }, getOrganizationId(req.user)); } catch (e) {}
-                }
+                // Non-socket background work only
             } catch (bgError) {
                 Logger.error('Background tasks failed for deleteTable:', bgError);
             }

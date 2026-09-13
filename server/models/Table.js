@@ -18,10 +18,6 @@ const tableSchema = new mongoose.Schema(
             ref: "Organization",
             required: true,
         },
-        isActive: {
-            type: Boolean,
-            default: true,
-        },
         status: {
             type: String,
             enum: ["empty", "occupied", "reserved"],
@@ -47,7 +43,6 @@ const tableSchema = new mongoose.Schema(
 tableSchema.index({ number: 1, section: 1, organization: 1 }, { unique: true });
 tableSchema.index({ section: 1 });
 tableSchema.index({ organization: 1 });
-tableSchema.index({ isActive: 1 });
 
 // Soft delete fields - isDeleted, deletedAt, deletedBy
 tableSchema.add({

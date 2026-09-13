@@ -340,22 +340,16 @@ export const createMenuItem = async (req, res) => {
             createdAt: menuItem.createdAt,
         };
 
+        // Emit socket event immediately before response
+        if (req.io) {
+            try { req.io.notifyMenuUpdate("created", menuItem, getOrganizationId(req.user)); } catch (e) {}
+        }
+
         // Return response IMMEDIATELY
         res.status(201).json({
             success: true,
             message: "تم إنشاء عنصر القائمة بنجاح",
             data: responseData,
-        });
-
-        // All background work in setImmediate - non-blocking
-        setImmediate(async () => {
-            try {
-                if (req.io) {
-                    try { req.io.notifyMenuUpdate("created", menuItem, getOrganizationId(req.user)); } catch (e) {}
-                }
-            } catch (bgError) {
-                Logger.error('Background tasks failed for createMenuItem:', bgError);
-            }
         });
     } catch (error) {
         if (error.code === 11000) {
@@ -465,27 +459,21 @@ export const updateMenuItem = async (req, res) => {
             updatedAt: menuItem.updatedAt,
         };
 
+        // Populate and emit socket event immediately before response
+        await menuItem.populate("category", "name section");
+        await menuItem.populate("category.section", "name");
+        await menuItem.populate("createdBy", "name");
+        await menuItem.populate("updatedBy", "name");
+
+        if (req.io) {
+            try { req.io.notifyMenuUpdate("updated", menuItem, getOrganizationId(req.user)); } catch (e) {}
+        }
+
         // Return response IMMEDIATELY
         res.json({
             success: true,
             message: "تم تحديث عنصر القائمة بنجاح",
             data: responseData,
-        });
-
-        // All background work in setImmediate - non-blocking
-        setImmediate(async () => {
-            try {
-                await menuItem.populate("category", "name section");
-                await menuItem.populate("category.section", "name");
-                await menuItem.populate("createdBy", "name");
-                await menuItem.populate("updatedBy", "name");
-
-                if (req.io) {
-                    try { req.io.notifyMenuUpdate("updated", menuItem, getOrganizationId(req.user)); } catch (e) {}
-                }
-            } catch (bgError) {
-                Logger.error('Background tasks failed for updateMenuItem:', bgError);
-            }
         });
     } catch (error) {
         if (error.code === 11000) {
@@ -526,21 +514,15 @@ export const deleteMenuItem = async (req, res) => {
         // Fire-and-forget Atlas write for delete
         writeToAtlas('menuitems', 'delete', null, { _id: menuItemId });
 
+        // Emit socket event immediately before response
+        if (req.io) {
+            try { req.io.notifyMenuUpdate("deleted", { _id: id }, getOrganizationId(req.user)); } catch (e) {}
+        }
+
         // Return response IMMEDIATELY
         res.json({
             success: true,
             message: "تم حذف عنصر القائمة بنجاح",
-        });
-
-        // All background work in setImmediate - non-blocking
-        setImmediate(async () => {
-            try {
-                if (req.io) {
-                    try { req.io.notifyMenuUpdate("deleted", { _id: id }, getOrganizationId(req.user)); } catch (e) {}
-                }
-            } catch (bgError) {
-                Logger.error('Background tasks failed for deleteMenuItem:', bgError);
-            }
         });
     } catch (error) {
         res.status(500).json({
@@ -706,6 +688,11 @@ export const toggleMenuItemAvailability = async (req, res) => {
             updatedAt: menuItem.updatedAt,
         };
 
+        // Emit socket event immediately before response
+        if (req.io) {
+            try { req.io.notifyMenuUpdate("updated", menuItem, getOrganizationId(req.user)); } catch (e) {}
+        }
+
         // Return response IMMEDIATELY
         res.json({
             success: true,
@@ -713,17 +700,6 @@ export const toggleMenuItemAvailability = async (req, res) => {
                 menuItem.isAvailable ? "تفعيل" : "إلغاء تفعيل"
             } عنصر القائمة بنجاح`,
             data: responseData,
-        });
-
-        // All background work in setImmediate - non-blocking
-        setImmediate(async () => {
-            try {
-                if (req.io) {
-                    try { req.io.notifyMenuUpdate("updated", menuItem, getOrganizationId(req.user)); } catch (e) {}
-                }
-            } catch (bgError) {
-                Logger.error('Background tasks failed for toggleMenuItemAvailability:', bgError);
-            }
         });
     } catch (error) {
         res.status(500).json({

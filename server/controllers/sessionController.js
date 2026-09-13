@@ -2773,11 +2773,11 @@ const sessionController = {
                         mergeNotes += `\n[تم نقل مدفوعات بقيمة ${transferredAmount} ج.م]`;
                     }
                     
-                    // Copy any partial payments
-                    if (updatedSessionBill.partialPayments && updatedSessionBill.partialPayments.length > 0) {
-                        Logger.info(`💳 Transferring ${updatedSessionBill.partialPayments.length} partial payments from empty bill`);
-                        existingTableBill.partialPayments = existingTableBill.partialPayments || [];
-                        existingTableBill.partialPayments.push(...updatedSessionBill.partialPayments);
+                    // Copy any partial payments (itemPayments-based)
+                    if (updatedSessionBill.itemPayments && updatedSessionBill.itemPayments.length > 0) {
+                        Logger.info(`💳 Transferring ${updatedSessionBill.itemPayments.length} item payments from empty bill`);
+                        existingTableBill.itemPayments = existingTableBill.itemPayments || [];
+                        existingTableBill.itemPayments.push(...updatedSessionBill.itemPayments);
                     }
                     
                     // Add merge information to table bill notes
@@ -3404,11 +3404,11 @@ const sessionController = {
                         mergeNotes += `\n[تم نقل مدفوعات بقيمة ${transferredAmount} ج.م]`;
                     }
                     
-                    // Copy any partial payments
-                    if (updatedCurrentBill.partialPayments && updatedCurrentBill.partialPayments.length > 0) {
-                        Logger.info(`💳 Transferring ${updatedCurrentBill.partialPayments.length} partial payments from empty bill`);
-                        finalBill.partialPayments = finalBill.partialPayments || [];
-                        finalBill.partialPayments.push(...updatedCurrentBill.partialPayments);
+                    // Copy any partial payments (itemPayments-based)
+                    if (updatedCurrentBill.itemPayments && updatedCurrentBill.itemPayments.length > 0) {
+                        Logger.info(`💳 Transferring ${updatedCurrentBill.itemPayments.length} item payments from empty bill`);
+                        finalBill.itemPayments = finalBill.itemPayments || [];
+                        finalBill.itemPayments.push(...updatedCurrentBill.itemPayments);
                     }
                     
                     // Copy itemPayments (الدفعات الجزئية للأصناف)

@@ -266,22 +266,15 @@ const deviceController = {
                 createdAt: device.createdAt,
             };
 
+            if (req.io) {
+                try { req.io.notifyDeviceUpdate("created", device, getOrganizationId(req.user)); } catch (e) {}
+            }
+
             // Return response IMMEDIATELY
             res.status(201).json({
                 success: true,
                 message: "تم إضافة الجهاز بنجاح",
                 data: responseData,
-            });
-
-            // All background work in setImmediate - non-blocking
-            setImmediate(async () => {
-                try {
-                    if (req.io) {
-                        try { req.io.notifyDeviceUpdate("created", device, getOrganizationId(req.user)); } catch (e) {}
-                    }
-                } catch (bgError) {
-                    Logger.error('Background tasks failed for createDevice:', bgError);
-                }
             });
         } catch (err) {
             
@@ -466,22 +459,15 @@ const device = await Device.findOneAndUpdate(
                 updatedAt: device.updatedAt,
             };
 
+            if (req.io) {
+                try { req.io.notifyDeviceUpdate("updated", device, getOrganizationId(req.user)); } catch (e) {}
+            }
+
             // Return response IMMEDIATELY
             res.status(200).json({
                 success: true,
                 message: "تم تحديث بيانات الجهاز بنجاح",
                 data: responseData,
-            });
-
-            // All background work in setImmediate - non-blocking
-            setImmediate(async () => {
-                try {
-                    if (req.io) {
-                        try { req.io.notifyDeviceUpdate("updated", device, getOrganizationId(req.user)); } catch (e) {}
-                    }
-                } catch (bgError) {
-                    Logger.error('Background tasks failed for updateDevice:', bgError);
-                }
             });
         } catch (err) {
             res.status(400).json({
@@ -543,22 +529,15 @@ const device = await Device.findOneAndUpdate(
             updatedAt: device.updatedAt,
         };
 
+        if (req.io) {
+            try { req.io.notifyDeviceUpdate("updated", device, getOrganizationId(req.user)); } catch (e) {}
+        }
+
         // Return response IMMEDIATELY
         res.json({
             success: true,
             message: "تم تحديث حالة الجهاز بنجاح",
             data: responseData,
-        });
-
-        // All background work in setImmediate - non-blocking
-        setImmediate(async () => {
-            try {
-                if (req.io) {
-                    try { req.io.notifyDeviceUpdate("updated", device, getOrganizationId(req.user)); } catch (e) {}
-                }
-            } catch (bgError) {
-                Logger.error('Background tasks failed for updateDeviceStatus:', bgError);
-            }
         });
     } catch (err) {
             res.status(400).json({
@@ -631,6 +610,10 @@ const deletedDevice = await Device.findOneAndDelete({
             // Fire-and-forget Atlas write for delete
             writeToAtlas('devices', 'delete', null, { _id: deletedDevice._id });
 
+            if (req.io) {
+                try { req.io.notifyDeviceUpdate("deleted", { _id: id }, getOrganizationId(req.user)); } catch (e) {}
+            }
+
             // Return response IMMEDIATELY
             res.json({
                 success: true,
@@ -640,17 +623,6 @@ const deletedDevice = await Device.findOneAndDelete({
                     name: deletedDevice.name,
                     number: deletedDevice.number,
                 },
-            });
-
-            // All background work in setImmediate - non-blocking
-            setImmediate(async () => {
-                try {
-                    if (req.io) {
-                        try { req.io.notifyDeviceUpdate("deleted", { _id: id }, getOrganizationId(req.user)); } catch (e) {}
-                    }
-                } catch (bgError) {
-                    Logger.error('Background tasks failed for deleteDevice:', bgError);
-                }
             });
         } catch (err) {
             res.status(400).json({
@@ -772,6 +744,10 @@ const result = await Device.updateMany(
             }));
             writeBatchToAtlas('devices', operations);
 
+            if (req.io) {
+                try { req.io.notifyDeviceUpdate("updated", null, getOrganizationId(req.user)); } catch (e) {}
+            }
+
             // Return response IMMEDIATELY
             res.json({
                 success: true,
@@ -780,17 +756,6 @@ const result = await Device.updateMany(
                     matched: result.matchedCount,
                     modified: result.modifiedCount,
                 },
-            });
-
-            // All background work in setImmediate - non-blocking
-            setImmediate(async () => {
-                try {
-                    if (req.io) {
-                        try { req.io.notifyDeviceUpdate("updated", null, getOrganizationId(req.user)); } catch (e) {}
-                    }
-                } catch (bgError) {
-                    Logger.error('Background tasks failed for bulkUpdateDevices:', bgError);
-                }
             });
         } catch (err) {
             res.status(400).json({

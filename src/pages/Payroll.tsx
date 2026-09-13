@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Tabs, Badge } from 'antd';
 import { Users, FileText, Clock } from 'lucide-react';
 import { io, Socket } from 'socket.io-client';
@@ -26,8 +26,7 @@ const Payroll: React.FC = () => {
   }, [refreshKey]);
 
   // Instant cross-device refresh: any HR write on another device bumps the
-  // refresh key (debounced), remounting tabs with fresh data. No polling.
-  const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // refresh key, remounting tabs with fresh data. No polling.
   useEffect(() => {
     let socket: Socket | null = null;
     try {
@@ -38,19 +37,12 @@ const Payroll: React.FC = () => {
         transports: ['websocket', 'polling'],
         reconnection: true,
       });
-      const schedule = () => {
-        if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
-        refreshTimerRef.current = setTimeout(() => {
-          setRefreshKey((prev) => prev + 1);
-        }, 500);
-      };
       const onRemote = (evt: any) => {
-        if (evt?.collection && PAYROLL_SYNC_COLLECTIONS.has(evt.collection)) schedule();
+        if (evt?.collection && PAYROLL_SYNC_COLLECTIONS.has(evt.collection)) setRefreshKey((prev) => prev + 1);
       };
       socket.on('lan:remote-change', onRemote);
       return () => {
         try {
-          if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
           socket?.off('lan:remote-change', onRemote);
           socket?.disconnect();
         } catch {}

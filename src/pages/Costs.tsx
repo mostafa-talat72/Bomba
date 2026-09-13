@@ -223,12 +223,11 @@ const Costs = () => {
   };
 
   // Instant cross-device refresh: LAN/Atlas changes arrive with the doc,
-  // so just refetch the current view (debounced) instead of polling.
+  // so just refetch the current view immediately instead of polling.
   const costsFetchRef = useRef({ fetchCosts, fetchCategories });
   costsFetchRef.current = { fetchCosts, fetchCategories };
   useEffect(() => {
     let socket: Socket | null = null;
-    let timer: ReturnType<typeof setTimeout> | null = null;
     try {
       const socketUrl = API_BASE_URL.replace(/\/api\/?$/, '');
       socket = io(socketUrl, {
@@ -237,20 +236,16 @@ const Costs = () => {
         transports: ['websocket', 'polling'],
         reconnection: true,
       });
-      const schedule = () => {
-        if (timer) clearTimeout(timer);
-        timer = setTimeout(() => {
-          costsFetchRef.current.fetchCosts();
-          costsFetchRef.current.fetchCategories();
-        }, 400);
+      const handleUpdate = () => {
+        costsFetchRef.current.fetchCosts();
+        costsFetchRef.current.fetchCategories();
       };
-      socket.on('cost-update', schedule);
+      socket.on('cost-update', handleUpdate);
       socket.on('lan:remote-change', (evt: any) => {
-        if (evt?.collection === 'costs' || evt?.collection === 'costcategories') schedule();
+        if (evt?.collection === 'costs' || evt?.collection === 'costcategories') handleUpdate();
       });
       return () => {
         try {
-          if (timer) clearTimeout(timer);
           socket?.off('cost-update');
           socket?.off('lan:remote-change');
           socket?.disconnect();

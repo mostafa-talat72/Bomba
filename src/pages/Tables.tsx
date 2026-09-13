@@ -739,16 +739,13 @@ const loadInitialData = async () => {
       const cur = selectedTableRef.current;
       if (cur) {
         const tid = cur._id || (cur as any).id;
-        // نبنّي tableOrders مؤقتاً من الـ orders المحدّثة بعد الفتش
-        setTimeout(() => {
-          setTableOrders(prev => {
-            const all = (window as any).__latestOrders || prev;
-            return all.filter((o: any) => {
-              const oid = o.table?._id || o.table?.id || o.table;
-              return oid === tid;
-            });
+        setTableOrders(prev => {
+          const all = (window as any).__latestOrders || prev;
+          return all.filter((o: any) => {
+            const oid = o.table?._id || o.table?.id || o.table;
+            return oid === tid;
           });
-        }, 200);
+        });
       }
     });
 

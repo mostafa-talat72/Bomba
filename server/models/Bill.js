@@ -178,56 +178,7 @@ const billSchema = new mongoose.Schema(
                 },
             },
         ],
-        // تتبع المدفوعات الجزئية للمشروبات
-        partialPayments: [
-            {
-                orderId: {
-                    type: mongoose.Schema.Types.ObjectId,
-                    ref: "Order",
-                    required: true,
-                },
-                orderNumber: {
-                    type: String,
-                    required: true,
-                },
-                items: [
-                    {
-                        itemName: {
-                            type: String,
-                            required: true,
-                        },
-                        price: {
-                            type: Number,
-                            required: true,
-                        },
-                        quantity: {
-                            type: Number,
-                            required: true,
-                            default: 1,
-                        },
-                        paidAt: {
-                            type: Date,
-                            default: Date.now,
-                        },
-                        paidBy: {
-                            type: mongoose.Schema.Types.ObjectId,
-                            ref: "User",
-                            required: true,
-                        },
-                        paymentMethod: {
-                            type: String,
-                            enum: ["cash", "card", "transfer"],
-                            required: true,
-                        },
-                    },
-                ],
-                totalPaid: {
-                    type: Number,
-                    required: true,
-                    default: 0,
-                },
-            },
-        ],
+        // partialPayments أُزيل — الدفعات تُدار عبر itemPayments + sessionPayments فقط
         // تتبع الدفع على مستوى الأصناف - نظام محسّن
         itemPayments: [
             {
@@ -1039,24 +990,6 @@ billSchema.pre("save", function (next) {
     next();
 });
 
-// Additional pre-save middleware to ensure remaining is never negative
-billSchema.pre("save", function (next) {
-    // Force remaining to be non-negative
-    if (this.remaining < 0) {
-        console.warn(`⚠️ [Pre-save] Bill ${this.billNumber || this._id}: Forcing remaining from ${this.remaining} to 0`);
-        this.remaining = 0;
-    }
-    
-    // Also ensure paid doesn't exceed total
-    if (this.paid > this.total) {
-        console.warn(`⚠️ [Pre-save] Bill ${this.billNumber || this._id}: Paid (${this.paid}) exceeds total (${this.total})`);
-        this.paid = this.total;
-        this.remaining = 0;
-    }
-    
-    next();
-});
-
 // Method to generate QR code
 billSchema.methods.generateQRCode = async function (baseUrl = null, forceRegenerate = false) {
     if ((!this.qrCode || forceRegenerate) && this._id) {
@@ -1169,22 +1102,7 @@ billSchema.methods.addPartialPayment = function (
         return sum + itemTotal;
     }, 0);
 
-    // Add to old partialPayments system (for backward compatibility)
-    this.partialPayments.push({
-        orderId,
-        orderNumber,
-        items: items.map((item) => ({
-            itemName: item.itemName,
-            price: item.price,
-            quantity: item.quantity,
-            paidAt: item.paidAt,
-            paidBy: user._id,
-            paymentMethod,
-        })),
-        totalPaid,
-    });
-
-    // Add to new itemPayments system (this is what the frontend expects)
+    // Add to itemPayments system (this is what the frontend expects)
     items.forEach((item) => {
         // Find existing itemPayment using itemId (new system)
         let existingPayment = this.itemPayments.find(
@@ -1245,24 +1163,31 @@ billSchema.methods.addPartialPayment = function (
     return this;
 };
 
-// Get partial payments summary
+// Get partial payments summary (itemPayments-based)
 billSchema.methods.getPartialPaymentsSummary = function () {
     const summary = {
         totalPaid: 0,
         orders: {},
     };
 
-    this.partialPayments.forEach((payment) => {
-        summary.totalPaid += payment.totalPaid;
-        if (!summary.orders[payment.orderId]) {
-            summary.orders[payment.orderId] = {
-                orderNumber: payment.orderNumber,
+    (this.itemPayments || []).forEach((ip) => {
+        const paidAmount = ip.paidAmount || 0;
+        if (paidAmount <= 0) return;
+        summary.totalPaid += paidAmount;
+        const orderId = String(ip.orderId);
+        if (!summary.orders[orderId]) {
+            summary.orders[orderId] = {
+                orderNumber: ip.orderNumber || orderId,
                 items: [],
                 totalPaid: 0,
             };
         }
-        summary.orders[payment.orderId].items.push(...payment.items);
-        summary.orders[payment.orderId].totalPaid += payment.totalPaid;
+        summary.orders[orderId].items.push({
+            itemName: ip.itemName,
+            price: ip.pricePerUnit,
+            quantity: ip.paidQuantity,
+        });
+        summary.orders[orderId].totalPaid += paidAmount;
     });
 
     return summary;

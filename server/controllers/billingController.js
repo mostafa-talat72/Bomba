@@ -1778,17 +1778,16 @@ export const addPayment = async (req, res) => {
             { path: "table", select: "number name" }
         ]);
 
+        // Real-time notify BEFORE response
+        if (req.io) {
+            req.io.notifyBillUpdate("payment-received", bill, req.user.organization);
+        }
+
         res.json({
             success: true,
             message: "تم تسجيل الدفع بنجاح",
             data: bill,
         });
-
-        // Notify before returning so every connected client sees the same
-        // persisted payment immediately.
-        if (req.io) {
-            req.io.notifyBillUpdate("payment-received", bill, req.user.organization);
-        }
 
         // Create notification in background (non-blocking)
         setImmediate(async () => {
@@ -1902,7 +1901,7 @@ export const addOrderToBill = async (req, res) => {
         await bill.calculateSubtotal();
 
         await bill.populate(
-            ["orders", "sessions", "createdBy", "partialPayments.items.paidBy"],
+            ["orders", "sessions", "createdBy"],
             "name"
         );
 
@@ -1988,7 +1987,7 @@ export const removeOrderFromBill = async (req, res) => {
         }
 
         await bill.populate(
-            ["orders", "sessions", "createdBy", "partialPayments.items.paidBy"],
+            ["orders", "sessions", "createdBy"],
             "name"
         );
 
@@ -2606,17 +2605,6 @@ export const addPartialPayment = async (req, res) => {
             "payments.user"
         ]);
 
-        res.json({
-            success: true,
-            message: `تم دفع ${totalPaymentAmount} جنيه بنجاح`,
-            data: bill,
-            paymentDetails: {
-                amount: totalPaymentAmount,
-                items: processedItems,
-                method: paymentMethod || "cash"
-            }
-        });
-
         // إرسال تحديث Socket.IO before response
         if (req.io) {
             req.io.notifyBillUpdate("partial-payment", bill, req.user.organization);
@@ -2636,6 +2624,17 @@ export const addPartialPayment = async (req, res) => {
                     actorFromReq(req)
                 );
             } catch {}
+        });
+
+        res.json({
+            success: true,
+            message: `تم دفع ${totalPaymentAmount} جنيه بنجاح`,
+            data: bill,
+            paymentDetails: {
+                amount: totalPaymentAmount,
+                items: processedItems,
+                method: paymentMethod || "cash"
+            }
         });
 
     } catch (error) {
@@ -3878,17 +3877,6 @@ export const addPartialPaymentAggregated = async (req, res) => {
             "payments.user"
         ]);
 
-        res.json({
-            success: true,
-            message: `تم دفع ${totalPaymentAmount} جنيه بنجاح`,
-            data: bill,
-            paymentDetails: {
-                amount: totalPaymentAmount,
-                items: processedItems,
-                method: paymentMethod || "cash"
-            }
-        });
-
         // إرسال تحديث Socket.IO before response
         if (req.io) {
             req.io.notifyBillUpdate("partial-payment", bill, req.user.organization);
@@ -3908,6 +3896,17 @@ export const addPartialPaymentAggregated = async (req, res) => {
                     actorFromReq(req)
                 );
             } catch {}
+        });
+
+        res.json({
+            success: true,
+            message: `تم دفع ${totalPaymentAmount} جنيه بنجاح`,
+            data: bill,
+            paymentDetails: {
+                amount: totalPaymentAmount,
+                items: processedItems,
+                method: paymentMethod || "cash"
+            }
         });
 
     } catch (error) {

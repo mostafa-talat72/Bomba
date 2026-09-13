@@ -341,6 +341,10 @@ export const createCost = async (req, res) => {
             createdAt: cost.createdAt,
         };
 
+        if (req.io) {
+            try { req.io.notifyCostUpdate("created", cost, req.user.organization); } catch (e) {}
+        }
+
         // Return response IMMEDIATELY
         res.status(201).json({
             success: true,
@@ -353,10 +357,6 @@ export const createCost = async (req, res) => {
             try {
                 await cost.populate("category", "name icon color");
                 await cost.populate("createdBy", "name");
-
-                if (req.io) {
-                    try { req.io.notifyCostUpdate("created", cost, req.user.organization); } catch (e) {}
-                }
             } catch (bgError) {
                 Logger.error('Background tasks failed for createCost:', bgError);
             }
@@ -484,6 +484,10 @@ export const updateCost = async (req, res) => {
             updatedAt: cost.updatedAt,
         };
 
+        if (req.io) {
+            try { req.io.notifyCostUpdate("updated", cost, req.user.organization); } catch (e) {}
+        }
+
         // Return response IMMEDIATELY
         res.json({
             success: true,
@@ -497,10 +501,6 @@ export const updateCost = async (req, res) => {
                 await cost.populate("category", "name icon color");
                 await cost.populate("createdBy", "name");
                 await cost.populate("approvedBy", "name");
-
-                if (req.io) {
-                    try { req.io.notifyCostUpdate("updated", cost, req.user.organization); } catch (e) {}
-                }
             } catch (bgError) {
                 Logger.error('Background tasks failed for updateCost:', bgError);
             }
@@ -558,6 +558,10 @@ export const approveCost = async (req, res) => {
             updatedAt: cost.updatedAt,
         };
 
+        if (req.io) {
+            try { req.io.notifyCostUpdate("updated", cost, req.user.organization); } catch (e) {}
+        }
+
         // Return response IMMEDIATELY
         res.json({
             success: true,
@@ -569,10 +573,6 @@ export const approveCost = async (req, res) => {
         setImmediate(async () => {
             try {
                 await cost.populate(["createdBy", "approvedBy"], "name");
-
-                if (req.io) {
-                    try { req.io.notifyCostUpdate("updated", cost, req.user.organization); } catch (e) {}
-                }
             } catch (bgError) {
                 Logger.error('Background tasks failed for approveCost:', bgError);
             }
@@ -617,6 +617,10 @@ export const deleteCost = async (req, res) => {
         // Fire-and-forget Atlas write for delete
         writeToAtlas('costs', 'delete', null, { _id: costId });
 
+        if (req.io) {
+            try { req.io.notifyCostUpdate("deleted", { _id: req.params.id }, req.user.organization); } catch (e) {}
+        }
+
         // Return response IMMEDIATELY
         res.json({
             success: true,
@@ -626,9 +630,6 @@ export const deleteCost = async (req, res) => {
         // All background work in setImmediate - non-blocking
         setImmediate(async () => {
             try {
-                if (req.io) {
-                    try { req.io.notifyCostUpdate("deleted", { _id: req.params.id }, req.user.organization); } catch (e) {}
-                }
             } catch (bgError) {
                 Logger.error('Background tasks failed for deleteCost:', bgError);
             }
@@ -708,6 +709,10 @@ export const addCostPayment = async (req, res) => {
             updatedAt: cost.updatedAt,
         };
 
+        if (req.io) {
+            try { req.io.notifyCostUpdate("updated", cost, req.user.organization); } catch (e) {}
+        }
+
         // Return response IMMEDIATELY
         res.json({
             success: true,
@@ -722,10 +727,6 @@ export const addCostPayment = async (req, res) => {
                 await cost.populate("createdBy", "name");
                 await cost.populate("amountHistory.addedBy", "name");
                 await cost.populate("paymentHistory.paidBy", "name");
-
-                if (req.io) {
-                    try { req.io.notifyCostUpdate("updated", cost, req.user.organization); } catch (e) {}
-                }
             } catch (bgError) {
                 Logger.error('Background tasks failed for addCostPayment:', bgError);
             }
@@ -792,6 +793,10 @@ export const increaseCostAmount = async (req, res) => {
             updatedAt: cost.updatedAt,
         };
 
+        if (req.io) {
+            try { req.io.notifyCostUpdate("updated", cost, req.user.organization); } catch (e) {}
+        }
+
         // Return response IMMEDIATELY
         res.json({
             success: true,
@@ -806,10 +811,6 @@ export const increaseCostAmount = async (req, res) => {
                 await cost.populate("createdBy", "name");
                 await cost.populate("amountHistory.addedBy", "name");
                 await cost.populate("paymentHistory.paidBy", "name");
-
-                if (req.io) {
-                    try { req.io.notifyCostUpdate("updated", cost, req.user.organization); } catch (e) {}
-                }
             } catch (bgError) {
                 Logger.error('Background tasks failed for increaseCostAmount:', bgError);
             }

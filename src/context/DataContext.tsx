@@ -2542,7 +2542,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const id = setTimeout(() => {
       debounceTimersRef.current.delete(key);
       fn();
-    }, 300);
+    }, 0); // فوري — بدون تأخير ملموس
     debounceTimersRef.current.set(key, id);
   };
   // Keep latest fetchers in ref to avoid stale closures
