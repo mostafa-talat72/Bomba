@@ -202,6 +202,69 @@ const Delivery = () => {
   const [creating, setCreating] = useState(false);
   const [zones, setZones] = useState<Array<{ _id?: string; name: string; fee: number }>>([]);
   const [newZone, setNewZone] = useState({ name: '', fee: '' });
+  // سجل عملاء موحد (السيرفر) + محلي — نتائج مختلطة بالترتيب، مفتاح واحد للرقم.
+  const [serverCustHits, setServerCustHits] = useState<DeviceCustomer[]>([]);
+  useEffect(() => {
+    const phoneQ = draft.phone.trim();
+    const nameQ = draft.customerName.trim();
+    const hasPhone = phoneQ.replace(/\D/g, '').length >= 2;
+    const hasName = nameQ.length >= 2;
+    if (!hasPhone && !hasName) {
+      setServerCustHits([]);
+      return;
+    }
+    // نسأل السيرفر بهاتف أو اسم — كل واحد على حدة ثم ندمج (السيرفر يبحث بنفس السلسلة في الاسم/العنوان/الرقم).
+    const q = hasPhone ? phoneQ : nameQ;
+    const ctrl = new AbortController();
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/delivery-customers/search?q=${encodeURIComponent(q)}`, {
+          headers: { Authorization: `Bearer ${localStorage.getItem('token') || ''}` },
+          signal: ctrl.signal,
+        });
+        const j: any = await res.json().catch(() => null);
+        if (j?.success && Array.isArray(j.data)) {
+          setServerCustHits(
+            j.data.map((d: any) => ({
+              name: d.customerName || '',
+              phone: d.phone || '',
+              address: d.address || '',
+              count: d.orderCount || 1,
+              lastUsed: d.updatedAt ? new Date(d.updatedAt).getTime() : Date.now(),
+            }))
+          );
+        }
+      } catch {}
+      // إن كان هناك هاتف واسم معاً، اسأل بالثاني أيضاً وادمج (يغطي بحث الاسم عند كتابة الهاتف).
+      if (hasPhone && hasName) {
+        try {
+          const res2 = await fetch(`${API_BASE_URL}/api/delivery-customers/search?q=${encodeURIComponent(nameQ)}`, {
+            headers: { Authorization: `Bearer ${localStorage.getItem('token') || ''}` },
+          });
+          const j2: any = await res2.json().catch(() => null);
+          if (j2?.success && Array.isArray(j2.data)) {
+            setServerCustHits((prev) => {
+              const seen = new Set(prev.map((c) => String(c.phone).replace(/\D/g, '')));
+              const extra = j2.data
+                .map((d: any) => ({
+                  name: d.customerName || '',
+                  phone: d.phone || '',
+                  address: d.address || '',
+                  count: d.orderCount || 1,
+                  lastUsed: d.updatedAt ? new Date(d.updatedAt).getTime() : Date.now(),
+                }))
+                .filter((c: any) => !seen.has(String(c.phone).replace(/\D/g, '')));
+              return [...prev, ...extra];
+            });
+          }
+        } catch {}
+      }
+    }, 320);
+    return () => {
+      clearTimeout(timer);
+      ctrl.abort();
+    };
+  }, [draft.phone, draft.customerName]);
   // مناطق مشتركة من السيرفر (كل الأجهزة) — محلي كاحتياطي عند انقطاعه
   const fetchZones = async () => {
     try {
@@ -791,10 +854,26 @@ const Delivery = () => {
                 const q = draft.phone.replace(/\D/g, '');
                 const qn = draft.customerName.trim();
                 if (q.length < 2 && qn.length < 2) return null;
-                const matches = loadDeviceCustomers().filter((c) => {
+                const localMatches = loadDeviceCustomers().filter((c) => {
                   const cp = c.phone.replace(/\D/g, '');
                   return (q.length >= 2 && cp.includes(q) && cp !== q) || (qn.length >= 2 && (c.name || '').includes(qn));
-                }).slice(0, 5);
+                });
+                // دمج السجل الموحد (السيرفر) + المحلي — رقم واحد = سطر واحد (السيرفر أسبقية للآخر تحديث).
+                const merged = new Map<string, DeviceCustomer>();
+                for (const c of serverCustHits) {
+                  const key = String((c as any).phone || '').replace(/\D/g, '');
+                  if (!key) continue;
+                  const cp = key;
+                  const okPhone = q.length >= 2 && cp.includes(q) && cp !== q;
+                  const okName = qn.length >= 2 && String((c as any).name || '').includes(qn);
+                  if (!okPhone && !okName) continue;
+                  if (!merged.has(key)) merged.set(key, c);
+                }
+                for (const c of localMatches) {
+                  const key = String(c.phone).replace(/\D/g, '');
+                  if (!merged.has(key)) merged.set(key, c);
+                }
+                const matches = Array.from(merged.values()).slice(0, 5);
                 if (matches.length === 0) return null;
                 return (
                   <div className="rounded-xl border border-violet-200 dark:border-violet-800 bg-violet-50 dark:bg-violet-900/20 overflow-hidden">

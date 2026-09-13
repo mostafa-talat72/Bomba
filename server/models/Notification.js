@@ -299,6 +299,13 @@ notificationSchema.statics.createOrderNotification = function (
         translations.en = getNotificationTranslation('order', 'cancelled', 'en', order.orderNumber);
         translations.fr = getNotificationTranslation('order', 'cancelled', 'fr', order.orderNumber);
         actionText = null;
+    } else if (type === 'transferred') {
+        const fromT = relations.fromTableNumber ?? '';
+        const toT = relations.tableNumber ?? '';
+        translations.ar = getNotificationTranslation('order', 'transferred', 'ar', order.orderNumber, fromT, toT);
+        translations.en = getNotificationTranslation('order', 'transferred', 'en', order.orderNumber, fromT, toT);
+        translations.fr = getNotificationTranslation('order', 'transferred', 'fr', order.orderNumber, fromT, toT);
+        actionText = null;
     } else if (type === 'updated' || type === 'deleted' || type === 'delivered') {
         // صفوف تلقائية من طبقة السوكت (تعديل/حذف/توصيل) — الرقم آمن حتى بعد الحذف.
         const orderNo = order.orderNumber || '';
@@ -332,6 +339,7 @@ notificationSchema.statics.createOrderNotification = function (
             // الربط العلاقي: الطلب ← طاولة + فاتورة (+ مفتاح منع تكرار الصفوف)
             tableId: relations.tableId || null,
             tableNumber: relations.tableNumber ?? null,
+            fromTableNumber: relations.fromTableNumber ?? null,
             billId: relations.billId || null,
             billNumber: relations.billNumber || null,
             fulfillmentType: relations.fulfillment || order.fulfillmentType || null,

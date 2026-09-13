@@ -4392,7 +4392,8 @@
       "updated": "تعديل الطلب {{number}}",
       "deleted": "حذف الطلب {{number}}",
       "ready": "الطلب {{number}} جاهز للتسليم",
-      "delivered": "تم توصيل الطلب {{number}}"
+      "delivered": "تم توصيل الطلب {{number}}",
+      "transferred": "نقل الطلب {{number}} من طاولة {{from}} إلى طاولة {{table}}"
     },
     "bill": {
       "created": "فاتورة جديدة {{number}}",

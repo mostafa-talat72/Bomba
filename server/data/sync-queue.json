@@ -1,0 +1,89 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-09-13T04:28:15.004Z",
+  "queueSize": 2,
+  "operations": [
+    {
+      "id": "1f65d085-1320-4a47-9908-ce324e499dc7",
+      "type": "update",
+      "collection": "users",
+      "data": {
+        "updatedAt": {
+          "$date": "2026-09-13T04:27:36.182Z"
+        }
+      },
+      "filter": {
+        "$and": [
+          {
+            "permissions": {
+              "$in": [
+                "cafe",
+                "billing"
+              ]
+            }
+          },
+          {
+            "permissions": {
+              "$ne": "tables"
+            }
+          }
+        ]
+      },
+      "timestamp": {
+        "$date": "2026-09-13T04:27:36.297Z"
+      },
+      "retryCount": 0,
+      "maxRetries": 10
+    },
+    {
+      "id": "42877536-06ff-40de-ae85-fa9a4d902706",
+      "type": "update",
+      "collection": "bills",
+      "data": [
+        {
+          "$set": {
+            "paid": "$total",
+            "remaining": 0
+          }
+        },
+        {
+          "$set": {
+            "updatedAt": {
+              "$date": "2026-09-13T04:27:44.846Z"
+            }
+          }
+        }
+      ],
+      "filter": {
+        "$and": [
+          {
+            "status": "paid"
+          },
+          {
+            "$expr": {
+              "$or": [
+                {
+                  "$ne": [
+                    "$paid",
+                    "$total"
+                  ]
+                },
+                {
+                  "$gt": [
+                    "$remaining",
+                    0.01
+                  ]
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "timestamp": {
+        "$date": "2026-09-13T04:27:44.996Z"
+      },
+      "retryCount": 0,
+      "maxRetries": 10
+    }
+  ]
+}

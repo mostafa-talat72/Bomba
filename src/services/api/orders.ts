@@ -154,6 +154,14 @@ async function cancelOrder(orderId: string): Promise<ApiResponse<Order>> {
 }
 
 
+async function moveOrderToTable(orderId: string, targetTableId: string): Promise<ApiResponse<any>> {
+  return apiClient.request<any>(`/orders/${orderId}/move-table`, {
+    method: 'POST',
+    body: JSON.stringify({ targetTableId }),
+  });
+}
+
+
 export const ordersApi = {
   getOrders,
   getOrder,
@@ -168,4 +176,5 @@ export const ordersApi = {
   deleteOrder,
   getPendingOrders,
   cancelOrder,
+  moveOrderToTable,
 };

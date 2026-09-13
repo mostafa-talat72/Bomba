@@ -16,6 +16,7 @@ import {
     deleteOrder,
     calculateOrderRequirements,
     deductOrderInventory,
+    moveOrderToTable,
 } from "../controllers/orderController.js";
 import { authenticateToken, authorize } from "../middleware/auth.js";
 import {
@@ -113,6 +114,13 @@ router.put(
     "/:orderId/deliver-section",
     authorize("cafe", "tables", "menu", "all"),
     deliverOrderSection
+);
+
+// Move single order to another table (smart bill handling)
+router.post(
+    "/:id/move-table",
+    authorize("cafe", "tables", "menu", "all"),
+    moveOrderToTable
 );
 
 export default router;

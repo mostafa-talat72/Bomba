@@ -1006,6 +1006,22 @@ export const createBill = async (req, res) => {
             data: responseData,
         });
 
+        // دليل العملاء الموحد (دليفري): رقم واحد = سجل واحد، آخر كتابة تفوز — خلفية لا تُعطل الرد.
+        setImmediate(async () => {
+            try {
+                const orgId = getOrganizationId(req.user);
+                if (normalizedFulfillmentType === 'delivery' && (deliveryInfo?.phone || customerPhone)) {
+                    const { upsertDeliveryCustomer } = await import("../utils/deliveryCustomer.js");
+                    await upsertDeliveryCustomer({
+                        phone: deliveryInfo?.phone || customerPhone,
+                        customerName: deliveryInfo?.customerName || customerName,
+                        address: deliveryInfo?.address,
+                        organization: orgId,
+                    });
+                }
+            } catch {}
+        });
+
         // Background work - only notifications and socket (table status already done)
         setImmediate(async () => {
             try {
@@ -1444,6 +1460,24 @@ export const updateBill = async (req, res) => {
             success: true,
             message: "تم تحديث الفاتورة بنجاح",
             data: responseData,
+        });
+
+        // دليل العملاء الموحد (دليفري): حدّث الاسم/العنوان عند تغير بيانات التوصيل — خلفية.
+        setImmediate(async () => {
+            try {
+                const eff = updatedBill.fulfillmentType || updatedBill.billType;
+                const di = updatedBill.deliveryInfo;
+                const ph = di?.phone || updatedBill.customerPhone;
+                if (eff === 'delivery' && ph) {
+                    const { upsertDeliveryCustomer } = await import("../utils/deliveryCustomer.js");
+                    await upsertDeliveryCustomer({
+                        phone: ph,
+                        customerName: di?.customerName || updatedBill.customerName,
+                        address: di?.address,
+                        organization: getOrganizationId(req.user),
+                    });
+                }
+            } catch {}
         });
 
         // Background work - only notifications and socket (table status already done)

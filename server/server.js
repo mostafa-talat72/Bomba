@@ -79,6 +79,7 @@ import printRoutes from "./routes/printRoutes.js";
 import connectedDevicesRoutes from "./routes/connectedDevicesRoutes.js";
 import backupRoutes from "./routes/backupRoutes.js";
 import deliveryZoneRoutes from "./routes/deliveryZoneRoutes.js";
+import deliveryCustomerRoutes from "./routes/deliveryCustomerRoutes.js";
 import auditRoutes from "./routes/auditRoutes.js";
 import shiftRoutes from "./routes/shiftRoutes.js";
 
@@ -808,6 +809,7 @@ app.use("/api/print", printRoutes);
 app.use("/api/connected-devices", connectedDevicesRoutes);
 app.use("/api/backup", backupRoutes);
 app.use("/api/delivery-zones", deliveryZoneRoutes);
+app.use("/api/delivery-customers", deliveryCustomerRoutes);
 app.use("/api/audit", auditRoutes);
 app.use("/api/shifts", shiftRoutes);
 app.use("/public", publicRoutes);

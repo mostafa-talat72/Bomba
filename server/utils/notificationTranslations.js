@@ -131,6 +131,20 @@ export const notificationTranslations = {
                 title: "Commande Livrée",
                 message: (orderNumber) => `La commande ${orderNumber} a été livrée`
             }
+        },
+        transferred: {
+            ar: {
+                title: "نقل طلب",
+                message: (orderNumber, fromTable, toTable) => `تم نقل الطلب ${orderNumber} من طاولة ${fromTable} إلى طاولة ${toTable}`
+            },
+            en: {
+                title: "Order Transferred",
+                message: (orderNumber, fromTable, toTable) => `Order ${orderNumber} moved from table ${fromTable} to table ${toTable}`
+            },
+            fr: {
+                title: "Commande Transférée",
+                message: (orderNumber, fromTable, toTable) => `Commande ${orderNumber} déplacée de la table ${fromTable} vers la table ${toTable}`
+            }
         }
     },
 

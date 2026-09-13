@@ -122,6 +122,12 @@ const PaymentManagementModal: React.FC<PaymentManagementModalProps> = ({
     : methodLabel(paymentMethod);
   const openPayConfirm = () => {
     if (hasActiveSession(selectedBill) || isProcessingPayment) return;
+    // الدفع الكامل له نافذته الخاصة في Tables (payFullBillConfirm) — لا نضاعف التأكيد
+    const isFullPayment = parseFloat(paymentAmount) >= (selectedBill?.remaining || 0);
+    if (!splitEnabled && isFullPayment) {
+      void handlePaymentSubmit();
+      return;
+    }
     if (splitEnabled) {
       if (!onSplitSubmit || !splitAmount2) return;
       setConfirmPay({ mode: 'split' });

@@ -214,9 +214,9 @@ export const setupSocketIO = (io) => {
         }
         // نشاط لحظي للتوست الموحد (الفاعل من سياق الطلب تلقائياً)
         emitActivity(io, org, { kind: "order", action: type, doc: order, number: order && typeof order === "object" ? order.orderNumber || null : null, silent: opts && opts.silent === true });
-        // صف إشعار تلقائي للأنواع بلا منشئ صف (updated/deleted/delivered) — created/ready/cancelled لها صفوفها.
+        // صف إشعار تلقائي للأنواع بلا منشئ صف (updated/deleted/delivered/transferred) — created/ready/cancelled لها صفوفها.
         // silent = تحديث جانبي مدمج: بلا توست وبلا صف. منع التكرار: نفس الصف خلال 90 ثانية يُنشأ مرة واحدة.
-        if ((type === "updated" || type === "deleted" || type === "item-delivered") && order && typeof order === "object" && !(opts && opts.silent)) {
+        if ((type === "updated" || type === "deleted" || type === "item-delivered" || type === "transferred") && order && typeof order === "object" && !(opts && opts.silent)) {
             (async () => {
                 try {
                     // حمولات الحذف المختصرة بلا منظمة (حقل مطلوب) — كمّلها من الغرفة.

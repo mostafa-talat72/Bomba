@@ -4401,7 +4401,8 @@
       "updated": "Order {{number}} updated",
       "deleted": "Order {{number}} deleted",
       "ready": "Order {{number}} is ready",
-      "delivered": "Order {{number}} delivered"
+      "delivered": "Order {{number}} delivered",
+      "transferred": "Order {{number}} moved from table {{from}} to table {{table}}"
     },
     "bill": {
       "created": "New bill {{number}}",

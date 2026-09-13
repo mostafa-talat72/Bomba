@@ -3233,3 +3233,275 @@ export const deliverOrderSection = async (req, res) => {
         });
     }
 };
+
+// @desc    نقل طلب لطاولة أخرى (مع منطق الفاتورة الذكي)
+// @route   POST /api/orders/:id/move-table
+// @access  Private
+export const moveOrderToTable = async (req, res) => {
+    try {
+        const orderId = req.params.id;
+        const { targetTableId } = req.body;
+        if (!mongoose.Types.ObjectId.isValid(orderId) || !mongoose.Types.ObjectId.isValid(targetTableId)) {
+            return res.status(400).json({ success: false, message: "معرف غير صحيح" });
+        }
+        const order = await Order.findOne({ _id: orderId, ...organizationFilter(req.user) });
+        if (!order) {
+            return res.status(404).json({ success: false, message: "الطلب غير موجود" });
+        }
+        const targetTable = await Table.findOne({ _id: targetTableId, ...organizationFilter(req.user) });
+        if (!targetTable) {
+            return res.status(404).json({ success: false, message: "الطاولة الهدف غير موجودة" });
+        }
+        const sourceTableId = order.table ? String(order.table) : null;
+        if (sourceTableId && String(sourceTableId) === String(targetTableId)) {
+            return res.status(400).json({ success: false, message: "الطلب موجود بالفعل على هذه الطاولة" });
+        }
+        // إيجاد فاتورة المصدر
+        let sourceBill = null;
+        if (order.bill) {
+            sourceBill = await Bill.findOne({ _id: order.bill, ...organizationFilter(req.user) });
+        }
+        if (!sourceBill) {
+            sourceBill = await Bill.findOne({ orders: order._id, ...organizationFilter(req.user) });
+        }
+        if (!sourceBill) {
+            return res.status(404).json({ success: false, message: "فاتورة المصدر غير موجودة" });
+        }
+        // تحقق أن الطلب فعلاً داخل الفاتورة
+        const orderInBill = sourceBill.orders.some((oid) => String(oid) === String(order._id));
+        if (!orderInBill) {
+            return res.status(400).json({ success: false, message: "الطلب غير مرتبط بفاتورته" });
+        }
+        const isSoleOrder = sourceBill.orders.length === 1 && (!sourceBill.sessions || sourceBill.sessions.length === 0);
+        // فاتورة وجهة غير مدفوعة إن وجدت
+        const destBill = await Bill.findOne({
+            table: targetTableId,
+            ...organizationFilter(req.user),
+            status: { $in: ["draft", "partial", "overdue"] },
+        }).sort({ createdAt: -1 });
+
+        const orgId = getOrganizationId(req.user);
+        const orgStr = String(orgId);
+        let resultBill = null;
+        let deletedBillId = null;
+        let createdBill = null;
+        // أرقام الطاولات للتوست/الإشعار (نقل)
+        let sourceTableNumber = null;
+        let targetTableNumber = targetTable.number ?? null;
+        try {
+            if (sourceTableId) {
+                const st = await Table.findById(sourceTableId).select('number').lean().catch(() => null);
+                if (st) sourceTableNumber = st.number;
+            }
+        } catch {}
+
+        // حالة 1: الطلب وحيد في فاتورته
+        if (isSoleOrder) {
+            if (destBill) {
+                // دمج: نقل الطلب لفاتورة الوجهة وحذف الفاتورة المصدر
+                // نقل مرجع الطلب
+                order.table = targetTableId;
+                order.bill = destBill._id;
+                await order.save();
+                writeToAtlas('orders', 'upsert', order.toObject ? order.toObject() : order, { _id: order._id });
+                // دمج الأوامر
+                if (!destBill.orders.some((oid) => String(oid) === String(order._id))) {
+                    destBill.orders.push(order._id);
+                }
+                // دمج مدفوعات الأصناف الخاصة بهذا الطلب إن وجدت
+                const movingPayments = (sourceBill.itemPayments || []).filter((ip) => String(ip.orderId) === String(order._id));
+                // باقي مدفوعات المصدر (إن كان وحيد فكلها له) - ننقل كل itemPayments
+                // للبساطة: إذا كان وحيد، انقل كل itemPayments
+                const allItemPaymentsToMove = sourceBill.itemPayments || [];
+                for (const ip of allItemPaymentsToMove) {
+                    // تجنب التكرار
+                    const exists = destBill.itemPayments.some((d) => d.itemId === ip.itemId && String(d.orderId) === String(ip.orderId));
+                    if (!exists) {
+                        destBill.itemPayments.push(ip.toObject ? ip.toObject() : { ...ip });
+                    }
+                }
+                // دمج الدفعات العامة والجلسات إن وجدت (وحيد لكن قد يكون فيها payments)
+                if (Array.isArray(sourceBill.payments) && sourceBill.payments.length > 0) {
+                    for (const p of sourceBill.payments) {
+                        destBill.payments.push(p.toObject ? p.toObject() : { ...p });
+                    }
+                }
+                if (Array.isArray(sourceBill.paymentHistory) && sourceBill.paymentHistory.length > 0) {
+                    destBill.paymentHistory.push(...sourceBill.paymentHistory.map((h) => (h.toObject ? h.toObject() : { ...h })));
+                }
+                // ملاحظة دمج
+                const mergeNote = `\n[تم دمج فاتورة ${sourceBill.billNumber} — الطلب ${order.orderNumber}]`;
+                destBill.notes = (destBill.notes || "") + mergeNote;
+                await destBill.calculateSubtotal();
+                await destBill.save();
+                writeToAtlas('bills', 'upsert', destBill.toObject(), { _id: destBill._id });
+                // حذف المصدر
+                const oldId = sourceBill._id;
+                const oldNumber = sourceBill.billNumber;
+                try {
+                    const { deleteFromBothDatabases } = await import("../utils/deleteHelper.js");
+                    await deleteFromBothDatabases(sourceBill, "bills", `bill ${oldNumber}`);
+                } catch {
+                    try { await sourceBill.deleteOne(); } catch {}
+                    try { writeToAtlas('bills', 'delete', null, { _id: oldId }); } catch {}
+                }
+                try { await createTombstone("bills", oldId, orgId, req.user._id); } catch {}
+                deletedBillId = oldId;
+                resultBill = destBill;
+                // إشعارات وبث: نقل الطلب — حذف الفاتورة الفارغة صامت (نتيجة النقل، ليست حذفاً مقصوداً)
+                if (req.io) {
+                    try {
+                        order.fromTableNumber = sourceTableNumber;
+                        req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('order:updated', order);
+                        req.io.notifyOrderUpdate("transferred", order, orgId);
+                    } catch {}
+                    try { req.io.notifyBillUpdate("deleted", { _id: oldId, billNumber: oldNumber, table: sourceTableId }, orgId, { silent: true }); } catch {}
+                    try { req.io.notifyBillUpdate("updated", destBill, orgId, { silent: true }); } catch {}
+                }
+            } else {
+                // نقل الفاتورة كاملة (مع طلبها الوحيد)
+                sourceBill.table = targetTableId;
+                // تحديث اسم العميل ليطابق الطاولة الجديدة إن كان يمثل طاولة
+                try {
+                    const userLang = req.user.preferences?.language || 'ar';
+                    const { getTableName } = await import("../utils/translations.js");
+                    // إذا كان اسم العميل يطابق طاولة قديمة، حدّثه
+                    // نبقيه بسيط: لا نغير إلا إذا كان يبدو كـ "طاولة X"
+                    if (sourceBill.customerName && sourceTableId) {
+                        const oldTable = await Table.findById(sourceTableId).select('number').lean().catch(() => null);
+                        if (oldTable && sourceBill.customerName.includes(String(oldTable.number))) {
+                            sourceBill.customerName = getTableName(targetTable.number, userLang);
+                        }
+                    }
+                } catch {}
+                await sourceBill.calculateSubtotal();
+                await sourceBill.save();
+                writeToAtlas('bills', 'upsert', sourceBill.toObject(), { _id: sourceBill._id });
+                order.table = targetTableId;
+                await order.save();
+                writeToAtlas('orders', 'upsert', order.toObject(), { _id: order._id });
+                resultBill = sourceBill;
+                if (req.io) {
+                    try {
+                        order.fromTableNumber = sourceTableNumber;
+                        req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('order:updated', order);
+                        req.io.notifyOrderUpdate("transferred", order, orgId);
+                    } catch {}
+                    try { req.io.notifyBillUpdate("updated", sourceBill, orgId, { silent: true }); } catch {}
+                }
+            }
+        } else {
+            // حالة 2: الفاتورة فيها طلبات/جلسات أخرى — ننقل الطلب فقط
+            if (destBill) {
+                // سحب الطلب من المصدر
+                sourceBill.orders = sourceBill.orders.filter((oid) => String(oid) !== String(order._id));
+                // سحب مدفوعات الأصناف المتعلقة بهذا الطلب
+                const movingItemPayments = (sourceBill.itemPayments || []).filter((ip) => String(ip.orderId) === String(order._id));
+                sourceBill.itemPayments = (sourceBill.itemPayments || []).filter((ip) => String(ip.orderId) !== String(order._id));
+                await sourceBill.calculateSubtotal();
+                await sourceBill.save();
+                writeToAtlas('bills', 'upsert', sourceBill.toObject(), { _id: sourceBill._id });
+                // إضافة للوجهة
+                if (!destBill.orders.some((oid) => String(oid) === String(order._id))) {
+                    destBill.orders.push(order._id);
+                }
+                for (const ip of movingItemPayments) {
+                    const exists = destBill.itemPayments.some((d) => d.itemId === ip.itemId && String(d.orderId) === String(ip.orderId));
+                    if (!exists) destBill.itemPayments.push(ip.toObject ? ip.toObject() : { ...ip });
+                }
+                await destBill.calculateSubtotal();
+                await destBill.save();
+                writeToAtlas('bills', 'upsert', destBill.toObject(), { _id: destBill._id });
+                // تحديث الطلب
+                order.table = targetTableId;
+                order.bill = destBill._id;
+                await order.save();
+                writeToAtlas('orders', 'upsert', order.toObject(), { _id: order._id });
+                resultBill = destBill;
+                if (req.io) {
+                    try {
+                        order.fromTableNumber = sourceTableNumber;
+                        req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('order:updated', order);
+                        req.io.notifyOrderUpdate("transferred", order, orgId);
+                    } catch {}
+                    try { req.io.notifyBillUpdate("updated", sourceBill, orgId, { silent: true }); } catch {}
+                    try { req.io.notifyBillUpdate("updated", destBill, orgId, { silent: true }); } catch {}
+                }
+            } else {
+                // إنشاء فاتورة جديدة في الوجهة
+                let instanceId = req.headers['x-instance-id'];
+                if (!instanceId) {
+                    try { instanceId = await getInstanceId(); } catch { instanceId = 'UNKNOWN'; }
+                }
+                // سحب من المصدر
+                sourceBill.orders = sourceBill.orders.filter((oid) => String(oid) !== String(order._id));
+                const movingItemPayments = (sourceBill.itemPayments || []).filter((ip) => String(ip.orderId) === String(order._id));
+                sourceBill.itemPayments = (sourceBill.itemPayments || []).filter((ip) => String(ip.orderId) !== String(order._id));
+                await sourceBill.calculateSubtotal();
+                await sourceBill.save();
+                writeToAtlas('bills', 'upsert', sourceBill.toObject(), { _id: sourceBill._id });
+                // إنشاء الجديد
+                let newBill = null;
+                for (let attempt = 0; attempt < 10; attempt++) {
+                    try {
+                        newBill = await Bill.create({
+                            table: targetTableId,
+                            orders: [order._id],
+                            sessions: [],
+                            subtotal: 0,
+                            total: 0,
+                            discount: 0,
+                            tax: 0,
+                            paid: 0,
+                            remaining: 0,
+                            status: 'draft',
+                            paymentMethod: 'cash',
+                            billType: 'cafe',
+                            fulfillmentType: 'dine_in',
+                            customerName: `طاولة ${targetTable.number}`,
+                            createdBy: req.user._id,
+                            organization: orgId,
+                            instanceId: instanceId,
+                            itemPayments: movingItemPayments.map((ip) => (ip.toObject ? ip.toObject() : { ...ip })),
+                        });
+                        break;
+                    } catch (e) {
+                        if (e.code !== 11000 || attempt === 9) throw e;
+                    }
+                }
+                await newBill.calculateSubtotal();
+                await newBill.save();
+                writeToAtlas('bills', 'upsert', newBill.toObject(), { _id: newBill._id });
+                order.table = targetTableId;
+                order.bill = newBill._id;
+                await order.save();
+                writeToAtlas('orders', 'upsert', order.toObject(), { _id: order._id });
+                createdBill = newBill;
+                resultBill = newBill;
+                if (req.io) {
+                    try {
+                        order.fromTableNumber = sourceTableNumber;
+                        req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('order:updated', order);
+                        req.io.notifyOrderUpdate("transferred", order, orgId);
+                    } catch {}
+                    try { req.io.notifyBillUpdate("updated", sourceBill, orgId, { silent: true }); } catch {}
+                    try { req.io.notifyBillUpdate("created", newBill, orgId, { silent: true }); } catch {}
+                }
+            }
+        }
+        // تحديث حالة الطاولتين
+        try {
+            const { updateTableStatusIfNeeded } = await import("../utils/tableUtils.js");
+            if (sourceTableId) await updateTableStatusIfNeeded(sourceTableId, orgId, req.io);
+            await updateTableStatusIfNeeded(targetTableId, orgId, req.io);
+        } catch {}
+        return res.json({
+            success: true,
+            message: "تم نقل الطلب بنجاح",
+            data: { order, bill: resultBill, deletedBillId, createdBill },
+        });
+    } catch (error) {
+        Logger.error("moveOrderToTable failed:", error);
+        return res.status(500).json({ success: false, message: error.message });
+    }
+};

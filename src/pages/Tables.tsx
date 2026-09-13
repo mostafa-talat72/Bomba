@@ -137,6 +137,9 @@ const Tables: React.FC = () => {
   const [showChangeTableModal, setShowChangeTableModal] = useState(false);
   const [newTableNumber, setNewTableNumber] = useState<string | null>(null);
   const [tableChangeSearch, setTableChangeSearch] = useState('');
+  const [orderToMove, setOrderToMove] = useState<Order | null>(null);
+  const [showMoveOrderModal, setShowMoveOrderModal] = useState(false);
+  const [isMovingOrder, setIsMovingOrder] = useState(false);
   const [isChangingTable, setIsChangingTable] = useState(false);
   const [paymentAmount, setPaymentAmount] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'card' | 'transfer'>('cash');
@@ -2850,6 +2853,54 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
     handleOpenChangeTableModal(unpaid[0]);
   }, [tableCardData, handleOpenChangeTableModal]);
 
+  // نقل طلب واحد لطاولة أخرى — يراعي الطلب مع الفاتورة حسب القواعد المطلوبة
+  const handleOpenMoveOrderModal = (order: Order) => {
+    setOrderToMove(order);
+    setShowMoveOrderModal(true);
+  };
+  const handleMoveOrder = async (targetTableId: string) => {
+    if (!orderToMove || !targetTableId) return;
+    setIsMovingOrder(true);
+    try {
+      const res: any = await api.moveOrderToTable(orderToMove._id || (orderToMove as any).id, targetTableId);
+      if (res?.success) {
+        showNotification('تم نقل الطلب بنجاح', 'success');
+        setShowMoveOrderModal(false);
+        setOrderToMove(null);
+        // تحديث محلي سريع + مزامنة
+        if (res.data?.order) {
+          const updated = res.data.order;
+          setOrders(prev => prev.map((o: any) => String(o._id || o.id) === String(updated._id || updated.id) ? updated : o));
+        } else {
+          // fallback refetch
+          await Promise.all([fetchBills(), fetchOrders(), fetchTables()]);
+        }
+        if (res.data?.bill) {
+          const b = res.data.bill;
+          setBills(prev => {
+            const exists = prev.some((x: any) => String(x._id || x.id) === String(b._id || b.id));
+            if (exists) return prev.map((x: any) => String(x._id || x.id) === String(b._id || b.id) ? b : x);
+            return [...prev, b];
+          });
+        }
+        if (res.data?.deletedBillId) {
+          setBills(prev => prev.filter((x: any) => String(x._id || x.id) !== String(res.data.deletedBillId)));
+        }
+        if (res.data?.createdBill) {
+          const cb = res.data.createdBill;
+          setBills(prev => [...prev, cb]);
+        }
+        scheduleBackgroundRefetch(true);
+      } else {
+        showNotification(res?.message || 'فشل نقل الطلب', 'error');
+      }
+    } catch (e: any) {
+      showNotification(e?.message || 'فشل نقل الطلب', 'error');
+    } finally {
+      setIsMovingOrder(false);
+    }
+  };
+
   const stableQuickChangeTable = useCallback((tb: Table, e: React.MouseEvent) => { handleQuickChangeTable(tb, e); }, [handleQuickChangeTable]);
 
   const handleQuickEditBill = useCallback((tb: Table, e: React.MouseEvent) => {
@@ -3573,6 +3624,10 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
                                     <button onClick={(e) => { e.stopPropagation(); handleEditOrder(order); }} title={t('cafe.tableOrdersModal.edit')}
                                       className="w-8 h-8 flex items-center justify-center bg-green-100 dark:bg-green-900/40 text-green-600 hover:bg-green-200 dark:hover:bg-green-800 rounded-lg transition-all shadow-sm">
                                       <Edit className="h-4 w-4" />
+                                    </button>
+                                    <button onClick={(e) => { e.stopPropagation(); handleOpenMoveOrderModal(order); }} title="نقل الطلب لطاولة أخرى"
+                                      className="w-8 h-8 flex items-center justify-center bg-purple-100 dark:bg-purple-900/40 text-purple-600 hover:bg-purple-200 dark:hover:bg-purple-800 rounded-lg transition-all shadow-sm">
+                                      <ArrowLeftRight className="h-3.5 w-3.5" />
                                     </button>
                                     <button onClick={(e) => { e.stopPropagation(); handleDeleteOrder(order); }} title={t('cafe.tableOrdersModal.delete')}
                                       className="w-8 h-8 flex items-center justify-center hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-all text-gray-400">
@@ -4323,6 +4378,17 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
           changing={isChangingTable}
           onConfirm={(id) => { setNewTableNumber(id); void handleChangeTable(id); }}
           onClose={() => { setShowChangeTableModal(false); setNewTableNumber(null); setTableChangeSearch(""); }}
+        />
+      )}
+      {showMoveOrderModal && orderToMove && (
+        <ChangeTableModal
+          billLabel={`طلب #${orderToMove.orderNumber}`}
+          tables={tables}
+          excludeTableId={String((orderToMove.table as any)?._id || (orderToMove as any)?.id || (orderToMove as any).table || "")}
+          getSectionName={getTableSectionName}
+          changing={isMovingOrder}
+          onConfirm={(id) => handleMoveOrder(id)}
+          onClose={() => { setShowMoveOrderModal(false); setOrderToMove(null); }}
         />
       )}
 
