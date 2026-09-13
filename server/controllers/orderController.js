@@ -160,17 +160,20 @@ async function deductInventoryForOrder(order, userId, billNumber = null) {
 
         await InventoryItem.updateOne(
             { _id: inventoryItemId },
-            { $push: { stockMovements: {
-                type: "out",
-                quantity: convertedQuantityNeeded,
-                reason,
-                user: userId,
-                orderId: order._id.toString(),
-                price: finalPrice,
-                warehouse: null,
-                totalCost: finalTotalCost,
-                timestamp: new Date(),
-            }}}
+            {
+                $push: { stockMovements: {
+                    type: "out",
+                    quantity: convertedQuantityNeeded,
+                    reason,
+                    user: userId,
+                    orderId: order._id.toString(),
+                    price: finalPrice,
+                    warehouse: null,
+                    totalCost: finalTotalCost,
+                    timestamp: new Date(),
+                }},
+                $inc: { currentStock: -Math.abs(convertedQuantityNeeded) }
+            }
         );
     }
 }
@@ -1529,17 +1532,15 @@ export const updateOrder = async (req, res) => {
         // Fire-and-forget Atlas write
         writeToAtlas('orders', 'upsert', order.toObject ? order.toObject() : order, { _id: order._id });
 
-        // تعديل المخزون في الخلفية — لا يحجب الاستجابة
+        // تعديل المخزون بشكل synchronous لضمان عدم فقدان البيانات
         if (oldOrderDataForInventory) {
-            setImmediate(async () => {
-                try {
-                    await adjustInventoryForOrderUpdate(oldOrderDataForInventory, order, req.user._id);
-                    Logger.info(`✓ تم تعديل المخزون للطلب ${order.orderNumber}`);
-                    if (req.io) req.io.notifyInventoryUpdate({ type: 'adjusted', orderId: order._id, orderNumber: order.orderNumber, timestamp: new Date() }, getOrganizationId(req.user));
-                } catch (inventoryError) {
-                    Logger.error('خطأ في تعديل المخزون:', inventoryError);
-                }
-            });
+            try {
+                await adjustInventoryForOrderUpdate(oldOrderDataForInventory, order, req.user._id);
+                Logger.info(`✓ تم تعديل المخزون للطلب ${order.orderNumber}`);
+                if (req.io) req.io.notifyInventoryUpdate({ type: 'adjusted', orderId: order._id, orderNumber: order.orderNumber, timestamp: new Date() }, getOrganizationId(req.user));
+            } catch (inventoryError) {
+                Logger.error('خطأ في تعديل المخزون:', inventoryError);
+            }
         }
 
         // Clean up invalid itemPayments and recalculate payments for this order's bill (if exists)
@@ -2100,11 +2101,34 @@ export const deleteOrder = async (req, res) => {
             const atlasConnection = dualDatabaseManager.getAtlasConnection();
             if (atlasConnection) {
                 const atlasOrdersCollection = atlasConnection.collection('orders');
-                atlasOrdersCollection.deleteOne({ _id: orderId }).catch(atlasError => {
+                atlasOrdersCollection.deleteOne({ _id: orderId }).catch(async (atlasError) => {
                     Logger.warn(`⚠️ Failed to delete order from Atlas: ${atlasError.message}`);
+                    // Enqueue for retry when Atlas comes back
+                    try {
+                        const { default: syncQueueManager } = await import('../services/sync/syncQueueManager.js');
+                        syncQueueManager.enqueue({
+                            type: "delete",
+                            collection: "orders",
+                            filter: { _id: orderId },
+                            origin: "local",
+                            instanceId: "delete-retry",
+                            timestamp: new Date(),
+                        });
+                    } catch (e) {}
                 });
             } else {
-                Logger.warn(`⚠️ Atlas connection not available - order will be synced later`);
+                Logger.warn(`⚠️ Atlas connection not available - enqueueing order delete for retry`);
+                try {
+                    const { default: syncQueueManager } = await import('../services/sync/syncQueueManager.js');
+                    syncQueueManager.enqueue({
+                        type: "delete",
+                        collection: "orders",
+                        filter: { _id: orderId },
+                        origin: "local",
+                        instanceId: "delete-retry",
+                        timestamp: new Date(),
+                    });
+                } catch (e) {}
             }
             // Tombstone لمنع الإحياء لمدة سنة
             try { await createTombstone('orders', orderId, getOrganizationId(req.user), req.user._id); } catch(e) {}
@@ -2432,58 +2456,12 @@ export const updateOrderStatus = async (req, res) => {
             updateData.deliveredTime = new Date();
         }
 
-        // استرداد المخزون عند إلغاء الطلب
+        // استرداد المخزون عند إلغاء الطلب — يستعيد كل المخزون (ليس فقط المُعدّد)
         if (status === "cancelled" && order.status !== "cancelled") {
             try {
-                const MenuItem = (await import("../models/MenuItem.js"))
-                    .default;
-                const InventoryItem = (
-                    await import("../models/InventoryItem.js")
-                ).default;
-
-                // دالة لتحويل الوحدات
-
-                for (const item of order.items) {
-                    if (
-                        item.preparedCount &&
-                        item.preparedCount > 0 &&
-                        item.menuItem
-                    ) {
-                        const menuItem = await MenuItem.findById(item.menuItem);
-                        if (
-                            menuItem &&
-                            menuItem.ingredients &&
-                            menuItem.ingredients.length > 0
-                        ) {
-                            for (const ingredient of menuItem.ingredients) {
-                                const inventoryItem =
-                                    await InventoryItem.findById(
-                                        ingredient.item
-                                    );
-                                if (inventoryItem) {
-                                    // حساب الكمية المستردة مع التحويل
-                                    const quantityToRestore =
-                                        convertQuantity(
-                                            ingredient.quantity,
-                                            ingredient.unit,
-                                            inventoryItem.unit
-                                        ) * item.preparedCount;
-
-                                    // استرداد المخزون
-                                    await inventoryItem.addStockMovement(
-                                        "in",
-                                        quantityToRestore,
-                                        `استرداد من إلغاء طلب رقم ${order.orderNumber}`,
-                                        req.user._id,
-                                        order._id.toString()
-                                    );
-                                }
-                            }
-                        }
-                    }
-                }
+                await restoreInventoryForOrder(order, req.user._id);
             } catch (error) {
-                // لا نوقف عملية الإلغاء إذا فشل استرداد المخزون
+                Logger.error(`❌ Failed to restore inventory for cancelled order ${order.orderNumber}: ${error.message}`);
             }
         }
 

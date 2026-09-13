@@ -2134,6 +2134,17 @@ export const cancelBill = async (req, res) => {
         bill.remaining = 0;
         await bill.save();
 
+        // استرداد المخزون لكل الطلبات المرتبطة بالفاتورة
+        try {
+            const orderController = await import('./orderController.js');
+            const orders = await Order.find({ bill: bill._id });
+            for (const order of orders) {
+                await orderController.restoreInventoryForOrder(order, req.user._id);
+            }
+        } catch (inventoryError) {
+            Logger.error(`❌ Failed to restore inventory for cancelled bill ${bill.billNumber}: ${inventoryError.message}`);
+        }
+
         // Remove bill reference from orders and sessions
         await Order.updateMany({ bill: bill._id }, { $unset: { bill: 1 } });
 
@@ -2299,11 +2310,38 @@ export const deleteBill = async (req, res) => {
                     const atlasOrdersCollection = atlasConnection.collection('orders');
                     atlasOrdersCollection.deleteMany({ 
                         _id: { $in: orderIds } 
-                    }).catch(atlasError => {
+                    }).catch(async (atlasError) => {
                         Logger.error(`❌ Failed to delete orders from Atlas: ${atlasError.message}`);
+                        // Enqueue each order delete for retry
+                        try {
+                            const { default: syncQueueManager } = await import('../services/sync/syncQueueManager.js');
+                            for (const id of orderIds) {
+                                syncQueueManager.enqueue({
+                                    type: "delete",
+                                    collection: "orders",
+                                    filter: { _id: id },
+                                    origin: "local",
+                                    instanceId: "delete-retry",
+                                    timestamp: new Date(),
+                                });
+                            }
+                        } catch (e) {}
                     });
                 } else {
-                    Logger.warn(`⚠️ Atlas connection not available - orders will be synced for deletion later`);
+                    Logger.warn(`⚠️ Atlas not available - enqueueing orders deletes for retry`);
+                    try {
+                        const { default: syncQueueManager } = await import('../services/sync/syncQueueManager.js');
+                        for (const id of orderIds) {
+                            syncQueueManager.enqueue({
+                                type: "delete",
+                                collection: "orders",
+                                filter: { _id: id },
+                                origin: "local",
+                                instanceId: "delete-retry",
+                                timestamp: new Date(),
+                            });
+                        }
+                    } catch (e) {}
                 }
             } else {
                 Logger.info(`ℹ️ No orders to delete for bill ${bill.billNumber}`);
@@ -2322,11 +2360,38 @@ export const deleteBill = async (req, res) => {
                     const atlasSessionsCollection = atlasConnection.collection('sessions');
                     atlasSessionsCollection.deleteMany({ 
                         _id: { $in: sessionIds } 
-                    }).catch(atlasError => {
+                    }).catch(async (atlasError) => {
                         Logger.error(`❌ Failed to delete sessions from Atlas: ${atlasError.message}`);
+                        // Enqueue each session delete for retry
+                        try {
+                            const { default: syncQueueManager } = await import('../services/sync/syncQueueManager.js');
+                            for (const id of sessionIds) {
+                                syncQueueManager.enqueue({
+                                    type: "delete",
+                                    collection: "sessions",
+                                    filter: { _id: id },
+                                    origin: "local",
+                                    instanceId: "delete-retry",
+                                    timestamp: new Date(),
+                                });
+                            }
+                        } catch (e) {}
                     });
                 } else {
-                    Logger.warn(`⚠️ Atlas connection not available - sessions will be synced for deletion later`);
+                    Logger.warn(`⚠️ Atlas not available - enqueueing sessions deletes for retry`);
+                    try {
+                        const { default: syncQueueManager } = await import('../services/sync/syncQueueManager.js');
+                        for (const id of sessionIds) {
+                            syncQueueManager.enqueue({
+                                type: "delete",
+                                collection: "sessions",
+                                filter: { _id: id },
+                                origin: "local",
+                                instanceId: "delete-retry",
+                                timestamp: new Date(),
+                            });
+                        }
+                    } catch (e) {}
                 }
             } else {
                 Logger.info(`ℹ️ No sessions to delete for bill ${bill.billNumber}`);
@@ -2339,11 +2404,34 @@ export const deleteBill = async (req, res) => {
             // Delete the bill from Atlas MongoDB مباشرة (non-blocking)
             if (atlasConnection) {
                 const atlasBillsCollection = atlasConnection.collection('bills');
-                atlasBillsCollection.deleteOne({ _id: bill._id }).catch(atlasError => {
+                atlasBillsCollection.deleteOne({ _id: bill._id }).catch(async (atlasError) => {
                     Logger.warn(`⚠️ Failed to delete bill from Atlas: ${atlasError.message}`);
+                    // Enqueue for retry when Atlas comes back
+                    try {
+                        const { default: syncQueueManager } = await import('../services/sync/syncQueueManager.js');
+                        syncQueueManager.enqueue({
+                            type: "delete",
+                            collection: "bills",
+                            filter: { _id: bill._id },
+                            origin: "local",
+                            instanceId: "delete-retry",
+                            timestamp: new Date(),
+                        });
+                    } catch (e) {}
                 });
             } else {
-                Logger.warn(`⚠️ Atlas connection not available - bill will be synced later`);
+                Logger.warn(`⚠️ Atlas not available - enqueueing bill delete for retry`);
+                try {
+                    const { default: syncQueueManager } = await import('../services/sync/syncQueueManager.js');
+                    syncQueueManager.enqueue({
+                        type: "delete",
+                        collection: "bills",
+                        filter: { _id: bill._id },
+                        origin: "local",
+                        instanceId: "delete-retry",
+                        timestamp: new Date(),
+                    });
+                } catch (e) {}
             }
 
             // Tombstones لمنع الإحياء لمدة سنة (حتى لو الجهاز الآخر offline)

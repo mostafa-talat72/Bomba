@@ -1,8 +1,39 @@
 import dualDatabaseManager from "../config/dualDatabaseManager.js";
 import Logger from "../middleware/logger.js";
 
+// Throttle "Atlas not available" warnings — log at most once per 30s
+let _lastAtlasUnavailableLog = 0;
+const ATLAS_UNAVAILABLE_LOG_THROTTLE_MS = 30000;
+
+/**
+ * Enqueue a failed Atlas write to sync queue for retry
+ */
+async function enqueueForRetry(collection, operation, data, filter) {
+  try {
+    const { default: syncQueueManager } = await import("../services/sync/syncQueueManager.js");
+    const op = {
+      type: operation === "insert" || operation === "upsert" ? "insert" : operation,
+      collection,
+      origin: "local",
+      instanceId: "write-retry",
+      timestamp: new Date(),
+    };
+    if (operation === "delete") {
+      op.filter = filter || {};
+    } else {
+      op.data = data || {};
+      op.filter = filter || {};
+    }
+    syncQueueManager.enqueue(op);
+    Logger.debug(`📋 Atlas ${operation} enqueued for retry: ${collection}`);
+  } catch (err) {
+    Logger.error(`❌ Failed to enqueue Atlas write for retry: ${err.message}`);
+  }
+}
+
 /**
  * Fire-and-forget Atlas write - does not block the response
+ * On failure, enqueues to sync queue for retry when Atlas comes back
  * @param {string} collection - Collection name
  * @param {'insert'|'upsert'|'update'|'delete'} operation - Operation type
  * @param {Object} data - Document data (for insert/upsert/update)
@@ -11,8 +42,13 @@ import Logger from "../middleware/logger.js";
 export function writeToAtlas(collection, operation, data, filter = {}) {
   const atlasConnection = dualDatabaseManager.getAtlasConnection();
   if (!atlasConnection) {
-    Logger.warn(`Atlas not available for ${operation} on ${collection} - will sync later`);
-    return;
+    const now = Date.now();
+    if (now - _lastAtlasUnavailableLog > ATLAS_UNAVAILABLE_LOG_THROTTLE_MS) {
+      Logger.warn(`Atlas not available for ${operation} on ${collection} — enqueueing for retry`);
+      _lastAtlasUnavailableLog = now;
+    }
+    enqueueForRetry(collection, operation, data, filter);
+    return Promise.resolve();
   }
 
   // Fire and forget - don't await
@@ -39,7 +75,8 @@ export function writeToAtlas(collection, operation, data, filter = {}) {
           break;
       }
     } catch (err) {
-      Logger.warn(`Atlas ${operation} failed for ${collection}: ${err.message}`);
+      Logger.warn(`Atlas ${operation} failed for ${collection}: ${err.message} - enqueueing for retry`);
+      enqueueForRetry(collection, operation, data, filter);
     }
   })();
 
@@ -52,7 +89,16 @@ export function writeToAtlas(collection, operation, data, filter = {}) {
 export function writeBatchToAtlas(collection, operations) {
   const atlasConnection = dualDatabaseManager.getAtlasConnection();
   if (!atlasConnection) {
-    Logger.warn(`Atlas not available for batch write on ${collection} - will sync later`);
+    const now = Date.now();
+    if (now - _lastAtlasUnavailableLog > ATLAS_UNAVAILABLE_LOG_THROTTLE_MS) {
+      Logger.warn(`Atlas not available for batch write on ${collection} — enqueueing for retry`);
+      _lastAtlasUnavailableLog = now;
+    }
+    (async () => {
+      for (const op of operations) {
+        await enqueueForRetry(collection, op.type, op.data, op.filter);
+      }
+    })();
     return;
   }
 
@@ -90,7 +136,14 @@ export function writeBatchToAtlas(collection, operations) {
         await atlasConnection.collection(collection).bulkWrite(bulkOps, { ordered: false });
       }
     } catch (err) {
-      Logger.warn(`Atlas batch write failed for ${collection}: ${err.message}`);
+      const now = Date.now();
+      if (now - _lastAtlasUnavailableLog > ATLAS_UNAVAILABLE_LOG_THROTTLE_MS) {
+        Logger.warn(`Atlas batch write failed for ${collection}: ${err.message} — enqueueing for retry`);
+        _lastAtlasUnavailableLog = now;
+      }
+      for (const op of operations) {
+        await enqueueForRetry(collection, op.type, op.data, op.filter);
+      }
     }
   })();
 }

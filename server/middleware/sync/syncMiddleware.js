@@ -166,16 +166,20 @@ function validateDocumentForSync(doc, collectionName) {
  */
 function postSaveHook(doc, next) {
     try {
-        const collectionName = this.collection.name;
+        const collectionName = this?.collection?.name;
         
-        // 🔍 DEBUG: Log that middleware was triggered
-        Logger.info(`🔍 [MIDDLEWARE] postSaveHook triggered for ${collectionName} (${doc._id})`);
+        // Skip if collection name is undefined (subdocument or uninitialized model)
+        if (!collectionName) {
+            return next();
+        }
+        
+        Logger.debug(`🔍 [MIDDLEWARE] postSaveHook triggered for ${collectionName} (${doc._id})`);
 
         const needsAtlas = shouldSync(collectionName);
         const needsLan = shouldLanSync(collectionName);
         const needsMesh = shouldMeshSync(collectionName);
         if (!needsAtlas && !needsLan && !needsMesh) {
-            Logger.info(`⏭️  [MIDDLEWARE] Skipping sync for ${collectionName} (not in sync list)`);
+            Logger.debug(`⏭️  [MIDDLEWARE] Skipping sync for ${collectionName} (not in sync list)`);
             return next();
         }
 
@@ -203,8 +207,8 @@ function postSaveHook(doc, next) {
 
         if (needsAtlas) {
             syncQueueManager.enqueue(operation);
-            Logger.info(`✅ [MIDDLEWARE] Operation queued: insert on ${collectionName} (${doc._id})`);
-            Logger.info(`📊 [MIDDLEWARE] Queue size now: ${syncQueueManager.size()}`);
+            Logger.debug(`✅ [MIDDLEWARE] Operation queued: insert on ${collectionName} (${doc._id})`);
+            Logger.debug(`📊 [MIDDLEWARE] Queue size now: ${syncQueueManager.size()}`);
         }
         if (needsLan || needsMesh) broadcastToLan(operation);
     } catch (error) {
@@ -221,16 +225,16 @@ function postSaveHook(doc, next) {
  */
 function postUpdateHook(result, next) {
     try {
-        const collectionName = this.model.collection.name;
+        const collectionName = this?.model?.collection?.name;
+        if (!collectionName) return next();
         
-        // 🔍 DEBUG: Log that middleware was triggered
-        Logger.info(`🔍 [MIDDLEWARE] postUpdateHook triggered for ${collectionName}`);
+        Logger.debug(`🔍 [MIDDLEWARE] postUpdateHook triggered for ${collectionName}`);
 
         const needsAtlas = shouldSync(collectionName);
         const needsLan = shouldLanSync(collectionName);
         const needsMesh = shouldMeshSync(collectionName);
         if (!needsAtlas && !needsLan && !needsMesh) {
-            Logger.info(`⏭️  [MIDDLEWARE] Skipping sync for ${collectionName} (not in sync list)`);
+            Logger.debug(`⏭️  [MIDDLEWARE] Skipping sync for ${collectionName} (not in sync list)`);
             return next();
         }
 
@@ -273,8 +277,8 @@ function postUpdateHook(result, next) {
 
         if (needsAtlas) {
             syncQueueManager.enqueue(operation);
-            Logger.info(`✅ [MIDDLEWARE] Operation queued: update on ${collectionName}`);
-            Logger.info(`📊 [MIDDLEWARE] Queue size now: ${syncQueueManager.size()}`);
+            Logger.debug(`✅ [MIDDLEWARE] Operation queued: update on ${collectionName}`);
+            Logger.debug(`📊 [MIDDLEWARE] Queue size now: ${syncQueueManager.size()}`);
         }
         if (needsLan || needsMesh) broadcastToLan(operation);
     } catch (error) {
@@ -294,7 +298,8 @@ function postFindOneAndUpdateHook(doc, next) {
             return next();
         }
 
-        const collectionName = this.model.collection.name;
+        const collectionName = this?.model?.collection?.name;
+        if (!collectionName) return next();
 
         const needsAtlas = shouldSync(collectionName);
         const needsLan = shouldLanSync(collectionName);
@@ -338,7 +343,8 @@ function postFindOneAndUpdateHook(doc, next) {
  */
 function postRemoveHook(doc, next) {
     try {
-        const collectionName = this.collection.name;
+        const collectionName = this?.collection?.name;
+        if (!collectionName) return next();
 
         const needsAtlas = shouldSync(collectionName);
         const needsLan = shouldLanSync(collectionName);
@@ -379,7 +385,8 @@ function postFindOneAndDeleteHook(doc, next) {
             return next();
         }
 
-        const collectionName = this.model.collection.name;
+        const collectionName = this?.model?.collection?.name;
+        if (!collectionName) return next();
 
         const needsAtlas = shouldSync(collectionName);
         const needsLan = shouldLanSync(collectionName);
@@ -419,7 +426,8 @@ function postFindOneAndDeleteHook(doc, next) {
  */
 function postDeleteOneHook(result, next) {
     try {
-        const collectionName = this.model.collection.name;
+        const collectionName = this?.model?.collection?.name;
+        if (!collectionName) return next();
 
         const needsAtlas = shouldSync(collectionName);
         const needsLan = shouldLanSync(collectionName);
@@ -464,7 +472,8 @@ function postDeleteOneHook(result, next) {
  */
 function postDeleteManyHook(result, next) {
     try {
-        const collectionName = this.model.collection.name;
+        const collectionName = this?.model?.collection?.name;
+        if (!collectionName) return next();
 
         const needsAtlas = shouldSync(collectionName);
         const needsLan = shouldLanSync(collectionName);

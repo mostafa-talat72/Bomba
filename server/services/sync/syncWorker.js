@@ -13,9 +13,13 @@ class SyncWorker {
     constructor() {
         this.isRunning = false;
         this.isPaused = false;
-        this.processingInterval = syncConfig.workerInterval;
+        this.baseInterval = syncConfig.workerInterval || 5000;
+        this.processingInterval = this.baseInterval;
         this.retryDelays = syncConfig.retryDelays;
         this.processLoopTimer = null;
+        this.atlasUnavailableSince = null;
+        this.lastWarningLog = 0;
+        this.warningLogThrottleMs = 60000; // log Atlas-unavailable at most once/min
         this.stats = {
             totalProcessed: 0,
             successCount: 0,
@@ -24,7 +28,7 @@ class SyncWorker {
             avgProcessTime: 0,
             totalProcessTime: 0,
         };
-        
+
         // Register for Atlas reconnection events
         this.setupReconnectionHandlers();
     }
@@ -83,7 +87,6 @@ class SyncWorker {
      */
     start() {
         if (this.isRunning) {
-            Logger.warn("⚠️ Sync worker is already running");
             return;
         }
 
@@ -94,23 +97,12 @@ class SyncWorker {
 
         this.isRunning = true;
         this.isPaused = false;
-        Logger.info("🚀 Sync worker started");
-        Logger.info(`   - Interval: ${this.processingInterval}ms`);
-        Logger.info(`   - Batch size: ${syncConfig.workerBatchSize}`);
-        Logger.info(`   - Max retries: ${syncConfig.maxRetries}`);
+        this.processingInterval = this.baseInterval;
         
-        // 🔍 DEBUG: Log worker loop type
-        if (this.processingInterval === 0) {
-            Logger.info(`   - Loop type: process.nextTick() (instant processing)`);
-        } else {
-            Logger.info(`   - Loop type: setTimeout(${this.processingInterval}ms)`);
-        }
+        Logger.info(`🚀 Sync worker started (interval: ${this.baseInterval}ms, batch: ${syncConfig.workerBatchSize})`);
         
         // Start processing loop
         this.scheduleNextProcess();
-        
-        Logger.info("✅ Sync worker loop initiated");
-        Logger.info("🔍 [WORKER] Worker is now actively monitoring queue...");
     }
 
     /**
@@ -159,80 +151,68 @@ class SyncWorker {
             return;
         }
 
-        // For instant sync (interval = 0), use process.nextTick for better performance
-        // For other intervals, use setTimeout
         const delay = this.processingInterval;
         
-        if (delay === 0) {
-            // Use process.nextTick for truly instant processing
-            // This is faster than setImmediate and ensures continuous processing
-            process.nextTick(() => {
-                this.processQueue()
-                    .then(() => {
-                        this.scheduleNextProcess();
-                    })
-                    .catch(error => {
-                        Logger.error('Error in processQueue:', error);
-                        // Continue processing even after error
-                        this.scheduleNextProcess();
-                    });
-            });
-        } else {
-            this.processLoopTimer = setTimeout(() => {
-                this.processQueue()
-                    .then(() => {
-                        this.scheduleNextProcess();
-                    })
-                    .catch(error => {
-                        Logger.error('Error in processQueue:', error);
-                        // Continue processing even after error
-                        this.scheduleNextProcess();
-                    });
-            }, delay);
-        }
+        this.processLoopTimer = setTimeout(() => {
+            this.processQueue()
+                .then(() => {
+                    this.scheduleNextProcess();
+                })
+                .catch(error => {
+                    Logger.error('Error in processQueue:', error);
+                    this.scheduleNextProcess();
+                });
+        }, delay);
     }
 
     /**
      * Process the sync queue
-     * معالجة لحظية: يعالج كل العمليات الموجودة في الـ queue فورًا
      */
     async processQueue() {
-        // 🔍 DEBUG: Log every cycle (even if empty) for first 10 seconds
-        const uptime = process.uptime();
-        if (uptime < 10) {
-            Logger.debug(`🔍 [WORKER] processQueue called (uptime: ${uptime.toFixed(1)}s, queue: ${syncQueueManager.size()})`);
-        }
-        
         // Skip if paused or not running
         if (this.isPaused || !this.isRunning) {
-            if (uptime < 10) {
-                Logger.debug(`🔍 [WORKER] Skipping: paused=${this.isPaused}, running=${this.isRunning}`);
-            }
             return;
         }
 
         // Skip if queue is empty
         if (syncQueueManager.isEmpty()) {
-            return;
-        }
-
-        // Log queue size for debugging (only when there are operations)
-        const queueSize = syncQueueManager.size();
-        Logger.info(`📦 [WORKER] Processing queue: ${queueSize} operations pending`);
-
-        // Skip if Atlas is not available
-        if (!dualDatabaseManager.isAtlasAvailable()) {
-            // Log warning periodically (every 100 cycles)
-            if (this.stats.totalProcessed % 100 === 0) {
-                Logger.warn(
-                    `⚠️ Atlas unavailable, ${queueSize} operations queued`
-                );
+            // Reset to base interval when queue is empty
+            if (this.processingInterval !== this.baseInterval) {
+                this.processingInterval = this.baseInterval;
             }
             return;
         }
 
-        // معالجة لحظية: معالجة كل العمليات الموجودة دفعة واحدة
-        // بدلاً من معالجة عملية واحدة فقط
+        // Skip if Atlas is not available — slow down to avoid log spam
+        if (!dualDatabaseManager.isAtlasAvailable()) {
+            if (!this.atlasUnavailableSince) {
+                this.atlasUnavailableSince = Date.now();
+            }
+            // Back off: check every 30s when Atlas is down
+            this.processingInterval = Math.max(this.processingInterval, 30000);
+
+            // Throttled warning — at most once per minute
+            const now = Date.now();
+            if (now - this.lastWarningLog > this.warningLogThrottleMs) {
+                const queueSize = syncQueueManager.size();
+                const offlineSeconds = Math.round((now - this.atlasUnavailableSince) / 1000);
+                Logger.warn(
+                    `⚠️ Atlas offline for ${offlineSeconds}s, ${queueSize} operations queued (checking every ${Math.round(this.processingInterval / 1000)}s)`
+                );
+                this.lastWarningLog = now;
+            }
+            return;
+        }
+
+        // Atlas is available — reset interval and clear offline tracking
+        if (this.atlasUnavailableSince) {
+            Logger.info(`✅ Atlas reconnected after ${Math.round((Date.now() - this.atlasUnavailableSince) / 1000)}s offline`);
+            this.atlasUnavailableSince = null;
+        }
+        this.processingInterval = this.baseInterval;
+
+        // Process batch
+        const queueSize = syncQueueManager.size();
         const batchSize = syncConfig.workerBatchSize || 100;
         const operationsToProcess = Math.min(queueSize, batchSize);
 
@@ -240,7 +220,7 @@ class SyncWorker {
             return;
         }
 
-        // جمع العمليات للمعالجة
+        // Collect operations
         const operations = [];
         for (let i = 0; i < operationsToProcess; i++) {
             const operation = syncQueueManager.dequeue();
@@ -253,13 +233,11 @@ class SyncWorker {
             return;
         }
 
-        // معالجة جميع العمليات بشكل متوازي للسرعة القصوى
         const startTime = Date.now();
         const results = await Promise.allSettled(
             operations.map(op => this.executeOperationWithRetry(op))
         );
 
-        // تحديث الإحصائيات
         let successCount = 0;
         let failureCount = 0;
 
@@ -269,9 +247,6 @@ class SyncWorker {
             if (result.status === 'fulfilled' && result.value.success) {
                 successCount++;
                 this.stats.successCount++;
-                Logger.debug(
-                    `✅ Synced: ${operation.type} on ${operation.collection} (${operation.id})`
-                );
             } else {
                 failureCount++;
                 this.stats.failureCount++;
@@ -286,33 +261,29 @@ class SyncWorker {
         });
 
         const duration = Date.now() - startTime;
-        this.updateProcessTime(duration / operations.length); // متوسط الوقت لكل عملية
+        this.updateProcessTime(duration / operations.length);
 
-        // طباعة ملخص الدفعة
+        // Log batch results
         if (operations.length > 1) {
             Logger.info(
-                `⚡ Batch synced: ${operations.length} operations in ${duration}ms ` +
+                `⚡ Batch synced: ${operations.length} ops in ${duration}ms ` +
                 `(✅ ${successCount} | ❌ ${failureCount})`
             );
-        } else {
-            Logger.info(
+        } else if (successCount === 1) {
+            Logger.debug(
                 `✅ Synced: ${operations[0].type} on ${operations[0].collection} (${operations[0].id})`
             );
         }
 
         this.stats.lastProcessTime = new Date();
 
-        // إشعار المراقب بحدوث تغيير (إذا كان نشطًا)
+        // Notify monitor
         if (global.syncStatusMonitor && global.syncStatusMonitor.isRunning) {
             global.syncStatusMonitor.printOnChange(
                 'Batch Sync',
                 `${operations.length} operations in ${duration}ms`
             );
         }
-
-        // Note: Don't call processQueue directly here
-        // Let scheduleNextProcess handle the loop
-        // This ensures the worker continues running properly
     }
 
     /**

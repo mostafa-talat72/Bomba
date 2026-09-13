@@ -1,43 +1,6 @@
 import mongoose from "mongoose";
-import net from "node:net";
 import Logger from "../middleware/logger.js";
 import syncConfig from "./syncConfig.js";
-
-/**
- * Fast reachability probe for the Atlas host (no credentials involved).
- * Offline devices must skip Atlas in ~seconds, not hang for 35s+ per attempt.
- * @returns {Promise<boolean>} true if TCP connects within timeoutMs
- */
-function probeHostPort(host, port, timeoutMs = 4000) {
-    return new Promise((resolve) => {
-        if (!host) return resolve(false);
-        let done = false;
-        const finish = (ok) => {
-            if (done) return;
-            done = true;
-            try {
-                sock.destroy();
-            } catch {}
-            resolve(ok);
-        };
-        const sock = net.connect({ host, port: port || 27017 });
-        sock.setTimeout(timeoutMs);
-        sock.on("connect", () => finish(true));
-        sock.on("timeout", () => finish(false));
-        sock.on("error", () => finish(false));
-    });
-}
-
-function atlasHostPort(uri) {
-    try {
-        // Strip credentials before parsing — never log the full URI.
-        const m = String(uri).match(/^mongodb(?:\+srv)?:\/\/(?:[^@]+@)?([^/:?]+)(?::(\d+))?/);
-        if (!m) return null;
-        return { host: m[1], port: m[2] ? parseInt(m[2], 10) : 27017 };
-    } catch {
-        return null;
-    }
-}
 
 /**
  * DualDatabaseManager
@@ -55,10 +18,12 @@ class DualDatabaseManager {
         this.maxReconnectAttempts = 10;
         this.reconnectDelay = 5000; // 5 seconds
         this.hourlyRetryScheduled = false;
-        this.reconnectListeners = []; // Listeners for reconnection events
-        this.disconnectListeners = []; // Listeners for disconnection events
+        this._atlasConnecting = false;
+        this._reconnectScheduled = false;
+        this.reconnectListeners = [];
+        this.disconnectListeners = [];
         this.monitoringInterval = null;
-        this.monitoringFrequency = 30000; // Check every 30 seconds
+        this.monitoringFrequency = 30000;
     }
 
     /**
@@ -123,20 +88,12 @@ class DualDatabaseManager {
             return null;
         }
 
-        // Fast offline skip: no internet (or blocked host) must not cost 35s.
-        // The background monitor keeps retrying, so Atlas attaches itself later.
-        try {
-            const hp = atlasHostPort(uri);
-            if (hp) {
-                const reachable = await probeHostPort(hp.host, hp.port, 4000);
-                if (!reachable) {
-                    Logger.warn(`⚠️ Atlas host unreachable (${hp.host}) — offline mode, Atlas deferred (local keeps working)`);
-                    this.isAtlasConnected = false;
-                    this.scheduleAtlasReconnect(uri);
-                    return null;
-                }
-            }
-        } catch {}
+        // Prevent concurrent connection attempts
+        if (this._atlasConnecting) {
+            Logger.debug("🔄 Atlas connection attempt already in progress, skipping");
+            return null;
+        }
+        this._atlasConnecting = true;
 
         try {
             Logger.info("🔄 Connecting to MongoDB Atlas (Backup)...");
@@ -153,17 +110,19 @@ class DualDatabaseManager {
             };
 
             // Create separate connection for Atlas
+            // Let mongoose resolve DNS SRV + handle timeouts — no TCP pre-probe needed
             this.atlasConnection = mongoose.createConnection(uri, options);
             
-            // Wait for connection to be ready
+            // Wait for connection to be ready (mongoose handles DNS SRV resolution)
             await new Promise((resolve, reject) => {
                 this.atlasConnection.once('open', resolve);
                 this.atlasConnection.once('error', reject);
-                setTimeout(() => reject(new Error('Atlas connection timeout after 35 seconds')), 35000);
+                setTimeout(() => reject(new Error('Atlas connection timeout after 15 seconds')), 15000);
             });
             
             this.isAtlasConnected = true;
             this.reconnectAttempts = 0;
+            this.hourlyRetryScheduled = false;
 
             Logger.info(`✅ MongoDB Atlas Connected Successfully! (Backup)`);
             Logger.info(`📊 Database: ${this.atlasConnection.name}`);
@@ -183,14 +142,17 @@ class DualDatabaseManager {
             return this.atlasConnection;
         } catch (error) {
             this.isAtlasConnected = false;
-            Logger.warn("⚠️ MongoDB Atlas connection failed (non-critical)");
-            Logger.warn("📝 Error details:", error.message);
+            Logger.warn(`⚠️ MongoDB Atlas connection failed: ${error.message}`);
             this.logConnectionError(error, "atlas");
 
-            // Schedule reconnection attempt
-            this.scheduleAtlasReconnect(uri);
+            // Schedule reconnection only if not already scheduled by monitor
+            if (!this._reconnectScheduled) {
+                this.scheduleAtlasReconnect(uri);
+            }
 
-            return null; // Atlas connection failure is non-critical
+            return null;
+        } finally {
+            this._atlasConnecting = false;
         }
     }
 
@@ -225,6 +187,12 @@ class DualDatabaseManager {
     setupAtlasEventHandlers() {
         if (!this.atlasConnection) return;
 
+        // Remove any existing listeners to prevent duplicates
+        this.atlasConnection.removeAllListeners("error");
+        this.atlasConnection.removeAllListeners("disconnected");
+        this.atlasConnection.removeAllListeners("reconnected");
+        this.atlasConnection.removeAllListeners("connected");
+
         this.atlasConnection.on("error", (err) => {
             this.isAtlasConnected = false;
             Logger.error("❌ Atlas MongoDB connection error:", err.message);
@@ -232,12 +200,11 @@ class DualDatabaseManager {
 
         this.atlasConnection.on("disconnected", () => {
             this.isAtlasConnected = false;
+            this._reconnectScheduled = false;
             Logger.warn("⚠️ Atlas MongoDB disconnected");
             
-            // Notify sync worker about disconnection
             this.notifyAtlasDisconnected();
             
-            // Attempt to reconnect
             if (syncConfig.enabled && syncConfig.atlasUri) {
                 this.scheduleAtlasReconnect(syncConfig.atlasUri);
             }
@@ -246,18 +213,20 @@ class DualDatabaseManager {
         this.atlasConnection.on("reconnected", () => {
             this.isAtlasConnected = true;
             this.reconnectAttempts = 0;
+            this._reconnectScheduled = false;
+            this.hourlyRetryScheduled = false;
             Logger.info("✅ Atlas MongoDB reconnected");
             
-            // Notify sync worker about reconnection
             this.notifyAtlasReconnected();
         });
 
         this.atlasConnection.on("connected", () => {
             this.isAtlasConnected = true;
             this.reconnectAttempts = 0;
+            this._reconnectScheduled = false;
+            this.hourlyRetryScheduled = false;
             Logger.info("✅ Atlas MongoDB connected");
             
-            // Notify sync worker about connection
             this.notifyAtlasReconnected();
         });
     }
@@ -267,30 +236,37 @@ class DualDatabaseManager {
      * @param {string} uri - Atlas connection URI
      */
     scheduleAtlasReconnect(uri) {
+        // Prevent duplicate scheduled reconnects
+        if (this._reconnectScheduled) {
+            Logger.debug("🔄 Atlas reconnection already scheduled, skipping");
+            return;
+        }
+
         if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-            // Don't die silently: after the backoff cycle, keep one hourly
-            // retry forever so Atlas re-attaches whenever internet returns.
             if (this.hourlyRetryScheduled) return;
             this.hourlyRetryScheduled = true;
             Logger.error(
-                `❌ Max reconnection attempts (${this.maxReconnectAttempts}) reached for Atlas — switching to hourly retry`
+                `❌ Max reconnection attempts (${this.maxReconnectAttempts}) reached — switching to hourly retry`
             );
             setTimeout(() => {
                 this.hourlyRetryScheduled = false;
+                this._reconnectScheduled = false;
                 this.reconnectAttempts = 0;
                 this.scheduleAtlasReconnect(uri);
             }, 3600000);
             return;
         }
 
+        this._reconnectScheduled = true;
         this.reconnectAttempts++;
         const delay = this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1);
 
         Logger.info(
-            `🔄 Scheduling Atlas reconnection attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts} in ${delay}ms`
+            `🔄 Atlas reconnection ${this.reconnectAttempts}/${this.maxReconnectAttempts} in ${delay}ms`
         );
 
         setTimeout(async () => {
+            this._reconnectScheduled = false;
             try {
                 await this.connectAtlas(uri);
             } catch (error) {
@@ -497,23 +473,31 @@ class DualDatabaseManager {
             return;
         }
 
-        // If Atlas is supposed to be connected but isn't
-        if (!this.isAtlasConnected && this.reconnectAttempts < this.maxReconnectAttempts) {
-            Logger.info("🔍 Connection monitor detected Atlas disconnection, attempting reconnect");
-            await this.attemptAtlasReconnect();
-        }
-        
         // If Atlas is connected, verify with ping
         if (this.isAtlasConnected && this.atlasConnection) {
             try {
                 await this.atlasConnection.db.admin().ping();
-                // Connection is healthy
+                // Connection is healthy — reset reconnect state
+                this.reconnectAttempts = 0;
+                this._reconnectScheduled = false;
+                this.hourlyRetryScheduled = false;
             } catch (error) {
-                Logger.warn("⚠️ Atlas ping failed, connection may be unhealthy:", error.message);
+                Logger.warn("⚠️ Atlas ping failed, marking disconnected");
                 this.isAtlasConnected = false;
                 this.notifyAtlasDisconnected();
-                await this.attemptAtlasReconnect();
+                // Only schedule reconnect if not already scheduled
+                if (!this._reconnectScheduled && !this.hourlyRetryScheduled) {
+                    this.reconnectAttempts = 0; // Reset to start fresh backoff
+                    this.scheduleAtlasReconnect(syncConfig.atlasUri);
+                }
             }
+            return;
+        }
+
+        // Atlas is not connected — only try if no reconnect is already scheduled
+        if (!this.isAtlasConnected && !this._reconnectScheduled && !this.hourlyRetryScheduled) {
+            Logger.info("🔍 Monitor: Atlas disconnected, scheduling reconnect");
+            this.scheduleAtlasReconnect(syncConfig.atlasUri);
         }
     }
 
@@ -526,21 +510,26 @@ class DualDatabaseManager {
             return false;
         }
 
+        // Don't attempt if already connecting or reconnect scheduled
+        if (this._atlasConnecting || this._reconnectScheduled) {
+            return false;
+        }
+
         try {
             // Close existing connection if any
             if (this.atlasConnection) {
                 try {
                     await this.atlasConnection.close();
                 } catch (error) {
-                    Logger.warn("⚠️ Error closing existing Atlas connection:", error.message);
+                    // Ignore close errors
                 }
+                this.atlasConnection = null;
             }
 
             // Attempt new connection
             await this.connectAtlas(syncConfig.atlasUri);
             return this.isAtlasConnected;
         } catch (error) {
-            Logger.error("❌ Atlas reconnection attempt failed:", error.message);
             return false;
         }
     }

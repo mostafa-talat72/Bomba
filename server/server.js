@@ -46,6 +46,7 @@ import BidirectionalInitialSync from "./services/sync/bidirectionalInitialSync.j
 import bidirectionalSyncMonitor from "./services/sync/bidirectionalSyncMonitor.js";
 import dualDatabaseManager from "./config/dualDatabaseManager.js";
 import syncStatusMonitor from "./services/sync/syncStatusMonitor.js";
+import pollingService from "./services/sync/pollingService.js";
 
 // Routes
 import authRoutes from "./routes/authRoutes.js";
@@ -229,18 +230,8 @@ mongoose.connection.once("open", async () => {
         Logger.error("❌ Error in bill-orders linkage repair:", billRepairError.message);
     }
 
-    // Auto-heal BSON types on startup: converts stringified Dates/ObjectIds
-    // (left by JSON-crossed sync payloads) back to proper types, local + Atlas.
-    // Uses raw collection ops (bypasses sync middleware); each node heals itself.
-    try {
-        Logger.info("🔍 Running automatic BSON type audit on startup...");
-        const { runStartupTypeAudit } = await import("./utils/startupTypeAudit.js");
-        await runStartupTypeAudit({ fix: true });
-    } catch (typeAuditError) {
-        Logger.error("❌ Error in automatic BSON type audit:", typeAuditError.message);
-    }
-    
-    // Initialize sync system (Atlas and/or LAN)
+    // Initialize sync system (Atlas and/or LAN) — MUST run before BSON audit
+    // so that syncWorker starts processing the queue immediately.
     const shouldInitSync = syncConfig.enabled || syncConfig.lanSync?.enabled;
     if (shouldInitSync) {
         Logger.info("🔄 Initializing sync system...");
@@ -267,6 +258,19 @@ mongoose.connection.once("open", async () => {
             syncMonitor.logStatus();
             
             Logger.info("✅ Sync system initialized successfully");
+            
+            // Run BSON type audit in background (non-blocking) AFTER sync worker starts
+            // so the worker can process the queue immediately without waiting for audit
+            (async () => {
+                try {
+                    Logger.info("🔍 Running automatic BSON type audit in background...");
+                    const { runStartupTypeAudit } = await import("./utils/startupTypeAudit.js");
+                    await runStartupTypeAudit({ fix: true });
+                    Logger.info("✅ BSON type audit completed");
+                } catch (typeAuditError) {
+                    Logger.error("❌ Error in automatic BSON type audit:", typeAuditError.message);
+                }
+            })();
         } else {
             Logger.info("✅ Sync middleware applied for LAN sync");
         }
@@ -402,121 +406,52 @@ mongoose.connection.once("open", async () => {
     }
 }); // End of mongoose.connection.once callback
 
-// Function to initialize bidirectional sync
+// Function to initialize bidirectional sync (via polling for M0 Free)
 async function initializeBidirectionalSync() {
-    Logger.info("🔄 Initializing bidirectional sync...");
+    Logger.info("🔄 Initializing bidirectional sync (polling mode for M0 Free)...");
     
     try {
-        // Verify bidirectional sync configuration
-        Logger.info("🔍 Verifying bidirectional sync configuration...");
-        
-        const bidirectionalConfig = syncConfig.bidirectionalSync;
-        
-        // Check required configuration
-        if (!bidirectionalConfig.conflictResolution || !bidirectionalConfig.conflictResolution.strategy) {
-            throw new Error("Conflict resolution strategy not configured");
-        }
-        
-        if (!bidirectionalConfig.changeStream) {
-            throw new Error("Change Stream configuration missing");
-        }
-        
-        Logger.info("✅ Bidirectional sync configuration verified");
-        Logger.info(`   - Conflict resolution: ${bidirectionalConfig.conflictResolution.strategy}`);
-        Logger.info(`   - Change Stream batch size: ${bidirectionalConfig.changeStream.batchSize}`);
-        Logger.info(`   - Max reconnect attempts: ${bidirectionalConfig.changeStream.maxReconnectAttempts}`);
-        
-        if (bidirectionalConfig.excludedCollections && bidirectionalConfig.excludedCollections.length > 0) {
-            Logger.info(`   - Excluded collections: ${bidirectionalConfig.excludedCollections.join(', ')}`);
-        }
-        
-        // Check Atlas Change Stream availability
-        Logger.info("🔍 Checking Atlas Change Stream availability...");
-        
+        // Check Atlas availability
         if (!dualDatabaseManager.isAtlasAvailable()) {
             Logger.warn("⚠️  Atlas connection not available yet");
-            Logger.warn("   Bidirectional sync will start when Atlas connection is established");
+            Logger.warn("   Polling will start when Atlas connection is established");
             Logger.warn("   One-way sync (Local → Atlas) will continue working");
-            throw new Error("Atlas connection not available - Change Streams require Atlas connection");
+            throw new Error("Atlas connection not available");
         }
         
         const atlasConnection = dualDatabaseManager.getAtlasConnection();
         if (!atlasConnection) {
-            Logger.warn("⚠️  Atlas connection is null");
             throw new Error("Atlas connection is null");
         }
         
         // Verify Atlas connection is ready
         if (atlasConnection.readyState !== 1) {
-            Logger.warn(`⚠️  Atlas connection not ready (readyState: ${atlasConnection.readyState})`);
             throw new Error(`Atlas connection not ready (readyState: ${atlasConnection.readyState})`);
         }
         
-        Logger.info("✅ Atlas Change Stream is available");
+        Logger.info("✅ Atlas connection is available for polling");
         Logger.info(`   - Atlas host: ${atlasConnection.host}`);
         Logger.info(`   - Atlas database: ${atlasConnection.name}`);
         
-        // Initialize Origin Tracker
-        originTracker = new OriginTracker();
-        Logger.info(`✅ Origin Tracker initialized (Instance ID: ${originTracker.instanceId})`);
-        
-        // Initialize Conflict Resolver
-        conflictResolver = new ConflictResolver();
-        Logger.info(`✅ Conflict Resolver initialized (Strategy: ${conflictResolver.getStrategy()})`);
-        
-        // Initialize Change Processor
-        changeProcessor = new ChangeProcessor(originTracker, conflictResolver, dualDatabaseManager);
-        Logger.info("✅ Change Processor initialized");
-        
-        // Initialize Atlas Change Listener
-        atlasChangeListener = new AtlasChangeListener(dualDatabaseManager, changeProcessor, originTracker);
-        Logger.info("✅ Atlas Change Listener initialized");
-        
-        // Expose to global scope for dynamic configuration updates
-        global.atlasChangeListener = atlasChangeListener;
-        global.changeProcessor = changeProcessor;
-        
-        // Load resume token if exists
-        Logger.info("🔍 Checking for resume token...");
-        const hasResumeToken = atlasChangeListener.resumeToken !== null;
-        if (hasResumeToken) {
-            Logger.info("✅ Resume token loaded - will resume from last position");
-        } else {
-            Logger.info("ℹ️  No resume token found - starting fresh");
-        }
-        
-        // Start Atlas Change Listener
-        await atlasChangeListener.start();
-        
-        // Update bidirectional sync monitor with Change Stream status
-        bidirectionalSyncMonitor.updateChangeStreamStatus('connected');
+        // Start polling service (replaces Change Stream for M0 Free)
+        pollingService.start();
         
         // Log bidirectional sync status
-        Logger.info("\n📊 Bidirectional Sync Status:");
+        const pollingMs = pollingService.getStatus().pollingMs;
+        Logger.info("\n📊 Bidirectional Sync Status (Polling Mode):");
         Logger.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
         Logger.info(`✅ Status: ACTIVE`);
-        Logger.info(`🔄 Direction: Local ⇄ Atlas (bidirectional)`);
-        Logger.info(`🆔 Instance ID: ${originTracker.instanceId}`);
-        Logger.info(`⚙️  Conflict Resolution: ${conflictResolver.getStrategy()}`);
-        Logger.info(`📡 Change Stream: Connected`);
-        Logger.info(`🔄 Resume Token: ${hasResumeToken ? 'Available' : 'Not available'}`);
-        Logger.info(`📦 Batch Size: ${bidirectionalConfig.changeStream.batchSize}`);
-        Logger.info(`🔁 Max Reconnect Attempts: ${bidirectionalConfig.changeStream.maxReconnectAttempts}`);
-        
-        if (bidirectionalConfig.excludedCollections && bidirectionalConfig.excludedCollections.length > 0) {
-            Logger.info(`🚫 Excluded Collections: ${bidirectionalConfig.excludedCollections.join(', ')}`);
-        }
-        
+        Logger.info(`🔄 Direction: Local ⇄ Atlas (bidirectional via polling)`);
+        Logger.info(`📡 Mode: Polling (every ${pollingMs}ms) — M0 Free compatible`);
+        Logger.info(`ℹ️  Note: Change Streams require M10+ cluster`);
         Logger.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
         
-        bidirectionalSyncMonitor.logBidirectionalStatus();
-        
-        Logger.info("✅ Bidirectional sync initialized successfully");
+        Logger.info("✅ Bidirectional sync initialized successfully (polling mode)");
         
     } catch (error) {
         Logger.warn("⚠️  Bidirectional sync not available:", error.message);
         Logger.info("📝 Falling back to one-way sync (Local → Atlas)");
-        Logger.info("💡 This is normal if you're not using MongoDB Atlas");
+        Logger.info("💡 One-way sync will continue working for all new data");
         
         // Update Change Stream status to disconnected
         if (bidirectionalSyncMonitor) {
@@ -528,7 +463,7 @@ async function initializeBidirectionalSync() {
         Logger.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
         Logger.info(`✅ Status: ONE-WAY SYNC MODE`);
         Logger.info(`🔄 Direction: Local → Atlas (one-way only)`);
-        Logger.info(`ℹ️  Bidirectional sync: Not available (requires Atlas)`);
+        Logger.info(`ℹ️  Bidirectional sync: Not available (atlas connection needed)`);
         Logger.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
         
         throw error; // Re-throw to be caught by caller
@@ -1262,6 +1197,17 @@ const gracefulShutdown = async (signal) => {
         } catch (error) {
             Logger.error("❌ Error stopping bidirectional sync:", error.message);
         }
+    }
+    
+    // Stop polling service
+    try {
+        if (pollingService && pollingService.isRunning) {
+            Logger.info("🛑 Stopping polling service...");
+            pollingService.stop();
+            Logger.info("✅ Polling service stopped");
+        }
+    } catch (error) {
+        Logger.error("❌ Error stopping polling service:", error.message);
     }
     
     // Stop sync worker

@@ -3,6 +3,26 @@ import syncConfig from '../config/syncConfig.js';
 import dualDatabaseManager from '../config/dualDatabaseManager.js';
 
 /**
+ * Enqueue a delete operation to sync queue for retry when Atlas comes back
+ */
+async function enqueueDeleteForRetry(collectionName, documentId) {
+    try {
+        const { default: syncQueueManager } = await import('../services/sync/syncQueueManager.js');
+        syncQueueManager.enqueue({
+            type: "delete",
+            collection: collectionName,
+            filter: { _id: documentId },
+            origin: "local",
+            instanceId: "delete-retry",
+            timestamp: new Date(),
+        });
+        Logger.info(`📋 Delete enqueued for retry: ${collectionName}:${documentId}`);
+    } catch (err) {
+        Logger.error(`❌ Failed to enqueue delete for retry: ${err.message}`);
+    }
+}
+
+/**
  * Helper function to delete a document from both Local and Atlas MongoDB
  * @param {Object} document - Mongoose document to delete
  * @param {String} collectionName - Name of the collection in Atlas
@@ -31,9 +51,12 @@ export const deleteFromBothDatabases = async (document, collectionName, itemName
                 Logger.info(`✓ Deleted ${itemName} from Atlas (deletedCount: ${atlasDeleteResult.deletedCount})`);
             } catch (atlasError) {
                 Logger.warn(`⚠️ Failed to delete ${itemName} from Atlas: ${atlasError.message}`);
+                // Enqueue for retry when Atlas comes back
+                await enqueueDeleteForRetry(collectionName, documentId);
             }
         } else {
-            Logger.warn(`⚠️ Atlas connection not available - ${itemName} will be synced later`);
+            Logger.warn(`⚠️ Atlas not available - enqueueing ${itemName} delete for retry`);
+            await enqueueDeleteForRetry(collectionName, documentId);
         }
     } finally {
         // إعادة تفعيل المزامنة
@@ -80,9 +103,16 @@ export const deleteManyFromBothDatabases = async (documentIds, Model, collection
                 Logger.info(`✓ Deleted ${atlasDeleteResult.deletedCount} ${itemName} from Atlas MongoDB`);
             } catch (atlasError) {
                 Logger.error(`❌ Failed to delete ${itemName} from Atlas: ${atlasError.message}`);
+                // Enqueue each delete for retry
+                for (const id of documentIds) {
+                    await enqueueDeleteForRetry(collectionName, id);
+                }
             }
         } else {
-            Logger.warn(`⚠️ Atlas connection not available - ${itemName} will be synced for deletion later`);
+            Logger.warn(`⚠️ Atlas not available - enqueueing ${itemName} deletes for retry`);
+            for (const id of documentIds) {
+                await enqueueDeleteForRetry(collectionName, id);
+            }
         }
     } finally {
         // إعادة تفعيل المزامنة

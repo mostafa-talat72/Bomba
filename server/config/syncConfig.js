@@ -16,7 +16,7 @@ const syncConfig = {
 
     // Queue configuration
     queueMaxSize: parseInt(process.env.SYNC_QUEUE_MAX_SIZE) || 10000,
-    workerInterval: parseInt(process.env.SYNC_WORKER_INTERVAL) || 100, // ms
+    workerInterval: Math.max(parseInt(process.env.SYNC_WORKER_INTERVAL) || 5000, 1000), // ms, minimum 1s
 
     // Retry configuration
     maxRetries: parseInt(process.env.SYNC_MAX_RETRIES) || 5,
@@ -104,8 +104,8 @@ export function validateSyncConfig() {
             errors.push("SYNC_QUEUE_MAX_SIZE must be at least 100");
         }
 
-        if (syncConfig.workerInterval < 10) {
-            errors.push("SYNC_WORKER_INTERVAL must be at least 10ms");
+        if (syncConfig.workerInterval < 1000) {
+            errors.push("SYNC_WORKER_INTERVAL must be at least 1000ms");
         }
 
         if (syncConfig.maxRetries < 1 || syncConfig.maxRetries > 10) {

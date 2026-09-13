@@ -1,6 +1,7 @@
 import Tombstone from "../models/Tombstone.js";
 import Logger from "../middleware/logger.js";
 import dualDatabaseManager from "../config/dualDatabaseManager.js";
+import syncConfig from "../config/syncConfig.js";
 
 /**
  * إنشاء Tombstone لمنع إحياء السجل المحذوف أثناء المزامنة (لمدة سنة)
@@ -13,13 +14,15 @@ export const createTombstone = async (collectionName, documentId, organization, 
   try {
     if (!collectionName || !documentId || !organization) return;
     const orgId = organization?._id ? organization._id : organization;
+
+    // 1. Local tombstone (always succeeds)
     await Tombstone.updateOne(
       { collectionName, documentId, organization: orgId },
       { $set: { deletedAt: new Date(), deletedBy } },
       { upsert: true }
     );
-    // LAN mesh push (fire-and-forget): peers must learn deletions even offline,
-    // otherwise a peer's stale copy can resurrect the doc via catch-up.
+
+    // 2. LAN mesh push (fire-and-forget)
     try {
         const tdoc = await Tombstone.findOne({ collectionName, documentId, organization: orgId }).lean();
         if (tdoc) {
@@ -28,7 +31,8 @@ export const createTombstone = async (collectionName, documentId, organization, 
             }).catch(() => {});
         }
     } catch {}
-    // Immediate dual-write to Atlas
+
+    // 3. Atlas dual-write with retry queue fallback
     const atlasConnection = dualDatabaseManager.getAtlasConnection();
     if (atlasConnection) {
       try {
@@ -39,15 +43,47 @@ export const createTombstone = async (collectionName, documentId, organization, 
         );
       } catch (atlasErr) {
         Logger.warn(`Atlas tombstone dual-write failed for ${collectionName} ${documentId}: ${atlasErr.message}`);
+        // Enqueue for retry when Atlas comes back
+        await enqueueTombstoneForRetry(collectionName, documentId, orgId, deletedBy);
       }
     } else {
-      Logger.warn("Atlas not available for tombstone - will sync later");
+      Logger.warn("Atlas not available for tombstone - enqueueing for retry");
+      await enqueueTombstoneForRetry(collectionName, documentId, orgId, deletedBy);
     }
   } catch (e) {
     // تجاهل خطأ duplicate أو غيره — لا نريد فشل الحذف الأصلي
     if (e.code !== 11000) Logger.warn(`Tombstone create failed for ${collectionName} ${documentId}: ${e.message}`);
   }
 };
+
+/**
+ *.enqueue tombstone to sync queue for retry when Atlas comes back
+ */
+async function enqueueTombstoneForRetry(collectionName, documentId, orgId, deletedBy) {
+  try {
+    // Dynamic import to avoid circular dependency
+    const { default: syncQueueManager } = await import("../services/sync/syncQueueManager.js");
+    syncQueueManager.enqueue({
+      type: "insert",
+      collection: "tombstones",
+      data: {
+        _id: `${collectionName}:${documentId}`,
+        collectionName,
+        documentId,
+        organization: orgId,
+        deletedAt: new Date(),
+        deletedBy,
+      },
+      filter: { collectionName, documentId, organization: orgId },
+      origin: "local",
+      instanceId: "tombstone-retry",
+      timestamp: new Date(),
+    });
+    Logger.info(`📋 Tombstone enqueued for retry: ${collectionName}:${documentId}`);
+  } catch (err) {
+    Logger.error(`❌ Failed to enqueue tombstone for retry: ${err.message}`);
+  }
+}
 
 export const createTombstones = async (collectionName, documentIds, organization, deletedBy = null) => {
   if (!Array.isArray(documentIds) || documentIds.length === 0) return;
