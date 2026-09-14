@@ -22,14 +22,12 @@ import { findReportEligibleOrders } from "./reportOrderFilter.js";
  * إعداد الجدولة التلقائية لحذف الإشعارات القديمة
  */
 const setupNotificationCleanupScheduler = () => {
-    // تشغيل كل يوم في الساعة 2:00 صباحاً
+    // كل ساعة عند الدقيقة 15 — يضمن أن أكبر عمر لأي إشعار ≈ 24 ساعة + ساعة
     cron.schedule(
-        "0 2 * * *",
+        "15 * * * *",
         async () => {
             try {
-                Logger.info("⏰ تشغيل جدولة تنظيف الإشعارات...");
                 await runCleanup();
-                Logger.info("✅ تم الانتهاء من جدولة تنظيف الإشعارات");
             } catch (error) {
                 Logger.error("❌ خطأ في جدولة تنظيف الإشعارات:", error);
             }
@@ -40,7 +38,7 @@ const setupNotificationCleanupScheduler = () => {
         }
     );
 
-    Logger.info("✅ تم إعداد جدولة تنظيف الإشعارات (كل يوم في 2:00 صباحاً)");
+    Logger.info("✅ تم إعداد جدولة تنظيف الإشعارات (كل ساعة في الدقيقة 15)");
 };
 
 /**
@@ -1133,6 +1131,18 @@ const setupTableStatusAutoFixScheduler = () => {
 // Initialize all scheduled tasks
 export const initializeScheduler = () => {
     Logger.info("Initializing scheduled tasks...");
+
+    // Purge audit logs older than 24h — TTL handles normal expiry; this
+    // retry deletes directly from BOTH dbs when the two clocks/drift slightly.
+    // Runs hourly, 10 minutes past the hour so heavy midnight crons have cleared.
+    try {
+        import("./auditCleanup.js").then((m) => {
+            const fn = () => m.cleanupAuditLogs({ maxDeletedPerDb: 10000 }).catch((e) => Logger.warn("auditCleanup failed:", e.message));
+            fn(); // immediate catch-up on boot (startup burst)
+            cron.schedule("10 * * * *", fn, { scheduled: true, timezone: "UTC" });
+            Logger.info("✅ Audit log cleanup scheduled: hourly at :10");
+        }).catch(() => {});
+    } catch {}
 
     // Auto-fix table statuses every 5 minutes (drift correction)
     setupTableStatusAutoFixScheduler();

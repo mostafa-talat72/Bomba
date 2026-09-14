@@ -34,6 +34,7 @@ const auditLogSchema = new mongoose.Schema(
 
 auditLogSchema.index({ organization: 1, createdAt: -1 });
 auditLogSchema.index({ organization: 1, action: 1, createdAt: -1 });
+auditLogSchema.index({ createdAt: 1 }, { expireAfterSeconds: 24 * 60 * 60 });
 
 applySyncMiddleware(auditLogSchema, 'AuditLog');
 
