@@ -1,5 +1,6 @@
 import CostCategory from '../models/CostCategory.js';
 import { writeToAtlas } from "../utils/atlasWrite.js";
+import { createTombstone } from "../utils/tombstoneHelper.js";
 import Logger from '../middleware/logger.js';
 import dualDatabaseManager from '../config/dualDatabaseManager.js';
 
@@ -222,10 +223,15 @@ export const deleteCostCategory = async (req, res) => {
         }
 
         const categoryId = category._id;
+        // Tombstone FIRST (before delete) — see deleteCost.
+        try { await createTombstone('costcategories', categoryId, category.organization || req.user.organization, req.user._id); } catch (e) {}
         await category.deleteOne();
 
         // Fire-and-forget Atlas write for delete
         writeToAtlas('costcategories', 'delete', null, { _id: categoryId });
+
+        // Tombstone لمنع إحياء القسم المحذوف على الأجهزة الأخرى
+        try { await createTombstone('costcategories', categoryId, category.organization || req.user.organization, req.user._id); } catch (e) {}
 
         // Return response IMMEDIATELY
         res.json({

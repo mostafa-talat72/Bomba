@@ -1295,9 +1295,10 @@ export const updateBill = async (req, res) => {
                     Logger.info(`✅ STEP 2: تم حفظ الفاتورة المدمجة ${existingBillInNewTable.billNumber}`);
                     
                     // STEP 3: حذف الفاتورة القديمة (التي أصبحت فارغة)
+                    // Tombstone FIRST (before delete).
+                    try { await createTombstone('bills', oldBillId, getOrganizationId(req.user), req.user._id); } catch (e) {}
                     const { deleteFromBothDatabases } = await import('../utils/deleteHelper.js');
                     await deleteFromBothDatabases(bill, 'bills', `bill ${oldBillNumber}`);
-                    try { await createTombstone('bills', oldBillId, getOrganizationId(req.user), req.user._id); } catch (e) {}
                     Logger.info(`✅ STEP 3: تم حذف الفاتورة القديمة ${oldBillNumber}`);
                     
                     // تحديث حالة الطاولة القديمة
@@ -1976,8 +1977,9 @@ export const removeOrderFromBill = async (req, res) => {
             const { deleteFromBothDatabases } = await import('../utils/deleteHelper.js');
             const deletedBillId = updatedBill._id;
             const deletedBillTable = updatedBill.table;
-            await deleteFromBothDatabases(updatedBill, 'bills', `bill ${updatedBill.billNumber}`);
+            // Tombstone FIRST (before delete).
             try { await createTombstone('bills', deletedBillId, getOrganizationId(req.user), req.user._id); } catch (e) {}
+            await deleteFromBothDatabases(updatedBill, 'bills', `bill ${updatedBill.billNumber}`);
             emitBillDeleted(req, deletedBillId, deletedBillTable);
             
             // Update table status if bill had a table
@@ -2134,7 +2136,9 @@ export const cancelBill = async (req, res) => {
         bill.remaining = 0;
         await bill.save();
 
-        // استرداد المخزون لكل الطلبات المرتبطة بالفاتورة
+        // استرداد المخزون لكل الطلبات المرتبطة بالفاتورة — fire-and-forget.
+        // لا شيء بعده يقرأ المخزون؛ والفشل مسجل في الـ log.
+        setImmediate(async () => {
         try {
             const orderController = await import('./orderController.js');
             const orders = await Order.find({ bill: bill._id });
@@ -2144,6 +2148,7 @@ export const cancelBill = async (req, res) => {
         } catch (inventoryError) {
             Logger.error(`❌ Failed to restore inventory for cancelled bill ${bill.billNumber}: ${inventoryError.message}`);
         }
+        });
 
         // Remove bill reference from orders and sessions
         await Order.updateMany({ bill: bill._id }, { $unset: { bill: 1 } });
@@ -2233,7 +2238,8 @@ export const deleteBill = async (req, res) => {
             // الحذف المباشر من Local و Atlas في نفس الوقت
             const localConnection = dualDatabaseManager.getLocalConnection();
             const atlasConnection = dualDatabaseManager.getAtlasConnection();
-            
+            const atlasDb = atlasConnection?.db;
+
             // إيقاف جميع الجلسات النشطة المرتبطة بالفاتورة قبل الحذف
             if (sessionIds.length > 0) {
                 Logger.info(`🛑 Checking for active sessions in bill ${bill.billNumber}`);
@@ -2287,7 +2293,9 @@ export const deleteBill = async (req, res) => {
                 // استيراد دالة استرداد المخزون
                 const orderController = await import('./orderController.js');
                 
-                // استرداد المخزون لكل طلب قبل الحذف
+                // استرداد المخزون لكل طلب قبل الحذف — fire-and-forget
+                // (background): الحذف بعده لا يقرأ المخزون، والفشل مسجل.
+                setImmediate(async () => {
                 for (const orderId of orderIds) {
                     try {
                         const order = await Order.findById(orderId);
@@ -2300,14 +2308,19 @@ export const deleteBill = async (req, res) => {
                         // نستمر في الحذف حتى لو فشل استرداد المخزون
                     }
                 }
+                });
                 
+                // Tombstones FIRST for all orders (before any delete): a crash
+                // after this point still converges to deleted via polling.
+                try { await createTombstones('orders', orderIds, organizationId, req.user._id); } catch (e) {}
+
                 // حذف من Local
                 const deleteResult = await Order.deleteMany({ _id: { $in: orderIds } });
                 Logger.info(`✓ Deleted ${deleteResult.deletedCount} orders from Local MongoDB`);
                 
                 // حذف من Atlas مباشرة (non-blocking)
-                if (atlasConnection) {
-                    const atlasOrdersCollection = atlasConnection.collection('orders');
+                if (atlasDb) {
+                    const atlasOrdersCollection = atlasDb.collection('orders');
                     atlasOrdersCollection.deleteMany({ 
                         _id: { $in: orderIds } 
                     }).catch(async (atlasError) => {
@@ -2351,13 +2364,16 @@ export const deleteBill = async (req, res) => {
             if (sessionIds.length > 0) {
                 Logger.info(`🗑️ Deleting ${sessionIds.length} sessions associated with bill ${bill.billNumber}`);
                 
+                // Tombstones FIRST for all sessions (before any delete).
+                try { await createTombstones('sessions', sessionIds, organizationId, req.user._id); } catch (e) {}
+
                 // حذف من Local
                 const sessionDeleteResult = await Session.deleteMany({ _id: { $in: sessionIds } });
                 Logger.info(`✓ Deleted ${sessionDeleteResult.deletedCount} sessions from Local MongoDB`);
                 
                 // حذف من Atlas مباشرة (non-blocking)
-                if (atlasConnection) {
-                    const atlasSessionsCollection = atlasConnection.collection('sessions');
+                if (atlasDb) {
+                    const atlasSessionsCollection = atlasDb.collection('sessions');
                     atlasSessionsCollection.deleteMany({ 
                         _id: { $in: sessionIds } 
                     }).catch(async (atlasError) => {
@@ -2397,13 +2413,16 @@ export const deleteBill = async (req, res) => {
                 Logger.info(`ℹ️ No sessions to delete for bill ${bill.billNumber}`);
             }
 
+            // Tombstone FIRST for the bill (before delete).
+            try { await createTombstone('bills', bill._id, organizationId, req.user._id); } catch (e) {}
+
             // Delete the bill from Local MongoDB
             await bill.deleteOne();
             Logger.info(`✓ Deleted bill ${bill.billNumber} from Local`);
             
             // Delete the bill from Atlas MongoDB مباشرة (non-blocking)
-            if (atlasConnection) {
-                const atlasBillsCollection = atlasConnection.collection('bills');
+            if (atlasDb) {
+                const atlasBillsCollection = atlasDb.collection('bills');
                 atlasBillsCollection.deleteOne({ _id: bill._id }).catch(async (atlasError) => {
                     Logger.warn(`⚠️ Failed to delete bill from Atlas: ${atlasError.message}`);
                     // Enqueue for retry when Atlas comes back
@@ -2434,10 +2453,6 @@ export const deleteBill = async (req, res) => {
                 } catch (e) {}
             }
 
-            // Tombstones لمنع الإحياء لمدة سنة (حتى لو الجهاز الآخر offline)
-            await createTombstone('bills', bill._id, organizationId, req.user._id);
-            if (orderIds.length) await createTombstones('orders', orderIds, organizationId, req.user._id);
-            if (sessionIds.length) await createTombstones('sessions', sessionIds, organizationId, req.user._id);
         } finally {
             // إعادة تفعيل المزامنة
             syncConfig.enabled = originalSyncEnabled;
@@ -3169,12 +3184,18 @@ export const createSubscriptionPayment = async (req, res) => {
                 }
             }
             
-            // إرسال إشعار للمستخدم
-            await sendSubscriptionNotification(
-                user.organization,
-                user._id,
-                `تم ${subscription.createdAt < now ? 'تجديد' : 'تفعيل'} اشتراكك (${plan === 'monthly' ? 'شهري' : 'سنوي'}) بنجاح!`
-            );
+            // إرسال إشعار للمستخدم — fire-and-forget (background).
+            setImmediate(async () => {
+            try {
+                await sendSubscriptionNotification(
+                    user.organization,
+                    user._id,
+                    `تم ${subscription.createdAt < now ? 'تجديد' : 'تفعيل'} اشتراكك (${plan === 'monthly' ? 'شهري' : 'سنوي'}) بنجاح!`
+                );
+            } catch (e) {
+                Logger.error('Failed to send subscription notification:', e);
+            }
+            });
             
             return res.json({
                 success: true,
@@ -3298,15 +3319,22 @@ export const fawryWebhook = async (req, res) => {
         subscription.paymentRef = merchantRefNumber;
         await subscription.save();
 
-        const organization = subscription.organization;
-        const orgOwner = await User.findOne({ organization, role: "owner" });
-        if (orgOwner) {
-            await sendSubscriptionNotification(
-                organization,
-                orgOwner._id,
-                "تم تفعيل اشتراك منشأتك بنجاح. شكراً لاستخدامك منصتنا!"
-            );
+        // إشعار التفعيل — fire-and-forget (background).
+        setImmediate(async () => {
+        try {
+            const organization = subscription.organization;
+            const orgOwner = await User.findOne({ organization, role: "owner" });
+            if (orgOwner) {
+                await sendSubscriptionNotification(
+                    organization,
+                    orgOwner._id,
+                    "تم تفعيل اشتراك منشأتك بنجاح. شكراً لاستخدامك منصتنا!"
+                );
+            }
+        } catch (e) {
+            Logger.error('Failed to send subscription activation notification:', e);
         }
+        });
 
         res.status(200).json({
             success: true,
@@ -4243,10 +4271,10 @@ export const updateBillAggregatedItems = async (req, res) => {
         const existingOrders = bill.orders || [];
 
         if (processedItems.length === 0) {
-            // Clear all orders
+            // Clear all orders (tombstones FIRST, then delete)
             for (const ord of existingOrders) {
+                try { await createTombstone("orders", ord._id, getOrganizationId(req.user), req.user._id); } catch {}
                 await Order.deleteOne({ _id: ord._id });
-                try { await createTombstone("Order", ord._id, getOrganizationId(req.user), ord.table); } catch {}
             }
             bill.orders = [];
         } else if (existingOrders.length === 0) {
@@ -4283,9 +4311,10 @@ export const updateBillAggregatedItems = async (req, res) => {
             primary.bill = bill._id;
             await primary.save();
             // Delete other orders (inventory already adjusted via delta, so no extra restore)
+            // Tombstones FIRST, then delete.
             for (let i = 1; i < sorted.length; i++) {
+                try { await createTombstone("orders", sorted[i]._id, getOrganizationId(req.user), req.user._id); } catch {}
                 await Order.deleteOne({ _id: sorted[i]._id });
-                try { await createTombstone("Order", sorted[i]._id, getOrganizationId(req.user), sorted[i].table); } catch {}
             }
             bill.orders = [primary._id];
         }

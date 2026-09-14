@@ -16,34 +16,50 @@ export const runAutoOrderCompleteOnce = async (io) => {
 
     let completed = 0;
     for (const order of orders) {
-        let changed = false;
+        const now = new Date();
+        const updateFields = {
+            status: "delivered",
+            deliveredTime: now,
+            updatedBy: order.updatedBy || "system",
+        };
 
-        for (const item of order.items) {
+        // Build updated items array with preparedCount/deliveredCount bumped
+        const updatedItems = order.items.map((item) => {
             const quantity = item.quantity || 0;
             const delivered = item.deliveredCount || 0;
-            if (delivered >= quantity) continue;
+            if (delivered >= quantity) return item.toObject();
 
-            if ((item.preparedCount || 0) < quantity) {
-                item.preparedCount = quantity;
-                changed = true;
-            }
-            if (delivered < quantity) {
-                item.deliveredCount = quantity;
-                changed = true;
-            }
-        }
+            return {
+                ...item.toObject(),
+                preparedCount: quantity,
+                deliveredCount: quantity,
+            };
+        });
+
+        // Check if anything actually changed
+        const changed = updatedItems.some(
+            (item, i) =>
+                item.preparedCount !== (order.items[i].preparedCount || 0) ||
+                item.deliveredCount !== (order.items[i].deliveredCount || 0)
+        );
 
         if (!changed) continue;
 
-        order.status = "delivered";
-        order.deliveredTime = new Date();
-        order.markModified("items");
-        await order.save();
+        updateFields.items = updatedItems;
+
+        // Use findOneAndUpdate (atomic, no version check) to avoid
+        // VersionError conflicts with sync middleware
+        const result = await Order.findOneAndUpdate(
+            { _id: order._id, status: { $in: ["pending", "preparing", "ready"] } },
+            { $set: updateFields, $inc: { __v: 1 } },
+            { new: true }
+        );
+
+        if (!result) continue;
 
         if (io && typeof io.notifyOrderUpdate === "function") {
             try {
-                // نطاق المنشأة صريح (لا بث شامل) — الفاعل الافتراضي "النظام" من emitActivity.
-                io.notifyOrderUpdate("item-delivered", order, order.organization);
+                io.notifyOrderUpdate("item-delivered", result, result.organization);
             } catch (err) {
                 Logger.error("[AutoComplete] Socket notify failed", err);
             }
@@ -51,7 +67,7 @@ export const runAutoOrderCompleteOnce = async (io) => {
 
         completed++;
         Logger.info(
-            `[AutoComplete] Order #${order.orderNumber} auto-prepared & delivered (${order.items.length} items, older than 24h)`
+            `[AutoComplete] Order #${result.orderNumber} auto-prepared & delivered (${result.items.length} items, older than 24h)`
         );
     }
 

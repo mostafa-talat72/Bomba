@@ -1828,10 +1828,22 @@ billSchema.index({ status: 1, createdAt: -1 }); // Index for status-based querie
 // Text index for customer name search
 billSchema.index({ customerName: "text" });
 
-// Shared helper: delete orders and sessions when a bill is deleted
-async function deleteBillAssociatedData(billId) {
+// Shared helper: delete orders and sessions when a bill is deleted.
+// Tombstones the orders FIRST (before deleteMany) so polling/fullSync on any
+// device never resurrect them — this covers EVERY bill-delete path centrally,
+// including merges and cleanups that tombstone only the bill itself.
+async function deleteBillAssociatedData(billId, organization) {
     const Order = mongoose.model("Order");
     const Session = mongoose.model("Session");
+    try {
+        const orderIds = await Order.distinct("_id", { bill: billId });
+        if (orderIds && orderIds.length > 0) {
+            try {
+                const { createTombstones } = await import("../utils/tombstoneHelper.js");
+                await createTombstones("orders", orderIds, organization, null);
+            } catch {}
+        }
+    } catch {}
     await Promise.all([
         Order.deleteMany({ bill: billId }),
         Session.updateMany({ bill: billId }, { $unset: { bill: "" } }),
@@ -1844,7 +1856,7 @@ billSchema.pre(
     { document: true },
     async function (next) {
         try {
-            await deleteBillAssociatedData(this._id);
+            await deleteBillAssociatedData(this._id, this.organization);
             next();
         } catch (error) {
             next(error);
@@ -1857,7 +1869,7 @@ billSchema.pre("findOneAndDelete", async function (next) {
     try {
         const bill = await this.model.findOne(this.getQuery());
         if (bill) {
-            await deleteBillAssociatedData(bill._id);
+            await deleteBillAssociatedData(bill._id, bill.organization);
         }
         next();
     } catch (error) {

@@ -1,5 +1,6 @@
 import Cost from "../models/Cost.js";
 import { writeToAtlas } from "../utils/atlasWrite.js";
+import { createTombstone } from "../utils/tombstoneHelper.js";
 import Logger from "../middleware/logger.js";
 
 // @desc    Get all costs
@@ -612,10 +613,16 @@ export const deleteCost = async (req, res) => {
         }
 
         const costId = cost._id;
+        // Tombstone FIRST (before delete): crash after this point still converges
+        // to deleted via polling instead of resurrecting.
+        try { await createTombstone('costs', costId, cost.organization || req.user.organization, req.user._id); } catch (e) {}
         await cost.deleteOne();
 
         // Fire-and-forget Atlas write for delete
         writeToAtlas('costs', 'delete', null, { _id: costId });
+
+        // Tombstone لمنع إحياء التكلفة المحذوفة على الأجهزة الأخرى
+        try { await createTombstone('costs', costId, cost.organization || req.user.organization, req.user._id); } catch (e) {}
 
         if (req.io) {
             try { req.io.notifyCostUpdate("deleted", { _id: req.params.id }, req.user.organization); } catch (e) {}

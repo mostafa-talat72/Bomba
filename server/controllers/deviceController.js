@@ -3,6 +3,7 @@ import Device from "../models/Device.js";
 import Session from "../models/Session.js";
 import DeviceValidator from "../services/validation/deviceValidator.js";
 import { writeToAtlas, writeBatchToAtlas } from "../utils/atlasWrite.js";
+import { createTombstone } from "../utils/tombstoneHelper.js";
 import Logger from "../middleware/logger.js";
 import mongoose from "mongoose";
 
@@ -602,10 +603,22 @@ const device = await Device.findOneAndUpdate(
                 });
             }
 
+            // Tombstone FIRST (before delete): `device` above is org-scoped.
+            // Crash after this point still converges to deleted via polling.
+            try { await createTombstone('devices', device._id, device.organization || getOrganizationId(req.user), req.user._id); } catch (e) {}
+
 const deletedDevice = await Device.findOneAndDelete({
             _id: id,
             ...organizationFilter(req.user),
         });
+
+            if (!deletedDevice) {
+                return res.status(404).json({
+                    success: false,
+                    message: "الجهاز غير موجود",
+                    error: "Device not found",
+                });
+            }
 
             // Fire-and-forget Atlas write for delete
             writeToAtlas('devices', 'delete', null, { _id: deletedDevice._id });

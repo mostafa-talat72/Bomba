@@ -563,7 +563,7 @@ export const getPayments = async (req, res) => {
 // Delete payment
 export const deletePayment = async (req, res) => {
   try {
-    const payment = await Payment.findOneAndDelete({
+    const payment = await Payment.findOne({
       _id: req.params.id,
       organizationId: req.user.organization
     });
@@ -572,7 +572,10 @@ export const deletePayment = async (req, res) => {
       return res.status(404).json({ success: false, error: 'الدفعة غير موجودة' });
     }
 
+    // Tombstone FIRST (before delete): crash after this point still converges
+    // to deleted via polling instead of resurrecting.
     try { await createTombstone('payments', payment._id, req.user.organization, req.user._id); } catch (e) {}
+    await payment.deleteOne();
     
     res.json({ success: true, message: 'تم حذف الدفعة بنجاح' });
   } catch (error) {

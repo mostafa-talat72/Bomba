@@ -402,10 +402,14 @@ export async function runStartupTypeAudit({ fix = true, label = "local" } = {}) 
         // Heal Atlas with its own pass (same schemas, raw driver handle)
         try {
             const { default: dualDatabaseManager } = await import("../config/dualDatabaseManager.js");
-            const atlasDb = dualDatabaseManager.getAtlasConnection?.();
-            if (atlasDb && typeof atlasDb.collection === "function") {
+            const atlasConn = dualDatabaseManager.getAtlasConnection?.();
+            // Only audit Atlas if the connection is actually ready;
+            // otherwise queries buffer and time out (10s each × hundreds of paths).
+            if (atlasConn && atlasConn.readyState === 1 && atlasConn.db && typeof atlasConn.db.collection === "function") {
                 Logger.info("🔍 [typeAudit] starting BSON type audit (atlas)...");
-                await auditDatabase(atlasDb, fix, stats, "atlas");
+                await auditDatabase(atlasConn.db, fix, stats, "atlas");
+            } else {
+                Logger.info("[typeAudit] atlas audit skipped: connection not ready");
             }
         } catch (e) {
             Logger.warn(`[typeAudit] atlas pass skipped: ${e.message}`);

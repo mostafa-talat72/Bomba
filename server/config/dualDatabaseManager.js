@@ -95,6 +95,15 @@ class DualDatabaseManager {
         }
         this._atlasConnecting = true;
 
+        // Close previous connection if exists (prevents MaxListenersExceededWarning)
+        if (this.atlasConnection) {
+            try {
+                this.atlasConnection.removeAllListeners();
+                await this.atlasConnection.close(false);
+            } catch {}
+            this.atlasConnection = null;
+        }
+
         try {
             Logger.info("🔄 Connecting to MongoDB Atlas (Backup)...");
 

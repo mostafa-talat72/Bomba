@@ -63,8 +63,9 @@ export const deleteDeduction = async (req, res) => {
     }
     
     const deductionId = deduction._id;
-    await deduction.deleteOne();
+    // Tombstone FIRST (before delete) — see deleteAdvance.
     try { await createTombstone('deductions', deductionId, req.user.organization, req.user._id); } catch (e) {}
+    await deduction.deleteOne();
     
     res.json({ success: true, message: 'تم حذف الخصم بنجاح' });
   } catch (error) {

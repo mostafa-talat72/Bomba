@@ -287,7 +287,16 @@ export async function applyReceivedDoc(collectionName, doc, operation) {
     if (!doc || doc._id === undefined || doc._id === null) throw new Error("Doc missing _id");
     // Restore ObjectIds lost in JSON serialization (all tables) BEFORE apply,
     // so refs never land as strings in the local DB.
-    const toApply = normalizeIncomingDoc(collectionName, { ...doc, _id: toObjectId(doc._id) });
+    // Depopulate FIRST (populated objects -> _id, possibly 24-hex strings),
+    // then normalize casts strings/$oid back to ObjectId.
+    let depopulated = doc;
+    try {
+        const { depopulateDocForSync } = await import("./syncSanitize.js");
+        depopulated = depopulateDocForSync(collectionName, { ...doc, _id: toObjectId(doc._id) });
+    } catch {
+        depopulated = { ...doc, _id: toObjectId(doc._id) };
+    }
+    const toApply = normalizeIncomingDoc(collectionName, depopulated);
     await markLanOrigin(toApply._id);
 
     // Last-write-wins: skip when local copy is newer.

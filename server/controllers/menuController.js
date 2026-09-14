@@ -2,6 +2,7 @@ import { getOrganizationId, organizationFilter } from '../utils/organization.js'
 import MenuItem from "../models/MenuItem.js";
 import MenuCategory from "../models/MenuCategory.js";
 import { writeToAtlas } from "../utils/atlasWrite.js";
+import { createTombstone, createTombstones } from "../utils/tombstoneHelper.js";
 import Logger from "../middleware/logger.js";
 import dualDatabaseManager from "../config/dualDatabaseManager.js";
 import { validateRequestData } from "../middleware/validation.js";
@@ -509,10 +510,16 @@ export const deleteMenuItem = async (req, res) => {
         }
 
         const menuItemId = menuItem._id;
+        // Tombstone FIRST (before delete): crash after this point still converges
+        // to deleted via polling instead of resurrecting.
+        try { await createTombstone('menuitems', menuItemId, menuItem.organization || getOrganizationId(req.user), req.user._id); } catch (e) {}
         await menuItem.deleteOne();
 
         // Fire-and-forget Atlas write for delete
         writeToAtlas('menuitems', 'delete', null, { _id: menuItemId });
+
+        // Tombstone لمنع إحياء العنصر المحذوف على الأجهزة الأخرى
+        try { await createTombstone('menuitems', menuItemId, menuItem.organization || getOrganizationId(req.user), req.user._id); } catch (e) {}
 
         // Emit socket event immediately before response
         if (req.io) {
@@ -911,11 +918,15 @@ export const mergeMenuItems = async (req, res) => {
         writeToAtlas('menuitems', 'upsert', baseItem.toObject ? baseItem.toObject() : baseItem, { _id: baseItem._id });
 
         if (idsToDelete.length > 0) {
+            // Tombstones FIRST (before delete) — see deleteMenuItem.
+            try { await createTombstones('menuitems', idsToDelete, getOrganizationId(req.user), req.user._id); } catch (e) {}
             await MenuItem.deleteMany({ _id: { $in: idsToDelete }, ...organizationFilter(req.user) });
             // Fire-and-forget Atlas deletes
             idsToDelete.forEach(id => {
                 writeToAtlas('menuitems', 'delete', null, { _id: id });
             });
+            // Tombstones لمنع إحياء العناصر المدمجة المحذوفة على الأجهزة الأخرى
+            try { await createTombstones('menuitems', idsToDelete, getOrganizationId(req.user), req.user._id); } catch (e) {}
         }
 
         // Populate for response

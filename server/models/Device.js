@@ -180,8 +180,7 @@ applySyncMiddleware(deviceSchema, 'Device');
 // Static method to fix devices with missing required fields
 deviceSchema.statics.fixMissingFields = async function() {
     try {
-        // حذف الأجهزة المعطوبة التي لا تحتوي على الحقول الأساسية
-        const brokenDevicesDeleted = await this.deleteMany({
+        const brokenFilter = {
             $or: [
                 { name: { $exists: false } },
                 { name: null },
@@ -189,7 +188,26 @@ deviceSchema.statics.fixMissingFields = async function() {
                 { organization: { $exists: false } },
                 { organization: null }
             ]
-        });
+        };
+        // Tombstones FIRST (for broken docs that carry an organization) so
+        // polling never resurrects them from Atlas on any device.
+        try {
+            const broken = await this.find(brokenFilter, { _id: 1, organization: 1 }).lean();
+            const { createTombstones } = await import("../utils/tombstoneHelper.js");
+            const byOrg = new Map();
+            for (const d of broken || []) {
+                const org = d.organization?._id || d.organization;
+                if (!org) continue;
+                const k = org.toString();
+                if (!byOrg.has(k)) byOrg.set(k, { org, ids: [] });
+                byOrg.get(k).ids.push(d._id);
+            }
+            for (const { org, ids } of byOrg.values()) {
+                if (ids.length) await createTombstones("devices", ids, org, null);
+            }
+        } catch {}
+        // حذف الأجهزة المعطوبة التي لا تحتوي على الحقول الأساسية
+        const brokenDevicesDeleted = await this.deleteMany(brokenFilter);
 
 
         // Fix computer devices without hourlyRate

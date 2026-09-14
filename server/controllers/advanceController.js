@@ -340,8 +340,10 @@ export const deleteAdvance = async (req, res) => {
     }
     
     const advanceId = advance._id;
-    await advance.deleteOne();
+    // Tombstone FIRST (before delete): crash after this point still converges
+    // to deleted via polling instead of resurrecting.
     try { await createTombstone('advances', advanceId, req.user.organization, req.user._id); } catch (e) {}
+    await advance.deleteOne();
     
     res.json({ success: true, message: 'تم حذف السلفة بنجاح' });
   } catch (error) {

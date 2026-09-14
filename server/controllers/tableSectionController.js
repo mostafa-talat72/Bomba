@@ -2,6 +2,7 @@ import { getOrganizationId, organizationFilter } from '../utils/organization.js'
 import TableSection from "../models/TableSection.js";
 import Table from "../models/Table.js";
 import { writeToAtlas } from "../utils/atlasWrite.js";
+import { createTombstone } from "../utils/tombstoneHelper.js";
 import Logger from "../middleware/logger.js";
 import dualDatabaseManager from "../config/dualDatabaseManager.js";
 
@@ -241,7 +242,7 @@ export const deleteTableSection = async (req, res) => {
             });
         }
 
-        const section = await TableSection.findOneAndDelete({
+        const section = await TableSection.findOne({
             _id: id,
             ...organizationFilter(req.user),
         });
@@ -253,8 +254,20 @@ export const deleteTableSection = async (req, res) => {
             });
         }
 
+        // Tombstone FIRST (before delete): crash after this point still converges
+        // to deleted via polling instead of resurrecting.
+        try { await createTombstone('tablesections', section._id, section.organization || getOrganizationId(req.user), req.user._id); } catch (e) {}
+
+        await TableSection.deleteOne({
+            _id: id,
+            ...organizationFilter(req.user),
+        });
+
         // Fire-and-forget Atlas write for delete
         writeToAtlas('tablesections', 'delete', null, { _id: section._id });
+
+        // Tombstone لمنع إحياء القسم المحذوف على الأجهزة الأخرى
+        try { await createTombstone('tablesections', section._id, section.organization || getOrganizationId(req.user), req.user._id); } catch (e) {}
 
         // ── Real-time emit (<50ms) ──
         if (req.io) {

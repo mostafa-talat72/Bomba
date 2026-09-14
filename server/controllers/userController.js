@@ -436,10 +436,11 @@ export const deleteUser = async (req, res) => {
             }
         }
 
+        // Tombstone FIRST (before delete): `user` above is org-verified.
+        // Crash after this point still converges to deleted via polling.
+        try { await createTombstone('users', user._id, user.organization || getOrganizationId(req.user), req.user._id); } catch (e) {}
+
         const deletedUser = await User.findByIdAndDelete(req.params.id);
-        if (deletedUser) {
-            try { await createTombstone('users', deletedUser._id, getOrganizationId(req.user), req.user._id); } catch (e) {}
-        }
 
         // Audit (fire-and-forget)
         import("../utils/auditHelper.js").then((m) => {

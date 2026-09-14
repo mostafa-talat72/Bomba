@@ -129,37 +129,64 @@ class PollingService {
         // 1. Documents in Atlas but NOT in Local → INSERT into Local
         const toInsert = atlasDocs.filter(d => !localIds.has(d._id.toString()));
         if (toInsert.length > 0) {
-            // Check tombstones — don't re-insert deleted docs
+            // Check LOCAL tombstones — don't re-insert docs we deleted
             const tombstoneColl = localDb.collection("tombstones");
-            const tombIds = await tombstoneColl.distinct("documentId", { collectionName });
-            const tombSet = new Set(tombIds.map(id => id.toString()));
+            const localTombIds = await tombstoneColl.distinct("documentId", { collectionName });
+            const localTombSet = new Set(localTombIds.map(id => id.toString()));
 
-            const真正ToInsert = toInsert.filter(d => !tombSet.has(d._id.toString()));
+            // Also check ATLAS tombstones — don't re-insert docs deleted by other devices
+            const atlasTombstoneColl = atlasDb.collection("tombstones");
+            const atlasTombIds = await atlasTombstoneColl.distinct("documentId", { collectionName }).catch(() => []);
+            const atlasTombSet = new Set(atlasTombIds.map(id => id.toString()));
 
-            if (真正ToInsert.length > 0) {
+            const filteredToInsert = toInsert.filter(d => {
+                const idStr = d._id.toString();
+                return !localTombSet.has(idStr) && !atlasTombSet.has(idStr);
+            });
+
+            if (filteredToInsert.length > 0) {
                 // Fetch full documents from Atlas
                 const fullDocs = [];
-                for (const doc of 真正ToInsert) {
+                for (const doc of filteredToInsert) {
                     const fullDoc = await atlasColl.findOne({ _id: doc._id });
                     if (fullDoc) fullDocs.push(fullDoc);
                 }
 
-                if (fullDocs.length > 0) {
+                // Expired docs (expiresAt in the past — e.g. invites/notifications
+                // removed locally by TTL) must NEVER be re-inserted: delete them
+                // from Atlas instead.
+                const nowTs = Date.now();
+                const liveDocs = [];
+                const expiredIds = [];
+                for (const d of fullDocs) {
+                    const exp = d.expiresAt ? new Date(d.expiresAt).getTime() : NaN;
+                    if (Number.isFinite(exp) && exp <= nowTs) expiredIds.push(d._id);
+                    else liveDocs.push(d);
+                }
+                if (expiredIds.length > 0) {
+                    try {
+                        await atlasColl.deleteMany({ _id: { $in: expiredIds } }).catch(() => {});
+                        stats.docsDeleted += expiredIds.length;
+                        Logger.info(`🗑️ Poll: deleted ${expiredIds.length} expired docs from Atlas (${collectionName})`);
+                    } catch {}
+                }
+
+                if (liveDocs.length > 0) {
                     // Insert in batches
                     const BATCH = 100;
-                    for (let i = 0; i < fullDocs.length; i += BATCH) {
-                        const batch = fullDocs.slice(i, i + BATCH);
+                    for (let i = 0; i < liveDocs.length; i += BATCH) {
+                        const batch = liveDocs.slice(i, i + BATCH);
                         try {
                             await localColl.insertMany(batch, { ordered: false }).catch(() => {});
                         } catch {}
                     }
-                    stats.docsInserted += fullDocs.length;
-                    Logger.info(`📥 Poll: inserted ${fullDocs.length} docs into ${collectionName}`);
+                    stats.docsInserted += liveDocs.length;
+                    Logger.info(`📥 Poll: inserted ${liveDocs.length} docs into ${collectionName}`);
                 }
             }
 
-            // Propagate tombstones — delete from Atlas docs that have local tombstones
-            const toDeleteFromAtlas = toInsert.filter(d => tombSet.has(d._id.toString()));
+            // Propagate LOCAL tombstones — delete from Atlas docs that have local tombstones
+            const toDeleteFromAtlas = toInsert.filter(d => localTombSet.has(d._id.toString()));
             if (toDeleteFromAtlas.length > 0) {
                 const idsToDelete = toDeleteFromAtlas.map(d => d._id);
                 await atlasColl.deleteMany({ _id: { $in: idsToDelete } }).catch(() => {});
@@ -167,21 +194,61 @@ class PollingService {
             }
         }
 
-        // 2. Documents in Local but NOT in Atlas → check tombstones → INSERT into Atlas or DELETE from Local
+        // 2. Documents in Local but NOT in Atlas → check tombstones → DELETE from Local or push to Atlas
+        //    Must check BOTH local and Atlas tombstones to propagate deletes from other devices
         const missingInAtlas = localDocs.filter(d => !atlasIds.has(d._id.toString()));
         if (missingInAtlas.length > 0) {
             const tombstoneColl = localDb.collection("tombstones");
-            const tombIds = await tombstoneColl.distinct("documentId", { collectionName });
-            const tombSet = new Set(tombIds.map(id => id.toString()));
+            const localTombIds = await tombstoneColl.distinct("documentId", { collectionName });
+            const localTombSet = new Set(localTombIds.map(id => id.toString()));
+
+            // Also check Atlas tombstones (other devices may have deleted + tombstoned)
+            const atlasTombstoneColl = atlasDb.collection("tombstones");
+            const atlasTombIds = await atlasTombstoneColl.distinct("documentId", { collectionName }).catch(() => []);
+            const atlasTombSet = new Set(atlasTombIds.map(id => id.toString()));
 
             for (const doc of missingInAtlas) {
-                if (tombSet.has(doc._id.toString())) {
-                    // Has tombstone → delete from Local (already deleted, skip)
+                const docIdStr = doc._id.toString();
+                const hasLocalTomb = localTombSet.has(docIdStr);
+                const hasAtlasTomb = atlasTombSet.has(docIdStr);
+
+                if (hasLocalTomb || hasAtlasTomb) {
+                    // Has tombstone (local or Atlas) → doc was intentionally deleted
+                    // 1. Propagate tombstone to Local if only in Atlas
+                    if (hasAtlasTomb && !hasLocalTomb) {
+                        try {
+                            const atlasTomb = await atlasTombstoneColl.findOne({ documentId: doc._id, collectionName });
+                            if (atlasTomb) {
+                                await tombstoneColl.updateOne(
+                                    { collectionName, documentId: doc._id, organization: atlasTomb.organization },
+                                    { $set: { deletedAt: atlasTomb.deletedAt, deletedBy: atlasTomb.deletedBy } },
+                                    { upsert: true }
+                                );
+                            }
+                        } catch {}
+                    }
+                    // 2. Delete from Local (cleanup — doc was deleted by this or another device)
+                    try {
+                        await localColl.deleteOne({ _id: doc._id });
+                        stats.docsDeleted++;
+                        Logger.info(`🗑️ Poll: deleted tombstoned doc from Local: ${collectionName}:${docIdStr}`);
+                    } catch {}
                     continue;
                 }
-                // No tombstone → push to Atlas
+
+                // No tombstone anywhere → push to Atlas (new doc created offline)
                 const fullDoc = await localColl.findOne({ _id: doc._id });
                 if (fullDoc) {
+                    // Expired locally (TTL will remove it) → never push back to
+                    // Atlas; drop it locally instead.
+                    const expTs = fullDoc.expiresAt ? new Date(fullDoc.expiresAt).getTime() : NaN;
+                    if (Number.isFinite(expTs) && expTs <= Date.now()) {
+                        try {
+                            await localColl.deleteOne({ _id: doc._id });
+                            stats.docsDeleted++;
+                        } catch {}
+                        continue;
+                    }
                     try {
                         await atlasColl.updateOne(
                             { _id: fullDoc._id },

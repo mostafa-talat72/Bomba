@@ -1495,8 +1495,9 @@ export const deletePayroll = async (req, res) => {
     }
     
     const payrollId = payroll._id;
-    await payroll.deleteOne();
+    // Tombstone FIRST (before delete) — see deleteAdvance.
     try { await createTombstone('payrolls', payrollId, req.user.organization, req.user._id); } catch (e) {}
+    await payroll.deleteOne();
     
     res.json({ success: true, message: 'تم حذف كشف الراتب بنجاح' });
   } catch (error) {

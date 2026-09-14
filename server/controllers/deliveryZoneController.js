@@ -1,5 +1,7 @@
 import DeliveryZone from "../models/DeliveryZone.js";
 import { getOrganizationId } from "../utils/organization.js";
+import { writeToAtlas } from "../utils/atlasWrite.js";
+import { createTombstone } from "../utils/tombstoneHelper.js";
 
 // @desc    List delivery zones
 // @route   GET /api/delivery-zones
@@ -41,8 +43,16 @@ export const createDeliveryZone = async (req, res) => {
 // @route   DELETE /api/delivery-zones/:id
 export const deleteDeliveryZone = async (req, res) => {
     try {
-        const zone = await DeliveryZone.findOneAndDelete({ _id: req.params.id, organization: getOrganizationId(req.user) });
+        const zone = await DeliveryZone.findOne({ _id: req.params.id, organization: getOrganizationId(req.user) });
         if (!zone) return res.status(404).json({ success: false, message: "المنطقة غير موجودة" });
+        // Tombstone FIRST (before delete): crash after this point still converges
+        // to deleted via polling instead of resurrecting.
+        try { await createTombstone('deliveryzones', zone._id, zone.organization || getOrganizationId(req.user), req.user._id); } catch (e) {}
+        await DeliveryZone.deleteOne({ _id: zone._id });
+        // Fire-and-forget Atlas write for delete
+        writeToAtlas('deliveryzones', 'delete', null, { _id: zone._id });
+        // Tombstone لمنع إحياء المنطقة المحذوفة على الأجهزة الأخرى
+        try { await createTombstone('deliveryzones', zone._id, zone.organization || getOrganizationId(req.user), req.user._id); } catch (e) {}
         if (req.io) req.io.notifyBillUpdate("delivery-zones-changed", zone, getOrganizationId(req.user));
         try { req.io?.emit?.("delivery-zones-changed", { _id: zone._id, deleted: true }); } catch {}
         res.json({ success: true, message: "تم حذف المنطقة" });

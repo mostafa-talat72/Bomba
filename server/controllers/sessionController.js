@@ -82,27 +82,19 @@ const deleteBillFromBothDatabases = async (billId) => {
             if (billDocForTomb) orgForTombstone = billDocForTomb.organization;
         } catch (e) {}
         
+        // Tombstone FIRST (before delete). Called unconditionally so a missing
+        // organization is VISIBLE in logs (SKIPPED warning) instead of silent.
+        try { await createTombstone('bills', billId, orgForTombstone, null); } catch (e) {}
         // حذف من Local
         const localResult = await Bill.deleteOne({ _id: billId });
-        if (orgForTombstone) {
-            try { await createTombstone('bills', billId, orgForTombstone, null); } catch (e) {}
-        }
         Logger.info(`✓ Deleted from Local: ${localResult.deletedCount} bill(s)`);
-        
-        // حذف من Atlas مباشرة
-        if (atlasConnection) {
-            try {
-                const atlasBillsCollection = atlasConnection.collection('bills');
-                const atlasResult = await atlasBillsCollection.deleteOne({ 
-                    _id: new mongoose.Types.ObjectId(billId)
-                });
-                Logger.info(`✓ Deleted from Atlas: ${atlasResult.deletedCount} bill(s)`);
-            } catch (atlasError) {
-                Logger.error(`❌ Failed to delete bill from Atlas:`, atlasError);
-            }
-        } else {
-            Logger.warn(`⚠️ Atlas connection not available - bill will be synced for deletion later`);
-        }
+
+        // حذف من Atlas (fire-and-forget — never blocks response).
+        // NOTE: native driver needs a real ObjectId (strings won't match).
+        try {
+            const idObj = billId instanceof mongoose.Types.ObjectId ? billId : new mongoose.Types.ObjectId(billId);
+            writeToAtlas('bills', 'delete', null, { _id: idObj });
+        } catch {}
         
         return { success: true };
     } catch (error) {
@@ -242,11 +234,11 @@ const performCleanupHelper = async (organizationId) => {
                                 Logger.info(`ℹ️ No suitable bill found for merge, deleting empty bill ${bill.billNumber}`);
                             }
                             
-                            // Delete the empty bill
+                            // Delete the empty bill (tombstone FIRST)
                             const billIdForTomb = bill._id;
                             const billOrgForTomb = bill.organization || orgId;
-                            await bill.deleteOne();
                             try { await createTombstone('bills', billIdForTomb, billOrgForTomb, null); } catch (e) {}
+                            await bill.deleteOne();
                             deletedBillsCount++;
                             Logger.info(`✅ Successfully processed empty bill ${bill.billNumber}`);
                             
@@ -360,8 +352,9 @@ const performSelectiveCleanup = async (sessionIds, organizationId) => {
                             try {
                                 const billIdTomb = bill._id;
                                 const billOrgTomb = bill.organization || orgId;
-                                await bill.deleteOne();
+                                // Tombstone FIRST (before delete).
                                 try { await createTombstone('bills', billIdTomb, billOrgTomb, null); } catch (e) {}
+                                await bill.deleteOne();
                                 deletedBillsCount++;
                                 affectedBillIds.delete(billIdTomb.toString());
                                 Logger.info(`✅ Deleted empty bill ${bill.billNumber}`);
@@ -878,12 +871,15 @@ const sessionController = {
                         await session.populate(["createdBy", "bill"], "name");
                         await bill.populate(["sessions", "createdBy"], "name");
 
-                        // Create notification for session start
+                        // Create notification for session start — fire-and-forget
+                        // (background): result unused by response, must never
+                        // slow down session start.
+                        setImmediate(async () => {
                         try {
                             const userLanguage = req.user.preferences?.language || 'ar';
                             const organization = await Organization.findById(getOrganizationId(req.user)).select('currency');
                             const currency = organization?.currency || 'EGP';
-                            
+
                             await NotificationService.createSessionNotification(
                                 "started",
                                 session,
@@ -898,6 +894,7 @@ const sessionController = {
                                 notificationError
                             );
                         }
+                        });
 
                         // Update device status to active
                         await Device.findOneAndUpdate(
@@ -2036,13 +2033,14 @@ const sessionController = {
                 } catch {}
             }
 
-            // إرسال إشعار بدء الجلسة
+            // إرسال إشعار بدء الجلسة — fire-and-forget (background).
+            setImmediate(async () => {
             try {
                 // Get user language and organization currency
                 const userLanguage = req.user.preferences?.language || 'ar';
                 const organization = await Organization.findById(getOrganizationId(req.user)).select('currency');
                 const currency = organization?.currency || 'EGP';
-                
+
                 await NotificationService.createSessionNotification(
                     "started",
                     session,
@@ -2057,6 +2055,7 @@ const sessionController = {
                     notificationError
                 );
             }
+            });
 
             // Update device status to active
             await Device.findOneAndUpdate(
@@ -2477,8 +2476,9 @@ const sessionController = {
                             if (updatedWrongBill.sessions.length === 0 && ordersCount === 0) {
                                 const delId = updatedWrongBill._id;
                                 const delOrg = updatedWrongBill.organization || getOrganizationId(req.user);
-                                await updatedWrongBill.deleteOne();
+                                // Tombstone FIRST (before delete).
                                 try { await createTombstone('bills', delId, delOrg, req.user._id); } catch (e) {}
+                                await updatedWrongBill.deleteOne();
                                 Logger.info(`🗑️ Deleted empty bill ${wrongBill.billNumber} during emergency cleanup`);
                             }
                         }
@@ -2924,8 +2924,9 @@ const sessionController = {
                             if (updatedWrongBill.sessions.length === 0 && ordersCount === 0) {
                                 const delId = updatedWrongBill._id;
                                 const delOrg = updatedWrongBill.organization || getOrganizationId(req.user);
-                                await updatedWrongBill.deleteOne();
+                                // Tombstone FIRST (before delete).
                                 try { await createTombstone('bills', delId, delOrg, req.user._id); } catch (e) {}
+                                await updatedWrongBill.deleteOne();
                                 Logger.info(`🗑️ Deleted empty bill ${wrongBill.billNumber} during emergency cleanup`);
                             }
                         }
@@ -3634,8 +3635,9 @@ const sessionController = {
                             if (updatedWrongBill.sessions.length === 0 && ordersCount === 0) {
                                 const delId = updatedWrongBill._id;
                                 const delOrg = updatedWrongBill.organization || getOrganizationId(req.user);
-                                await updatedWrongBill.deleteOne();
+                                // Tombstone FIRST (before delete).
                                 try { await createTombstone('bills', delId, delOrg, req.user._id); } catch (e) {}
+                                await updatedWrongBill.deleteOne();
                                 Logger.info(`🗑️ Deleted empty bill ${wrongBill.billNumber} during emergency cleanup`);
                             }
                         }
@@ -4150,13 +4152,11 @@ const sessionController = {
             { $set: { bill: targetBill._id } }
         );
 
-        // Delete source bill
+        // Delete source bill (tombstone FIRST)
         const srcBillId = sourceBill._id;
         const srcBillOrg = sourceBill.organization;
+        try { await createTombstone('bills', srcBillId, srcBillOrg, null); } catch (e) {}
         const deletedBill = await Bill.findByIdAndDelete(sourceBill._id);
-        if (deletedBill) {
-            try { await createTombstone('bills', srcBillId, srcBillOrg, null); } catch (e) {}
-        }
 
         Logger.info(`✅ Bill merge completed successfully:`, {
             deletedBillId: srcBillId,
@@ -4228,66 +4228,42 @@ const sessionController = {
                 if (orderIds.length > 0) {
                     Logger.info(`🗑️ Deleting ${orderIds.length} orders associated with bill ${bill.billNumber}`);
                     
+                    // Tombstones FIRST for all orders (before any delete).
+                    try { await createTombstones('orders', orderIds, organizationId, null); } catch (e) {}
+
                     // حذف من Local
                     const deleteResult = await Order.deleteMany({ _id: { $in: orderIds } });
                     Logger.info(`✓ Deleted ${deleteResult.deletedCount} orders from Local MongoDB`);
-                    
-                    // حذف من Atlas مباشرة
-                    if (atlasConnection) {
-                        try {
-                            const atlasOrdersCollection = atlasConnection.collection('orders');
-                            const atlasDeleteResult = await atlasOrdersCollection.deleteMany({ 
-                                _id: { $in: orderIds } 
-                            });
-                            Logger.info(`✓ Deleted ${atlasDeleteResult.deletedCount} orders from Atlas MongoDB`);
-                        } catch (atlasError) {
-                            Logger.error(`❌ Failed to delete orders from Atlas: ${atlasError.message}`);
-                        }
-                    }
+
+                    // حذف من Atlas (fire-and-forget — never blocks response;
+                    // writeToAtlas enqueues for retry when Atlas is down).
+                    try { writeToAtlas('orders', 'delete', null, { _id: { $in: orderIds } }); } catch {}
                 }
 
                 // Delete all sessions associated with this bill (cascade delete)
                 if (sessionIds.length > 0) {
                     Logger.info(`🗑️ Deleting ${sessionIds.length} sessions associated with bill ${bill.billNumber}`);
                     
+                    // Tombstones FIRST for all sessions (before any delete).
+                    try { await createTombstones('sessions', sessionIds, organizationId, null); } catch (e) {}
+
                     // حذف من Local
                     const sessionDeleteResult = await Session.deleteMany({ _id: { $in: sessionIds } });
                     Logger.info(`✓ Deleted ${sessionDeleteResult.deletedCount} sessions from Local MongoDB`);
-                    
-                    // حذف من Atlas مباشرة
-                    if (atlasConnection) {
-                        try {
-                            const atlasSessionsCollection = atlasConnection.collection('sessions');
-                            const atlasDeleteResult = await atlasSessionsCollection.deleteMany({ 
-                                _id: { $in: sessionIds } 
-                            });
-                            Logger.info(`✓ Deleted ${atlasDeleteResult.deletedCount} sessions from Atlas MongoDB`);
-                        } catch (atlasError) {
-                            Logger.error(`❌ Failed to delete sessions from Atlas: ${atlasError.message}`);
-                        }
-                    }
+
+                    // حذف من Atlas (fire-and-forget — never blocks response).
+                    try { writeToAtlas('sessions', 'delete', null, { _id: { $in: sessionIds } }); } catch {}
                 }
+
+                // Tombstone FIRST for the bill (before delete).
+                try { await createTombstone('bills', bill._id, organizationId, null); } catch (e) {}
 
                 // Delete the bill from Local MongoDB
                 await bill.deleteOne();
                 Logger.info(`✓ Deleted bill ${bill.billNumber} from Local`);
-                
-                // Delete the bill from Atlas MongoDB مباشرة
-                if (atlasConnection) {
-                    try {
-                        const atlasBillsCollection = atlasConnection.collection('bills');
-                        const atlasDeleteResult = await atlasBillsCollection.deleteOne({ _id: bill._id });
-                        Logger.info(`✓ Deleted bill ${bill.billNumber} from Atlas (deletedCount: ${atlasDeleteResult.deletedCount})`);
-                    } catch (atlasError) {
-                        Logger.warn(`⚠️ Failed to delete bill from Atlas: ${atlasError.message}`);
-                    }
-                }
-                // Tombstones لمنع الإحياء
-                try {
-                    await createTombstone('bills', bill._id, organizationId, null);
-                    if (orderIds.length) await createTombstones('orders', orderIds, organizationId, null);
-                    if (sessionIds.length) await createTombstones('sessions', sessionIds, organizationId, null);
-                } catch (e) {}
+
+                // Delete the bill from Atlas (fire-and-forget — never blocks response).
+                try { writeToAtlas('bills', 'delete', null, { _id: bill._id }); } catch {}
             } finally {
                 // إعادة تفعيل المزامنة
                 syncConfig.enabled = originalSyncEnabled;

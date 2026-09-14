@@ -3,6 +3,7 @@ import Table from "../models/Table.js";
 import Order from "../models/Order.js";
 import Bill from "../models/Bill.js";
 import { writeToAtlas } from "../utils/atlasWrite.js";
+import { createTombstone } from "../utils/tombstoneHelper.js";
 import Logger from "../middleware/logger.js";
 import dualDatabaseManager from "../config/dualDatabaseManager.js";
 import { updateTableStatusIfNeeded } from "../utils/tableUtils.js";
@@ -414,8 +415,12 @@ export const deleteTable = async (req, res) => {
     try {
         const { id } = req.params;
 
-        // Check if table has active orders
-        const table = await Table.findById(id);
+        // Org-scoped fetch (404 for missing AND cross-org — same as before).
+        // Must precede the tombstone so we never tombstone another org's doc.
+        const table = await Table.findOne({
+            _id: id,
+            ...organizationFilter(req.user),
+        });
         if (!table) {
             return res.status(404).json({
                 success: false,
@@ -435,6 +440,10 @@ export const deleteTable = async (req, res) => {
                 message: "لا يمكن حذف الطاولة لأنها تحتوي على طلبات نشطة",
             });
         }
+
+        // Tombstone FIRST (before delete): crash after this point still converges
+        // to deleted via polling instead of resurrecting.
+        try { await createTombstone('tables', table._id, table.organization || getOrganizationId(req.user), req.user._id); } catch (e) {}
 
         const deletedTable = await Table.findOneAndDelete({
             _id: id,

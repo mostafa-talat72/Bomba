@@ -472,6 +472,18 @@ async function initializeBidirectionalSync() {
 
 const app = express();
 const server = createServer(app);
+
+// Reject API requests until the local database is connected.
+// Prevents Mongoose "buffering timed out" errors on startup when
+// the Electron client (or any client) hits the server before MongoDB is ready.
+app.use("/api", (req, res, next) => {
+    if (req.path === "/health") return next();
+    if (mongoose.connection.readyState !== 1) {
+        return res.status(503).json({ error: "Database not ready, please wait..." });
+    }
+    next();
+});
+
 // API responses are always read from the database; do not allow browser,
 // Electron, proxy, or service-worker caches to serve stale data.
 app.use("/api", (req, res, next) => {

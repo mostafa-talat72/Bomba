@@ -1,6 +1,8 @@
 import express from 'express';
 import ConnectedDevice from '../models/ConnectedDevice.js';
 import { authenticateToken, authorizeRoles } from '../middleware/auth.js';
+import { createTombstone } from '../utils/tombstoneHelper.js';
+import { writeToAtlas } from '../utils/atlasWrite.js';
 import { ONLINE_WINDOW_MS } from '../middleware/deviceTracker.js';
 
 const router = express.Router();
@@ -60,6 +62,17 @@ router.patch('/:instanceId', async (req, res) => {
 // DELETE /api/connected-devices/:instanceId — forget (reappears blocked on next contact)
 router.delete('/:instanceId', async (req, res) => {
     try {
+        // This model has no sync middleware: tombstone + Atlas write are manual.
+        // (A re-registering device creates a NEW _id, so the tombstone below
+        // never blocks its intended reappearance.)
+        let existing = null;
+        try { existing = await ConnectedDevice.findOne({ instanceId: req.params.instanceId }); } catch {}
+        if (existing?.organization) {
+            try { await createTombstone('connecteddevices', existing._id, existing.organization, req.user?._id || null); } catch {}
+        }
+        if (existing?._id) {
+            try { writeToAtlas('connecteddevices', 'delete', null, { _id: existing._id }); } catch {}
+        }
         await ConnectedDevice.deleteOne({ instanceId: req.params.instanceId });
         res.json({ success: true });
     } catch (e) {

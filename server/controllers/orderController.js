@@ -656,21 +656,31 @@ export const calculateOrderRequirements = async (req, res) => {
             });
         }
 
-        // حساب المخزون المطلوب والتكلفة
-        const inventoryNeeded = await calculateTotalInventoryNeeded(items);
-        const totalCost = await calculateOrderTotalCost(items);
+        // حساب المخزون المطلوب والتكلفة — متوازيان (مستقلان، نفس المدخلات،
+        // قراءة فقط): النتائج مطابقة تماماً، والزمن = الأطول بدل المجموع.
+        const [inventoryNeeded, totalCost] = await Promise.all([
+            calculateTotalInventoryNeeded(items),
+            calculateOrderTotalCost(items),
+        ]);
 
-        // التحقق من توفر المخزون
+        // التحقق من توفر المخزون (يعتمد على inventoryNeeded فيبقى بعدهما)
         const { errors: validationErrors, details: insufficientDetails } =
             await validateInventoryAvailability(inventoryNeeded);
 
-        // جلب تفاصيل المخزون المطلوب
+        // جلب تفاصيل المخزون المطلوب — استعلام واحد بدل حلقة N استعلامات.
+        // نفس المستندات وبنفس الترتيب (Map) ونفس المعادلات بالحرف.
         const InventoryItem = (await import("../models/InventoryItem.js"))
             .default;
         const inventoryDetails = [];
 
+        const neededIds = [...inventoryNeeded.keys()];
+        const foundDocs = neededIds.length > 0
+            ? await InventoryItem.find({ _id: { $in: neededIds } }).lean()
+            : [];
+        const foundMap = new Map(foundDocs.map((d) => [String(d._id), d]));
+
         for (const [inventoryItemId, { quantity, unit }] of inventoryNeeded) {
-            const inventoryItem = await InventoryItem.findById(inventoryItemId);
+            const inventoryItem = foundMap.get(String(inventoryItemId));
             if (inventoryItem) {
                 // تحويل الكمية المطلوبة من وحدة المكون إلى وحدة المخزون
                 const convertedQuantityNeeded = convertQuantity(
@@ -1942,11 +1952,13 @@ export const deleteOrder = async (req, res) => {
             });
         }
 
-        // استرداد المخزون عند حذف الطلب
+        // استرداد المخزون عند حذف الطلب — fire-and-forget (background):
+        // لا شيء بعده يقرأ المخزون المسترد، والنتيجة للـ log فقط.
+        setImmediate(async () => {
         try {
             await restoreInventoryForOrder(order, req.user._id);
             Logger.info(`✓ تم استرداد المخزون للطلب ${order.orderNumber}`);
-            
+
             // إطلاق حدث تحديث المخزون عبر Socket.IO
             if (req.io) {
                 
@@ -1965,6 +1977,7 @@ export const deleteOrder = async (req, res) => {
             Logger.error('خطأ في استرداد المخزون:', inventoryError);
             // نستمر في الحذف حتى لو فشل استرداد المخزون
         }
+        });
 
         // Remove order from bill.orders if linked to a bill BEFORE deleting the order
         let billIdToCheck = null;
@@ -2034,9 +2047,10 @@ export const deleteOrder = async (req, res) => {
                         Logger.info(`🗑️ Deleting empty bill ${billDoc.billNumber}`);
                         const billIdForTombstone = billDoc._id;
                         const billOrgForTombstone = billDoc.organization || getOrganizationId(req.user);
+                        // Tombstone FIRST (before delete).
+                        try { await createTombstone('bills', billIdForTombstone, billOrgForTombstone, req.user._id); } catch (e) {}
                         const { deleteFromBothDatabases } = await import('../utils/deleteHelper.js');
                         await deleteFromBothDatabases(billDoc, 'bills', `bill ${billDoc.billNumber}`);
-                        try { await createTombstone('bills', billIdForTombstone, billOrgForTombstone, req.user._id); } catch (e) {}
                         // ── emit bill:deleted instantly (<100ms) ──
                         if (req.io) {
                             try {
@@ -2093,14 +2107,18 @@ export const deleteOrder = async (req, res) => {
             syncConfig.enabled = false;
             Logger.info(`🔒 Sync middleware disabled for direct delete operation`);
             
+            // Tombstone FIRST (before delete) لمنع الإحياء لمدة سنة:
+            // crash after this point still converges to deleted via polling.
+            try { await createTombstone('orders', orderId, getOrganizationId(req.user), req.user._id); } catch(e) {}
+
             // حذف من Local
             await order.deleteOne();
             Logger.info(`✓ Deleted order ${orderNumber} from Local MongoDB`);
             
             // حذف من Atlas مباشرة (non-blocking)
             const atlasConnection = dualDatabaseManager.getAtlasConnection();
-            if (atlasConnection) {
-                const atlasOrdersCollection = atlasConnection.collection('orders');
+            if (atlasConnection?.db) {
+                const atlasOrdersCollection = atlasConnection.db.collection('orders');
                 atlasOrdersCollection.deleteOne({ _id: orderId }).catch(async (atlasError) => {
                     Logger.warn(`⚠️ Failed to delete order from Atlas: ${atlasError.message}`);
                     // Enqueue for retry when Atlas comes back
@@ -2130,8 +2148,6 @@ export const deleteOrder = async (req, res) => {
                     });
                 } catch (e) {}
             }
-            // Tombstone لمنع الإحياء لمدة سنة
-            try { await createTombstone('orders', orderId, getOrganizationId(req.user), req.user._id); } catch(e) {}
         } finally {
             // إعادة تفعيل المزامنة
             syncConfig.enabled = originalSyncEnabled;
@@ -2456,13 +2472,16 @@ export const updateOrderStatus = async (req, res) => {
             updateData.deliveredTime = new Date();
         }
 
-        // استرداد المخزون عند إلغاء الطلب — يستعيد كل المخزون (ليس فقط المُعدّد)
+        // استرداد المخزون عند إلغاء الطلب — يستعيد كل المخزون (ليس فقط المُعدّد).
+        // Fire-and-forget (background): التحديث بعده لا يقرأ المخزون.
         if (status === "cancelled" && order.status !== "cancelled") {
+            setImmediate(async () => {
             try {
                 await restoreInventoryForOrder(order, req.user._id);
             } catch (error) {
                 Logger.error(`❌ Failed to restore inventory for cancelled order ${order.orderNumber}: ${error.message}`);
             }
+            });
         }
 
         const updatedOrder = await Order.findOneAndUpdate({ _id: id, ...organizationFilter(req.user) }, updateData, {
@@ -3310,6 +3329,8 @@ export const moveOrderToTable = async (req, res) => {
                 // حذف المصدر
                 const oldId = sourceBill._id;
                 const oldNumber = sourceBill.billNumber;
+                // Tombstone FIRST (before delete).
+                try { await createTombstone("bills", oldId, orgId, req.user._id); } catch {}
                 try {
                     const { deleteFromBothDatabases } = await import("../utils/deleteHelper.js");
                     await deleteFromBothDatabases(sourceBill, "bills", `bill ${oldNumber}`);
@@ -3317,7 +3338,6 @@ export const moveOrderToTable = async (req, res) => {
                     try { await sourceBill.deleteOne(); } catch {}
                     try { writeToAtlas('bills', 'delete', null, { _id: oldId }); } catch {}
                 }
-                try { await createTombstone("bills", oldId, orgId, req.user._id); } catch {}
                 deletedBillId = oldId;
                 resultBill = destBill;
                 // إشعارات وبث: نقل الطلب — حذف الفاتورة الفارغة صامت (نتيجة النقل، ليست حذفاً مقصوداً)

@@ -193,6 +193,17 @@ export const deleteEmployee = async (req, res) => {
       Payroll.distinct('_id', { employeeId: employee._id, organizationId: req.user.organization })
     ]);
       
+    // Tombstones FIRST (before deletes) for cascaded records: crash after this
+    // point still converges to deleted via polling instead of resurrecting.
+    try {
+      if (attendanceIds.length) await createTombstones('attendances', attendanceIds, req.user.organization, req.user._id);
+      if (advanceIds.length) await createTombstones('advances', advanceIds, req.user.organization, req.user._id);
+      if (paymentIds.length) await createTombstones('payments', paymentIds, req.user.organization, req.user._id);
+      if (deductionIds.length) await createTombstones('deductions', deductionIds, req.user.organization, req.user._id);
+      if (bonusIds.length) await createTombstones('bonuses', bonusIds, req.user.organization, req.user._id);
+      if (payrollIds.length) await createTombstones('payrolls', payrollIds, req.user.organization, req.user._id);
+    } catch (e) {}
+
     // Delete all related records
     await Promise.all([
       Attendance.deleteMany({ employeeId: employee._id, organizationId: req.user.organization }),
@@ -203,20 +214,11 @@ export const deleteEmployee = async (req, res) => {
       Payroll.deleteMany({ employeeId: employee._id, organizationId: req.user.organization })
     ]);
 
-    // Tombstones for cascaded deletes
-    try {
-      if (attendanceIds.length) await createTombstones('attendances', attendanceIds, req.user.organization, req.user._id);
-      if (advanceIds.length) await createTombstones('advances', advanceIds, req.user.organization, req.user._id);
-      if (paymentIds.length) await createTombstones('payments', paymentIds, req.user.organization, req.user._id);
-      if (deductionIds.length) await createTombstones('deductions', deductionIds, req.user.organization, req.user._id);
-      if (bonusIds.length) await createTombstones('bonuses', bonusIds, req.user.organization, req.user._id);
-      if (payrollIds.length) await createTombstones('payrolls', payrollIds, req.user.organization, req.user._id);
-    } catch (e) {}
-    
-    
+    // Tombstone FIRST for the employee itself, then delete.
+    try { await createTombstone('employees', employee._id, req.user.organization, req.user._id); } catch (e) {}
+
     // حذف الموظف نفسه
     await Employee.deleteOne({ _id: req.params.id });
-    try { await createTombstone('employees', employee._id, req.user.organization, req.user._id); } catch (e) {}
     
     
     res.json({ 

@@ -3,6 +3,7 @@ import syncConfig from "../../config/syncConfig.js";
 import dualDatabaseManager from "../../config/dualDatabaseManager.js";
 import syncQueueManager from "./syncQueueManager.js";
 import { rehydrateDocument, rehydrateFilter } from "../../utils/bsonRehydrate.js";
+import { depopulateDocForSync, depopulateSyncPayload } from "../../utils/syncSanitize.js";
 
 /**
  * SyncWorker
@@ -312,7 +313,7 @@ class SyncWorker {
     async executeOperation(operation) {
         const atlasConnection = dualDatabaseManager.getAtlasConnection();
         
-        if (!atlasConnection) {
+        if (!atlasConnection || !atlasConnection.db) {
             throw new Error("Atlas connection not available");
         }
 
@@ -353,6 +354,9 @@ class SyncWorker {
         // Dates/ObjectIds degrade to strings — restore BSON types via schema.
         const collName = collection.collectionName;
         if (Array.isArray(operation.data)) {
+            // Depopulate BEFORE rehydrate: collapse populated objects to _id
+            // first (may yield 24-hex strings), then rehydrate casts to ObjectId.
+            operation.data.forEach((doc) => depopulateDocForSync(collName, doc));
             operation.data.forEach((doc) => rehydrateDocument(collName, doc));
             // For arrays, insert each document with upsert
             const bulkOps = operation.data.map((doc) => ({
@@ -376,6 +380,8 @@ class SyncWorker {
                 Logger.debug(`   🔄 ${result.modifiedCount} existing documents replaced (idempotent retry)`);
             }
         } else {
+            // Depopulate BEFORE rehydrate (see array branch above).
+            depopulateDocForSync(collection.collectionName, operation.data);
             rehydrateDocument(collection.collectionName, operation.data);
             // For single document, use replaceOne with upsert
             const result = await collection.replaceOne(
@@ -421,14 +427,18 @@ class SyncWorker {
         // would then create duplicates with a string _id).
         const collName = collection.collectionName;
         rehydrateFilter(collName, operation.filter);
+        // Depopulate BEFORE rehydrate: $set content may carry populated objects.
+        try {
+            operation.data = depopulateSyncPayload(collName, operation.data);
+        } catch {}
         rehydrateDocument(collName, operation.data);
 
-        // Use updateOne with upsert to ensure idempotency
-        // $set operations are deterministic - same result on retry
+        // Use updateOne WITHOUT upsert — updates must never create ghost documents.
+        // If the document doesn't exist in Atlas, it will be synced via full sync or polling.
         const result = await collection.updateOne(
             operation.filter,
             { $set: operation.data },
-            { upsert: true } // Create if doesn't exist
+            { upsert: false }
         );
 
         // Log detailed results for monitoring

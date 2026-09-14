@@ -133,6 +133,7 @@ const notificationSchema = new mongoose.Schema(
 );
 
 // Indexes for better performance
+notificationSchema.index({ organization: 1, isActive: 1, createdAt: -1 });
 notificationSchema.index({ targetRoles: 1, isActive: 1, createdAt: -1 });
 notificationSchema.index({ targetUsers: 1, isActive: 1, createdAt: -1 });
 notificationSchema.index({ category: 1, isActive: 1 });

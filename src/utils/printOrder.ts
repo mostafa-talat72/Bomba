@@ -547,15 +547,15 @@ body {
   .no-print { display: none !important; }
 
   .section-block {
-    page-break-after: auto;
-    break-after: auto;
+    page-break-before: always;
+    break-before: always;
     page-break-inside: avoid;
     break-inside: avoid;
   }
 
-  .section-block:last-child {
-    page-break-after: auto;
-    break-after: auto;
+  .section-block:first-child {
+    page-break-before: auto;
+    break-before: auto;
   }
 }
 </style>
@@ -606,44 +606,48 @@ export const printOrder = async (
         ]).catch(() => null);
         orgHint = orgRes?.success ? orgRes.data : null;
       }
-      // نفس HTML المصمم للديسكتوب — يرحّله السيرفر للوكيل المحلي (نفس الشكل 100%).
-      // الفشل هنا لا يكسر المسار السريع: السيرفر يسقط على RAW النصي.
-      let orderHtmlForRelay: string | undefined;
-      try {
-        orderHtmlForRelay = await buildOrderPrintHTML(
-          order,
-          menuSections,
-          menuItemsMap,
-          fallbackOrganizationName,
-          language,
-          t,
-          tableSectionName,
-          selectedSectionIds,
-        );
-      } catch (e) {
-        // تشخيص: بدون HTML يسقط السيرفر على RAW النصي.
-        console.warn('[printOrder] relay HTML build failed, server will use RAW fallback:', e);
-      }
-      const payload = {
-        order,
-        organization: orgHint,
-        language,
-        html: orderHtmlForRelay,
-        printerName,
-        paperWidthMm,
-        printKey: `order:${(order as any)?._id || (order as any)?.orderNumber || ''}`,
-      };
-      let res: any = await api.printOrder(payload);
-      if (!res?.success) {
-        // No printer configured on the server? Try zero-config USB auto-detect.
+      // Split by sections so each gets its own print page + cut, like the desktop path.
+      const phoneSections = selectedSectionIds && selectedSectionIds.length > 1
+        ? selectedSectionIds
+        : [undefined];
+      let lastRes: any = null;
+      await Promise.all(phoneSections.map(async (sectionId) => {
+        let orderHtmlForRelay: string | undefined;
         try {
-          res = await api.autoDetectAndPrintOrder(payload);
-        } catch {}
-      }
-      if (res?.success) {
-        tSuccess(language === 'ar' ? 'تم إرسال الطلب للطباعة على الجهاز الرئيسي' : language === 'fr' ? 'Commande envoyée à l’imprimante principale' : 'Order sent to the main device printer');
+          orderHtmlForRelay = await buildOrderPrintHTML(
+            order,
+            menuSections,
+            menuItemsMap,
+            fallbackOrganizationName,
+            language,
+            t,
+            tableSectionName,
+            sectionId ? [sectionId] : selectedSectionIds,
+          );
+        } catch (e) {
+          console.warn('[printOrder] relay HTML build failed, server will use RAW fallback:', e);
+        }
+        const payload = {
+          order,
+          organization: orgHint,
+          language,
+          html: orderHtmlForRelay,
+          printerName,
+          paperWidthMm,
+          printKey: `order:${(order as any)?._id || (order as any)?.orderNumber || ''}:${sectionId || 'all'}`,
+        };
+        let res: any = await api.printOrder(payload);
+        if (!res?.success) {
+          try {
+            res = await api.autoDetectAndPrintOrder(payload);
+          } catch {}
+        }
+        lastRes = res;
+      }));
+      if (lastRes?.success) {
+        tSuccess(language === 'ar' ? 'تم إرسال الطلب للطباعة على الجهاز الرئيسي' : language === 'fr' ? 'Commande envoyée à l\u2019imprimante principale' : 'Order sent to the main device printer');
       } else {
-        tError(res?.message || (language === 'ar' ? 'فشلت الطباعة على الجهاز الرئيسي — تأكد من توصيل الطابعة بالجهاز الرئيسي' : 'Server print failed — check the printer on the main device'));
+        tError(lastRes?.message || (language === 'ar' ? 'فشلت الطباعة على الجهاز الرئيسي — تأكد من توصيل الطابعة بالجهاز الرئيسي' : 'Server print failed — check the printer on the main device'));
       }
     } catch {
       tError(language === 'ar' ? 'تعذر الاتصال بالجهاز الرئيسي' : 'Main device unreachable');

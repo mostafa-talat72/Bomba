@@ -208,8 +208,9 @@ export const deleteBonus = async (req, res) => {
     }
     
     const bonusId = bonus._id;
-    await bonus.deleteOne();
+    // Tombstone FIRST (before delete) — see deleteAdvance.
     try { await createTombstone('bonuses', bonusId, req.user.organization, req.user._id); } catch (e) {}
+    await bonus.deleteOne();
     
     res.json({ 
       success: true,

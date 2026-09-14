@@ -7,6 +7,7 @@ import { useOrganization } from '../context/OrganizationContext';
 import { useApp } from '../context/AppContext';
 import api, { Device, Session } from '../services/api';
 import { SessionCostDisplay } from '../components/SessionCostDisplay';
+import ChangeTableModal from '../components/tables/ChangeTableModal';
 import { formatDecimal, formatCurrency, getCurrencySymbol } from '../utils/formatters';
 import { sameId } from '../utils/id';
 import { formatDateTime } from '../utils/timeFormat';
@@ -1276,6 +1277,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
                                     setSelectedSessionForLink(activeSession);
                                     setShowLinkTableModal(true);
                                     setTableSearch('');
+                                    fetchTables().catch(() => {});
                                   }}
                                   className="px-3 py-2 bg-gradient-to-r from-orange-500 to-yellow-500 hover:from-orange-600 hover:to-yellow-600 text-white rounded-lg text-sm font-medium transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-105 flex items-center justify-center gap-1"
                                 >
@@ -1320,6 +1322,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
                                   setSelectedSessionForLink(activeSession);
                                   setShowLinkTableModal(true);
                                   setTableSearch('');
+                                  fetchTables().catch(() => {});
                                 }}
                                 className="px-3 py-2 bg-gradient-to-r from-purple-500 to-indigo-500 hover:from-purple-600 hover:to-indigo-600 text-white rounded-lg text-sm font-medium transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-105 flex items-center justify-center gap-1"
                               >
@@ -1823,7 +1826,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
                   {t('gaming.noTable')}
                 </button>
                 {tables
-                  .filter((t: any) => t.isActive)
+                  .filter((t: any) => t.isActive !== false)
                   .filter((t: any) => {
                     if (!tableSearch) return true;
                     const q = tableSearch.toLowerCase();
@@ -1933,157 +1936,36 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
         </div>
       )}
 
-      {/* ????? ??? ?????? ?????? */}
+      {/* ????? ??? ?????? ?????? — using shared ChangeTableModal */}
       {showLinkTableModal && selectedSessionForLink && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
-          <div className="bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-2xl shadow-2xl p-4 sm:p-6 w-full max-w-md border-2 border-purple-200 dark:border-purple-800 animate-bounce-in">
-            <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-pink-500 rounded-xl flex items-center justify-center shadow-lg">
-                  <TableIcon className="h-6 w-6 text-white" />
-                </div>
-                <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-                  {(() => {
-                    const bill = typeof selectedSessionForLink.bill === 'object' ? selectedSessionForLink.bill : null;
-                    const isCurrentlyLinkedToTable = bill ? !!(bill as any)?.table : false;
-                    return isCurrentlyLinkedToTable ? t('gaming.changeTableTitle') : t('gaming.linkTableTitle');
-                  })()}
-                </h2>
-              </div>
-              <button
-                onClick={() => {
-                  setShowLinkTableModal(false);
-                  setSelectedSessionForLink(null);
-                  setTableSearch('');
-                }}
-                className="w-10 h-10 bg-red-500 hover:bg-red-600 rounded-lg transition-all duration-200 flex items-center justify-center text-white hover:scale-110 transform shadow-md"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-
-            <div className="mb-4 space-y-3">
-              <div className="p-4 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/30 dark:to-indigo-900/30 border-2 border-blue-300 dark:border-blue-700 rounded-xl">
-                <div className="flex items-center gap-2">
-                  <Icon className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                  <div>
-                    <p className="text-xs text-blue-600 dark:text-blue-400 font-semibold">{t('gaming.device')}</p>
-                    <p className="text-sm font-bold text-blue-900 dark:text-blue-100">
-                      {devices.find(d => d.number === selectedSessionForLink.deviceNumber)?.name || selectedSessionForLink.deviceName}
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {selectedSessionForLink.bill && (
-                <div className="p-4 bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/30 dark:to-emerald-900/30 border-2 border-green-300 dark:border-green-700 rounded-xl">
-                  <div className="flex items-center gap-2">
-                    <svg className="h-5 w-5 text-green-600 dark:text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                    </svg>
-                    <div>
-                      <p className="text-xs text-green-600 dark:text-green-400 font-semibold">{t('gaming.bill')}</p>
-                      <p className="text-sm font-bold text-green-900 dark:text-green-100">
-                        #{typeof selectedSessionForLink.bill === 'object' ? (selectedSessionForLink.bill as any)?.billNumber : t('gaming.unknown')}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <div className="mb-6">
-              <label className="block text-sm font-bold text-purple-900 dark:text-purple-100 mb-3 flex items-center gap-2">
-                <TableIcon className="h-5 w-5" />
-                {t('gaming.selectTableLabel')}
-              </label>
-
-              {(() => {
-                const bill = typeof selectedSessionForLink.bill === 'object' ? selectedSessionForLink.bill : null;
-                const linkedTableId = (bill as any)?.table?._id;
-                if (!linkedTableId) return null;
-                const st = tables.find((t: any) => t._id === linkedTableId);
-                return st ? (
-                  <div className="mb-2 px-4 py-2 bg-purple-100 dark:bg-purple-900/40 border border-purple-300 dark:border-purple-700 rounded-lg flex items-center justify-between">
-                    <span className="text-sm font-bold text-purple-800 dark:text-purple-200">
-                      {t('gaming.currentTable')}: {t('gaming.table')} {st.number}{getTableSectionLabel(st) ? ` (${getTableSectionLabel(st)})` : ''}
-                    </span>
-                    <button
-                      onClick={() => setTableSearch('')}
-                      className="text-xs text-purple-600 dark:text-purple-400 font-semibold"
-                    >
-                      {t('gaming.changeTable')}
-                    </button>
-                  </div>
-                ) : null;
-              })()}
-
-              <div className="relative">
-                <Search className={`absolute top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 ${isRTL ? 'right-3' : 'left-3'}`} />
-                <input
-                  type="text"
-                  value={tableSearch}
-                  onChange={(e) => setTableSearch(e.target.value)}
-                  placeholder={t('gaming.searchTable') || 'بحث...'}
-                  className="w-full pr-10 pl-10 py-3 border-2 border-purple-300 dark:border-purple-700 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500 dark:bg-gray-700 dark:text-gray-100 transition-all shadow-sm hover:shadow-md"
-                  disabled={linkingTable}
-                />
-                {tableSearch && (
-                  <button onClick={() => setTableSearch('')} className={`absolute top-1/2 -translate-y-1/2 ${isRTL ? 'left-2' : 'right-2'} p-1 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-full`}>
-                    <X className="h-3.5 w-3.5 text-gray-400" />
-                  </button>
-                )}
-              </div>
-              <div className="mt-2 max-h-40 overflow-y-auto border border-purple-200 dark:border-purple-700 rounded-xl">
-                <button
-                  onClick={async () => { await handleLinkTableToSession(selectedSessionForLink, null); setTableSearch(''); }}
-                  disabled={linkingTable}
-                  className="w-full text-right px-4 py-2.5 text-sm transition-colors hover:bg-purple-50 dark:hover:bg-purple-900/30 border-b border-purple-100 dark:border-purple-800 text-gray-600 dark:text-gray-400 disabled:opacity-50"
-                >
-                  {t('gaming.noTable')}
-                </button>
-                {tables
-                  .filter((t: any) => t.isActive)
-                  .filter((t: any) => {
-                    if (!tableSearch) return true;
-                    const q = tableSearch.toLowerCase();
-                    return String(t.number).toLowerCase().includes(q) || (t.name || '').toLowerCase().includes(q);
-                  })
-                  .sort((a: any, b: any) => String(a.number).localeCompare(String(b.number), 'ar', { numeric: true }))
-                  .map((table: any) => {
-                    const bill = typeof selectedSessionForLink.bill === 'object' ? selectedSessionForLink.bill : null;
-                    const linkedTableId = (bill as any)?.table?._id;
-                    const isSelected = linkedTableId === table._id;
-                    return (
-                      <button
-                        key={table.id || table._id}
-                        onClick={() => { handleLinkTableToSession(selectedSessionForLink, table._id); setTableSearch(''); }}
-                        disabled={linkingTable}
-                        className={`w-full text-right px-4 py-2.5 text-sm transition-colors hover:bg-purple-50 dark:hover:bg-purple-900/30 border-b border-purple-100 dark:border-purple-800 last:border-b-0 disabled:opacity-50 flex items-center justify-between gap-2 ${isSelected ? 'bg-purple-100 dark:bg-purple-900/50 font-bold text-purple-800 dark:text-purple-200 ring-2 ring-purple-400 dark:ring-purple-600' : 'text-gray-700 dark:text-gray-300'}`}
-                      >
-                        <span>{t('gaming.table')} {table.number}</span>
-                        {getTableSectionLabel(table) ? <span className="text-xs opacity-70 text-right">{getTableSectionLabel(table)}</span> : null}
-                      </button>
-                    );
-                  })}
-              </div>
-            </div>
-
-            <div className="flex justify-end">
-              <button
-                onClick={() => {
-                  setShowLinkTableModal(false);
-                  setSelectedSessionForLink(null);
-                  setTableSearch('');
-                }}
-                className="px-6 py-3 bg-gray-200 dark:bg-gray-600 rounded-xl hover:bg-gray-300 dark:hover:bg-gray-500 text-gray-900 dark:text-gray-100 transition-all duration-200 font-bold shadow-md hover:shadow-lg transform hover:scale-105"
-                disabled={linkingTable}
-              >
-                {t('common.close')}
-              </button>
-            </div>
-          </div>
-        </div>
+        <ChangeTableModal
+          billLabel={(() => {
+            const bill = typeof selectedSessionForLink.bill === 'object' ? selectedSessionForLink.bill : null;
+            return bill?.billNumber || selectedSessionForLink.deviceName || '';
+          })()}
+          tables={tables}
+          excludeTableId={(() => {
+            const bill = typeof selectedSessionForLink.bill === 'object' ? selectedSessionForLink.bill : null;
+            return (bill as any)?.table?._id || undefined;
+          })()}
+          getSectionName={(t: any) => {
+            if (t.section && typeof t.section === 'object') return t.section.name || '';
+            if (t.sectionId && tableSections?.length) {
+              const sec = tableSections.find((s: any) => String(s._id || s.id) === String(t.sectionId));
+              return sec?.name || '';
+            }
+            return '';
+          }}
+          changing={linkingTable}
+          onConfirm={(id) => {
+            handleLinkTableToSession(selectedSessionForLink, id);
+          }}
+          onClose={() => {
+            setShowLinkTableModal(false);
+            setSelectedSessionForLink(null);
+            setTableSearch('');
+          }}
+        />
       )}
 
       {/* ????? ?? ??? ?????? ?? ??????? */}

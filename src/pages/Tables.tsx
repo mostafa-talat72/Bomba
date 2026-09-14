@@ -1993,7 +1993,16 @@ const loadInitialData = async () => {
           }, 0);
         }
         // تحديث متفائل — createOrder في DataContext حدث orders+bills، نحدث tableOrders فقط
-        setTableOrders(p => [...p, order]);
+        // Upsert (not blind append): the socket broadcast of this same order may
+        // have already inserted it via onOrderCreated — appending again would
+        // render two children with the same key.
+        setTableOrders(p => {
+          const oid = String((order as any)._id || (order as any).id);
+          if (p.some((o: any) => String((o as any)._id || (o as any).id) === oid)) {
+            return p.map((o: any) => String((o as any)._id || (o as any).id) === oid ? order : o);
+          }
+          return [...p, order];
+        });
         // إبطال كاش الطاولات لضمان إعادة الرسم الفوري
         // لا حاجة لـ fetchBills/fetchOrders المكرر — scheduleBackgroundRefetch للتأكيد فقط
         scheduleBackgroundRefetch(true);
@@ -2885,7 +2894,14 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
         }
         if (res.data?.createdBill) {
           const cb = res.data.createdBill;
-          setBills(prev => [...prev, cb]);
+          // Upsert (not blind append): the socket broadcast may have added it already.
+          setBills(prev => {
+            const cid = String((cb as any)._id || (cb as any).id);
+            if (prev.some((x: any) => String(x._id || x.id) === cid)) {
+              return prev.map((x: any) => String(x._id || x.id) === cid ? cb : x);
+            }
+            return [...prev, cb];
+          });
         }
         scheduleBackgroundRefetch(true);
       } else {
@@ -3585,7 +3601,7 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
                             const sc = statusCfg[order.status] || statusCfg.draft;
                             const orderTime = order.createdAt ? formatDateTime(order.createdAt) : '';
                             return (
-                              <div key={order.id} className={`bg-white dark:bg-gray-800 rounded-xl border overflow-hidden transition-all group cursor-pointer ${pinnedOrder?.id === order.id ? 'border-orange-400 ring-2 ring-orange-200' : 'border-gray-200/80 dark:border-gray-700/60 hover:border-gray-300'}`}
+                              <div key={String(order._id || order.id)} className={`bg-white dark:bg-gray-800 rounded-xl border overflow-hidden transition-all group cursor-pointer ${pinnedOrder?.id === order.id ? 'border-orange-400 ring-2 ring-orange-200' : 'border-gray-200/80 dark:border-gray-700/60 hover:border-gray-300'}`}
                                 onClick={() => { if (pinnedOrder?.id === order.id) setPinnedOrder(null); else setPinnedOrder(order); }}>
                                 <div className={`h-0.5 ${sc.dot}`} />
                                 <div className="flex items-center gap-2 px-2.5 py-2 sm:px-3 sm:py-2.5">

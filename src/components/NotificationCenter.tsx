@@ -192,11 +192,13 @@ const NotificationCenter: React.FC = () => {
     loadStats();
   }, []);
 
-  // Refresh notifications every 30 seconds
+  // Refresh every 30 seconds — stats ONLY while closed (lightweight ~0.1KB).
+  // The full 50-doc list (~66KB) used to download here just for the badge;
+  // badge + sound already run off context state (socket, real-time), and the
+  // full list loads on mount + when the panel opens.
   useEffect(() => {
     const interval = setInterval(() => {
       if (!isOpen) {
-        loadNotifications();
         loadStats();
       }
     }, 30000);

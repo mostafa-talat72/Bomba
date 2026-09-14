@@ -1,6 +1,7 @@
 import express from "express";
 import { protect } from "../middleware/auth.js";
 import Invite from "../models/Invite.js";
+import { createTombstone } from "../utils/tombstoneHelper.js";
 
 const router = express.Router();
 
@@ -86,6 +87,8 @@ router.delete("/:id", checkUsersPermission, async (req, res) => {
             });
         }
 
+        // Tombstone FIRST (before delete) so polling never resurrects it.
+        try { await createTombstone("invites", invite._id, invite.organization || req.user.organization, req.user._id); } catch {}
         await invite.deleteOne();
 
         res.json({

@@ -156,8 +156,8 @@ class FullSyncService {
         const atlasConnection = dualDatabaseManager.getAtlasConnection();
 
         // Get collections
-        const localCollection = localConnection.collection(collectionName);
-        const atlasCollection = atlasConnection.collection(collectionName);
+        const localCollection = localConnection.db.collection(collectionName);
+        const atlasCollection = atlasConnection.db.collection(collectionName);
 
         // Fetch all documents from both databases
         const localDocs = await localCollection.find({}).toArray();
@@ -172,20 +172,41 @@ class FullSyncService {
         // Compare and sync
         const differences = await this.compareDocuments(localDocs, atlasDocs);
 
-        if (differences.missingInAtlas.length > 0 || differences.outdatedInAtlas.length > 0) {
+        // Sync missing documents (tombstone-guarded — never resurrect deleted docs)
+        if (differences.missingInAtlas.length > 0) {
+            const { toPush, tombstoned } = await this.partitionMissingByTombstone(
+                localConnection,
+                atlasConnection,
+                collectionName,
+                differences.missingInAtlas
+            );
+
+            // Cleanup: docs deleted here or on another device must not stay in Local
+            if (tombstoned.length > 0) {
+                try {
+                    await localCollection.deleteMany({
+                        _id: { $in: tombstoned.map((d) => d._id) },
+                    });
+                    Logger.info(
+                        `   🗑️ Removed ${tombstoned.length} tombstoned documents from Local (${collectionName})`
+                    );
+                } catch {}
+            }
+
+            if (toPush.length > 0) {
+                Logger.info(
+                    `   🔍 Differences found: ${toPush.length} missing, ${differences.outdatedInAtlas.length} outdated`
+                );
+                await this.syncMissingDocuments(atlasCollection, toPush);
+            } else if (differences.outdatedInAtlas.length === 0) {
+                Logger.info(`   ✅ Already in sync - no changes needed`);
+            }
+        } else if (differences.outdatedInAtlas.length > 0) {
             Logger.info(
-                `   🔍 Differences found: ${differences.missingInAtlas.length} missing, ${differences.outdatedInAtlas.length} outdated`
+                `   🔍 Differences found: 0 missing, ${differences.outdatedInAtlas.length} outdated`
             );
         } else {
             Logger.info(`   ✅ Already in sync - no changes needed`);
-        }
-
-        // Sync missing documents
-        if (differences.missingInAtlas.length > 0) {
-            await this.syncMissingDocuments(
-                atlasCollection,
-                differences.missingInAtlas
-            );
         }
 
         // Sync outdated documents
@@ -318,6 +339,84 @@ class FullSyncService {
         });
 
         return sorted;
+    }
+
+    /**
+     * Partition local docs missing in Atlas into genuinely-new (safe to push)
+     * vs tombstoned (deleted here or on another device — must NOT be resurrected).
+     * Atlas-only tombstones are propagated to Local.
+     * Fail-open: on any error returns everything as toPush (previous behavior).
+     */
+    async partitionMissingByTombstone(localConnection, atlasConnection, collectionName, docs) {
+        if (collectionName === "tombstones") {
+            return { toPush: docs, tombstoned: [] };
+        }
+        try {
+            const localTombIds = await localConnection.db
+                .collection("tombstones")
+                .distinct("documentId", { collectionName })
+                .catch(() => []);
+            const localSet = new Set(localTombIds.map((id) => id.toString()));
+
+            let atlasSet = new Set();
+            try {
+                const atlasTombIds = await atlasConnection.db
+                    .collection("tombstones")
+                    .distinct("documentId", { collectionName });
+                atlasSet = new Set(atlasTombIds.map((id) => id.toString()));
+            } catch {}
+
+            const toPush = [];
+            const tombstoned = [];
+            const nowTs = Date.now();
+            for (const doc of docs) {
+                const idStr = doc._id.toString();
+                if (localSet.has(idStr) || atlasSet.has(idStr)) {
+                    tombstoned.push(doc);
+                    continue;
+                }
+                // Expired docs (expiresAt in the past — TTL removes them locally)
+                // must never be pushed to Atlas: clean them from Local instead.
+                const exp = doc.expiresAt ? new Date(doc.expiresAt).getTime() : NaN;
+                if (Number.isFinite(exp) && exp <= nowTs) {
+                    tombstoned.push(doc);
+                    continue;
+                }
+                toPush.push(doc);
+            }
+
+            // Propagate Atlas-only tombstones to Local so polling/other flows see them
+            for (const doc of tombstoned) {
+                const idStr = doc._id.toString();
+                if (atlasSet.has(idStr) && !localSet.has(idStr)) {
+                    try {
+                        const atlasTomb = await atlasConnection.db
+                            .collection("tombstones")
+                            .findOne({ documentId: doc._id, collectionName });
+                        if (atlasTomb) {
+                            await localConnection.db.collection("tombstones").updateOne(
+                                {
+                                    collectionName,
+                                    documentId: doc._id,
+                                    organization: atlasTomb.organization,
+                                },
+                                {
+                                    $set: {
+                                        deletedAt: atlasTomb.deletedAt,
+                                        deletedBy: atlasTomb.deletedBy,
+                                    },
+                                },
+                                { upsert: true }
+                            );
+                        }
+                    } catch {}
+                }
+            }
+
+            return { toPush, tombstoned };
+        } catch {
+            return { toPush: docs, tombstoned: [] };
+        }
     }
 
     /**

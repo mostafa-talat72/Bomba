@@ -44,9 +44,9 @@ export const deleteFromBothDatabases = async (document, collectionName, itemName
         
         // حذف من Atlas
         const atlasConnection = dualDatabaseManager.getAtlasConnection();
-        if (atlasConnection) {
+        if (atlasConnection && atlasConnection.readyState === 1 && atlasConnection.db) {
             try {
-                const atlasCollection = atlasConnection.collection(collectionName);
+                const atlasCollection = atlasConnection.db.collection(collectionName);
                 const atlasDeleteResult = await atlasCollection.deleteOne({ _id: documentId });
                 Logger.info(`✓ Deleted ${itemName} from Atlas (deletedCount: ${atlasDeleteResult.deletedCount})`);
             } catch (atlasError) {
@@ -94,9 +94,9 @@ export const deleteManyFromBothDatabases = async (documentIds, Model, collection
         
         // حذف من Atlas
         const atlasConnection = dualDatabaseManager.getAtlasConnection();
-        if (atlasConnection) {
+        if (atlasConnection && atlasConnection.readyState === 1 && atlasConnection.db) {
             try {
-                const atlasCollection = atlasConnection.collection(collectionName);
+                const atlasCollection = atlasConnection.db.collection(collectionName);
                 const atlasDeleteResult = await atlasCollection.deleteMany({ 
                     _id: { $in: documentIds } 
                 });

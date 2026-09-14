@@ -476,8 +476,9 @@ export const deleteAttendance = async (req, res) => {
     }
     
     const attendanceId = attendance._id;
-    await attendance.deleteOne();
+    // Tombstone FIRST (before delete) — see deleteAdvance.
     try { await createTombstone('attendances', attendanceId, req.user.organization, req.user._id); } catch (e) {}
+    await attendance.deleteOne();
     
     res.json({ 
       success: true,

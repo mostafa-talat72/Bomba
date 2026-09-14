@@ -1,6 +1,7 @@
 import Notification from "../models/Notification.js";
 import User from "../models/User.js";
 import Logger from "../middleware/logger.js";
+import { createTombstone, createTombstones } from "../utils/tombstoneHelper.js";
 import { resolveActivityContext } from "../utils/activity.js";
 import { getRequestActor } from "../middleware/auditStamping.js";
 
@@ -328,6 +329,8 @@ class NotificationService {
                 }
             }
 
+            // Tombstone FIRST (before delete) so polling never resurrects it.
+            try { await createTombstone("notifications", notification._id, notification.organization, userId); } catch {}
             await notification.deleteOne();
 
             return true;
@@ -340,6 +343,25 @@ class NotificationService {
     // تنظيف الإشعارات المنتهية الصلاحية
     static async cleanExpiredNotifications() {
         try {
+            // Snapshot + tombstones FIRST (grouped by org) so polling never
+            // resurrects them from Atlas on any device.
+            try {
+                const olds = await Notification.find(
+                    { expiresAt: { $lt: new Date() } },
+                    { _id: 1, organization: 1 }
+                ).lean();
+                const byOrg = new Map();
+                for (const d of olds) {
+                    const org = d.organization?._id || d.organization;
+                    if (!org) continue;
+                    const k = org.toString();
+                    if (!byOrg.has(k)) byOrg.set(k, { org, ids: [] });
+                    byOrg.get(k).ids.push(d._id);
+                }
+                for (const { org, ids } of byOrg.values()) {
+                    if (ids.length) await createTombstones("notifications", ids, org, null);
+                }
+            } catch {}
             const result = await Notification.cleanExpired();
 
             return result;

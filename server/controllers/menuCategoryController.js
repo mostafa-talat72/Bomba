@@ -2,6 +2,7 @@ import { getOrganizationId, organizationFilter } from '../utils/organization.js'
 import MenuCategory from "../models/MenuCategory.js";
 import MenuItem from "../models/MenuItem.js";
 import { writeToAtlas } from "../utils/atlasWrite.js";
+import { createTombstone } from "../utils/tombstoneHelper.js";
 import Logger from "../middleware/logger.js";
 import dualDatabaseManager from "../config/dualDatabaseManager.js";
 
@@ -233,7 +234,7 @@ export const deleteMenuCategory = async (req, res) => {
             });
         }
 
-        const category = await MenuCategory.findOneAndDelete({
+        const category = await MenuCategory.findOne({
             _id: id,
             ...organizationFilter(req.user),
         });
@@ -245,8 +246,20 @@ export const deleteMenuCategory = async (req, res) => {
             });
         }
 
+        // Tombstone FIRST (before delete): crash after this point still converges
+        // to deleted via polling instead of resurrecting.
+        try { await createTombstone('menucategories', category._id, category.organization || getOrganizationId(req.user), req.user._id); } catch (e) {}
+
+        await MenuCategory.deleteOne({
+            _id: id,
+            ...organizationFilter(req.user),
+        });
+
         // Fire-and-forget Atlas write for delete
         writeToAtlas('menucategories', 'delete', null, { _id: category._id });
+
+        // Tombstone لمنع إحياء الفئة المحذوفة على الأجهزة الأخرى
+        try { await createTombstone('menucategories', category._id, category.organization || getOrganizationId(req.user), req.user._id); } catch (e) {}
 
         // Return response IMMEDIATELY
         res.json({

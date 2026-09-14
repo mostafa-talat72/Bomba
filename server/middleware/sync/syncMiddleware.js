@@ -1,6 +1,7 @@
 import Logger from "../../middleware/logger.js";
 import syncConfig from "../../config/syncConfig.js";
 import syncQueueManager from "../../services/sync/syncQueueManager.js";
+import { depopulateDocForSync, depopulateSyncPayload } from "../../utils/syncSanitize.js";
 import { meshSyncEnabled, pushLanOp } from "../../utils/lanPeerSync.js";
 import OriginTracker from "../../services/sync/originTracker.js";
 
@@ -196,10 +197,12 @@ function postSaveHook(doc, next) {
         tracker.markLocalChange(doc._id);
 
         // Queue insert operation with origin metadata
+        // Depopulate first: a populated doc (orders/sessions/table as objects)
+        // must never overwrite ObjectId refs on the other side.
         const operation = {
             type: "insert",
             collection: collectionName,
-            data: docData,
+            data: depopulateDocForSync(collectionName, docData),
             timestamp: new Date(),
             origin: 'local',
             instanceId: tracker.instanceId,
@@ -246,6 +249,13 @@ function postUpdateHook(result, next) {
         // Get the update data
         const update = this.getUpdate();
 
+        // Aggregation pipeline updates (array) can't be flattened to $set.
+        // Log and skip sync for these — the actual data will sync via polling.
+        if (Array.isArray(update)) {
+            Logger.debug(`⏭️  [MIDDLEWARE] Skipping sync for ${collectionName} (aggregation pipeline update)`);
+            return next();
+        }
+
         // Validate update data for devices collection
         if (collectionName === 'devices' && update.$set) {
             // Check if the update would create invalid data
@@ -265,11 +275,13 @@ function postUpdateHook(result, next) {
         }
 
         // Queue update operation with origin metadata
+        // Depopulate first ($set-aware): populated objects (table/orders/...)
+        // must never overwrite ObjectId refs on the other side.
         const operation = {
             type: "update",
             collection: collectionName,
             filter: filter,
-            data: update.$set || update,
+            data: depopulateSyncPayload(collectionName, update.$set || update),
             timestamp: new Date(),
             origin: 'local',
             instanceId: tracker.instanceId,
@@ -315,11 +327,12 @@ function postFindOneAndUpdateHook(doc, next) {
         tracker.markLocalChange(doc._id);
 
         // Queue update operation with the document data and origin metadata
+        // Depopulate first: the returned doc may be populated.
         const operation = {
             type: "update",
             collection: collectionName,
             filter: filter,
-            data: doc.toObject ? doc.toObject() : doc,
+            data: depopulateDocForSync(collectionName, doc.toObject ? doc.toObject() : doc),
             timestamp: new Date(),
             origin: 'local',
             instanceId: tracker.instanceId,
