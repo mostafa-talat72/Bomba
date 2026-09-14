@@ -3,6 +3,7 @@ import { applySyncMiddleware } from "../middleware/sync/syncMiddleware.js";
 import { stampUpdatedBy } from "../middleware/auditStamping.js";
 import { auditPlugin } from "../utils/audit.js";
 import { getInstanceId } from "../utils/instanceId.js";
+import { bumpVersion } from "../utils/cacheVersion.js";
 
 const orderItemSchema = new mongoose.Schema({
     menuItem: {
@@ -317,6 +318,17 @@ orderSchema.pre("findOneAndUpdate", function (next) {
 // Apply sync middleware BEFORE creating the model
 applySyncMiddleware(orderSchema, 'Order');
 auditPlugin(orderSchema, 'orders');
+
+// Invalidate order-list caches on ANY write to this collection — local or
+// arriving through sync from another device. (Pre-hooks: fire even when the
+// write is applied via Model.updateOne sync paths.)
+orderSchema.pre("save", () => bumpVersion("orders"));
+orderSchema.pre("findOneAndUpdate", () => bumpVersion("orders"));
+orderSchema.pre("updateOne", () => bumpVersion("orders"));
+orderSchema.pre("updateMany", () => bumpVersion("orders"));
+orderSchema.pre("deleteOne", () => bumpVersion("orders"));
+orderSchema.pre("deleteMany", () => bumpVersion("orders"));
+orderSchema.pre("findOneAndDelete", () => bumpVersion("orders"));
 
 // Create the model AFTER middleware is applied
 const Order = mongoose.model("Order", orderSchema);

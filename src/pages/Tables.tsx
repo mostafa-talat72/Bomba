@@ -586,6 +586,10 @@ const loadInitialData = async () => {
       const durMin = Math.max(0, (now - startMs)) / 60000;
       const rate = getRate(session.controllers || 1);
       total = (durMin * rate) / 60;
+      // مطابقة calculateCost (فرع no-history): ceil إذا كان الكسر من الساعات >= 0.5
+      const hours = durMin / 60;
+      const fracPart = hours - Math.floor(hours);
+      return fracPart >= 0.5 ? Math.ceil(total) : Math.round(total);
     } else {
       for (const period of session.controllersHistory) {
         const pEnd = period.to ? new Date(period.to).getTime() : now;
@@ -596,8 +600,11 @@ const loadInitialData = async () => {
           total += (durMin * rate) / 60;
         }
       }
+      // مطابقة calculateCost (فرع history): ceil/round على الساعات المكافئة بنفس المعدل
+      const equivHours = total / (getRate(session.controllers || 1) || 1);
+      const fracPart = equivHours - Math.floor(equivHours);
+      return fracPart >= 0.5 ? Math.ceil(total) : Math.round(total);
     }
-    return Math.round(total);
   }, []);
 
   const hasAnyActiveSession = useMemo(() =>
@@ -612,42 +619,25 @@ const loadInitialData = async () => {
     if (pendingRefetchRef.current) return;
     pendingRefetchRef.current = setTimeout(() => {
       pendingRefetchRef.current = null;
+      // الصدى الفوري للسوكيت (دمج + جلب للفواتير والطلبات) يغطي الحالة المتصلة — نتخطى الجلب هنا لتفادي التكرار.
+      // ولو السوكيت مقطوع، هذا هو مسار التحديث الوحيد قبل fallback الـ 60s.
+      if (socketRef.current?.connected) return;
       const jobs: Promise<void>[] = [fetchersRef.current.fetchBills()];
       if (includeOrders) jobs.push(fetchersRef.current.fetchOrders());
-      Promise.all(jobs).then(() => fetchAllTableStatuses()).catch(() => {});
+      Promise.all(jobs).catch(() => {});
     }, 250);
   }, []);
 
   // ── tick لحظي كل 10 ثوانٍ — يعمل فقط لو فيه جلسات نشطة (بلا fetch لتجنب الفيضان، السوكت هو المصدر الفوري)
   const [tick, setTick] = useState(0);
-  const billsRef = useRef<Bill[]>([]);
-  billsRef.current = bills as Bill[];
   useEffect(() => {
     if (!hasAnyActiveSession) return;
     const id = setInterval(() => {
       setTick(t => t + 1);
     }, 10000);
-    // فواتير الجلسات النشطة فقط كل 30 ثانية — إجماليات حية دقيقة من السيرفر
-    // (طلب واحد خفيف لكل فاتورة بدل fetchBills الكامل، وبدون double-count).
-    const liveId = setInterval(() => {
-      try {
-        const activeBillIds = new Set<string>();
-        (billsRef.current || []).forEach((b: any) => {
-          if (['paid', 'cancelled'].includes(b.status)) return;
-          if ((b.sessions || []).some((s: any) => s && s.status === 'active')) {
-            activeBillIds.add(String(b._id || b.id));
-          }
-        });
-        activeBillIds.forEach(bid => {
-          api.getBill(bid).then((r: any) => {
-            if (r?.success && r.data) {
-              setBills(prev => prev.map((b: any) => String(b._id || b.id) === bid ? r.data : b));
-            }
-          }).catch(() => {});
-        });
-      } catch {}
-    }, 30000);
-    return () => { clearInterval(id); clearInterval(liveId); };
+    // (أُزيل جلب getBill لكل فاتورة نشطة — الحساب الحي محلياً عبر liveExtra/getSessionCost،
+    // والمزامنة عبر أحداث السوكيت + fetchBills الاحتياطي كل 30s في DataContext)
+    return () => { clearInterval(id); };
   }, [hasAnyActiveSession]);
 
   // السيرفر يحسب الفاتورة حية — لا نضيف delta هنا
@@ -697,7 +687,7 @@ const loadInitialData = async () => {
       });
     });
     return m;
-  }, [bills]);
+  }, [bills, tick]);
 
   // تنبيه صوتي مرة واحدة عند دخول جلسة نطاق التحذير/الخطر
   const alertedSessionsRef = useRef<Set<string>>(new Set());
@@ -1316,13 +1306,21 @@ const loadInitialData = async () => {
       const activeSessionType: 'playstation' | 'computer' | 'both' | null =
         hasPS && hasPC ? 'both' : hasPS ? 'playstation' : hasPC ? 'computer' : null;
 
-      // السيرفر الآن يحسب الفاتورة حية، لا حاجة لـ delta على الكارت — نعتمد على bill.remaining الحي من السيرفر
-      const liveExtra = 0;
+      // delta حية للجلسات النشطة (تُعاد كل tick فقط): فرق التكلفة الحية عن المخزنة — تُعرض على الكارت
+      // الكروت بلا جلسات نشطة تبقى liveExtra=0 ثابتة فيتخطاها memo ولا تُعاد رسمها
+      let liveExtra = 0;
+      for (const s of activeSessions) {
+        try {
+          const live = getSessionCost(s);
+          const stored = Number((s as any).totalCost) || Number((s as any).finalCost) || 0;
+          if (live > stored) liveExtra += live - stored;
+        } catch {}
+      }
 
       result.set(tid, { tBills, tOrdersCount, activeSessionType, liveExtra });
     });
     return result;
-  }, [bills, orders, activeTables, getSessionCost]);
+  }, [bills, orders, activeTables, getSessionCost, tick]);
 
   // ── gamingDeviceData — بيانات الأجهزة محسوبة خارج JSX ──────────────────
   const gamingDeviceData = useMemo(() => {

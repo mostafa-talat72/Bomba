@@ -5,6 +5,7 @@ import { stampUpdatedBy } from "../middleware/auditStamping.js";
 import { auditPlugin } from "../utils/audit.js";
 import { getInstanceId } from "../utils/instanceId.js";
 import Logger from "../middleware/logger.js";
+import { bumpVersion } from "../utils/cacheVersion.js";
 
 // Helper function to get item redistribution key
 // Uses menuItem ID if available, falls back to name|price for backward compatibility
@@ -1692,10 +1693,34 @@ billSchema.methods.calculateSubtotal = async function () {
 
     // Add sessions total (استخدم breakdown الفعلي)
     if (this.sessions && this.sessions.length > 0) {
+        // جمع أسعار الأجهزة دفعة واحدة — بدل استعلام Device.findById لكل جلسة نشطة
+        // (مع DB سحابي هذا يختصر N اتصالات متسلسلة إلى اتصال واحد)
+        const pendingDeviceIds = [
+            ...new Set(
+                this.sessions
+                    .filter(s => !(s.status === 'completed' && (Number(s.finalCost) || Number(s.totalCost))))
+                    .map(s => s.deviceId)
+                    .filter(Boolean)
+                    .map(String)
+            ),
+        ];
+        let deviceRateMap = new Map();
+        if (pendingDeviceIds.length > 0) {
+            const devices = await mongoose
+                .model('Device')
+                .find({ _id: { $in: pendingDeviceIds } })
+                .select('type hourlyRate playstationRates')
+                .lean();
+            deviceRateMap = new Map(devices.map(d => [String(d._id), d]));
+        }
         for (const session of this.sessions) {
             let sessionCost = 0;
-            if (typeof session.getCostBreakdownAsync === "function") {
-                const { totalCost } = await session.getCostBreakdownAsync();
+            if (session.status === 'completed' && (Number(session.finalCost) || Number(session.totalCost))) {
+                // الجلسات المنتهية: التكلفة متجمدة في finalCost — لا داعي لإعادة الحساب
+                sessionCost = Number(session.finalCost) || Number(session.totalCost) || 0;
+            } else if (typeof session.getCostBreakdownAsync === "function") {
+                const device = deviceRateMap.get(String(session.deviceId));
+                const { totalCost } = await session.getCostBreakdownAsync(device);
                 sessionCost = totalCost;
             } else {
                 sessionCost = session.finalCost || session.totalCost || 0;
@@ -1962,5 +1987,15 @@ billSchema.pre("findOneAndUpdate", function (next) {
 // Apply sync middleware
 applySyncMiddleware(billSchema, 'Bill');
 auditPlugin(billSchema, 'bills');
+
+// Invalidate caches that depend on bill state (order visibility, totals) on
+// ANY write to this collection — local or through sync from another device.
+billSchema.pre("save", () => bumpVersion("bills"));
+billSchema.pre("findOneAndUpdate", () => bumpVersion("bills"));
+billSchema.pre("updateOne", () => bumpVersion("bills"));
+billSchema.pre("updateMany", () => bumpVersion("bills"));
+billSchema.pre("deleteOne", () => bumpVersion("bills"));
+billSchema.pre("deleteMany", () => bumpVersion("bills"));
+billSchema.pre("findOneAndDelete", () => bumpVersion("bills"));
 
 export default mongoose.model("Bill", billSchema);

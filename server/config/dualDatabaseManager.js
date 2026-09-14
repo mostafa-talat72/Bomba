@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import Logger from "../middleware/logger.js";
 import syncConfig from "./syncConfig.js";
+import { buildNonSrvAtlasUri } from "../utils/atlasUriFallback.js";
 
 /**
  * DualDatabaseManager
@@ -105,54 +106,91 @@ class DualDatabaseManager {
         }
 
         try {
-            Logger.info("🔄 Connecting to MongoDB Atlas (Backup)...");
-
-            const options = {
-                maxPoolSize: 20,
-                serverSelectionTimeoutMS: 10000,
-                socketTimeoutMS: 15000,
-                family: 4,
-                retryWrites: true,
-                w: "majority",
-                minPoolSize: 1,
-                maxIdleTimeMS: 30000
-            };
-
-            // Create separate connection for Atlas
-            // Let mongoose resolve DNS SRV + handle timeouts — no TCP pre-probe needed
-            this.atlasConnection = mongoose.createConnection(uri, options);
-            
-            // Wait for connection to be ready (mongoose handles DNS SRV resolution)
-            await new Promise((resolve, reject) => {
-                this.atlasConnection.once('open', resolve);
-                this.atlasConnection.once('error', reject);
-                setTimeout(() => reject(new Error('Atlas connection timeout after 15 seconds')), 15000);
-            });
-            
-            this.isAtlasConnected = true;
-            this.reconnectAttempts = 0;
-            this.hourlyRetryScheduled = false;
-
-            Logger.info(`✅ MongoDB Atlas Connected Successfully! (Backup)`);
-            Logger.info(`📊 Database: ${this.atlasConnection.name}`);
-            Logger.info(`🌐 Host: ${this.atlasConnection.host}`);
-
-            // Test connection
-            try {
-                await this.atlasConnection.db.admin().ping();
-                Logger.info("✅ Atlas database ping successful");
-            } catch (pingError) {
-                Logger.warn("⚠️ Atlas database ping failed, but connection established");
+            // Candidate URIs: the configured one first, then (if it's an SRV
+            // URI) a standard non-SRV build — some networks REFUSE `querySrv`
+            // lookups while answering plain A-record queries fine.
+            const candidates = [uri];
+            if (uri.startsWith("mongodb+srv://")) {
+                const fallback = await buildNonSrvAtlasUri(uri).catch(() => null);
+                if (fallback && fallback !== uri) candidates.push(fallback);
             }
 
-            // Setup event handlers
-            this.setupAtlasEventHandlers();
+            let lastError = null;
+            for (const candidate of candidates) {
+                const scheme = candidate.startsWith("mongodb+srv://") ? "SRV" : "standard";
+                try {
+                    Logger.info(
+                        `🔄 Connecting to MongoDB Atlas (Backup) via ${scheme}...`
+                    );
 
-            return this.atlasConnection;
-        } catch (error) {
+                    const options = {
+                        maxPoolSize: 20,
+                        serverSelectionTimeoutMS: 10000,
+                        socketTimeoutMS: 15000,
+                        family: 4,
+                        retryWrites: true,
+                        w: "majority",
+                        minPoolSize: 1,
+                        maxIdleTimeMS: 30000
+                    };
+
+                    if (this.atlasConnection) {
+                        try {
+                            this.atlasConnection.removeAllListeners();
+                            await this.atlasConnection.close(false);
+                        } catch {}
+                        this.atlasConnection = null;
+                    }
+
+                    // Create separate connection for Atlas
+                    this.atlasConnection = mongoose.createConnection(candidate, options);
+
+                    // Wait for connection to be ready (mongoose handles DNS resolution)
+                    await new Promise((resolve, reject) => {
+                        this.atlasConnection.once('open', resolve);
+                        this.atlasConnection.once('error', reject);
+                        setTimeout(() => reject(new Error('Atlas connection timeout after 15 seconds')), 15000);
+                    });
+
+                    this.isAtlasConnected = true;
+                    this.reconnectAttempts = 0;
+                    this.hourlyRetryScheduled = false;
+
+                    Logger.info(`✅ MongoDB Atlas Connected Successfully! (Backup)`);
+                    Logger.info(`📊 Database: ${this.atlasConnection.name}`);
+                    Logger.info(`🌐 Host: ${this.atlasConnection.host}`);
+
+                    // Test connection
+                    try {
+                        await this.atlasConnection.db.admin().ping();
+                        Logger.info("✅ Atlas database ping successful");
+                    } catch (pingError) {
+                        Logger.warn("⚠️ Atlas database ping failed, but connection established");
+                    }
+
+                    // Setup event handlers
+                    this.setupAtlasEventHandlers();
+
+                    return this.atlasConnection;
+                } catch (error) {
+                    lastError = error;
+                    if (scheme === "SRV") {
+                        Logger.warn(
+                            `⚠️ MongoDB Atlas connection failed via SRV: ${error.message}`
+                        );
+                        if (candidates.length > 1) {
+                            Logger.info("↩️ Retrying Atlas with a standard (non-SRV) connection string...");
+                        }
+                    } else {
+                        Logger.warn(
+                            `⚠️ MongoDB Atlas connection failed via standard URI: ${error.message}`
+                        );
+                    }
+                }
+            }
+
             this.isAtlasConnected = false;
-            Logger.warn(`⚠️ MongoDB Atlas connection failed: ${error.message}`);
-            this.logConnectionError(error, "atlas");
+            this.logConnectionError(lastError, "atlas");
 
             // Schedule reconnection only if not already scheduled by monitor
             if (!this._reconnectScheduled) {

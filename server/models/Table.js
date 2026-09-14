@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import { applySyncMiddleware } from "../middleware/sync/syncMiddleware.js";
 import { auditPlugin } from "../utils/audit.js";
+import { bumpVersion } from "../utils/cacheVersion.js";
 
 const tableSchema = new mongoose.Schema(
     {
@@ -53,5 +54,15 @@ tableSchema.add({
 // Apply sync middleware
 applySyncMiddleware(tableSchema, 'Table');
 auditPlugin(tableSchema, 'tables');
+
+// Orders/bills GET responses embed table name/number. A table rename/status
+// change must invalidate those caches too.
+tableSchema.pre("save", () => { bumpVersion("orders"); bumpVersion("bills"); });
+tableSchema.pre("findOneAndUpdate", () => { bumpVersion("orders"); bumpVersion("bills"); });
+tableSchema.pre("updateOne", () => { bumpVersion("orders"); bumpVersion("bills"); });
+tableSchema.pre("updateMany", () => { bumpVersion("orders"); bumpVersion("bills"); });
+tableSchema.pre("deleteOne", () => { bumpVersion("orders"); bumpVersion("bills"); });
+tableSchema.pre("deleteMany", () => { bumpVersion("orders"); bumpVersion("bills"); });
+tableSchema.pre("findOneAndDelete", () => { bumpVersion("orders"); bumpVersion("bills"); });
 
 export default mongoose.model("Table", tableSchema);

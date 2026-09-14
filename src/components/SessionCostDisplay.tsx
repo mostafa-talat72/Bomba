@@ -44,6 +44,10 @@ export const SessionCostDisplay: React.FC<SessionCostDisplayProps> = ({ session,
       const hourlyRate = getRate(session.controllers || 1);
       const minuteRate = hourlyRate / 60;
       total = minutes * minuteRate;
+      // مطابقة calculateCost (فرع no-history): ceil إذا كان كسر الساعات >= 0.5
+      const hours = minutes / 60;
+      const fracPart = hours - Math.floor(hours);
+      return fracPart >= 0.5 ? Math.ceil(total) : Math.round(total);
     } else {
       // Calculate based on controllersHistory
       for (const period of session.controllersHistory) {
@@ -60,9 +64,11 @@ export const SessionCostDisplay: React.FC<SessionCostDisplayProps> = ({ session,
           total += periodCost;
         }
       }
+      // مطابقة calculateCost (فرع history): ceil/round على الساعات المكافئة بنفس المعدل
+      const equivHours = total / (getRate(session.controllers || 1) || 1);
+      const fracPart = equivHours - Math.floor(equivHours);
+      return fracPart >= 0.5 ? Math.ceil(total) : Math.round(total);
     }
-
-    return Math.round(total);
   };
 
   // Calculate duration

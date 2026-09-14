@@ -25,6 +25,7 @@ import { actorFromReq } from "../utils/actorInfo.js";
 import { writeToAtlas } from "../utils/atlasWrite.js";
 import { getId, sameId } from "../utils/idUtils.js";
 import cache from "../utils/simpleCache.js";
+import { getVersion } from "../utils/cacheVersion.js";
 import MenuItem from "../models/MenuItem.js";
 import InventoryItem from "../models/InventoryItem.js";
 import {
@@ -290,8 +291,10 @@ export const getBills = async (req, res) => {
         query.organization = getOrganizationId(req.user);
 
         // ── SimpleCache 10s TTL for getBills — fast fetch (<50ms) ──
+        // Version key: any Bill write bumps getVersion("bills"), so the cache
+        // never serves stale data after a change (local or from sync).
         const billsOrgId = String(getOrganizationId(req.user));
-        const billsCacheKey = `bills:${billsOrgId}:${JSON.stringify({ status, table, tableNumber, customerName, q, all, page, limit, fulfillmentType, mode })}`;
+        const billsCacheKey = `bills:${billsOrgId}:${getVersion("bills")}:${JSON.stringify({ status, table, tableNumber, customerName, q, all, page, limit, fulfillmentType, mode })}`;
         const cachedBills = cache.get(billsCacheKey);
         if (cachedBills && !q) {
             return res.json(cachedBills);
@@ -320,8 +323,12 @@ export const getBills = async (req, res) => {
             .populate({
                 path: "sessions",
                 select: isListMode
-                    ? "_id deviceName deviceNumber status startTime endTime finalCost"
+                    ? "_id deviceName deviceNumber deviceType status startTime endTime controllers controllersHistory totalCost finalCost deviceId"
                     : "deviceName deviceNumber deviceType status startTime endTime controllers controllersHistory discount totalCost finalCost deviceId",
+                populate: {
+                    path: "deviceId",
+                    select: "type hourlyRate playstationRates",
+                },
             })
             .populate(isListMode
                 ? {
@@ -673,6 +680,10 @@ export const getBill = async (req, res) => {
                                 const durMin = Math.max(0, (now.getTime() - startMs) / 60000);
                                 const rate = getRate(s.controllers || 1);
                                 total = (durMin * rate) / 60;
+                                // مطابقة calculateCost (فرع no-history): ceil إذا كان كسر الساعات >= 0.5
+                                const hours = durMin / 60;
+                                const fracPart = hours - Math.floor(hours);
+                                liveSessionsTotal += fracPart >= 0.5 ? Math.ceil(total) : Math.round(total);
                             }
                         } else {
                             for (const period of s.controllersHistory) {
@@ -684,8 +695,11 @@ export const getBill = async (req, res) => {
                                     total += (durMin * rate) / 60;
                                 }
                             }
+                            // مطابقة calculateCost (فرع history): ceil/round على الساعات المكافئة بنفس المعدل
+                            const equivHours = total / (getRate(s.controllers || 1) || 1);
+                            const fracPart = equivHours - Math.floor(equivHours);
+                            liveSessionsTotal += fracPart >= 0.5 ? Math.ceil(total) : Math.round(total);
                         }
-                        liveSessionsTotal += Math.round(total);
                     }
                 }
                 const ordersTotal = Array.isArray(bill.orders)

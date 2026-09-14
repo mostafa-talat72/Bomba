@@ -18,6 +18,17 @@ import { updateTableStatusIfNeeded } from "../utils/tableUtils.js";
 import { getId, sameId } from "../utils/idUtils.js";
 
 // ── Helper: instant emit for session + bill + table, keeps DB writes immediate ──
+// Populate كامل للفاتورة المبثوثة في أي عملية جلسة (إنهاء/ربط/فك ربط/تعديل وقت/تعديل أذرعة):
+// الجلسات بكل الحقول + أسعار الجهاز، حتى يسمع العميل فاتورة كاملة ويحسبها صحيحة فوراً من أول لحظة.
+const BILL_FOR_EMIT_POPULATE = [
+    {
+        path: "sessions",
+        select: "deviceName deviceNumber deviceType status startTime endTime controllers controllersHistory discount totalCost finalCost deviceId",
+        populate: { path: "deviceId", select: "type hourlyRate playstationRates" },
+    },
+    { path: "createdBy", select: "name" },
+];
+
 function emitSessionInstant(req, session, bill, type = "updated") {
     // fire-and-forget Atlas writes — local save already done before emit
     try { if (session?._id) writeToAtlas('sessions', 'upsert', session.toObject ? session.toObject() : session, { _id: session._id }); } catch {}
@@ -28,15 +39,11 @@ function emitSessionInstant(req, session, bill, type = "updated") {
         if (!orgId) return;
         const orgStr = String(orgId);
         req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit(type === "started" ? 'session:created' : 'session:updated', session);
-        req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit(type === "started" ? 'session:created' : 'session:updated', session); // duplicate for colon compat
         req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('session-update', { type, session });
         try { req.io.notifySessionUpdate(type, session, req.user.organization); } catch {}
         if (bill) {
+            // البث مرة واحدة عبر notifyBillUpdate (bill-update + bill:updated) — بلا تكرار
             try { req.io.notifyBillUpdate("updated", bill, req.user.organization); } catch {}
-            try {
-                req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('bill:updated', bill);
-                req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('bill-update', { type: 'updated', bill });
-            } catch {}
             if (bill.table) {
                 try {
                     req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('table:statusChanged', { tableId: bill.table?._id || bill.table, status: 'occupied' });
@@ -49,10 +56,7 @@ function emitSessionInstant(req, session, bill, type = "updated") {
                 req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('table:statusChanged', { tableId: tid, status: 'occupied' });
             } catch {}
         }
-        // also emit session:created/updated colon for tables/bills cross-sync
-        try {
-            req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit(type === "started" ? 'bill:updated' : 'bill:updated', bill || session);
-        } catch {}
+        // bill:updated/bill-update تُبث مرة واحدة عبر notifyBillUpdate أعلاه — بلا تكرار
     } catch {}
 }
 
@@ -909,7 +913,6 @@ const sessionController = {
 
                         if (req.io) {
                             try { req.io.notifySessionUpdate("started", session, getOrganizationId(req.user)); } catch (e) {}
-                            try { if (bill) req.io.notifyBillUpdate("updated", bill, getOrganizationId(req.user), { silent: true }); } catch (e) {}
                             try { req.io.notifyTableStatusUpdate({ tableId: table || null }, getOrganizationId(req.user)); } catch (e) {}
                         }
                     } catch (bgError) {
@@ -971,8 +974,27 @@ const sessionController = {
             // Fire-and-forget Atlas write
             writeToAtlas('sessions', 'upsert', session.toObject ? session.toObject() : session, { _id: session._id });
 
+            // ── إعادة حساب الفاتورة كاملة (كل الجلسات وكل الطلبات) والبث فوراً بالبيانات الكاملة ──
+            let billForEmit = null;
+            if (session.bill) {
+                try {
+                    const bToUpdate = await Bill.findById(session.bill);
+                    if (bToUpdate) {
+                        await bToUpdate.calculateSubtotal();
+                        bToUpdate.updatedBy = req.user._id;
+                        await bToUpdate.save();
+                        writeToAtlas('bills', 'upsert', bToUpdate.toObject ? bToUpdate.toObject() : bToUpdate, { _id: bToUpdate._id });
+                        await bToUpdate.populate(BILL_FOR_EMIT_POPULATE);
+                        billForEmit = bToUpdate;
+                        if (bToUpdate.table) { try { await updateTableStatusIfNeeded(bToUpdate.table, req.user.organization, req.io); } catch {} }
+                    }
+                } catch (billEmitError) {
+                    Logger.error('bill update failed after controllers change:', billEmitError);
+                }
+            }
+
             // ── Instant emit (<100ms) ──
-            emitSessionInstant(req, session, session.bill ? await Bill.findById(session.bill).lean().catch(()=>null) : null);
+            emitSessionInstant(req, session, billForEmit);
 
             // Prepare minimal response data
             const responseData = {
@@ -1213,22 +1235,11 @@ const sessionController = {
                     const BillM = mongoose.model('Bill');
                     const bill = await BillM.findById(session.bill);
                     if (bill) {
-                        const sessionsInBill = await Session.find({ 
-                            bill: bill._id,
-                            ...organizationFilter(req.user),
-                        });
-                        const ordersInBill = await mongoose.model('Order').find({ 
-                            bill: bill._id,
-                            ...organizationFilter(req.user),
-                        });
-                        const sessionsTotal = sessionsInBill.reduce((sum, s) => sum + (s.finalCost || 0), 0);
-                        const ordersTotal = ordersInBill.reduce((sum, order) => sum + (order.finalAmount || 0), 0);
-                        bill.subtotal = sessionsTotal + ordersTotal;
-                        bill.total = bill.subtotal - (bill.discount || 0) + (bill.tax || 0);
-                        bill.remaining = bill.total - (bill.paid || 0);
+                        await bill.calculateSubtotal();
                         bill.updatedBy = req.user._id;
                         await bill.save();
                         writeToAtlas('bills', 'upsert', bill.toObject ? bill.toObject() : bill, { _id: bill._id });
+                        await bill.populate(BILL_FOR_EMIT_POPULATE);
                         updatedBillForEmit = bill;
                         if (bill.table) { try { await updateTableStatusIfNeeded(bill.table, req.user.organization, req.io); } catch {} }
                         Logger.info(`Updated bill ${bill._id} after session time update:`, {
@@ -1242,13 +1253,6 @@ const sessionController = {
             }
             // ── Instant emit <100ms before response — local save before emit ──
             emitSessionInstant(req, session, updatedBillForEmit);
-            if (updatedBillForEmit && req.io) {
-                try {
-                    const orgStr = String(getOrganizationId(req.user));
-                    req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('bill:updated', updatedBillForEmit);
-                    req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('bill-update', { type: 'updated', bill: updatedBillForEmit });
-                } catch {}
-            }
             
             await session.populate(["createdBy", "updatedBy"], "name");
 
@@ -1666,7 +1670,6 @@ const sessionController = {
             session.updatedBy = req.user._id;
 
             await session.save();
-            emitSessionInstant(req, session, null);
             
             Logger.info('🔍 After save:', {
                 sessionId: session._id,
@@ -1688,13 +1691,25 @@ const sessionController = {
                 });
             }
 
+            // ── تحرير الجهاز بالتوازي (مستقل عن حساب الفاتورة — يفرغ الجهاز فوراً) ──
+            const deviceUpdatePromise = Device.findOneAndUpdate(
+                { _id: session.deviceId },
+                { status: "available" }
+            );
+
+            // جلب الفاتورة بالتوازي مع إعادة تحميل الجلسة — مع DB سحابي هذا يوفر RTT كامل
+            const billFindPromise = session.bill
+                ? Bill.findById(session.bill._id || session.bill).catch(() => null)
+                : Promise.resolve(null);
+
             // Update existing bill with final cost OR create new bill if missing
-            let updatedBill = null;
-            if (updatedSession.bill) {
+            let updatedBill = await billFindPromise;
+            if (!updatedBill && updatedSession.bill) {
+                updatedBill = await Bill.findById(updatedSession.bill);
+            }
+            if (updatedBill) {
                 try {
-                    updatedBill = await Bill.findById(updatedSession.bill);
-                    if (updatedBill) {
-                        // تحديد اسم العميل فقط إذا لم تكن الفاتورة مرتبطة بطاولة
+                    // تحديد اسم العميل فقط إذا لم تكن الفاتورة مرتبطة بطاولة
                         if (!updatedBill.table) {
                             const userLanguage = getUserLanguage(req.user);
                             const deviceType = updatedSession.deviceType;
@@ -1734,23 +1749,24 @@ const sessionController = {
                         updatedBill.updatedBy = req.user._id;
 
                         await updatedBill.save();
-                        await updatedBill.populate(["sessions", "createdBy"], "name");
+await updatedBill.populate([
+                                {
+                                    path: "sessions",
+                                    select: "deviceName deviceNumber deviceType status startTime endTime controllers controllersHistory discount totalCost finalCost deviceId",
+                                    populate: { path: "deviceId", select: "type hourlyRate playstationRates" },
+                                },
+                                { path: "createdBy", select: "name" },
+                            ]);
 
                         // Fire-and-forget Atlas write for bill
                         writeToAtlas('bills', 'upsert', updatedBill.toObject ? updatedBill.toObject() : updatedBill, { _id: updatedBill._id });
 
                         Logger.info(`✓ Bill updated successfully: ${updatedBill.billNumber}, Customer: ${updatedBill.customerName}`);
-                    } else {
-                        Logger.error(
-                            "❌ Bill not found for session:",
-                            updatedSession.bill
-                        );
-                    }
                 } catch (billError) {
                     Logger.error("❌ خطأ في تحديث الفاتورة:", billError);
                     // Continue with session ending even if bill update fails
                 }
-            } else {
+            } else if (!updatedSession.bill) {
                 // إنشاء فاتورة جديدة للجلسة إذا لم تكن موجودة
                 Logger.warn(
                     "⚠️ No bill reference found in session, creating new bill:",
@@ -1808,9 +1824,15 @@ const sessionController = {
                     // ربط الفاتورة بالجلسة
                     updatedSession.bill = updatedBill._id;
                     await updatedSession.save();
-            emitSessionInstant(req, updatedSession, null);
                     
-                    await updatedBill.populate(["sessions", "createdBy"], "name");
+                    await updatedBill.populate([
+                        {
+                            path: "sessions",
+                            select: "deviceName deviceNumber deviceType status startTime endTime controllers controllersHistory discount totalCost finalCost deviceId",
+                            populate: { path: "deviceId", select: "type hourlyRate playstationRates" },
+                        },
+                        { path: "createdBy", select: "name" },
+                    ]);
                     
                     // Fire-and-forget Atlas write for new bill
                     writeToAtlas('bills', 'upsert', updatedBill.toObject ? updatedBill.toObject() : updatedBill, { _id: updatedBill._id });
@@ -1827,11 +1849,8 @@ const sessionController = {
                 }
             }
 
-            // Update device status to available
-            await Device.findOneAndUpdate(
-                { _id: session.deviceId },
-                { status: "available" }
-            );
+            // Update device status to available (بدأ بالتوازي قبل الفاتورة)
+            await deviceUpdatePromise;
 
             if (updatedSession.table) {
                 await updateTableStatusIfNeeded(updatedSession.table, req.user.organization, req.io);
@@ -1903,7 +1922,7 @@ const sessionController = {
 
                     if (req.io) {
                         try { req.io.notifySessionUpdate("ended", updatedSession, req.user.organization); } catch (e) {}
-                        try { if (updatedBill) req.io.notifyBillUpdate("updated", updatedBill, req.user.organization, { silent: true }); } catch (e) {}
+                        // (البث تم عبر emitSessionInstant أعلاه — بلا تكرار)
                     }
                 } catch (bgError) {
                     Logger.error('Background tasks failed for endSession:', bgError);
@@ -2018,20 +2037,18 @@ const sessionController = {
 
             // Save bill without modifying customer name
             const updatedBill = await Bill.findByIdAndUpdate(bill._id, updateData, { new: true })
-                .populate(["sessions", "createdBy"], "name");
+                .populate({
+                    path: "sessions",
+                    select: "deviceName deviceNumber deviceType status startTime endTime controllers controllersHistory discount totalCost finalCost deviceId",
+                    populate: { path: "deviceId", select: "type hourlyRate playstationRates" },
+                })
+                .populate("createdBy", "name");
             if (updatedBill) writeToAtlas('bills', 'upsert', updatedBill.toObject ? updatedBill.toObject() : updatedBill, { _id: updatedBill._id });
             if (table || updatedBill?.table) {
                 await updateTableStatusIfNeeded(table || updatedBill.table, req.user.organization, req.io);
             }
             // ── Instant emit <100ms before response ──
             emitSessionInstant(req, session, updatedBill, "started");
-            if (updatedBill && req.io) {
-                try {
-                    const orgStr = String(getOrganizationId(req.user));
-                    req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('bill:updated', updatedBill);
-                    req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('bill-update', { type: 'updated', bill: updatedBill });
-                } catch {}
-            }
 
             // إرسال إشعار بدء الجلسة — fire-and-forget (background).
             setImmediate(async () => {
@@ -2408,7 +2425,7 @@ const sessionController = {
 
             // Populate session data
             await session.populate(["createdBy", "updatedBy", "bill"], "name");
-            await newBill.populate(["sessions", "createdBy"], "name");
+            await newBill.populate(BILL_FOR_EMIT_POPULATE);
 
             // Create notification
             try {
@@ -2506,8 +2523,6 @@ const sessionController = {
                 emitSessionInstant(req, session, newBill);
                 if (req.io) {
                     const orgStr = String(getOrganizationId(req.user));
-                    req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('bill:updated', newBill);
-                    req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('bill-update', { type: 'updated', bill: newBill });
                     if (newBill.table) {
                         req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('table:statusChanged', { tableId: newBill.table, status: 'occupied' });
                         req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('table-status-update', { tableId: newBill.table, status: 'occupied' });
@@ -2954,8 +2969,6 @@ const sessionController = {
                 emitSessionInstant(req, updatedSession, finalBill);
                 if (req.io) {
                     const orgStr = String(getOrganizationId(req.user));
-                    req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('bill:updated', finalBill);
-                    req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('bill-update', { type: 'updated', bill: finalBill });
                     req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('table:statusChanged', { tableId: table._id, status: 'occupied' });
                     req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('table-status-update', { tableId: table._id, status: 'occupied' });
                     try { await updateTableStatusIfNeeded(table._id, req.user.organization, req.io); } catch {}
@@ -3679,8 +3692,6 @@ const sessionController = {
                 emitSessionInstant(req, updatedSession, finalBill);
                 if (req.io) {
                     const orgStr = String(getOrganizationId(req.user));
-                    req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('bill:updated', finalBill);
-                    req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('bill-update', { type: 'updated', bill: finalBill });
                     // emit both tables status
                     const oldTid = currentBill.table || null;
                     if (oldTid) {
@@ -3852,6 +3863,7 @@ const sessionController = {
                         await bill.calculateSubtotal();
                         await bill.save();
                         writeToAtlas('bills', 'upsert', bill.toObject ? bill.toObject() : bill, { _id: bill._id });
+                        await bill.populate(BILL_FOR_EMIT_POPULATE);
                         billForEmit = bill;
                         if (bill.table) { try { await updateTableStatusIfNeeded(bill.table, req.user.organization, req.io); } catch {} }
                     }
@@ -3861,9 +3873,6 @@ const sessionController = {
             }
             // ── Instant emit <100ms before response ──
             emitSessionInstant(req, session, billForEmit);
-            if (billForEmit && req.io) {
-                try { const orgStr = String(getOrganizationId(req.user)); req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('bill:updated', billForEmit); } catch {}
-            }
 
             // Populate session data
             await session.populate(["createdBy", "updatedBy", "bill"], "name");
@@ -4027,6 +4036,7 @@ const sessionController = {
                         await bill.calculateSubtotal();
                         await bill.save();
                         writeToAtlas('bills', 'upsert', bill.toObject ? bill.toObject() : bill, { _id: bill._id });
+                        await bill.populate(BILL_FOR_EMIT_POPULATE);
                         billForEmitTimes = bill;
                         if (bill.table) { try { await updateTableStatusIfNeeded(bill.table, req.user.organization, req.io); } catch {} }
                         Logger.info(`✓ Bill updated after session time change:`, {
@@ -4041,9 +4051,6 @@ const sessionController = {
             }
             // ── Instant emit <100ms before response ──
             emitSessionInstant(req, session, billForEmitTimes);
-            if (billForEmitTimes && req.io) {
-                try { const orgStr = String(getOrganizationId(req.user)); req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('bill:updated', billForEmitTimes); } catch {}
-            }
 
             // Populate session data
             await session.populate(["createdBy", "updatedBy", "bill"], "name");

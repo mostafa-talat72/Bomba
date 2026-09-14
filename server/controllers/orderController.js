@@ -10,6 +10,8 @@ import NotificationService from "../services/notificationService.js";
 import { createTombstone } from "../utils/tombstoneHelper.js";
 import mongoose from "mongoose";
 import performanceMetrics from "../utils/performanceMetrics.js";
+import cache from "../utils/simpleCache.js";
+import { getVersion } from "../utils/cacheVersion.js";
 import { getInstanceId } from "../utils/instanceId.js";
 import { actorFromReq } from "../utils/actorInfo.js";
 import { writeToAtlas } from "../utils/atlasWrite.js";
@@ -29,6 +31,12 @@ import {
 // UX visibility filter only — auth/org scoping is unchanged.
 const visibleBillsCache = new Map(); // orgKey -> { ids, at }
 const VISIBLE_BILLS_TTL_MS = 15000;
+
+// Response cache for the unpaged GET /api/orders (the dashboard/kitchen poll,
+// which fetched ~3380 docs in 1-2s every few seconds). TTL 8s absorbs the
+// repeated identical polls; socket pushes keep the UI fresh in between.
+const ORDERS_CACHE_TTL_S = 8;
+const ORDERS_CACHE_PREFIX = "orders:";
 
 // ==================== دوال مساعدة للأرقام ====================
 
@@ -522,7 +530,7 @@ export const getOrders = async (req, res) => {
         // display pending/preparing/ready) takes priority over the default.
         if (!status) {
             const fourMonthsAgo = new Date(Date.now() - 120 * 24 * 60 * 60 * 1000);
-            const orgKey = String(getOrganizationId(req.user));
+            const orgKey = `${String(getOrganizationId(req.user))}:${getVersion("bills")}`;
             const cached = visibleBillsCache.get(orgKey);
             let visibleBillIds;
             if (cached && Date.now() - cached.at < VISIBLE_BILLS_TTL_MS) {
@@ -546,6 +554,27 @@ export const getOrders = async (req, res) => {
         const paged = req.query.page !== undefined;
         const pageNum = Math.max(1, parseInt(page, 10) || 1);
         const limitNum = Math.min(500, Math.max(1, parseInt(limit, 10) || 25));
+
+        // Serve repeated identical unpaged polls from cache (TTL 8s) — the
+        // dashboard/kitchen poll hits once per ~10-30s; this kills the ~2s
+        // DB query + 3.4MB serialize cost on every poll. Paged/infinite-scroll
+        // requests bypass the cache.
+        if (!paged) {
+            const ordersOrgId = String(getOrganizationId(req.user));
+            const ordersCacheKey = `${ORDERS_CACHE_PREFIX}${ordersOrgId}:${getVersion("orders")}:${getVersion("bills")}:${JSON.stringify({
+                status,
+                table,
+                startDate,
+                endDate,
+                reportEligible,
+                minimal,
+            })}`;
+            const cachedOrders = cache.get(ordersCacheKey);
+            if (cachedOrders) {
+                return res.json(cachedOrders);
+            }
+            // fallthrough — compute below, then populate cache
+        }
 
         // Selective field projection - only essential fields + bill status + items
         // minimal=true (report/consumption callers): skip the 3 populates — they add
@@ -589,12 +618,25 @@ export const getOrders = async (req, res) => {
         });
 
         // Response بدون pagination metadata
-        res.json({
+        const responseBody = {
             success: true,
             count: orders.length,
             total,
             data: orders
-        });
+        };
+        if (!paged) {
+            const ordersOrgId = String(getOrganizationId(req.user));
+            const ordersCacheKey = `${ORDERS_CACHE_PREFIX}${ordersOrgId}:${getVersion("orders")}:${getVersion("bills")}:${JSON.stringify({
+                status,
+                table,
+                startDate,
+                endDate,
+                reportEligible,
+                minimal,
+            })}`;
+            cache.set(ordersCacheKey, responseBody, ORDERS_CACHE_TTL_S);
+        }
+        res.json(responseBody);
     } catch (error) {
         Logger.error("خطأ في جلب الطلبات", {
             error: error.message,

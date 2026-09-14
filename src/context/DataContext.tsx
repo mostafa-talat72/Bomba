@@ -3149,14 +3149,15 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     };
     socket.on('lan:remote-change', onLanRemoteChange);
 
-    // fallback polling every 30s if socket disconnected
+    // fallback polling every 60s if socket disconnected
     const fallbackInterval = setInterval(() => {
       if (!socket.connected) {
         fetchersRef.current.fetchOrders().catch(()=>{});
         fetchersRef.current.fetchBills().catch(()=>{});
+        fetchersRef.current.fetchSessions().catch(()=>{});
         fetchersRef.current.fetchTables().catch(()=>{});
       }
-    }, 30000);
+    }, 60000);
 
     socket.on('reconnect', () => {
       // عند إعادة الاتصال — جلب كل شيء

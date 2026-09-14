@@ -3,6 +3,7 @@ import Device from "./Device.js";
 import { applySyncMiddleware } from "../middleware/sync/syncMiddleware.js";
 import { auditPlugin } from "../utils/audit.js";
 import { getInstanceId } from "../utils/instanceId.js";
+import { bumpVersion } from "../utils/cacheVersion.js";
 
 const sessionSchema = new mongoose.Schema(
     {
@@ -540,9 +541,9 @@ sessionSchema.methods.getCostBreakdown = function () {
 };
 
 // دالة async لحساب breakdown بناءً على أسعار الجهاز من الداتا بيز
-sessionSchema.methods.getCostBreakdownAsync = async function () {
+sessionSchema.methods.getCostBreakdownAsync = async function (deviceDoc) {
     const Device = mongoose.model("Device");
-    const device = await Device.findById(this.deviceId);
+    const device = deviceDoc || (await Device.findById(this.deviceId));
     // دالة لجلب سعر الساعة حسب نوع الجهاز
     const getRate = (controllers) => {
         if (
@@ -607,8 +608,11 @@ sessionSchema.methods.getCostBreakdownAsync = async function () {
     }
 
     const total = breakdown.reduce((sum, item) => sum + item.cost, 0);
+    // نفس قاعدة التقريب في calculateCost: كسر الساعات المكافئة >= 0.5 → ceil وإلا round
+    const hourlyRate = getRate(this.controllers) || 1;
+    const fracHours = total / hourlyRate - Math.floor(total / hourlyRate);
     return {
-        totalCost: Math.round(total), // التقريب فقط عند حساب التكلفة النهائية
+        totalCost: fracHours >= 0.5 ? Math.ceil(total) : Math.round(total),
         breakdown,
     };
 };
@@ -622,6 +626,18 @@ sessionSchema.add({
 // Apply sync middleware
 applySyncMiddleware(sessionSchema, 'Session');
 auditPlugin(sessionSchema, 'sessions');
+
+// Bills GET responses EMBED session documents (populate sessions). A session
+// write (time/controllers/cost change) must therefore invalidate the bills
+// cache too — otherwise repeated GET polls could serve stale session state
+// even though the live socket event already corrected the UI.
+sessionSchema.pre("save", () => bumpVersion("bills"));
+sessionSchema.pre("findOneAndUpdate", () => bumpVersion("bills"));
+sessionSchema.pre("updateOne", () => bumpVersion("bills"));
+sessionSchema.pre("updateMany", () => bumpVersion("bills"));
+sessionSchema.pre("deleteOne", () => bumpVersion("bills"));
+sessionSchema.pre("deleteMany", () => bumpVersion("bills"));
+sessionSchema.pre("findOneAndDelete", () => bumpVersion("bills"));
 
 const Session = mongoose.model("Session", sessionSchema);
 export default Session;
