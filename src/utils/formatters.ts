@@ -32,16 +32,28 @@ export const replaceAMPM = (formattedTime: string): string => {
 
 /** عرض الرقم بدون مقطع التاريخ للطباعة فقط (BILL-426D13-260909-001 → BILL-426D13-001).
  *  مثبّت بنهاية السلسلة حتى لا يحذف معرّفاً رقمياً بالخطأ. التخزين لا يتغير. */
+/** الرقم الكامل للعرض/الطباعة — يظهر كما هو مخزناً شاملاً التاريخ.
+ *  مع الترقيم اليومي (001 كل يوم) لا يجوز إخفاء التاريخ وإلا تكرر الرقم عبر الأيام. */
 export const getDisplayNumber = (num: string): string => {
-    return num?.replace(/-\d{6}(-\d+)$/, '$1') || num;
+    return num ?? '';
 };
 
-/** الرقم المختصر للعرض على الكروت (#BILL-426D13-260909-002 → 426D13-002).
- *  يزيل # والبادئة والتاريخ. التخزين لا يتغير. */
+/** تقسيم الرقم إلى البادئة + التسلسل اليومي (لتمييز التسلسل في الطباعة).
+ *  BILL-C90835-260915-002 → { head: 'BILL-C90835-260915-', seq: '002' } */
+export const splitDailySeq = (num: any): { head: string; seq: string } => {
+    const s = String(num ?? '').replace(/^#/, '');
+    const m = s.match(/^(.*-)(\d+)$/);
+    if (m) return { head: m[1], seq: m[2] };
+    return { head: '', seq: s };
+};
+
+/** الرقم المختصر للكروت (BILL-C90835-260915-002 → C90835-002). التخزين لا يتغير. */
 export const getShortBillNumber = (num: any): string => {
     if (num === null || num === undefined) return '';
-    const display = getDisplayNumber(String(num).replace(/^#/, ''));
-    return display.replace(/^(BILL|ORD|SES|INV)-/i, '');
+    const s = String(num).replace(/^#/, '');
+    const m = s.match(/^(BILL|ORD|SES|INV)-([^-]+)-(?:\d{6}-)?(\d+)$/i);
+    if (m) return `${m[2]}-${m[3]}`;
+    return s.replace(/^(BILL|ORD|SES|INV)-/i, '');
 };
 
 /**

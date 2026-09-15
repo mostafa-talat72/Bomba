@@ -1,6 +1,6 @@
 import { Bill, Order, Session, ItemPayment, SessionPayment } from '../services/api';
 import { aggregateItemsWithPayments, AggregatedItem } from './billAggregation';
-import { formatDecimal, getCurrencySymbol, getDisplayNumber } from './formatters';
+import { formatDecimal, getCurrencySymbol, getDisplayNumber, splitDailySeq } from './formatters';
 import QRCode from 'qrcode';
 import { api } from '../services/api';
 import { toast } from 'react-toastify';
@@ -773,7 +773,7 @@ export const buildBillPrintHTML = async (
         ${typeof organizationData?.phone === 'string' && organizationData.phone.trim()
           ? `<div class="org-phone">${t('billPrint.phone')}: ${organizationData.phone.trim()}</div>`
           : ''}
-        <div class="title" style="font-weight: 900; font-size: 22px;">${getDisplayNumber(bill.billNumber) || ''}</div>
+        <div class="title" style="font-weight: 700; font-size: 19px;">${splitDailySeq(bill.billNumber).head}<span style="font-size: 32px; font-weight: 900; background: #000; color: #fff; padding: 0 8px; border-radius: 6px;">${splitDailySeq(bill.billNumber).seq}</span></div>
         <div class="info" style="font-weight: 900; font-size: 1.15em;">${formatDate(bill.createdAt || new Date())}</div>
         ${bill.table?.number ? `<div class="info" style="font-weight: 900; font-size: 1.25em; color: #000; margin: 8px 0;"><span style="background: #000; color: #fff; padding: 2px 8px; border-radius: 3px;">${t('billPrint.table')}</span> <strong style="font-size: 1.5em;">${bill.table.number}${tableSectionName ? ` — (${tableSectionName})` : ''}</strong></div>` : ((bill.customerName || bill.deliveryInfo?.customerName) ? `<div class="info" style="font-weight: 900; font-size: 1.15em;">${t('billPrint.customer')}: ${bill.customerName || bill.deliveryInfo?.customerName}</div>` : '')}
         ${(bill.customerPhone || bill.deliveryInfo?.phone) ? `<div class="info" style="font-weight: 900; font-size: 1.15em;">${t('billPrint.phone')}: ${bill.customerPhone || bill.deliveryInfo?.phone}</div>` : ''}

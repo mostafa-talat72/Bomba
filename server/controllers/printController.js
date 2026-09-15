@@ -7,10 +7,19 @@ import { resolvePrintSettingsForUser } from '../utils/organization.js';
 import { organizationFilter, resolvePrintSettings } from '../utils/organization.js';
 import Logger from "../middleware/logger.js";
 
-// نفس getDisplayNumber في الواجهة: إخفاء مقطع التاريخ من العرض/الطباعة فقط
-// (BILL-426D13-260909-001 → BILL-426D13-001). التخزين لا يتغير أبداً.
+// عرض الرقم الكامل دائماً شاملاً التاريخ — مع الترقيم اليومي (001 كل يوم)
+// إخفاء التاريخ يجعل الرقم مكرراً وغامضاً عبر الأيام.
+// (BILL-C90835-260915-001 يظهر كاملاً في العرض/الطباعة). التخزين لا يتغير أبداً.
 function formatDisplayNumber(num) {
-  return String(num || '').replace(/-\d{6}(-\d+)$/, '$1') || num;
+  return num == null ? '' : String(num);
+}
+
+// الرقم الكامل مع تمييز التسلسل اليومي (BILL-C90835-260915-002 → BILL-C90835-260915-[002])
+// للإيصال النصي حيث لا توجد خطوط — الأقواس هي التمييز.
+function bracketSeq(num) {
+  const s = String(num ?? '').replace(/^#/, '');
+  const m = s.match(/^(.*-)(\d+)$/);
+  return m ? `${m[1]}[${m[2]}]` : s;
 }
 
 // آخر طابعة نجحت فعلاً — تُفضّل في الاختيار التالي لثبات الطابعة بين المهام
@@ -338,7 +347,7 @@ class PrintController {
     // الرأس
     if (printSettings.printHeader !== false) {
       content += this.centerText(orgName, charsPerLine) + '\n';
-      content += this.centerText(formatDisplayNumber(bill.billNumber) || '', charsPerLine) + '\n';
+      content += this.centerText(bracketSeq(bill.billNumber), charsPerLine) + '\n';
       content += this.centerText(new Date(bill.createdAt || new Date()).toLocaleString(language), charsPerLine) + '\n';
       
       if (bill.table?.number) {
@@ -438,7 +447,7 @@ class PrintController {
     let content = '';
 
     content += this.centerText(orgName, charsPerLine) + '\n';
-    content += this.centerText(`Order #${formatDisplayNumber(order.orderNumber) || ''}`, charsPerLine) + '\n';
+    content += this.centerText(`Order ${bracketSeq(order.orderNumber)}`, charsPerLine) + '\n';
     content += this.centerText(new Date(order.createdAt || new Date()).toLocaleString(language), charsPerLine) + '\n';
     
     if (order.table?.number) {

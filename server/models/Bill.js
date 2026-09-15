@@ -490,15 +490,16 @@ billSchema.pre("save", async function (next) {
             if (!identifier) {
                 identifier = 'UNKNOWN';
             }
-            // Short format BILL-{instanceId}-{seq} (no date segment).
-            // Global per-instance sequence (never resets) + short-only match
-            // so legacy dated numbers (BILL-id-YYMMDD-seq) are never counted.
-            const shortPrefix = `BILL-${identifier}-`;
+            // Dated daily format BILL-{instanceId}-{YYMMDD}-{seq} — التسلسل يبدأ من 001 كل يوم تلقائياً
+            // لأن البادئة تشمل تاريخ اليوم، فأول فاتورة في اليوم لا تجد سابقاً → 001.
+            const now = new Date();
+            const dateStr = `${String(now.getFullYear()).slice(-2)}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
+            const shortPrefix = `BILL-${identifier}-${dateStr}-`;
 
-            // Find the highest sequence number for this identifier
+            // Find the highest sequence number for this identifier + today only
             const result = await this.constructor.aggregate([
                 { $match: { billNumber: { $regex: `^${shortPrefix}\\d+$` } } },
-                { $addFields: { seq: { $toInt: { $arrayElemAt: [{ $split: ["$billNumber", "-"] }, 2] } } } },
+                { $addFields: { seq: { $toInt: { $arrayElemAt: [{ $split: ["$billNumber", "-"] }, 3] } } } },
                 { $group: { _id: null, maxSeq: { $max: "$seq" } } }
             ]);
             let nextSeq = (result[0]?.maxSeq || 0) + 1;

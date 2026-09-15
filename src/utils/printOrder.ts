@@ -1,6 +1,6 @@
 import api from '../services/api';
 import { toast } from 'react-toastify';
-import { formatDecimal, getCurrencySymbol, getDisplayNumber } from './formatters';
+import { formatDecimal, getCurrencySymbol, getDisplayNumber, splitDailySeq } from './formatters';
 import type { TFunction } from 'i18next';
 import { getCachedDevicePrinter, printThroughLocalBridge } from './localPrintBridge';
 import { isMobileDevice } from './deviceDetect';
@@ -290,7 +290,7 @@ const printAllSectionsInOnePage = (
         <!-- Order info for each section -->
         <div class="order-info">
           <div style="margin-bottom: 2px;">
-            <div style="font-size: 22px; font-weight: 900; margin: 2px 0;"><strong>${getDisplayNumber(order.orderNumber)}</strong></div>
+            <div style="font-size: 19px; font-weight: 700; margin: 2px 0;">${splitDailySeq(order.orderNumber).head}<strong style="font-size: 32px; font-weight: 900; background: #000; color: #fff; padding: 0 8px; border-radius: 6px;">${splitDailySeq(order.orderNumber).seq}</strong></div>
             <div style="font-size: 1.15em; font-weight: 900; color: #333; margin: 2px 0;">${dateTimeString}</div>
             ${order.table?.number ? `
               <div style="font-size: 1.15em; font-weight: 900; margin: 2px 0; text-align: center;">

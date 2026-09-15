@@ -214,14 +214,16 @@ orderSchema.pre("save", async function (next) {
             if (!identifier) {
                 identifier = 'UNKNOWN';
             }
-            // Short format ORD-{instanceId}-{seq} (no date segment, global sequence).
-            // Short-only match so legacy dated numbers are never counted.
-            const prefix = `ORD-${identifier}-`;
+            // Dated daily format ORD-{instanceId}-{YYMMDD}-{seq} — التسلسل يبدأ من 001 كل يوم تلقائياً
+            // لأن البادئة تشمل تاريخ اليوم، فأول أوردر في اليوم لا يجد سابقاً → 001.
+            const now = new Date();
+            const dateStr = `${String(now.getFullYear()).slice(-2)}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
+            const prefix = `ORD-${identifier}-${dateStr}-`;
 
-            // Find max sequence for this identifier using aggregation
+            // Find max sequence for this identifier + today only using aggregation
             const result = await this.constructor.aggregate([
                 { $match: { orderNumber: { $regex: `^${prefix}\\d+$` } } },
-                { $addFields: { seq: { $toInt: { $arrayElemAt: [{ $split: ["$orderNumber", "-"] }, 2] } } } },
+                { $addFields: { seq: { $toInt: { $arrayElemAt: [{ $split: ["$orderNumber", "-"] }, 3] } } } },
                 { $group: { _id: null, maxSeq: { $max: "$seq" } } }
             ]);
             const nextSeq = (result[0]?.maxSeq || 0) + 1;
