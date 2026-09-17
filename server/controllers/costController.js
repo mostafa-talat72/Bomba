@@ -27,8 +27,17 @@ export const getCosts = async (req, res) => {
         }
 
         // Status filter (Requirements 6.2)
-        // Support 'all' to return all statuses
-        if (status && status !== 'all') {
+        // Support 'all' to return all statuses.
+        // 'overdue' is COMPUTED (pending + past dueDate) — never written to the DB.
+        const todayStart = new Date();
+        todayStart.setHours(0, 0, 0, 0);
+        const andClauses = [];
+        if (status === 'overdue') {
+            andClauses.push({ status: 'pending' }, { dueDate: { $lt: todayStart } });
+        } else if (status === 'pending') {
+            // Pending excludes past-due items (they surface under 'overdue')
+            andClauses.push({ status: 'pending' }, { $or: [{ dueDate: { $exists: false } }, { dueDate: null }, { dueDate: { $gte: todayStart } }] });
+        } else if (status && status !== 'all') {
             query.status = status;
         }
 
@@ -39,10 +48,16 @@ export const getCosts = async (req, res) => {
 
         // Search functionality for description and vendor (Requirements 6.1, 6.2, 6.3, 6.4)
         if (search) {
-            query.$or = [
-                { description: { $regex: search, $options: "i" } },
-                { vendor: { $regex: search, $options: "i" } }
-            ];
+            andClauses.push({
+                $or: [
+                    { description: { $regex: search, $options: "i" } },
+                    { vendor: { $regex: search, $options: "i" } }
+                ]
+            });
+        }
+
+        if (andClauses.length > 0) {
+            query.$and = andClauses;
         }
 
         // Enhanced date range filter - only filter by cost date for better performance
@@ -149,12 +164,30 @@ export const getCosts = async (req, res) => {
             { $sort: { total: -1 } }
         ]);
 
-        // Get status breakdown for filtered results
+        // Get status breakdown for filtered results ('overdue' is computed, never stored)
         const statusBreakdown = await Cost.aggregate([
             { $match: aggregationQuery },
             {
+                $addFields: {
+                    effectiveStatus: {
+                        $cond: [
+                            {
+                                $and: [
+                                    { $eq: ['$status', 'pending'] },
+                                    { $ne: [{ $type: '$dueDate' }, 'missing'] },
+                                    { $ne: ['$dueDate', null] },
+                                    { $lt: ['$dueDate', todayStart] }
+                                ]
+                            },
+                            'overdue',
+                            '$status'
+                        ]
+                    }
+                }
+            },
+            {
                 $group: {
-                    _id: '$status',
+                    _id: '$effectiveStatus',
                     total: { $sum: '$amount' },
                     paid: { $sum: '$paidAmount' },
                     remaining: { $sum: '$remainingAmount' },

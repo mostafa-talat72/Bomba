@@ -5,6 +5,8 @@ import api from '../../services/api';
 import EmployeeProfile from './EmployeeProfile';
 import { numberOnlyInputProps } from '../../utils/inputHelpers';
 import { useTranslation } from 'react-i18next';
+import { useApp } from '../../context/AppContext';
+import { canAddEmployee, canDeleteEmployee } from '../../utils/permissionHelper';
 import { useLanguage } from '../../context/LanguageContext';
 import arEG from 'antd/locale/ar_EG';
 import enUS from 'antd/locale/en_US';
@@ -39,7 +41,8 @@ interface EmployeeListProps {
 }
 
 const EmployeeList: React.FC<EmployeeListProps> = ({ onAdvanceAdded }) => {
-  const { t, i18n } = useTranslation();
+const { t, i18n } = useTranslation();
+const { user } = useApp();
   const { isRTL } = useLanguage();
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(false);
@@ -94,11 +97,13 @@ const EmployeeList: React.FC<EmployeeListProps> = ({ onAdvanceAdded }) => {
   };
 
   const handleAdd = () => {
+    if (!canAddEmployee(user)) { message.error(t('common.permissionDenied')); return; }
     form.resetFields();
     setIsModalVisible(true);
   };
 
   const handleDelete = async (id: string) => {
+    if (!canDeleteEmployee(user)) { message.error(t('common.permissionDenied')); return; }
     Modal.confirm({
       title: t('payroll.employeeList.deleteModal.title'),
       content: (
@@ -193,6 +198,7 @@ const EmployeeList: React.FC<EmployeeListProps> = ({ onAdvanceAdded }) => {
   };
 
   const handleSubmit = async (values: any) => {
+    if (!canAddEmployee(user)) { message.error(t('common.permissionDenied')); return; }
     try {
       const data = {
         personalInfo: {

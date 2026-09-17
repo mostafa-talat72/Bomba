@@ -576,7 +576,8 @@ export const deleteWarehouseStockMovement = async (req, res) => {
 
         const movementToDelete = item.stockMovements[movementIndex];
 
-        if (movementToDelete.reason && (movementToDelete.reason.includes("طلب رقم") || movementToDelete.type === "transfer_out" || movementToDelete.type === "transfer_in")) {
+        // منع حذف حركات النقل أو المرتبطة بالطلبات/الفواتير بأي لغة
+        if ((movementToDelete.reason && /طلب|فاتورة|order|invoice|commande|facture/i.test(movementToDelete.reason)) || movementToDelete.type === "transfer_out" || movementToDelete.type === "transfer_in") {
             return res.status(403).json({
                 success: false,
                 message: "لا يمكن حذف حركات النقل أو الحركات المرتبطة بالطلبات.",
@@ -665,6 +666,14 @@ export const updateWarehouseStockMovement = async (req, res) => {
         const movement = item.stockMovements.find(m => m._id.toString() === movementId);
         if (!movement) {
             return res.status(404).json({ success: false, message: "الحركة غير موجودة" });
+        }
+
+        // منع تعديل حركات النقل أو المرتبطة بالطلبات/الفواتير بأي لغة
+        if ((movement.reason && /طلب|فاتورة|order|invoice|commande|facture/i.test(movement.reason)) || movement.type === "transfer_out" || movement.type === "transfer_in") {
+            return res.status(403).json({
+                success: false,
+                message: "لا يمكن تعديل حركات النقل أو الحركات المرتبطة بالطلبات.",
+            });
         }
 
         // Validate quantity

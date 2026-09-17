@@ -3,8 +3,10 @@ import { Save, DollarSign, AlertCircle, CheckCircle, X } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import { api } from '../services/api';
 import { useApp } from '../context/AppContext';
+import { canAddCost, canEditCost } from '../utils/permissionHelper';
 import { useTranslation } from 'react-i18next';
 import { useLanguage } from '../context/LanguageContext';
+import { useOrganization } from '../context/OrganizationContext';
 import { formatCurrency } from '../utils/formatters';
 import { DatePicker, TimePicker, ConfigProvider } from 'antd';
 import dayjs from 'dayjs';
@@ -57,7 +59,8 @@ const CostFormModal: React.FC<CostFormModalProps> = ({
 }) => {
   const { t, i18n } = useTranslation();
   const { isRTL } = useLanguage();
-  const { showNotification } = useApp();
+  const { showNotification, user } = useApp();
+  const { currency } = useOrganization();
   const [loading, setLoading] = useState(false);
 
   const [formData, setFormData] = useState({
@@ -119,6 +122,10 @@ const CostFormModal: React.FC<CostFormModalProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (editingCost ? !canEditCost(user) : !canAddCost(user)) {
+      showNotification(t('common.permissionDenied'), 'error');
+      return;
+    }
 
     // Validation
     if (!formData.category) {
@@ -149,13 +156,15 @@ const CostFormModal: React.FC<CostFormModalProps> = ({
     try {
       setLoading(true);
 
-      // Combine date and time into ISO string
-      const dateTimeString = `${formData.date}T${formData.time}:00.000Z`;
+      // Combine date and time as LOCAL time, then convert to UTC.
+      // (Appending 'Z' to a local time would shift it by the timezone offset.)
+      const localDateTime = new Date(`${formData.date}T${formData.time || '00:00'}:00`);
+      const dateTimeString = isNaN(localDateTime.getTime()) ? new Date().toISOString() : localDateTime.toISOString();
 
       const payload = {
         ...formData,
         date: dateTimeString, // Send combined date and time
-        currency: 'EGP', // Add default currency
+        currency: currency || 'EGP', // Organization currency
         dueDate: formData.dueDate || undefined,
       };
 
@@ -342,8 +351,15 @@ const CostFormModal: React.FC<CostFormModalProps> = ({
               value={formData.paidAmount}
               onChange={(e) => setFormData({ ...formData, paidAmount: parseFloat(e.target.value) || 0 })}
               placeholder={t('costs.modals.costForm.paidAmountPlaceholder')}
-              className="form-field w-full px-4 py-3 border-2 border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all font-semibold text-lg"
+              disabled={!!editingCost}
+              title={editingCost ? t('costs.modals.costForm.editPaidNote') : undefined}
+              className="form-field w-full px-4 py-3 border-2 border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all font-semibold text-lg disabled:opacity-60"
             />
+            {!!editingCost && (
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1.5 font-medium">
+                {t('costs.modals.costForm.editPaidNote')}
+              </p>
+            )}
           </div>
         </div>
 

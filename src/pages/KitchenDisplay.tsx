@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLanguage } from '../context/LanguageContext';
+import { useApp } from '../context/AppContext';
+import { canUpdateOrderStatus } from '../utils/permissionHelper';
 import { api, Order } from '../services/api';
 import { io, Socket } from 'socket.io-client';
 import { API_BASE_URL } from '../utils/apiBase';
@@ -34,6 +36,7 @@ const CARD_BORDER_COLORS = [
 export function KitchenDisplay() {
   const { t, i18n } = useTranslation();
   const { isRTL } = useLanguage();
+  const { user, showNotification } = useApp();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [newOrderAlert, setNewOrderAlert] = useState(false);
@@ -110,6 +113,7 @@ export function KitchenDisplay() {
   }, []);
 
   const handleStatusChange = async (orderId: string, newStatus: string) => {
+    if (!canUpdateOrderStatus(user)) { showNotification(t('common.permissionDenied'), 'error'); return; }
     try {
       const res = await api.updateOrderStatus(orderId, newStatus as any);
       if (!res.success) return;
@@ -122,6 +126,7 @@ export function KitchenDisplay() {
   };
 
   const handleItemToggle = async (orderId: string, item: Order['items'][number]) => {
+    if (!canUpdateOrderStatus(user)) { showNotification(t('common.permissionDenied'), 'error'); return; }
     const order = orders.find(o => o._id === orderId);
     if (!order) return;
     const itemIndex = order.items.findIndex(oi => oi._id === item._id);
@@ -135,6 +140,7 @@ export function KitchenDisplay() {
   };
 
   const handleSectionDeliver = async (orderId: string, sectionId: string) => {
+    if (!canUpdateOrderStatus(user)) { showNotification(t('common.permissionDenied'), 'error'); return; }
     const res = await api.deliverOrderSection(orderId, sectionId);
     if (!res.success) return;
     const data = res.data;

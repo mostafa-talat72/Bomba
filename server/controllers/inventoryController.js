@@ -985,8 +985,8 @@ export const deleteStockMovement = async (req, res) => {
 
         const movementToDelete = item.stockMovements[movementIndex];
 
-        // منع حذف الحركات المرتبطة بالطلبات
-        if (movementToDelete.reason && movementToDelete.reason.includes('طلب رقم')) {
+        // منع حذف الحركات المرتبطة بالطلبات/الفواتير بأي لغة
+        if (movementToDelete.reason && /طلب|فاتورة|order|invoice|commande|facture/i.test(movementToDelete.reason)) {
             return res.status(403).json({
                 success: false,
                 message: "لا يمكن حذف الحركات المرتبطة بالطلبات. يجب حذف الطلب نفسه.",
@@ -1163,8 +1163,8 @@ export const updateStockMovement = async (req, res) => {
             });
         }
 
-        // منع تعديل الحركات المرتبطة بالطلبات
-        if (movement.reason && movement.reason.includes('طلب رقم')) {
+        // منع تعديل الحركات المرتبطة بالطلبات/الفواتير بأي لغة
+        if (movement.reason && /طلب|فاتورة|order|invoice|commande|facture/i.test(movement.reason)) {
             return res.status(403).json({
                 success: false,
                 message: "لا يمكن تعديل الحركات المرتبطة بالطلبات. يجب تعديل الطلب نفسه.",

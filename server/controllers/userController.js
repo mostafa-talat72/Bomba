@@ -149,6 +149,19 @@ export const createUser = async (req, res) => {
         }
 
         // Create user
+        // Only organization owner can create admins or grant full access
+        if (role === 'admin' || (Array.isArray(permissions) && permissions.includes('all'))) {
+            const Organization = (await import('../models/Organization.js')).default;
+            const organization = await Organization.findById(getOrganizationId(req.user));
+            const isCurrentUserOwner = organization && organization.owner &&
+                (organization.owner.toString() === req.user._id.toString() || req.user.role === 'owner');
+            if (!isCurrentUserOwner) {
+                return res.status(403).json({
+                    success: false,
+                    message: "فقط مالك المنشأة يمكنه إنشاء مديرين أو منح صلاحية كاملة",
+                });
+            }
+        }
         const user = await User.create({
             name,
             email,
@@ -250,6 +263,35 @@ export const updateUser = async (req, res) => {
         // التحقق من قاعدة البيانات مباشرة
         const isTargetAdmin = user.role === 'admin';
         const isEditingSelf = user._id.toString() === req.user._id.toString();
+
+        // Nobody may change their own role/permissions (no self-service path by design)
+        if (isEditingSelf && (role !== undefined || permissions !== undefined)) {
+            return res.status(403).json({
+                success: false,
+                message: "لا يمكنك تعديل دورك أو صلاحياتك بنفسك",
+            });
+        }
+        // Nobody may deactivate themselves via this endpoint (dedicated route guards it)
+        if (isEditingSelf && status !== undefined && status !== 'active') {
+            return res.status(403).json({
+                success: false,
+                message: "لا يمكنك تعطيل حسابك الخاص",
+            });
+        }
+
+        // Only organization owner can grant admin role or full access to others
+        if (!isEditingSelf && (role === 'admin' || (Array.isArray(permissions) && permissions.includes('all')))) {
+            const Organization = (await import('../models/Organization.js')).default;
+            const organization = await Organization.findById(getOrganizationId(req.user));
+            const isCurrentUserOwner = organization && organization.owner &&
+                (organization.owner.toString() === req.user._id.toString() || req.user.role === 'owner');
+            if (!isCurrentUserOwner) {
+                return res.status(403).json({
+                    success: false,
+                    message: "فقط مالك المنشأة يمكنه منح دور المدير أو الصلاحية الكاملة",
+                });
+            }
+        }
 
         if (isTargetAdmin && !isEditingSelf) {
             // جلب المنشأة من قاعدة البيانات للتحقق من المالك
@@ -632,12 +674,39 @@ export const updateUserPermissions = async (req, res) => {
             });
         }
 
-        // Prevent removing admin permissions from yourself
-        if (user._id.toString() === req.user._id.toString() && req.user.role === 'admin') {
-            if (!permissions.includes('all') && !permissions.includes('users')) {
-                return res.status(400).json({
+        // Nobody may change their own permissions (no self-service path by design)
+        // This also covers the old self-demotion case (stricter, simpler rule).
+        if (user._id.toString() === req.user._id.toString()) {
+            return res.status(403).json({
+                success: false,
+                message: "لا يمكنك تعديل صلاحياتك بنفسك",
+            });
+        }
+
+        // Only organization owner can grant full access to others
+        if (Array.isArray(permissions) && permissions.includes('all')) {
+            const Organization = (await import('../models/Organization.js')).default;
+            const organization = await Organization.findById(getOrganizationId(req.user));
+            const isCurrentUserOwner = organization && organization.owner &&
+                (organization.owner.toString() === req.user._id.toString() || req.user.role === 'owner');
+            if (!isCurrentUserOwner) {
+                return res.status(403).json({
                     success: false,
-                    message: "لا يمكنك إزالة صلاحيات الإدارة من حسابك الخاص",
+                    message: "فقط مالك المنشأة يمكنه منح الصلاحية الكاملة",
+                });
+            }
+        }
+
+        // Only organization owner can edit other admins' permissions (consistent with edit/delete rules)
+        if (user.role === 'admin') {
+            const Organization = (await import('../models/Organization.js')).default;
+            const organization = await Organization.findById(getOrganizationId(req.user));
+            const isCurrentUserOwner = organization && organization.owner &&
+                (organization.owner.toString() === req.user._id.toString() || req.user.role === 'owner');
+            if (!isCurrentUserOwner) {
+                return res.status(403).json({
+                    success: false,
+                    message: "لا يمكن للمديرين تعديل صلاحيات مديرين آخرين. فقط مالك المنشأة يمكنه ذلك.",
                 });
             }
         }
@@ -710,6 +779,20 @@ export const updateUserStatus = async (req, res) => {
                 success: false,
                 message: "لا يمكنك تعطيل حسابك الخاص",
             });
+        }
+
+        // Only organization owner can change other admins' status (consistent with edit/delete rules)
+        if (user.role === 'admin' && user._id.toString() !== req.user._id.toString()) {
+            const Organization = (await import('../models/Organization.js')).default;
+            const organization = await Organization.findById(getOrganizationId(req.user));
+            const isCurrentUserOwner = organization && organization.owner &&
+                (organization.owner.toString() === req.user._id.toString() || req.user.role === 'owner');
+            if (!isCurrentUserOwner) {
+                return res.status(403).json({
+                    success: false,
+                    message: "لا يمكن للمديرين تعديل حالة مديرين آخرين. فقط مالك المنشأة يمكنه ذلك.",
+                });
+            }
         }
 
         user.status = status;

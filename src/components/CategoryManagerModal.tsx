@@ -5,6 +5,7 @@ import IconPickerModal from './IconPickerModal';
 import ConfirmDialog from './ConfirmDialog';
 import { api } from '../services/api';
 import { useApp } from '../context/AppContext';
+import { canEditCost } from '../utils/permissionHelper';
 import { useTranslation } from 'react-i18next';
 import { useLanguage } from '../context/LanguageContext';
 
@@ -29,7 +30,7 @@ const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
   onClose,
   onSave,
 }) => {
-  const { showNotification } = useApp();
+  const { showNotification, user } = useApp();
   const { t } = useTranslation();
   const { isRTL } = useLanguage();
   const [categories, setCategories] = useState<CostCategory[]>([]);
@@ -103,6 +104,10 @@ const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canEditCost(user)) {
+      showNotification(t('common.permissionDenied'), 'error');
+      return;
+    }
 
     if (!formData.name.trim()) {
       showNotification(t('costs.modals.categoryManager.notifications.nameRequired'), 'error');
@@ -137,6 +142,10 @@ const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
 
   const handleDeleteConfirm = async () => {
     if (!deleteConfirm.categoryId) return;
+    if (!canEditCost(user)) {
+      showNotification(t('common.permissionDenied'), 'error');
+      return;
+    }
 
     try {
       setDeleting(deleteConfirm.categoryId);

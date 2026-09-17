@@ -593,7 +593,70 @@
       "canEditWarehouseMovementDesc": "Autoriser la modification des mouvements d'entrepôt",
       "canDeleteWarehouseMovement": "Supprimer un Mouvement d'Entrepôt",
       "canDeleteWarehouseMovementDesc": "Autoriser la suppression des mouvements d'entrepôt",
-      "notifications": "Notifications"
+      "notifications": "Notifications",
+      "canViewInventory": "Voir l'inventaire",
+      "canViewInventoryDesc": "Voir la liste des produits",
+      "canAddInventoryItem": "Ajouter un article",
+      "canAddInventoryItemDesc": "Ajouter des produits",
+      "canEditInventoryItem": "Modifier un article",
+      "canEditInventoryItemDesc": "Modifier les informations",
+      "canDeleteInventoryItem": "Supprimer un article",
+      "canDeleteInventoryItemDesc": "Supprimer des produits",
+      "canAddStock": "Ajouter du stock",
+      "canAddStockDesc": "Ajouter des quantités",
+      "canRemoveStock": "Retirer du stock",
+      "canRemoveStockDesc": "Déduire des quantités",
+      "canAdjustStock": "Ajuster le stock",
+      "canAdjustStockDesc": "Ajuster le solde réel",
+      "canViewStockMovements": "Voir les mouvements",
+      "canViewStockMovementsDesc": "Voir l'historique des mouvements",
+      "canEditStockMovement": "Modifier un mouvement",
+      "canEditStockMovementDesc": "Modifier les mouvements",
+      "canDeleteStockMovement": "Supprimer un mouvement",
+      "canDeleteStockMovementDesc": "Supprimer des mouvements",
+      "takeaway": "À emporter",
+      "takeawayDesc": "Accéder aux commandes à emporter",
+      "delivery": "Livraison",
+      "deliveryDesc": "Accéder aux commandes de livraison",
+      "payroll": "Paie",
+      "payrollDesc": "Accéder à la paie et aux employés",
+      "notificationsDesc": "Accéder aux notifications",
+      "subscription": "Abonnement",
+      "subscriptionDesc": "Accéder à l'abonnement",
+      "canAddMenuItem": "Ajouter au menu",
+      "canAddMenuItemDesc": "Ajouter articles, sections et catégories",
+      "canEditMenuItem": "Modifier le menu",
+      "canEditMenuItemDesc": "Modifier les articles et sections",
+      "canDeleteMenuItem": "Supprimer du menu",
+      "canDeleteMenuItemDesc": "Supprimer articles et sections",
+      "canAddDevice": "Ajouter un appareil",
+      "canAddDeviceDesc": "Ajouter des appareils",
+      "canEditDevice": "Modifier un appareil",
+      "canEditDeviceDesc": "Modifier les appareils",
+      "canDeleteDevice": "Supprimer un appareil",
+      "canDeleteDeviceDesc": "Supprimer des appareils",
+      "canAddCost": "Ajouter une dépense",
+      "canAddCostDesc": "Ajouter des dépenses",
+      "canEditCost": "Modifier une dépense",
+      "canEditCostDesc": "Modifier dépenses et paiements",
+      "canDeleteCost": "Supprimer une dépense",
+      "canDeleteCostDesc": "Supprimer des dépenses",
+      "canManageShifts": "Gérer les shifts",
+      "canManageShiftsDesc": "Ouvrir et fermer les shifts",
+      "canAddEmployee": "Ajouter un employé",
+      "canAddEmployeeDesc": "Ajouter des employés",
+      "canEditEmployee": "Modifier un employé",
+      "canEditEmployeeDesc": "Modifier employés et paiements",
+      "canDeleteEmployee": "Supprimer un employé",
+      "canDeleteEmployeeDesc": "Licencier et supprimer",
+      "canApproveAdvance": "Approuver avances",
+      "canApproveAdvanceDesc": "Approuver ou rejeter les avances",
+      "canUpdateOrderStatus": "Maj statut commandes",
+      "canUpdateOrderStatusDesc": "Changer le statut en cuisine",
+      "canDeleteNotification": "Supprimer notifications",
+      "canDeleteNotificationDesc": "Supprimer des notifications",
+      "canExportReports": "Exporter rapports",
+      "canExportReportsDesc": "Exporter en PDF et Excel"
     },
     "status": "l'état",
     "totalUsers": "Utilisateurs",
@@ -688,7 +751,8 @@
       "updating": "Mise à jour...",
       "saving": "Économie...",
       "updateUser": "Mise à jour utilisateur",
-      "addUser": "Ajouter un utilisateur"
+      "addUser": "Ajouter un utilisateur",
+      "selfLockNote": "Vous ne pouvez pas modifier votre rôle ou vos permissions"
     },
     "updateUserData": "Mettre à jour les données utilisateur",
     "addNewUserToSystem": "Ajouter un nouvel utilisateur au système",
@@ -754,6 +818,31 @@
       "suspendedWarning": "⚠️ L'utilisateur sera temporairement suspendu et ne pourra pas accéder au système.",
       "updating": "Mise à jour...",
       "updateStatus": "Mise à jour du statut"
+    },
+    "permissionGroups": {
+      "general": "Accès complet",
+      "pages": "Pages du système",
+      "orders": "Commandes",
+      "bills": "Factures et paiements",
+      "sessions": "Sessions et shifts",
+      "menu": "Menu",
+      "devices": "Appareils",
+      "inventory": "Inventaire",
+      "warehouse": "Entrepôt",
+      "costs": "Dépenses",
+      "payroll": "Paie et employés",
+      "kitchen": "Cuisine",
+      "extras": "Outils supplémentaires",
+      "other": "Autre"
+    },
+    "permissionsUI": {
+      "search": "Rechercher une permission...",
+      "selectAll": "Tout sélectionner",
+      "clear": "Effacer",
+      "clearAll": "Tout effacer",
+      "expandAll": "Tout ouvrir",
+      "collapseAll": "Tout fermer",
+      "noResults": "Aucune permission trouvée"
     }
   },
   "billing": {
@@ -2522,7 +2611,8 @@
       "cannotDeleteSummary": "Impossible de supprimer {{name}} car il est utilisé dans {{count}} articles de la liste",
       "warehouseItemCreated": "Article d'entrepôt créé et lié au produit",
       "warehouseItemCreateError": "Échec de la création de l'article d'entrepôt",
-      "creating": "Création en cours..."
+      "creating": "Création en cours...",
+      "cannotDeleteUnknown": "Suppression impossible de {{name}} — vérification du menu impossible, réessayez"
     },
     "notifications": {
       "quantityAdded": "Quantité ajoutée avec succès !",
@@ -2565,6 +2655,12 @@
       "returning": "Retour en cours...",
       "noLinkMessage": "Ce produit doit d'abord être lié à un article d'entrepôt. Vous pouvez modifier le produit et sélectionner l'article d'entrepôt lié.",
       "createWarehouseItem": "Créer un article d'entrepôt"
+    },
+    "pagination": {
+      "previous": "Précédent",
+      "next": "Suivant",
+      "page": "Page",
+      "of": "sur"
     }
   },
   "kitchenDisplay": {
@@ -2640,7 +2736,8 @@
       "edit": "amendement",
       "delete": "supprimer",
       "addPayment": "Ajouter un lot",
-      "refresh": "mettre à jour"
+      "refresh": "mettre à jour",
+      "exportCsv": "Exporter CSV"
     },
     "notifications": {
       "costAdded": "Le coût a été ajouté avec succès",
@@ -2784,7 +2881,8 @@
           "created": "Le coût a été ajouté avec succès",
           "updated": "Le coût a été mis à jour avec succès",
           "error": "Échec de la réduction des coûts"
-        }
+        },
+        "editPaidNote": "En modification, le montant payé se gère via les paiements"
       },
       "paymentAddition": {
         "title": "Ajouter un lot",
@@ -2859,6 +2957,10 @@
           "deleteError": "Échec de la suppression du coût"
         }
       }
+    },
+    "messages": {
+      "exported": "Dépenses exportées avec succès",
+      "exportError": "Échec de l'exportation"
     }
   },
   "payroll": {
@@ -4086,8 +4188,28 @@
     },
     "messages": {
       "loading": "Chargement...",
-      "noNotifications": "Aucune notification"
-    }
+      "noNotifications": "Aucune notification",
+      "orderNotFound": "Commande {{order}} introuvable — elle a peut-être été supprimée",
+      "billNotFound": "Facture introuvable pour la commande {{order}}",
+      "billCancelled": "La commande {{order}} appartient à une facture annulée"
+    },
+    "viewOrder": "Voir la commande",
+    "fulfillment": {
+      "delivery": "Livraison",
+      "takeaway": "À emporter"
+    },
+    "mobileSource": "Mobile",
+    "muteToastsTitle": "Couper les alertes",
+    "muteToasts": {
+      "order": "Commandes",
+      "bill": "Factures",
+      "session": "Sessions",
+      "table": "Tables"
+    },
+    "seenBy": "Vu par :",
+    "kitchenAlarm": "Alarme cuisine",
+    "kitchenAlarmHint": "Son répété pour chaque nouvelle commande jusqu'à confirmation (écrans cuisine)",
+    "kitchenAlarmAck": "Confirmé — arrêter l'alarme"
   },
   "notificationManagement": {
     "title": "Gérer les notifications",
@@ -4111,7 +4233,8 @@
       "inventory": "Inventaire",
       "billing": "Factures",
       "system": "commande",
-      "security": "Sécurité"
+      "security": "Sécurité",
+      "backup": "Sauvegarde"
     },
     "priority": {
       "low": "Faible",
@@ -4122,7 +4245,9 @@
     "actions": {
       "markAsRead": "Marquer comme lu",
       "markAllAsRead": "Marquer tout comme lu",
-      "delete": "Supprimer la notification"
+      "delete": "Supprimer la notification",
+      "viewOrder": "Voir la commande",
+      "confirmDelete": "Confirmer la suppression ?"
     },
     "messages": {
       "loading": "Chargement des notifications...",

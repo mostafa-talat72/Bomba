@@ -2,6 +2,7 @@ import React from 'react';
 import { X, Save, User, Mail, Lock, Phone, MapPin, Shield, Crown } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useLanguage } from '../context/LanguageContext';
+import PermissionPicker from './PermissionPicker';
 
 interface Role {
   id: string;
@@ -44,12 +45,14 @@ interface UserFormModalProps {
   onSubmit: (e: React.FormEvent) => void;
   formData: FormData;
   onInputChange: (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => void;
-  onPermissionChange: (permissionId: string, checked: boolean) => void;
+  onPermissionsChange: (permissions: string[]) => void;
   roles: Role[];
   permissions: Permission[];
   businessTypes: { id: string; name: string; }[];
   isEditing: boolean;
   loading: boolean;
+  /** قفل الدور والصلاحيات (تعديل الذات) — يعرض ملاحظة ويعطل الحقول */
+  lockRoleAndPermissions?: boolean;
 }
 
 const UserFormModal: React.FC<UserFormModalProps> = ({
@@ -58,12 +61,13 @@ const UserFormModal: React.FC<UserFormModalProps> = ({
   onSubmit,
   formData,
   onInputChange,
-  onPermissionChange,
+  onPermissionsChange,
   roles,
   permissions,
   businessTypes,
   isEditing,
   loading,
+  lockRoleAndPermissions = false,
 }) => {
   const { t } = useTranslation();
   const { isRTL } = useLanguage();
@@ -248,6 +252,7 @@ const UserFormModal: React.FC<UserFormModalProps> = ({
                   value={formData.role}
                   onChange={onInputChange}
                   required
+                  disabled={lockRoleAndPermissions}
                   className={`w-full px-4 py-3 border-2 border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all font-semibold ${getInputDirClass()}`}
                   dir={isRTL ? 'rtl' : 'ltr'}
                 >
@@ -390,48 +395,13 @@ const UserFormModal: React.FC<UserFormModalProps> = ({
                 <Crown className="w-5 h-5 text-purple-600" />
                 {t('users.permissions.title')} <span className="text-red-500">*</span>
               </label>
-              <div className="bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-700/50 dark:to-gray-800/50 border-2 border-gray-200 dark:border-gray-600 rounded-xl p-5">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-80 overflow-y-auto modern-scrollbar">
-                  {permissions.map(permission => (
-                    <label 
-                      key={permission.id} 
-                      className="flex items-start p-4 bg-white dark:bg-gray-700 border-2 border-gray-200 dark:border-gray-600 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-600 hover:border-blue-300 dark:hover:border-blue-500 transition-all cursor-pointer group"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={formData.permissions.includes(permission.id)}
-                        onChange={(e) => onPermissionChange(permission.id, e.target.checked)}
-                        className="mt-1 rounded border-gray-300 text-blue-600 focus:ring-blue-500 w-5 h-5"
-                      />
-                      <div className={`${isRTL ? 'mr-3' : 'ml-3'} flex-1`}>
-                        <div className="text-sm font-bold text-gray-900 dark:text-gray-100 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
-                          {permission.name}
-                        </div>
-                        <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                          {permission.description}
-                        </div>
-                      </div>
-                    </label>
-                  ))}
-                </div>
-                
-                {/* Permissions Summary */}
-                <div className="mt-4 p-4 bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 border-2 border-blue-200 dark:border-blue-800 rounded-xl">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 bg-blue-500 rounded-full animate-pulse"></div>
-                      <span className="text-sm font-bold text-blue-900 dark:text-blue-300">
-                        {t('users.form.selectedPermissions')}: {formData.permissions.length} {t('users.form.of')} {permissions.length}
-                      </span>
-                    </div>
-                    {formData.permissions.includes('all') && (
-                      <span className="px-3 py-1 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 rounded-full text-xs font-bold">
-                        ✨ {t('users.permissions.all')}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              </div>
+              <PermissionPicker
+                permissions={permissions}
+                selected={formData.permissions}
+                onChange={onPermissionsChange}
+                disabled={lockRoleAndPermissions}
+                lockNote={lockRoleAndPermissions ? t('users.form.selfLockNote') : null}
+              />
             </div>
 
             {/* Submit Button */}

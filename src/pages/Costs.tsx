@@ -4,7 +4,7 @@ import { API_BASE_URL } from '../utils/apiBase';
 import {
   DollarSign, Plus, Filter, Search,
   TrendingUp, AlertCircle, CheckCircle,
-  Clock, XCircle, Settings, RefreshCw
+  Clock, XCircle, Settings, RefreshCw, Download
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { api } from '../services/api';
@@ -14,6 +14,8 @@ import CategoryManagerModal from '../components/CategoryManagerModal';
 import CostFormModal from '../components/CostFormModal';
 import PaymentAdditionModal from '../components/PaymentAdditionModal';
 import CostDetailsModal from '../components/CostDetailsModal';
+import PermissionGuard from '../components/PermissionGuard';
+import { canAddCost, canEditCost, canDeleteCost, canExportReports } from '../utils/permissionHelper';
 import { 
   StatisticsCardsSkeleton, 
   CategoriesFilterSkeleton, 
@@ -91,7 +93,7 @@ const Costs = () => {
   const { t, i18n } = useTranslation();
   const { isRTL } = useLanguage();
   const { formatDate } = useOrganization();
-  const { showNotification } = useApp();
+  const { showNotification, user } = useApp();
   const [costs, setCosts] = useState<Cost[]>([]);
   const [categories, setCategories] = useState<CostCategory[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
@@ -140,19 +142,30 @@ const Costs = () => {
     fetchCategories();
   }, []);
 
-  // Real-time filtering with debounced search
+  // Real-time filtering with debounced search.
+  // Single-fetch rule: filter changes reset to page 1 (the page effect fetches),
+  // and fetch directly only when already on page 1 — never both.
+  const pageRef = useRef(pagination.page);
+  pageRef.current = pagination.page;
+  const skipPageFetchOnMount = useRef(true);
   useEffect(() => {
     const timer = setTimeout(() => {
-      // Reset to first page when filters change
-      setPagination(prev => ({ ...prev, page: 1 }));
-      fetchCosts();
+      if (pageRef.current === 1) {
+        fetchCosts();
+      } else {
+        setPagination(prev => ({ ...prev, page: 1 }));
+      }
     }, 300);
 
     return () => clearTimeout(timer);
   }, [selectedCategory, selectedStatus, searchTerm, dateFrom, dateTo]);
 
-  // Fetch costs when pagination changes
+  // Fetch costs when pagination changes (skipped on mount — the filter effect covers it)
   useEffect(() => {
+    if (skipPageFetchOnMount.current) {
+      skipPageFetchOnMount.current = false;
+      return;
+    }
     fetchCosts();
   }, [pagination.page]);
 
@@ -295,6 +308,16 @@ const Costs = () => {
     }
   };
 
+  // 'overdue' is computed, never stored: pending + past dueDate (matches server rule)
+  const getEffectiveStatus = (cost: Cost) => {
+    if (cost?.status === 'pending' && cost?.dueDate) {
+      const start = new Date();
+      start.setHours(0, 0, 0, 0);
+      if (new Date(cost.dueDate) < start) return 'overdue';
+    }
+    return cost?.status;
+  };
+
   const getCategoryIcon = (iconName: string) => {
     const Icon = (LucideIcons as any)[iconName] || DollarSign;
     return <Icon className="w-5 h-5" />;
@@ -315,6 +338,7 @@ const Costs = () => {
   const hasActiveFilters = selectedCategory !== null || selectedStatus !== 'all' || searchTerm.trim() !== '' || dateFrom !== '' || dateTo !== '';
 
   const handleDeleteCost = async (costId: string) => {
+    if (!canDeleteCost(user)) { showNotification(t('common.permissionDenied'), 'error'); return Promise.reject(new Error('permission')); }
     try {
       const response = await api.delete(`/costs/${costId}`);
       showNotification(t('costs.notifications.costDeleted'), 'success');
@@ -346,6 +370,7 @@ const Costs = () => {
   };
 
   const openPaymentModal = (cost: any) => {
+    if (!canEditCost(user)) { showNotification(t('common.permissionDenied'), 'error'); return; }
     setSelectedCostForPayment(cost);
     setShowPaymentModal(true);
   };
@@ -356,6 +381,45 @@ const Costs = () => {
     }
     if (categoriesError) {
       fetchCategories();
+    }
+  };
+
+  // Export the current filtered view as CSV (Excel-compatible, BOM for Arabic)
+  const handleExportCSV = async () => {
+    if (!canExportReports(user)) { showNotification(t('common.permissionDenied'), 'error'); return; }
+    try {
+      const params: any = { page: 1, limit: 10000 };
+      if (selectedCategory) params.category = selectedCategory;
+      if (selectedStatus !== 'all') params.status = selectedStatus;
+      if (searchTerm.trim()) params.search = searchTerm.trim();
+      if (dateFrom) params.startDate = dateFrom;
+      if (dateTo) params.endDate = dateTo;
+      const response: any = await api.getCosts(params);
+      const rows: Cost[] = response?.data || [];
+      const esc = (v: any) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+      const lines = [['Description', 'Category', 'Vendor', 'Amount', 'Paid', 'Remaining', 'Status', 'Date'].join(',')]
+        .concat(rows.map(c => [
+          esc(c.description),
+          esc(c.category?.name || ''),
+          esc(c.vendor || ''),
+          Number(c.amount || 0),
+          Number(c.paidAmount || 0),
+          Number(c.remainingAmount || 0),
+          esc(getStatusText(getEffectiveStatus(c) as string)),
+          esc(c.date ? new Date(c.date).toISOString().split('T')[0] : '')
+        ].join(',')));
+      const blob = new Blob(['\uFEFF' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `costs-${new Date().toISOString().split('T')[0]}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      showNotification(t('costs.messages.exported'), 'success');
+    } catch {
+      showNotification(t('costs.messages.exportError'), 'error');
     }
   };
 
@@ -390,6 +454,7 @@ const Costs = () => {
           </p>
         </div>
         <div className="flex gap-2 sm:gap-3 w-full sm:w-auto">
+          <PermissionGuard requiredPermissions={['canEditCost']}>
           <button
             onClick={() => setShowCategoryModal(true)}
             className="modern-action-btn modern-action-btn-secondary flex-1 sm:flex-none flex items-center justify-center gap-2"
@@ -397,6 +462,8 @@ const Costs = () => {
             <Settings className="w-5 h-5" />
             {t('costs.manageCategories')}
           </button>
+          </PermissionGuard>
+          <PermissionGuard requiredPermissions={['canAddCost']}>
           <button
             onClick={() => {
               setEditingCost(null);
@@ -407,6 +474,16 @@ const Costs = () => {
             <Plus className="w-5 h-5" />
             {t('costs.addCost')}
           </button>
+          </PermissionGuard>
+          <PermissionGuard requiredPermissions={['canExportReports']}>
+          <button
+            onClick={handleExportCSV}
+            className="modern-action-btn modern-action-btn-secondary flex-1 sm:flex-none flex items-center justify-center gap-2"
+          >
+            <Download className="w-5 h-5" />
+            {t('costs.actions.exportCsv')}
+          </button>
+          </PermissionGuard>
         </div>
       </div>
 
@@ -419,7 +496,7 @@ const Costs = () => {
         <div 
           className="modern-stats-card stats-card hover-lift"
           style={selectedCategory && categories.find(c => c._id === selectedCategory) ? {
-            borderRight: `5px solid ${categories.find(c => c._id === selectedCategory)?.color}`,
+            borderInlineStart: `5px solid ${categories.find(c => c._id === selectedCategory)?.color}`,
           } : {}}
         >
           <div className="flex items-center justify-between">
@@ -455,7 +532,7 @@ const Costs = () => {
         <div 
           className="modern-stats-card stats-card hover-lift"
           style={selectedCategory && categories.find(c => c._id === selectedCategory) ? {
-            borderRight: `5px solid ${categories.find(c => c._id === selectedCategory)?.color}`,
+            borderInlineStart: `5px solid ${categories.find(c => c._id === selectedCategory)?.color}`,
           } : {}}
         >
           <div className="flex items-center justify-between">
@@ -498,7 +575,7 @@ const Costs = () => {
         <div 
           className="modern-stats-card stats-card hover-lift"
           style={selectedCategory && categories.find(c => c._id === selectedCategory) ? {
-            borderRight: `5px solid ${categories.find(c => c._id === selectedCategory)?.color}`,
+            borderInlineStart: `5px solid ${categories.find(c => c._id === selectedCategory)?.color}`,
           } : {}}
         >
           <div className="flex items-center justify-between">
@@ -541,7 +618,7 @@ const Costs = () => {
         <div 
           className="modern-stats-card stats-card hover-lift"
           style={selectedCategory && categories.find(c => c._id === selectedCategory) ? {
-            borderRight: `5px solid ${categories.find(c => c._id === selectedCategory)?.color}`,
+            borderInlineStart: `5px solid ${categories.find(c => c._id === selectedCategory)?.color}`,
           } : {}}
         >
           <div className="flex items-center justify-between">
@@ -640,7 +717,7 @@ const Costs = () => {
                           </p>
                         </div>
                       </div>
-                      <div className="text-left">
+                      <div className={`${isRTL ? 'text-right' : 'text-left'}`}>
                         <p className="font-bold text-gray-900 dark:text-white">
                           {formatCurrency(category.total, i18n.language)}
                         </p>
@@ -708,7 +785,7 @@ const Costs = () => {
                           {formatDecimal(status.count, i18n.language)} {status.count === 1 ? t('costs.breakdown.cost') : t('costs.breakdown.costs')}
                         </p>
                       </div>
-                      <div className="text-left">
+                      <div className={`${isRTL ? 'text-right' : 'text-left'}`}>
                         <p className="font-bold text-gray-900 dark:text-white">
                           {formatCurrency(status.total, i18n.language)}
                         </p>
@@ -878,6 +955,8 @@ const Costs = () => {
                   <option value="pending">{t('costs.status.pending')}</option>
                   <option value="partially_paid">{t('costs.status.partiallyPaid')}</option>
                   <option value="paid">{t('costs.status.paid')}</option>
+                  <option value="overdue">{t('costs.status.overdue')}</option>
+                  <option value="cancelled">{t('costs.status.cancelled')}</option>
                 </select>
                 <Filter className={`absolute ${isRTL ? 'left-4' : 'right-4'} top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none`} />
               </div>
@@ -1098,9 +1177,9 @@ const Costs = () => {
                   </div>
 
                   {/* Status Badge */}
-                  <span className={`modern-status-badge flex-shrink-0 text-xs ${getStatusColor(cost.status)}`}>
-                    {getStatusIcon(cost.status)}
-                    {getStatusText(cost.status)}
+                  <span className={`modern-status-badge flex-shrink-0 text-xs ${getStatusColor(getEffectiveStatus(cost) as string)}`}>
+                    {getStatusIcon(getEffectiveStatus(cost) as string)}
+                    {getStatusText(getEffectiveStatus(cost) as string)}
                   </span>
                 </div>
 
@@ -1183,9 +1262,15 @@ const Costs = () => {
                     {t('costs.pagination.previous')}
                   </button>
                   <div className="flex items-center gap-1">
-                    {Array.from({ length: Math.min(5, pagination.totalPages) }, (_, i) => {
-                      const pageNum = i + 1;
-                      return (
+                    {(() => {
+                      const total = pagination.totalPages;
+                      const cur = pagination.page;
+                      let start = Math.max(1, Math.min(cur - 2, total - 4));
+                      const end = Math.min(total, start + 4);
+                      start = Math.max(1, end - 4);
+                      const pages: number[] = [];
+                      for (let p = start; p <= end; p++) pages.push(p);
+                      return pages.map(pageNum => (
                         <button
                           key={pageNum}
                           onClick={() => setPagination(prev => ({ ...prev, page: pageNum }))}
@@ -1197,8 +1282,8 @@ const Costs = () => {
                         >
                           {formatDecimal(pageNum, i18n.language)}
                         </button>
-                      );
-                    })}
+                      ));
+                    })()}
                   </div>
                   <button
                     onClick={() => {
@@ -1268,9 +1353,10 @@ const Costs = () => {
           setShowDetailsModal(false);
           setSelectedCostForDetails(null);
         }}
-        cost={selectedCostForDetails}
+        cost={selectedCostForDetails ? { ...selectedCostForDetails, status: getEffectiveStatus(selectedCostForDetails) } as Cost : null}
         onRefresh={fetchCosts}
-        onEdit={(cost) => {
+          onEdit={(cost) => {
+            if (!canEditCost(user)) { showNotification(t('common.permissionDenied'), 'error'); return; }
           setEditingCost(cost as any);
           setShowCostModal(true);
         }}

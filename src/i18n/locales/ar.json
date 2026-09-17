@@ -602,7 +602,70 @@
       "canEditWarehouseMovementDesc": "السماح بتعديل حركات المخزن الرئيسي",
       "canDeleteWarehouseMovement": "حذف حركة مخزن رئيسي",
       "canDeleteWarehouseMovementDesc": "السماح بحذف حركات المخزن الرئيسي",
-      "notifications": "الإشعارات"
+      "notifications": "الإشعارات",
+      "canViewInventory": "عرض المخزون",
+      "canViewInventoryDesc": "السماح بعرض قائمة المخزون والمنتجات",
+      "canAddInventoryItem": "إضافة منتج للمخزون",
+      "canAddInventoryItemDesc": "السماح بإضافة منتجات جديدة للمخزون",
+      "canEditInventoryItem": "تعديل منتج المخزون",
+      "canEditInventoryItemDesc": "السماح بتعديل معلومات المنتجات",
+      "canDeleteInventoryItem": "حذف منتج المخزون",
+      "canDeleteInventoryItemDesc": "السماح بحذف المنتجات من المخزون",
+      "canAddStock": "إضافة كمية للمخزون",
+      "canAddStockDesc": "السماح بإضافة كميات جديدة للمنتجات",
+      "canRemoveStock": "خصم كمية من المخزون",
+      "canRemoveStockDesc": "السماح بخصم كميات من المنتجات",
+      "canAdjustStock": "تعديل رصيد المخزون",
+      "canAdjustStockDesc": "السماح بتعديل الرصيد الفعلي للمخزون",
+      "canViewStockMovements": "عرض حركات المخزون",
+      "canViewStockMovementsDesc": "السماح بعرض سجل حركات المخزون",
+      "canEditStockMovement": "تعديل حركة المخزون",
+      "canEditStockMovementDesc": "السماح بتعديل حركات المخزون",
+      "canDeleteStockMovement": "حذف حركة المخزون",
+      "canDeleteStockMovementDesc": "السماح بحذف حركات المخزون",
+      "takeaway": "تيك أوي",
+      "takeawayDesc": "الوصول إلى صفحة طلبات التيك أوي",
+      "delivery": "دليفري",
+      "deliveryDesc": "الوصول إلى صفحة طلبات الدليفري",
+      "payroll": "الرواتب",
+      "payrollDesc": "الوصول إلى صفحة الرواتب والموظفين",
+      "notificationsDesc": "الوصول إلى صفحة إدارة الإشعارات",
+      "subscription": "الاشتراك",
+      "subscriptionDesc": "الوصول إلى صفحة الاشتراك والخطط",
+      "canAddMenuItem": "إضافة صنف للمنيو",
+      "canAddMenuItemDesc": "السماح بإضافة أصناف وأقسام وتصنيفات جديدة للمنيو",
+      "canEditMenuItem": "تعديل المنيو",
+      "canEditMenuItemDesc": "السماح بتعديل أصناف وأقسام المنيو",
+      "canDeleteMenuItem": "حذف من المنيو",
+      "canDeleteMenuItemDesc": "السماح بحذف أصناف وأقسام المنيو",
+      "canAddDevice": "إضافة جهاز",
+      "canAddDeviceDesc": "السماح بإضافة أجهزة بلايستيشن وكمبيوتر جديدة",
+      "canEditDevice": "تعديل جهاز",
+      "canEditDeviceDesc": "السماح بتعديل بيانات الأجهزة",
+      "canDeleteDevice": "حذف جهاز",
+      "canDeleteDeviceDesc": "السماح بحذف الأجهزة",
+      "canAddCost": "إضافة مصروف",
+      "canAddCostDesc": "السماح بإضافة مصروفات جديدة",
+      "canEditCost": "تعديل مصروف",
+      "canEditCostDesc": "السماح بتعديل المصروفات والمدفوعات والتصنيفات",
+      "canDeleteCost": "حذف مصروف",
+      "canDeleteCostDesc": "السماح بحذف المصروفات",
+      "canManageShifts": "إدارة الورديات",
+      "canManageShiftsDesc": "السماح بفتح وإغلاق الورديات",
+      "canAddEmployee": "إضافة موظف",
+      "canAddEmployeeDesc": "السماح بإضافة موظفين جدد",
+      "canEditEmployee": "تعديل موظف",
+      "canEditEmployeeDesc": "السماح بتعديل بيانات الموظفين ومدفوعاتهم",
+      "canDeleteEmployee": "حذف موظف",
+      "canDeleteEmployeeDesc": "السماح بإنهاء خدمة وحذف الموظفين",
+      "canApproveAdvance": "اعتماد السلف",
+      "canApproveAdvanceDesc": "السماح باعتماد أو رفض سلف الموظفين",
+      "canUpdateOrderStatus": "تحديث حالة الطلبات",
+      "canUpdateOrderStatusDesc": "السماح بتغيير حالة الطلبات في شاشة المطبخ",
+      "canDeleteNotification": "حذف الإشعارات",
+      "canDeleteNotificationDesc": "السماح بحذف الإشعارات",
+      "canExportReports": "تصدير التقارير",
+      "canExportReportsDesc": "السماح بتصدير التقارير PDF وExcel"
     },
     "status": "الحالة",
     "totalUsers": "المستخدمين",
@@ -699,7 +762,8 @@
       "updating": "جاري التحديث...",
       "saving": "جاري الحفظ...",
       "updateUser": "تحديث المستخدم",
-      "addUser": "إضافة مستخدم"
+      "addUser": "إضافة مستخدم",
+      "selfLockNote": "لا يمكنك تعديل دورك أو صلاحياتك بنفسك"
     },
     "updateUserData": "تحديث بيانات المستخدم",
     "addNewUserToSystem": "إضافة مستخدم جديد للنظام",
@@ -765,6 +829,31 @@
       "suspendedWarning": "⚠️ المستخدم سيتم تعليقه مؤقتاً ولن يتمكن من الوصول للنظام.",
       "updating": "جاري التحديث...",
       "updateStatus": "تحديث الحالة"
+    },
+    "permissionGroups": {
+      "general": "صلاحية شاملة",
+      "pages": "صفحات النظام",
+      "orders": "الطلبات",
+      "bills": "الفواتير والمدفوعات",
+      "sessions": "الجلسات والورديات",
+      "menu": "المنيو",
+      "devices": "الأجهزة",
+      "inventory": "المخزون",
+      "warehouse": "المخزن",
+      "costs": "المصروفات",
+      "payroll": "الرواتب والموظفين",
+      "kitchen": "المطبخ",
+      "extras": "أدوات إضافية",
+      "other": "أخرى"
+    },
+    "permissionsUI": {
+      "search": "ابحث عن صلاحية...",
+      "selectAll": "تحديد الكل",
+      "clear": "إلغاء",
+      "clearAll": "مسح الكل",
+      "expandAll": "فتح الكل",
+      "collapseAll": "طي الكل",
+      "noResults": "لا توجد صلاحيات مطابقة للبحث"
     }
   },
   "billing": {
@@ -2647,7 +2736,8 @@
       "cannotDeleteSummary": "لا يمكن حذف {{name}} لأنه مستخدم في {{count}} صنف في القائمة",
       "warehouseItemCreated": "تم إنشاء العنصر في المخزن الرئيسي وربطه بالمنتج",
       "warehouseItemCreateError": "فشل إنشاء العنصر في المخزن الرئيسي",
-      "creating": "جاري الإنشاء..."
+      "creating": "جاري الإنشاء...",
+      "cannotDeleteUnknown": "لا يمكن حذف {{name}} — تعذر التحقق من ارتباطه بالمنيو، أعد المحاولة"
     },
     "notifications": {
       "quantityAdded": "تمت إضافة الكمية بنجاح!",
@@ -2690,6 +2780,12 @@
       "returning": "جاري الإرجاع...",
       "noLinkMessage": "يجب ربط هذا المنتج بعنصر من المخزن الرئيسي أولاً. يمكنك تعديل المنتج واختيار العنصر المرتبط من المخزن الرئيسي.",
       "createWarehouseItem": "إنشاء عنصر في المخزن الرئيسي"
+    },
+    "pagination": {
+      "previous": "السابق",
+      "next": "التالي",
+      "page": "صفحة",
+      "of": "من"
     }
   },
   "kitchenDisplay": {
@@ -2765,7 +2861,8 @@
       "edit": "تعديل",
       "delete": "حذف",
       "addPayment": "إضافة دفعة",
-      "refresh": "تحديث"
+      "refresh": "تحديث",
+      "exportCsv": "تصدير CSV"
     },
     "notifications": {
       "costAdded": "تم إضافة التكلفة بنجاح",
@@ -2909,7 +3006,8 @@
           "created": "تم إضافة التكلفة بنجاح",
           "updated": "تم تحديث التكلفة بنجاح",
           "error": "فشل في حفظ التكلفة"
-        }
+        },
+        "editPaidNote": "عند التعديل: المبلغ المدفوع يُدار من المدفوعات وسجلها فقط"
       },
       "paymentAddition": {
         "title": "إضافة دفعة",
@@ -2984,6 +3082,10 @@
           "deleteError": "فشل في حذف التكلفة"
         }
       }
+    },
+    "messages": {
+      "exported": "تم تصدير المصروفات بنجاح",
+      "exportError": "فشل تصدير المصروفات"
     }
   },
   "payroll": {
@@ -4221,7 +4323,10 @@
     },
     "messages": {
       "loading": "جاري التحميل...",
-      "noNotifications": "لا توجد إشعارات"
+      "noNotifications": "لا توجد إشعارات",
+      "orderNotFound": "الطلب {{order}} غير موجود — ربما حُذف",
+      "billNotFound": "تعذر العثور على فاتورة الطلب {{order}}",
+      "billCancelled": "الطلب {{order}} يتبع فاتورة ملغاة"
     },
     "muteToastsTitle": "كتم تنبيهات",
     "muteToasts": {
@@ -4233,7 +4338,13 @@
     "seenBy": "شوهد من:",
     "kitchenAlarmAck": "تم الاستلام — إيقاف التنبيه",
     "kitchenAlarm": "منبه المطبخ",
-    "kitchenAlarmHint": "صوت متكرر لكل طلب جديد حتى التأكيد (لشاشات المطبخ)"
+    "kitchenAlarmHint": "صوت متكرر لكل طلب جديد حتى التأكيد (لشاشات المطبخ)",
+    "viewOrder": "عرض الطلب",
+    "fulfillment": {
+      "delivery": "دليفري",
+      "takeaway": "تيك أوي"
+    },
+    "mobileSource": "هاتف"
   },
   "notificationManagement": {
     "title": "إدارة الإشعارات",
@@ -4257,7 +4368,8 @@
       "inventory": "المخزون",
       "billing": "الفواتير",
       "system": "النظام",
-      "security": "الأمان"
+      "security": "الأمان",
+      "backup": "نسخ احتياطي"
     },
     "priority": {
       "low": "منخفضة",
@@ -4268,7 +4380,9 @@
     "actions": {
       "markAsRead": "تحديد كمقروء",
       "markAllAsRead": "تحديد الكل كمقروء",
-      "delete": "حذف الإشعار"
+      "delete": "حذف الإشعار",
+      "viewOrder": "عرض الطلب",
+      "confirmDelete": "تأكيد الحذف؟"
     },
     "messages": {
       "loading": "جاري تحميل الإشعارات...",

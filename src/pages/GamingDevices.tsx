@@ -10,6 +10,7 @@ import { SessionCostDisplay } from '../components/SessionCostDisplay';
 import ChangeTableModal from '../components/tables/ChangeTableModal';
 import { formatDecimal, formatCurrency, getCurrencySymbol } from '../utils/formatters';
 import { sameId } from '../utils/id';
+import { canAddDevice, canEditDevice, canDeleteDevice, canEditSessionTime } from '../utils/permissionHelper';
 import { formatDateTime } from '../utils/timeFormat';
 import dayjs from 'dayjs';
 import 'dayjs/locale/ar';
@@ -349,6 +350,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
 
   // ???? ??????? ??????
   const handleEditDevice = (device: any) => {
+    if (!canEditDevice(user)) { showNotification(t('common.permissionDenied'), 'error'); return; }
     const activeSession = sessions.find(session => 
       session.deviceId === device._id && session.status === 'active'
     );
@@ -377,12 +379,14 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
   };
 
   const handleDeleteDevice = (device: any) => {
+    if (!canDeleteDevice(user)) { showNotification(t('common.permissionDenied'), 'error'); return; }
     setDeviceToDelete(device);
     setShowDeleteConfirm(true);
   };
 
   const confirmDeleteDevice = async () => {
     if (!deviceToDelete) return;
+    if (!canDeleteDevice(user)) { showNotification(t('common.permissionDenied'), 'error'); return; }
     
     setIsDeletingDevice(true);
     try {
@@ -402,6 +406,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
   // ????? ???? ????
   const handleAddDevice = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canAddDevice(user)) { showNotification(t('common.permissionDenied'), 'error'); return; }
     setAddDeviceError(null);
     if (!newDevice.name || !newDevice.number) {
       setAddDeviceError(t('gaming.deviceNameRequired'));
@@ -582,6 +587,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
 
   // ????? ??? ??? ??????
   const handleEditStartTime = async () => {
+    if (!canEditSessionTime(user)) { showNotification(t('common.permissionDenied'), 'error'); return; }
     if (!selectedSessionForEditTime || !newStartTime) {
       showNotification(t('gaming.newStartTime') + ' ' + t('gaming.required'), 'error');
       return;
@@ -789,6 +795,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
 
   // ???? ????? ??? ???? ????????
   const handleEditPeriodTime = async () => {
+    if (!canEditSessionTime(user)) { showNotification(t('common.permissionDenied'), 'error'); return; }
     if (!selectedSessionForPeriodEdit || !newPeriodStartTime) {
       showNotification(t('gaming.newPeriodStartTime') + ' ' + t('gaming.required'), 'error');
       return;
@@ -986,7 +993,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
             </div>
           </div>
           <div className="flex gap-3 w-full sm:w-auto">
-            {user?.role === 'admin' && (
+            {canAddDevice(user) && (
               <button
                 onClick={() => setShowAddDevice(true)}
                 className="flex-1 sm:flex-none bg-white hover:bg-gray-100 dark:bg-gray-800 dark:hover:bg-gray-700 px-4 py-2.5 sm:px-6 sm:py-3 rounded-xl flex items-center justify-center transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-105 font-bold"
@@ -1370,8 +1377,9 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
                   </div>
 
                   {/* ????? ??????? ?????? - ?????? ??? */}
-                  {user?.role === 'admin' && (
+                  {(canEditDevice(user) || canDeleteDevice(user)) && (
                     <div className="flex gap-2 mt-3 pt-3 sm:mt-4 sm:pt-4 border-t border-gray-200 dark:border-gray-700">
+                      {canEditDevice(user) && (
                       <button
                         onClick={() => handleEditDevice(device)}
                         disabled={isActive}
@@ -1385,6 +1393,8 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
                         <Edit className="h-4 w-4" />
                         {t('common.edit')}
                       </button>
+                      )}
+                      {canDeleteDevice(user) && (
                       <button
                         onClick={() => handleDeleteDevice(device)}
                         disabled={isActive}
@@ -1398,6 +1408,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
                         <Trash2 className="h-4 w-4" />
                         {t('common.delete')}
                       </button>
+                      )}
                     </div>
                   )}
                 </div>

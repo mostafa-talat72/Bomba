@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import ModalPortal from './ModalPortal';
 import { Bell, X, Check, Trash2, AlertCircle, Info, CheckCircle, Clock, Eye } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import PermissionGuard from './PermissionGuard';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
 import NotificationSound from './NotificationSound';
@@ -89,7 +90,7 @@ const NotificationCenter: React.FC = () => {
   const [hoveredNotification, setHoveredNotification] = useState<string | null>(null);
   const [playSound, setPlaySound] = useState(false);
   const [soundType, setSoundType] = useState<'default' | 'success' | 'warning' | 'error' | 'urgent'>('default');
-  const [prevUnreadCount, setPrevUnreadCount] = useState(0);
+  const prevUnreadRef = useRef(0);
   const [soundEnabled, setSoundEnabled] = useState(() => {
     try {
       const settings = JSON.parse(localStorage.getItem('notificationSettings') || '{"soundEnabled": true}');
@@ -139,9 +140,10 @@ const NotificationCenter: React.FC = () => {
   // احسب unreadCount دائماً من الإشعارات المرئية فقط
   const unreadCount = visibleNotifications.filter(n => !n.readBy.some((read: NotificationRead) => read.user === user?.id)).length;
 
-  // عند تحديث notifications من context، شغل الصوت فقط إذا زاد العدد
+  // عند تحديث notifications من context، شغل الصوت فقط إذا زاد العدد (ref لتفادي إعادة التشغيل)
+  // الشارة تُرسم من unreadCount تلقائياً — لا حاجة للتلاعب بالـ DOM
   useEffect(() => {
-    if (!isOpen && unreadCount > prevUnreadCount && prevUnreadCount > 0) { // تأكد من أن هذا ليس التحميل الأولي
+    if (!isOpen && unreadCount > prevUnreadRef.current && prevUnreadRef.current > 0) { // تأكد من أن هذا ليس التحميل الأولي
       // تحديد نوع الصوت حسب أولوية الإشعارات الجديدة
       const newNotifications = visibleNotifications.filter(n => !n.readBy.some((read: NotificationRead) => read.user === user?.id));
       const urgentNotification = newNotifications.find(n => n.priority === 'urgent');
@@ -155,14 +157,8 @@ const NotificationCenter: React.FC = () => {
       }
       setPlaySound(true);
     }
-    setPrevUnreadCount(unreadCount);
-    // حدث الشارة في كل مكان
-    const badge = document.querySelector('.notification-badge') as HTMLElement;
-    if (badge) {
-      badge.textContent = unreadCount > 99 ? '99+' : unreadCount.toString();
-      badge.style.display = unreadCount > 0 ? 'flex' : 'none';
-    }
-  }, [notifications, unreadCount, isOpen, prevUnreadCount]);
+    prevUnreadRef.current = unreadCount;
+  }, [notifications, unreadCount, isOpen]);
 
   // Close panel when clicking outside (now handled by backdrop)
 
@@ -173,12 +169,10 @@ const NotificationCenter: React.FC = () => {
     }
   }, [isOpen, filter]);
 
-  // Update count when opening panel
+  // فتح/إغلاق النافذة — تعليم تلقائي كمقروء عند الفتح فقط
   const handleTogglePanel = async () => {
     const newIsOpen = !isOpen;
     setIsOpen(newIsOpen);
-
-    // إذا كان يتم فتح النافذة، حدد جميع الإشعارات كمقروءة
     if (newIsOpen && !isMarkingAllAsRead) {
       try {
         setIsMarkingAllAsRead(true);
@@ -190,6 +184,10 @@ const NotificationCenter: React.FC = () => {
         setIsMarkingAllAsRead(false);
       }
     }
+  };
+
+  const closePanel = () => {
+    setIsOpen(false);
   };
 
   // Load notifications and stats on mount
@@ -212,51 +210,12 @@ const NotificationCenter: React.FC = () => {
     return () => clearInterval(interval);
   }, [isOpen]);
 
-  useEffect(() => {
-    // عند إغلاق المكون، أعد ضبط الحالة
-    return () => {};
-  }, []);
-
+  // القائمة تُرسم من context والصوت/الشارة من الـ effect أعلاه —
+  // هذه فقط تحدث بيانات الـ context عند الفتح/التحميل الأول
   const loadNotifications = async () => {
     setLoading(true);
     try {
-      const options: { category?: string; unreadOnly?: boolean; limit?: number } = {};
-      if (filter === 'unread') {
-        options.unreadOnly = true;
-      }
-      const data: Notification[] = await getNotifications(options);
-
-      // التحقق من الإشعارات الجديدة
-      const previousCount = unreadCount;
-      const newCount = data.filter((notification: Notification) => isUnread(notification)).length;
-
-      // إذا كان هناك إشعارات جديدة، شغل الصوت (فقط إذا لم يكن هذا التحميل الأولي)
-      if (newCount > previousCount && !isOpen && previousCount > 0) {
-        // تحديد نوع الصوت حسب أولوية الإشعارات الجديدة
-        const newNotifications = data.filter((notification: Notification) => isUnread(notification));
-        const urgentNotification = newNotifications.find((n: Notification) => n.priority === 'urgent');
-        const highPriorityNotification = newNotifications.find((n: Notification) => n.priority === 'high');
-
-        if (urgentNotification) {
-          setSoundType('urgent');
-        } else if (highPriorityNotification) {
-          setSoundType('warning');
-        } else {
-          setSoundType('default');
-        }
-
-        setPlaySound(true);
-      }
-
-      // setNotifications(data); // This line was removed as per the edit hint
-      // setUnreadCount(newCount); // This line was removed as per the edit hint
-
-      // Update badge count after loading notifications
-      const badge = document.querySelector('.notification-badge') as HTMLElement;
-      if (badge) {
-        badge.textContent = newCount > 99 ? '99+' : newCount.toString();
-        badge.style.display = newCount > 0 ? 'flex' : 'none';
-      }
+      await forceRefreshNotifications();
     } catch (error) {
       } finally {
       setLoading(false);
@@ -269,18 +228,11 @@ const NotificationCenter: React.FC = () => {
       // تأكيد النوع
       if (data && typeof data === 'object' && 'total' in data && 'unread' in data) {
         setStats(data as { total: number; unread: number });
-        // Update badge count from stats
-        const badge = document.querySelector('.notification-badge') as HTMLElement;
-        const unread = (data as { unread: number }).unread;
-        if (badge) {
-          badge.textContent = unread > 99 ? '99+' : unread.toString();
-          badge.style.display = unread > 0 ? 'flex' : 'none';
-        }
       } else {
         setStats(null);
       }
     } catch (error) {
-      }
+    }
   };
 
   const handleMarkAsRead = async (notificationId: string) => {
@@ -313,12 +265,16 @@ const NotificationCenter: React.FC = () => {
   };
 
   const handleMarkAllAsRead = async () => {
+    if (isMarkingAllAsRead) return; // تجنب السباق عند الضغط المتكرر
     try {
+      setIsMarkingAllAsRead(true);
       await markAllNotificationsAsRead();
       await forceRefreshNotifications(); // تحديث الإشعارات فوراً بعد تحديد الكل كمقروء
       await loadStats(); // تحديث الإحصائيات فوراً
     } catch (error) {
-      }
+    } finally {
+      setIsMarkingAllAsRead(false);
+    }
   };
 
 // عرض الطلب من الإشعار: يفتح الطاولة + معاينة، أو إدارة الدفع حسب حالة الفاتورة/نوعها
@@ -338,7 +294,7 @@ const NotificationCenter: React.FC = () => {
       } catch {}
     }
     if (!order || !(order as any)._id) {
-      showNotification(`الطلب ${orderNumLabel} غير موجود — ربما حُذف`, 'error');
+      showNotification(t('notificationCenter.messages.orderNotFound', { order: orderNumLabel }), 'error');
       return;
     }
     // 2) الفاتورة: من الذاكرة ثم جلب مباشر (المدفوعة خارج الـ state)
@@ -354,11 +310,11 @@ const NotificationCenter: React.FC = () => {
     const billStatus = (bill as any)?.status;
     const billNumLabel = (bill as any)?.billNumber ? `#${(bill as any).billNumber}` : (md.billNumber ? `#${md.billNumber}` : 'الفاتورة');
     if (!bill) {
-      showNotification(`تعذر العثور على فاتورة الطلب ${orderNumLabel}`, 'error');
+      showNotification(t('notificationCenter.messages.billNotFound', { order: orderNumLabel }), 'error');
       return;
     }
     if (billStatus === 'cancelled') {
-      showNotification(`الطلب ${orderNumLabel} يتبع فاتورة ملغاة ${billNumLabel}`, 'error');
+      showNotification(t('notificationCenter.messages.billCancelled', { order: orderNumLabel }), 'error');
       return;
     }
     const fulfillment = (bill as any)?.fulfillmentType || (order as any)?.fulfillmentType || md.fulfillmentType || 'dine_in';
@@ -388,22 +344,8 @@ const NotificationCenter: React.FC = () => {
     try {
       const success = await deleteNotification(notificationId);
       if (success) {
-        // Check if the deleted notification was unread
-        const deletedNotification = notifications.find(n => n.id === notificationId);
-        const wasUnread = deletedNotification ? isUnread(deletedNotification) : false;
-
-        // setNotifications(prev => prev.filter(notification => notification.id !== notificationId)); // This line was removed as per the edit hint
-        // loadStats(); // This line was removed as per the edit hint
-
-        // Update badge count immediately if notification was unread
-        if (wasUnread) {
-          const newCount = Math.max(0, unreadCount - 1);
-          const badge = document.querySelector('.notification-badge') as HTMLElement;
-          if (badge) {
-            badge.textContent = newCount > 99 ? '99+' : newCount.toString();
-            badge.style.display = newCount > 0 ? 'flex' : 'none';
-          }
-        }
+        await forceRefreshNotifications();
+        await loadStats();
       }
     } catch (error) {
       }
@@ -476,21 +418,7 @@ const NotificationCenter: React.FC = () => {
           {/* Backdrop */}
           <div
             className="fixed inset-0 bg-black bg-opacity-50 z-[10000]"
-            onClick={async () => {
-              setIsOpen(false);
-              // تحديد جميع الإشعارات كمقروءة عند إغلاق النافذة
-              if (!isMarkingAllAsRead) {
-                try {
-                  setIsMarkingAllAsRead(true);
-                  await markAllNotificationsAsRead();
-                  await forceRefreshNotifications();
-                  await loadStats();
-                } catch (error) {
-                  } finally {
-                  setIsMarkingAllAsRead(false);
-                }
-              }
-            }}
+            onClick={closePanel}
           />
           <div className="notification-panel bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 shadow-xl">
           {/* Header */}
@@ -527,21 +455,7 @@ const NotificationCenter: React.FC = () => {
                 {t('notificationCenter.markAllAsRead')}
               </button>
               <button
-                onClick={async () => {
-                  setIsOpen(false);
-                  // تحديد جميع الإشعارات كمقروءة عند إغلاق النافذة
-                  if (!isMarkingAllAsRead) {
-                    try {
-                      setIsMarkingAllAsRead(true);
-                      await markAllNotificationsAsRead();
-                      await forceRefreshNotifications();
-                      await loadStats();
-                    } catch (error) {
-                      } finally {
-                      setIsMarkingAllAsRead(false);
-                    }
-                  }
-                }}
+                onClick={closePanel}
                 className="text-gray-400 hover:text-gray-600"
               >
                 <X className="h-4 w-4 sm:h-5 sm:w-5" />
@@ -659,9 +573,9 @@ const NotificationCenter: React.FC = () => {
             ) : filteredNotifications.length === 0 ? (
               <div className="p-4 text-center text-gray-500 dark:text-gray-400">{t('notificationCenter.messages.noNotifications')}</div>
             ) : (
-              filteredNotifications.map((notification) => (
+              filteredNotifications.map((notification, idx) => (
                 <div
-                  key={notification.id || notification._id || `notification-${Date.now()}-${Math.random()}`}
+                  key={notification.id || notification._id || `notif-${idx}`}
                   className={`p-3 sm:p-4 border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors duration-200 ${
   isUnread(notification) ? 'bg-orange-50 dark:bg-orange-900/30 border-r-4 border-r-orange-500' : 'bg-white dark:bg-gray-800 border-r-4 border-r-green-500'
 } ${getPriorityColor(notification.priority)}`}
@@ -712,16 +626,18 @@ const NotificationCenter: React.FC = () => {
                           >
                             <Check className="h-3 w-3 sm:h-4 sm:w-4" />
                           </button>
-                          <button
-                            onClick={() => {
-                              const id = notification.id || notification._id;
-                              if (id) handleDelete(id);
-                            }}
-                            className="text-gray-400 dark:text-gray-500 hover:text-red-600 dark:hover:text-red-400"
-                            title={t('notificationCenter.actions.delete')}
-                          >
-                            <Trash2 className="h-3 w-3 sm:h-4 sm:w-4" />
-                          </button>
+                          <PermissionGuard requiredPermissions={['canDeleteNotification', 'users']}>
+                            <button
+                              onClick={() => {
+                                const id = notification.id || notification._id;
+                                if (id) handleDelete(id);
+                              }}
+                              className="text-gray-400 dark:text-gray-500 hover:text-red-600 dark:hover:text-red-400"
+                              title={t('notificationCenter.actions.delete')}
+                            >
+                              <Trash2 className="h-3 w-3 sm:h-4 sm:w-4" />
+                            </button>
+                          </PermissionGuard>
                         </div>
                       </div>
                       <p className={`text-xs sm:text-sm mt-1 ${
@@ -740,7 +656,7 @@ const NotificationCenter: React.FC = () => {
                           )}
                           {((notification.metadata as any)?.fulfillmentType === 'delivery' || (notification.metadata as any)?.fulfillmentType === 'takeaway') && (
                             <span className="text-[11px] font-bold bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300 rounded-full px-2 py-0.5">
-                              {(notification.metadata as any).fulfillmentType === 'delivery' ? '🛵 دليفري' : '🥡 تيك أوي'}
+                              {(notification.metadata as any).fulfillmentType === 'delivery' ? `🛵 ${t('notificationCenter.fulfillment.delivery')}` : `🥡 ${t('notificationCenter.fulfillment.takeaway')}`}
                             </span>
                           )}
                           {(notification.metadata as any)?.deviceName && (
@@ -751,8 +667,13 @@ const NotificationCenter: React.FC = () => {
                       {notification.actionUrl && notification.actionText && (
                         <button
                           onClick={() => {
-                            // Handle action navigation
-                            window.location.href = notification.actionUrl!;
+                            const url = notification.actionUrl!;
+                            if (url.startsWith('/')) {
+                              setIsOpen(false);
+                              navigate(url);
+                            } else {
+                              window.location.href = url;
+                            }
                           }}
                           className="mt-2 text-xs sm:text-sm text-orange-600 dark:text-orange-400 hover:text-orange-800 dark:hover:text-orange-300 font-medium"
                         >
@@ -764,13 +685,13 @@ const NotificationCenter: React.FC = () => {
                           onClick={() => handleViewOrder(notification)}
                           className="mt-2 text-xs sm:text-sm text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 font-medium flex items-center gap-1"
                         >
-                          <Eye className="h-3.5 w-3.5" /> عرض الطلب
+                          <Eye className="h-3.5 w-3.5" /> {t('notificationCenter.viewOrder')}
                         </button>
                       )}
                       <div className={`flex flex-col sm:flex-row sm:items-center sm:justify-between mt-2 text-xs space-y-1 sm:space-y-0 ${
                         isUnread(notification) ? 'text-gray-700 dark:text-gray-300' : 'text-gray-500 dark:text-gray-400'
                       }`}>
-                        <span>{notification.createdBy?.name}{(notification.metadata as any)?.actor?.source === 'mobile' ? ' • 📱 هاتف' : ''}</span>
+                        <span>{notification.createdBy?.name}{(notification.metadata as any)?.actor?.source === 'mobile' ? ` • 📱 ${t('notificationCenter.mobileSource')}` : ''}</span>
                         <span>{formatDateTime(notification.createdAt)}</span>
                       </div>
                       {Array.isArray((notification as any).readBy) && (notification as any).readBy.length > 0 && (
@@ -801,21 +722,7 @@ const NotificationCenter: React.FC = () => {
           {/* Footer */}
           <div className="p-3 sm:p-4 border-t border-gray-200 dark:border-gray-700">
             <button
-              onClick={async () => {
-                setIsOpen(false);
-                // تحديد جميع الإشعارات كمقروءة عند إغلاق النافذة
-                if (!isMarkingAllAsRead) {
-                  try {
-                    setIsMarkingAllAsRead(true);
-                    await markAllNotificationsAsRead();
-                    await forceRefreshNotifications();
-                    await loadStats();
-                  } catch (error) {
-                    } finally {
-                    setIsMarkingAllAsRead(false);
-                  }
-                }
-              }}
+              onClick={closePanel}
               className="w-full text-center text-xs sm:text-sm text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
             >
               {t('notificationCenter.close')}

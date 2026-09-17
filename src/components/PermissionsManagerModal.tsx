@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { X, Save, Crown, Shield, Check, AlertTriangle } from 'lucide-react';
+import { X, Save, Crown, Shield, AlertTriangle } from 'lucide-react';
 import { User as UserType } from '../services/api';
 import { useTranslation } from 'react-i18next';
 import { useLanguage } from '../context/LanguageContext';
+import PermissionPicker from './PermissionPicker';
 
 interface Permission {
   id: string;
@@ -49,29 +50,6 @@ const PermissionsManagerModal: React.FC<PermissionsManagerModalProps> = ({
     }
   }, [selectedPermissions, user]);
 
-  const handlePermissionChange = (permissionId: string, checked: boolean) => {
-    setSelectedPermissions(prev => {
-      let newPermissions: string[];
-
-      if (permissionId === 'all') {
-        if (checked) {
-          newPermissions = ['all'];
-        } else {
-          newPermissions = prev.filter(p => p !== 'all');
-        }
-      } else {
-        if (checked) {
-          const filteredPermissions = prev.filter(p => p !== 'all');
-          newPermissions = [...filteredPermissions, permissionId];
-        } else {
-          newPermissions = prev.filter(p => p !== permissionId);
-        }
-      }
-
-      return newPermissions;
-    });
-  };
-
   const handleSave = async () => {
     if (!user || !hasChanges) return;
 
@@ -86,28 +64,7 @@ const PermissionsManagerModal: React.FC<PermissionsManagerModalProps> = ({
     }
   };
 
-  const getPermissionsByCategory = () => {
-    const categories = {
-      [t('users.permissionsModal.systemManagement')]: ['all', 'users', 'settings', 'auditLog', 'syncStatus'],
-      [t('users.permissionsModal.reportsAndStats')]: ['dashboard', 'reports', 'consumption'],
-      [t('users.permissionsModal.gaming')]: ['playstation', 'computer'],
-      [t('users.permissionsModal.restaurantAndCafe')]: ['tables', 'cafe', 'kitchenDisplay', 'menu',
-          // صلاحيات المخزون التفصيلية (كانت مخفية سابقاً)
-          'inventory', 'canViewInventory', 'canAddInventoryItem', 'canEditInventoryItem',
-          'canDeleteInventoryItem', 'canAddStock', 'canRemoveStock', 'canAdjustStock',
-          'canViewStockMovements', 'canEditStockMovement', 'canDeleteStockMovement',
-          'warehouse', 'canAddWarehouseItem', 'canEditWarehouseItem', 'canDeleteWarehouseItem',
-          'canViewWarehouseMovements', 'canAdjustWarehouseStock', 'canEditWarehouseMovement',
-          'canDeleteWarehouseMovement', 'canTransferToInventory', 'canReturnToWarehouse'],
-      [t('users.permissionsModal.financial')]: ['billing', 'view_all_bills', 'costs', 'viewCustomerContacts', 'shifts'],
-    };
-
-    return categories;
-  };
-
   if (!isOpen || !user) return null;
-
-  const categories = getPermissionsByCategory();
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fadeIn">
@@ -180,69 +137,12 @@ const PermissionsManagerModal: React.FC<PermissionsManagerModalProps> = ({
               )}
             </div>
 
-            {/* Permissions by Category */}
-            <div className="space-y-6">
-              {Object.entries(categories).map(([categoryName, categoryPermissions]) => (
-                <div key={categoryName} className="bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-700/50 dark:to-gray-800/50 border-2 border-gray-200 dark:border-gray-600 rounded-xl p-5">
-                  <h4 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-4 flex items-center gap-2">
-                    <div className="w-3 h-3 bg-gradient-to-r from-purple-500 to-indigo-600 rounded-full"></div>
-                    {categoryName}
-                  </h4>
-                  <div className="grid grid-cols-1 gap-3">
-                    {categoryPermissions.map(permissionId => {
-                      const permission = permissions.find(p => p.id === permissionId);
-                      if (!permission) return null;
-
-                      const isChecked = selectedPermissions.includes(permissionId);
-                      const isDisabled = selectedPermissions.includes('all') && permissionId !== 'all';
-
-                      return (
-                        <label 
-                          key={permissionId}
-                          className={`flex items-start p-4 bg-white dark:bg-gray-700 border-2 rounded-xl transition-all cursor-pointer group ${
-                            isChecked 
-                              ? 'border-green-300 dark:border-green-500 bg-green-50 dark:bg-green-900/20' 
-                              : 'border-gray-200 dark:border-gray-600 hover:border-blue-300 dark:hover:border-blue-500'
-                          } ${isDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}
-                        >
-                          <div className="relative">
-                            <input
-                              type="checkbox"
-                              checked={isChecked}
-                              onChange={(e) => handlePermissionChange(permissionId, e.target.checked)}
-                              disabled={isDisabled}
-                              className="mt-1 rounded border-gray-300 text-blue-600 focus:ring-blue-500 w-5 h-5"
-                            />
-                            {isChecked && (
-                              <Check className="absolute top-0.5 left-0.5 w-4 h-4 text-green-600 pointer-events-none" />
-                            )}
-                          </div>
-                          <div className={`${isRTL ? 'mr-3' : 'ml-3'} flex-1`}>
-                            <div className={`text-sm font-bold transition-colors ${
-                              isChecked 
-                                ? 'text-green-900 dark:text-green-200' 
-                                : 'text-gray-900 dark:text-gray-100 group-hover:text-blue-600 dark:group-hover:text-blue-400'
-                            }`}>
-                              {permission.name}
-                              {permissionId === 'all' && (
-                                <Crown className="inline w-4 h-4 mr-1 text-purple-600" />
-                              )}
-                            </div>
-                            <div className={`text-xs mt-1 ${
-                              isChecked 
-                                ? 'text-green-700 dark:text-green-400' 
-                                : 'text-gray-500 dark:text-gray-400'
-                            }`}>
-                              {permission.description}
-                            </div>
-                          </div>
-                        </label>
-                      );
-                    })}
-                  </div>
-                </div>
-              ))}
-            </div>
+            {/* Permissions by Group */}
+            <PermissionPicker
+              permissions={permissions}
+              selected={selectedPermissions}
+              onChange={setSelectedPermissions}
+            />
           </div>
         </div>
 

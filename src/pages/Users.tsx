@@ -89,16 +89,16 @@ const [formData, setFormData] = useState({
     { id: 'inventory', name: t('users.permissions.inventory'), description: t('users.permissions.inventoryDesc') },
     { id: 'warehouse', name: t('users.permissions.warehouse'), description: t('users.permissions.warehouseDesc') },
     // Inventory detailed permissions
-    { id: 'canViewInventory', name: 'عرض المخزون', description: 'السماح بعرض قائمة المخزون والمنتجات' },
-    { id: 'canAddInventoryItem', name: 'إضافة منتج للمخزون', description: 'السماح بإضافة منتجات جديدة للمخزون' },
-    { id: 'canEditInventoryItem', name: 'تعديل منتج المخزون', description: 'السماح بتعديل معلومات المنتجات' },
-    { id: 'canDeleteInventoryItem', name: 'حذف منتج المخزون', description: 'السماح بحذف المنتجات من المخزون' },
-    { id: 'canAddStock', name: 'إضافة كمية للمخزون', description: 'السماح بإضافة كميات جديدة للمنتجات' },
-    { id: 'canRemoveStock', name: 'خصم كمية من المخزون', description: 'السماح بخصم كميات من المنتجات' },
-    { id: 'canAdjustStock', name: 'تعديل رصيد المخزون', description: 'السماح بتعديل الرصيد الفعلي للمخزون' },
-    { id: 'canViewStockMovements', name: 'عرض حركات المخزون', description: 'السماح بعرض سجل حركات المخزون' },
-    { id: 'canEditStockMovement', name: 'تعديل حركة المخزون', description: 'السماح بتعديل حركات المخزون' },
-    { id: 'canDeleteStockMovement', name: 'حذف حركة المخزون', description: 'السماح بحذف حركات المخزون' },
+    { id: 'canViewInventory', name: t('users.permissions.canViewInventory'), description: t('users.permissions.canViewInventoryDesc') },
+    { id: 'canAddInventoryItem', name: t('users.permissions.canAddInventoryItem'), description: t('users.permissions.canAddInventoryItemDesc') },
+    { id: 'canEditInventoryItem', name: t('users.permissions.canEditInventoryItem'), description: t('users.permissions.canEditInventoryItemDesc') },
+    { id: 'canDeleteInventoryItem', name: t('users.permissions.canDeleteInventoryItem'), description: t('users.permissions.canDeleteInventoryItemDesc') },
+    { id: 'canAddStock', name: t('users.permissions.canAddStock'), description: t('users.permissions.canAddStockDesc') },
+    { id: 'canRemoveStock', name: t('users.permissions.canRemoveStock'), description: t('users.permissions.canRemoveStockDesc') },
+    { id: 'canAdjustStock', name: t('users.permissions.canAdjustStock'), description: t('users.permissions.canAdjustStockDesc') },
+    { id: 'canViewStockMovements', name: t('users.permissions.canViewStockMovements'), description: t('users.permissions.canViewStockMovementsDesc') },
+    { id: 'canEditStockMovement', name: t('users.permissions.canEditStockMovement'), description: t('users.permissions.canEditStockMovementDesc') },
+    { id: 'canDeleteStockMovement', name: t('users.permissions.canDeleteStockMovement'), description: t('users.permissions.canDeleteStockMovementDesc') },
     // Warehouse detailed permissions
     { id: 'canTransferToInventory', name: t('users.permissions.canTransferToInventory'), description: t('users.permissions.canTransferToInventoryDesc') },
     { id: 'canReturnToWarehouse', name: t('users.permissions.canReturnToWarehouse'), description: t('users.permissions.canReturnToWarehouseDesc') },
@@ -125,6 +125,37 @@ const [formData, setFormData] = useState({
     { id: 'auditLog', name: t('users.permissions.auditLog'), description: t('users.permissions.auditLogDesc') },
     { id: 'syncStatus', name: t('users.permissions.syncStatus'), description: t('users.permissions.syncStatusDesc') },
     { id: 'viewCustomerContacts', name: t('users.permissions.viewCustomerContacts'), description: t('users.permissions.viewCustomerContactsDesc') },
+    // Takeaway / delivery / payroll / notifications / subscription pages
+    { id: 'takeaway', name: t('users.permissions.takeaway'), description: t('users.permissions.takeawayDesc') },
+    { id: 'delivery', name: t('users.permissions.delivery'), description: t('users.permissions.deliveryDesc') },
+    { id: 'payroll', name: t('users.permissions.payroll'), description: t('users.permissions.payrollDesc') },
+    { id: 'notifications', name: t('users.permissions.notifications'), description: t('users.permissions.notificationsDesc') },
+    { id: 'subscription', name: t('users.permissions.subscription'), description: t('users.permissions.subscriptionDesc') },
+    // Menu actions
+    { id: 'canAddMenuItem', name: t('users.permissions.canAddMenuItem'), description: t('users.permissions.canAddMenuItemDesc') },
+    { id: 'canEditMenuItem', name: t('users.permissions.canEditMenuItem'), description: t('users.permissions.canEditMenuItemDesc') },
+    { id: 'canDeleteMenuItem', name: t('users.permissions.canDeleteMenuItem'), description: t('users.permissions.canDeleteMenuItemDesc') },
+    // Gaming devices actions
+    { id: 'canAddDevice', name: t('users.permissions.canAddDevice'), description: t('users.permissions.canAddDeviceDesc') },
+    { id: 'canEditDevice', name: t('users.permissions.canEditDevice'), description: t('users.permissions.canEditDeviceDesc') },
+    { id: 'canDeleteDevice', name: t('users.permissions.canDeleteDevice'), description: t('users.permissions.canDeleteDeviceDesc') },
+    // Costs actions
+    { id: 'canAddCost', name: t('users.permissions.canAddCost'), description: t('users.permissions.canAddCostDesc') },
+    { id: 'canEditCost', name: t('users.permissions.canEditCost'), description: t('users.permissions.canEditCostDesc') },
+    { id: 'canDeleteCost', name: t('users.permissions.canDeleteCost'), description: t('users.permissions.canDeleteCostDesc') },
+    // Shifts actions
+    { id: 'canManageShifts', name: t('users.permissions.canManageShifts'), description: t('users.permissions.canManageShiftsDesc') },
+    // Payroll actions
+    { id: 'canAddEmployee', name: t('users.permissions.canAddEmployee'), description: t('users.permissions.canAddEmployeeDesc') },
+    { id: 'canEditEmployee', name: t('users.permissions.canEditEmployee'), description: t('users.permissions.canEditEmployeeDesc') },
+    { id: 'canDeleteEmployee', name: t('users.permissions.canDeleteEmployee'), description: t('users.permissions.canDeleteEmployeeDesc') },
+    { id: 'canApproveAdvance', name: t('users.permissions.canApproveAdvance'), description: t('users.permissions.canApproveAdvanceDesc') },
+    // Kitchen display actions
+    { id: 'canUpdateOrderStatus', name: t('users.permissions.canUpdateOrderStatus'), description: t('users.permissions.canUpdateOrderStatusDesc') },
+    // Notifications actions
+    { id: 'canDeleteNotification', name: t('users.permissions.canDeleteNotification'), description: t('users.permissions.canDeleteNotificationDesc') },
+    // Reports actions
+    { id: 'canExportReports', name: t('users.permissions.canExportReports'), description: t('users.permissions.canExportReportsDesc') },
   ];
 
   const businessTypes = [
@@ -140,20 +171,26 @@ const [formData, setFormData] = useState({
       playstation: ['playstation'],
       computer: ['computer'],
       cafe: ['cafe'],
+      tables: ['tables', 'cafe', 'billing'],
+      takeaway: ['takeaway', 'tables', 'cafe', 'billing'],
+      delivery: ['delivery', 'tables', 'cafe', 'billing'],
       menu: ['menu'],
       billing: ['billing'],
       reports: ['reports'],
-      consumption: ['consumption'],
+      consumption: ['consumption', 'reports'],
       soldItems: ['soldItems'],
       inventory: ['inventory'],
       warehouse: ['warehouse'],
+      kitchenDisplay: ['kitchenDisplay'],
       costs: ['costs'],
+      payroll: ['payroll', 'users'],
       users: ['users'],
       settings: ['settings'],
       shifts: ['shifts'],
       auditLog: ['auditLog'],
       syncStatus: ['syncStatus'],
-      notifications: ['dashboard', 'playstation', 'computer', 'cafe', 'menu', 'billing', 'reports', 'consumption', 'soldItems', 'inventory', 'warehouse', 'costs', 'users', 'settings']
+      subscription: ['subscription'],
+      notifications: ['notifications', 'dashboard', 'playstation', 'computer', 'cafe', 'menu', 'billing', 'reports', 'consumption', 'soldItems', 'inventory', 'warehouse', 'costs', 'users', 'settings']
     };
 
     const accessiblePages = [];
@@ -285,33 +322,11 @@ const [formData, setFormData] = useState({
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handlePermissionChange = (permissionId: string, checked: boolean) => {
-    setFormData(prev => {
-      let newPermissions: string[];
-
-      if (permissionId === 'all') {
-        // إذا تم تحديد "جميع الصلاحيات"
-        if (checked) {
-          newPermissions = ['all'];
-        } else {
-          newPermissions = prev.permissions.filter(p => p !== 'all');
-        }
-      } else {
-        // إذا تم تحديد صلاحية أخرى
-        if (checked) {
-          // إزالة "جميع الصلاحيات" إذا كانت محددة
-          const filteredPermissions = prev.permissions.filter(p => p !== 'all');
-          newPermissions = [...filteredPermissions, permissionId];
-        } else {
-          newPermissions = prev.permissions.filter(p => p !== permissionId);
-        }
-      }
-
-      return {
-        ...prev,
-        permissions: newPermissions
-      };
-    });
+  const handlePermissionsChange = (permissionIds: string[]) => {
+    setFormData(prev => ({
+      ...prev,
+      permissions: permissionIds
+    }));
   };
 
   const resetForm = () => {
@@ -881,12 +896,13 @@ const [formData, setFormData] = useState({
         onSubmit={handleSubmit}
         formData={formData}
         onInputChange={handleInputChange}
-        onPermissionChange={handlePermissionChange}
+        onPermissionsChange={handlePermissionsChange}
         roles={roles}
         permissions={permissions}
         businessTypes={businessTypes}
         isEditing={showEditUser}
         loading={saveLoading}
+        lockRoleAndPermissions={showEditUser && !!selectedUserId && !!user && String(selectedUserId) === String((user as any)?.id || (user as any)?._id)}
       />
 
 

@@ -97,6 +97,125 @@ export const canViewCustomerContacts = (user: UserPermissions | null): boolean =
 };
 
 /**
+ * Check if user can add menu items/sections/categories
+ */
+export const canAddMenuItem = (user: UserPermissions | null): boolean => {
+  return hasPermission(user, 'canAddMenuItem');
+};
+
+/**
+ * Check if user can edit menu items/sections/categories
+ */
+export const canEditMenuItem = (user: UserPermissions | null): boolean => {
+  return hasPermission(user, 'canEditMenuItem');
+};
+
+/**
+ * Check if user can delete menu items/sections/categories (also merge-as-sizes)
+ */
+export const canDeleteMenuItem = (user: UserPermissions | null): boolean => {
+  return hasPermission(user, 'canDeleteMenuItem');
+};
+
+/**
+ * Check if user can add gaming devices (playstation/computer)
+ */
+export const canAddDevice = (user: UserPermissions | null): boolean => {
+  return hasPermission(user, 'canAddDevice');
+};
+
+/**
+ * Check if user can edit gaming devices
+ */
+export const canEditDevice = (user: UserPermissions | null): boolean => {
+  return hasPermission(user, 'canEditDevice');
+};
+
+/**
+ * Check if user can delete gaming devices
+ */
+export const canDeleteDevice = (user: UserPermissions | null): boolean => {
+  return hasPermission(user, 'canDeleteDevice');
+};
+
+/**
+ * Check if user can add costs
+ */
+export const canAddCost = (user: UserPermissions | null): boolean => {
+  return hasPermission(user, 'canAddCost');
+};
+
+/**
+ * Check if user can edit costs (also payments and categories)
+ */
+export const canEditCost = (user: UserPermissions | null): boolean => {
+  return hasPermission(user, 'canEditCost');
+};
+
+/**
+ * Check if user can delete costs
+ */
+export const canDeleteCost = (user: UserPermissions | null): boolean => {
+  return hasPermission(user, 'canDeleteCost');
+};
+
+/**
+ * Check if user can open/close shifts
+ */
+export const canManageShifts = (user: UserPermissions | null): boolean => {
+  return hasPermission(user, 'canManageShifts');
+};
+
+/**
+ * Check if user can add employees
+ */
+export const canAddEmployee = (user: UserPermissions | null): boolean => {
+  return hasPermission(user, 'canAddEmployee');
+};
+
+/**
+ * Check if user can edit employees (profile, payments, attendance, advances, deductions, bonuses)
+ */
+export const canEditEmployee = (user: UserPermissions | null): boolean => {
+  return hasPermission(user, 'canEditEmployee');
+};
+
+/**
+ * Check if user can delete/terminate employees
+ */
+export const canDeleteEmployee = (user: UserPermissions | null): boolean => {
+  return hasPermission(user, 'canDeleteEmployee');
+};
+
+/**
+ * Check if user can approve/reject employee advances
+ */
+export const canApproveAdvance = (user: UserPermissions | null): boolean => {
+  return hasPermission(user, 'canApproveAdvance');
+};
+
+/**
+ * Check if user can change order status on the kitchen display
+ */
+export const canUpdateOrderStatus = (user: UserPermissions | null): boolean => {
+  return hasPermission(user, 'canUpdateOrderStatus');
+};
+
+/**
+ * Check if user can delete notifications
+ */
+export const canDeleteNotification = (user: UserPermissions | null): boolean => {
+  return hasPermission(user, 'canDeleteNotification');
+};
+
+/**
+ * Check if user can export reports (PDF/Excel)
+ */
+export const canExportReports = (user: UserPermissions | null): boolean => {
+  return hasPermission(user, 'canExportReports');
+};
+
+/**
  * Check if user has any of the specified permissions
  */
 export const hasAnyPermission = (user: UserPermissions | null, permissions: string[]): boolean => {

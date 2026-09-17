@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useApp } from '../context/AppContext';
 import { MenuItem, MenuSection, MenuCategory } from '../services/api';
 import { formatDecimal } from '../utils/formatters';
+import { canAddMenuItem, canEditMenuItem, canDeleteMenuItem } from '../utils/permissionHelper';
 import '../styles/menu-animations.css';
 import {
 	MenuItemModal,
@@ -34,7 +35,8 @@ const Menu: React.FC = () => {
 		inventoryItems,
 		fetchInventoryItems,
 		showNotification,
-		mergeMenuItems
+		mergeMenuItems,
+		user
 	} = useApp() as any;
 
 	// UI State
@@ -179,6 +181,7 @@ const Menu: React.FC = () => {
 
 	// Item Handlers
 	const handleAddItem = (categoryId?: string) => {
+		if (!canAddMenuItem(user)) { showNotification(t('common.permissionDenied'), 'error'); return; }
 		setEditingItem(null);
 		setFormData({
 			name: '',
@@ -195,6 +198,7 @@ const Menu: React.FC = () => {
 	};
 
 	const handleEditItem = (item: MenuItem) => {
+		if (!canEditMenuItem(user)) { showNotification(t('common.permissionDenied'), 'error'); return; }
 		setEditingItem(item);
 		const categoryId = typeof item.category === 'string' ? item.category : item.category?.id || item.category?._id || '';
 		const variantsData = item.variants && item.variants.length > 0
@@ -215,6 +219,7 @@ const Menu: React.FC = () => {
 	};
 
 	const handleDuplicateItem = (item: MenuItem) => {
+		if (!canAddMenuItem(user)) { showNotification(t('common.permissionDenied'), 'error'); return; }
 		setEditingItem(null);
 		const categoryId = typeof item.category === 'string' ? item.category : item.category?.id || item.category?._id || '';
 		const variantsData = item.variants && item.variants.length > 0
@@ -311,6 +316,7 @@ const Menu: React.FC = () => {
 	const handleDeleteItem = async () => {
 		const { id } = showDeleteModal;
 		if (!id || showDeleteModal.type !== 'item') return;
+		if (!canDeleteMenuItem(user)) { showNotification(t('common.permissionDenied'), 'error'); return; }
 
 		try {
 			setDeletingItems(prev => ({ ...prev, [id]: true }));
@@ -328,18 +334,21 @@ const Menu: React.FC = () => {
 
 	// Section Handlers
 	const handleAddSection = () => {
+		if (!canAddMenuItem(user)) { showNotification(t('common.permissionDenied'), 'error'); return; }
 		setEditingSection(null);
 		setSectionFormData({ name: '', description: '', sortOrder: menuSections.length });
 		setShowSectionModal(true);
 	};
 
 	const handleEditSection = (section: MenuSection) => {
+		if (!canEditMenuItem(user)) { showNotification(t('common.permissionDenied'), 'error'); return; }
 		setEditingSection(section);
 		setSectionFormData({ name: section.name, description: section.description || '', sortOrder: section.sortOrder });
 		setShowSectionModal(true);
 	};
 
 	const handleSaveSection = async (data: { name: string; description: string; sortOrder: number }) => {
+		if (editingSection ? !canEditMenuItem(user) : !canAddMenuItem(user)) { showNotification(t('common.permissionDenied'), 'error'); return; }
 		if (!data.name.trim()) {
 			showNotification(t('menu.notifications.enterSectionName'), 'error');
 			return;
@@ -366,6 +375,7 @@ const Menu: React.FC = () => {
 	const handleDeleteSection = async () => {
 		const { id } = showDeleteModal;
 		if (!id || showDeleteModal.type !== 'section') return;
+		if (!canDeleteMenuItem(user)) { showNotification(t('common.permissionDenied'), 'error'); return; }
 
 		try {
 			setDeletingSections(prev => ({ ...prev, [id]: true }));
@@ -383,6 +393,7 @@ const Menu: React.FC = () => {
 
 	// Category Handlers
 	const handleAddCategory = (sectionId?: string) => {
+		if (!canAddMenuItem(user)) { showNotification(t('common.permissionDenied'), 'error'); return; }
 		setEditingCategory(null);
 		setCategoryFormData({
 			name: '',
@@ -397,6 +408,7 @@ const Menu: React.FC = () => {
 	};
 
 	const handleEditCategory = (category: MenuCategory) => {
+		if (!canEditMenuItem(user)) { showNotification(t('common.permissionDenied'), 'error'); return; }
 		setEditingCategory(category);
 		const sectionId = typeof category.section === 'string' ? category.section : category.section?.id || category.section?._id;
 		setCategoryFormData({ name: category.name, description: category.description || '', section: sectionId || '', sortOrder: category.sortOrder });
@@ -404,6 +416,7 @@ const Menu: React.FC = () => {
 	};
 
 	const handleSaveCategory = async (data: { name: string; description: string; section: string; sortOrder: number }) => {
+		if (editingCategory ? !canEditMenuItem(user) : !canAddMenuItem(user)) { showNotification(t('common.permissionDenied'), 'error'); return; }
 		if (!data.name.trim()) {
 			showNotification(t('menu.notifications.enterCategoryName'), 'error');
 			return;
@@ -434,6 +447,7 @@ const Menu: React.FC = () => {
 	const handleDeleteCategory = async () => {
 		const { id } = showDeleteModal;
 		if (!id || showDeleteModal.type !== 'category') return;
+		if (!canDeleteMenuItem(user)) { showNotification(t('common.permissionDenied'), 'error'); return; }
 
 		try {
 			setDeletingCategories(prev => ({ ...prev, [id]: true }));
@@ -520,6 +534,7 @@ const Menu: React.FC = () => {
 	}, [selectedMergeIds, menuItems]);
 
 	const handleConfirmMerge = async () => {
+		if (!canDeleteMenuItem(user)) { showNotification(t('common.permissionDenied'), 'error'); return; }
 		if (selectedMergeIds.length < 2 || selectedMergeIds.length > 4) {
 			showNotification('يجب اختيار من 2 إلى 4 عناصر للدمج', 'error');
 			return;

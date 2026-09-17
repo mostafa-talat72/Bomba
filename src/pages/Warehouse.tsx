@@ -1,10 +1,9 @@
-import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { formatCurrency, formatDecimal, formatQuantity } from '../utils/formatters';
 import { Package, Plus, AlertTriangle, Edit, Trash2, History, Minus, ChevronDown, ChevronUp, Edit2, X } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { WarehouseItem, MenuItem } from '../services/api';
+import { WarehouseItem } from '../services/api';
 import { api } from '../services/api';
-import { useNavigate } from 'react-router-dom';
 import { io, Socket } from 'socket.io-client';
 import { API_BASE_URL } from '../utils/apiBase';
 import { useTranslation } from 'react-i18next';
@@ -21,12 +20,17 @@ import 'dayjs/locale/en';
 import 'dayjs/locale/fr';
 import customParseFormat from 'dayjs/plugin/customParseFormat';
 import PermissionGuard from '../components/PermissionGuard';
+import {
+  UNIT_CANONICAL, UNIT_LABEL_KEYS, CATEGORY_CANONICAL, CATEGORY_LABEL_KEYS,
+  toCanonicalUnit, toCanonicalCategory, toCanonicalReason, isOrderLinkedReason,
+} from '../utils/canonicalInventory';
 
 dayjs.extend(customParseFormat);
 
-const getCairoDateTime = (timezone: string) => {
+const getCairoDateTime = (timezone?: string) => {
   const now = new Date();
-  const orgTime = new Date(now.toLocaleString('en-US', { timeZone: timezone }));
+  const tz = timezone || 'Africa/Cairo';
+  const orgTime = new Date(now.toLocaleString('en-US', { timeZone: tz }));
   const year = orgTime.getFullYear();
   const month = String(orgTime.getMonth() + 1).padStart(2, '0');
   const day = String(orgTime.getDate()).padStart(2, '0');
@@ -64,6 +68,7 @@ const Warehouse = () => {
   const [deductForm, setDeductForm] = useState({
     quantity: '', reason: '', type: 'out' as 'out' | 'adjustment', date: getCairoDateTime(timezone),
   });
+  const [deductCustomReason, setDeductCustomReason] = useState(false);
 
   const [searchTerm, setSearchTerm] = useState('');
   const [filterCategory, setFilterCategory] = useState('');
@@ -86,6 +91,8 @@ const Warehouse = () => {
   });
 
   const [addType, setAddType] = useState<'existing' | 'new'>('existing');
+  // Manual cost-status choice must survive auto-recalc on price/qty edits
+  const [costStatusDirty, setCostStatusDirty] = useState(false);
   const [addForm, setAddForm] = useState({
     productId: '', name: '', category: '', quantity: '', price: '', supplier: '', minStock: '', unit: '',
     date: getCairoDateTime(timezone), costStatus: 'pending', paidAmount: '', isRawMaterial: false,
@@ -100,53 +107,13 @@ const Warehouse = () => {
   const [alertType, setAlertType] = useState<'success' | 'error'>('success');
   const [menuCategories, setMenuCategories] = useState<Array<{ id: string; name: string }>>([]);
 
-  const unitOptions = useMemo(() => [
-    t('inventory.units.piece'), t('inventory.units.kilo'), t('inventory.units.gram'),
-    t('inventory.units.liter'), t('inventory.units.ml'), t('inventory.units.box'),
-    t('inventory.units.bag'), t('inventory.units.bottle'),
-  ], [t]);
-
-  const normalizeUnit = useCallback((unit: string): string => {
-    if (!unit) return '';
-    const unitMap: { [key: string]: string } = {
-      'قطعة': t('inventory.units.piece'), 'كيلو': t('inventory.units.kilo'), 'جرام': t('inventory.units.gram'),
-      'لتر': t('inventory.units.liter'), 'مل': t('inventory.units.ml'), 'علبة': t('inventory.units.box'),
-      'كيس': t('inventory.units.bag'), 'زجاجة': t('inventory.units.bottle'),
-      'Piece': t('inventory.units.piece'), 'Kilo': t('inventory.units.kilo'), 'Gram': t('inventory.units.gram'),
-      'Liter': t('inventory.units.liter'), 'ML': t('inventory.units.ml'), 'Box': t('inventory.units.box'),
-      'Bag': t('inventory.units.bag'), 'Bottle': t('inventory.units.bottle'),
-      'Pièce': t('inventory.units.piece'), 'Gramme': t('inventory.units.gram'),
-      'Litre': t('inventory.units.liter'), 'Boîte': t('inventory.units.box'),
-      'Sac': t('inventory.units.bag'), 'Bouteille': t('inventory.units.bottle'),
-    };
-    return unitMap[unit] || unit;
-  }, [t]);
-
-  const normalizeCategory = useCallback((category: string): string => {
-    if (!category) return '';
-    const categoryMap: { [key: string]: string } = {
-      'مشروبات ساخنة': t('inventory.categories.hotDrinks'), 'مشروبات باردة': t('inventory.categories.coldDrinks'),
-      'طعام': t('inventory.categories.food'), 'حلويات': t('inventory.categories.desserts'),
-      'مواد خام': t('inventory.categories.rawMaterials'), 'أخرى': t('inventory.categories.other'),
-      'Hot Drinks': t('inventory.categories.hotDrinks'), 'Cold Drinks': t('inventory.categories.coldDrinks'),
-      'Food': t('inventory.categories.food'), 'Desserts': t('inventory.categories.desserts'),
-      'Raw Materials': t('inventory.categories.rawMaterials'), 'Other': t('inventory.categories.other'),
-      'Boissons chaudes': t('inventory.categories.hotDrinks'), 'Nourriture': t('inventory.categories.food'),
-      'Matières premières': t('inventory.categories.rawMaterials'), 'Autre': t('inventory.categories.other'),
-    };
-    return categoryMap[category] || category;
-  }, [t]);
-
-  const defaultCategories = useMemo(() => [
-    t('inventory.categories.hotDrinks'), t('inventory.categories.coldDrinks'),
-    t('inventory.categories.food'), t('inventory.categories.desserts'),
-    t('inventory.categories.rawMaterials'), t('inventory.categories.other'),
-  ], [t]);
-
+  // الفئات الافتراضية + الفئات من المنيو (القيمة معيارية، والتسمية مترجمة)
   const categoryOptions = useMemo(() => {
-    const menuCategoryNames = menuCategories.map(cat => cat.name);
-    return [...new Set([...defaultCategories, ...menuCategoryNames])].sort();
-  }, [menuCategories]);
+    const defaults = CATEGORY_CANONICAL.map((ar, i) => ({ value: ar, label: t(CATEGORY_LABEL_KEYS[i]) }));
+    const menuCats = menuCategories.map(cat => ({ value: cat.name, label: cat.name }));
+    const merged = [...defaults, ...menuCats.filter(m => !defaults.some(d => d.value === m.value))];
+    return merged.sort((a, b) => a.label.localeCompare(b.label, i18n.language));
+  }, [menuCategories, t, i18n.language]);
 
   const costStatusOptions = useMemo(() => [
     { value: 'pending', label: t('inventory.addModal.pending') },
@@ -230,35 +197,55 @@ const Warehouse = () => {
   const filteredItems = useMemo(() => {
     return warehouseItems.filter(item => {
       if (searchTerm && !item.name.toLowerCase().includes(searchTerm.toLowerCase())) return false;
-      if (filterCategory && item.category !== filterCategory) return false;
+      if (filterCategory && toCanonicalCategory(item.category) !== toCanonicalCategory(filterCategory)) return false;
       if (filterType === 'raw' && !item.isRawMaterial) return false;
       if (filterType === 'product' && item.isRawMaterial) return false;
       if (filterStock === 'low' && item.currentStock > item.minStock) return false;
       if (filterStock === 'out' && item.currentStock > 0) return false;
-      if (filterDateFrom && filterDateTo) {
-        const itemDate = new Date(item.createdAt);
-        const from = new Date(filterDateFrom);
-        const to = new Date(filterDateTo);
-        to.setHours(23, 59, 59, 999);
-        if (itemDate < from || itemDate > to) return false;
+      // Date filters: single bound works; type switch clears the others (see onChange)
+      if (dateFilterType === 'range') {
+        if (filterDateFrom || filterDateTo) {
+          const itemDate = new Date(item.createdAt);
+          if (filterDateFrom) {
+            const from = new Date(filterDateFrom + 'T00:00:00');
+            if (itemDate < from) return false;
+          }
+          if (filterDateTo) {
+            const to = new Date(filterDateTo + 'T23:59:59');
+            if (itemDate > to) return false;
+          }
+        }
       }
-      if (filterMonth) {
+      if (dateFilterType === 'month' && filterMonth) {
         const itemDate = new Date(item.createdAt);
         const itemMonth = `${itemDate.getFullYear()}-${String(itemDate.getMonth() + 1).padStart(2, '0')}`;
         if (itemMonth !== filterMonth) return false;
       }
-      if (filterYear) {
+      if (dateFilterType === 'year' && filterYear) {
         const itemDate = new Date(item.createdAt);
         if (itemDate.getFullYear().toString() !== filterYear) return false;
       }
       return true;
     });
-  }, [warehouseItems, searchTerm, filterCategory, filterType, filterStock, filterDateFrom, filterDateTo, filterMonth, filterYear]);
+  }, [warehouseItems, searchTerm, filterCategory, filterType, filterStock, dateFilterType, filterDateFrom, filterDateTo, filterMonth, filterYear]);
+
+  // Display pagination (client-side slice; full list stays in context for other screens)
+  const [whPage, setWhPage] = useState(1);
+  const WH_PAGE_SIZE = 50;
+  useEffect(() => { setWhPage(1); }, [searchTerm, filterCategory, filterType, filterStock, dateFilterType, filterDateFrom, filterDateTo, filterMonth, filterYear]);
+  const pagedItems = useMemo(() =>
+    filteredItems.slice((whPage - 1) * WH_PAGE_SIZE, whPage * WH_PAGE_SIZE),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [filteredItems, whPage]
+  );
+  const whTotalPages = Math.max(1, Math.ceil(filteredItems.length / WH_PAGE_SIZE));
 
   useEffect(() => { fetchWarehouseItems(); fetchMenuCategories(); }, []);
 
+  // Socket: single connection, refs avoid reconnect storms on modal open/close
+  const modalStateRef = useRef({ show: showMovementsModal, item: selectedItem });
+  modalStateRef.current = { show: showMovementsModal, item: selectedItem };
   useEffect(() => {
-    if (socketRef.current) return;
     const apiUrl = API_BASE_URL;
     const socketUrl = apiUrl.replace(/\/api\/?$/, '');
     const socket = io(socketUrl, {
@@ -269,8 +256,9 @@ const Warehouse = () => {
     socketRef.current = socket;
     socket.on('inventory-update', async () => {
       await fetchWarehouseItems();
-      if (showMovementsModal && selectedItem) {
-        await refreshStockMovements(selectedItem.id || selectedItem._id);
+      const { show, item } = modalStateRef.current;
+      if (show && item) {
+        await refreshStockMovements(item.id || item._id);
       }
     });
     socket.on('connect', () => {});
@@ -279,7 +267,8 @@ const Warehouse = () => {
       socket.off('inventory-update'); socket.off('connect'); socket.off('disconnect');
       socket.disconnect(); socketRef.current = null;
     };
-  }, [showMovementsModal, selectedItem]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const fetchMenuCategories = async () => {
     try {
@@ -296,10 +285,21 @@ const Warehouse = () => {
         setShowAddModal(false); setShowEditModal(false); setShowDeleteModal(false);
         setShowMovementsModal(false); setShowDeductModal(false);
         setShowEditMovementModal(false); setShowDeleteMovementModal(false); setDeletingMovementId(null);
+        setShowProductDropdown(false); setError('');
+      }
+    };
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('.product-dropdown-container')) {
+        setShowProductDropdown(false);
       }
     };
     document.addEventListener('keydown', handleEscape);
-    return () => document.removeEventListener('keydown', handleEscape);
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('keydown', handleEscape);
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
   }, []);
 
   const calculateRemainingAmount = () => {
@@ -316,7 +316,7 @@ const Warehouse = () => {
     else setAddForm(prev => ({ ...prev, costStatus: 'pending' }));
   };
 
-  useEffect(() => { updatePaymentStatus(); }, [addForm.price, addForm.quantity, addForm.paidAmount]);
+  useEffect(() => { if (!costStatusDirty) updatePaymentStatus(); }, [addForm.price, addForm.quantity, addForm.paidAmount, costStatusDirty]);
 
   const getStockStatus = (current: number, min: number) => {
     if (current <= min) return { status: 'low', color: 'text-red-600', bgColor: 'bg-red-50' };
@@ -326,6 +326,7 @@ const Warehouse = () => {
 
   const openAddModal = (type?: 'existing' | 'new') => {
     setAddType(type || 'existing');
+    setCostStatusDirty(false);
     setAddForm({
       productId: '', name: '', category: '', quantity: '', price: '', supplier: '', minStock: '', unit: '',
       date: getCairoDateTime(timezone), costStatus: 'pending', paidAmount: '', isRawMaterial: false,
@@ -338,9 +339,9 @@ const Warehouse = () => {
   const openEditModal = (item: WarehouseItem) => {
     setSelectedItem(item);
     setAddForm({
-      productId: '', name: item.name, category: normalizeCategory(item.category), quantity: '', price: String(item.price),
+      productId: '', name: item.name, category: toCanonicalCategory(item.category), quantity: '', price: String(item.price),
       supplier: item.supplier || '', minStock: String(item.minStock || ''),
-      unit: normalizeUnit(item.unit || ''), date: getCairoDateTime(timezone),
+      unit: toCanonicalUnit(item.unit || ''), date: getCairoDateTime(timezone),
       costStatus: 'pending', paidAmount: '', isRawMaterial: item.isRawMaterial || false,
     });
     setError(''); setSuccess(''); setShowEditModal(true);
@@ -349,7 +350,7 @@ const Warehouse = () => {
   const openDeleteModal = (item: WarehouseItem) => { setDeleteTarget(item); setShowDeleteModal(true); };
 
   const openMovementsModal = async (item: WarehouseItem) => {
-    setSelectedItem(item); setLoading(true);
+    setSelectedItem(item); setError(''); setLoading(true);
     try {
       const itemResponse = await api.getWarehouseItem(item.id || item._id);
       if (itemResponse.success && itemResponse.data) setSelectedItem(itemResponse.data);
@@ -372,6 +373,7 @@ const Warehouse = () => {
 
   const openDeductModal = (item: WarehouseItem) => {
     setSelectedItem(item);
+    setDeductCustomReason(false);
     setDeductForm({ quantity: '', reason: '', type: 'out', date: getCairoDateTime(timezone) });
     setError(''); setShowDeductModal(true);
   };
@@ -379,6 +381,10 @@ const Warehouse = () => {
   const handleDeductSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedItem) return;
+    if (!hasPermission('canAdjustWarehouseStock')) {
+      setError(t('common.permissionDenied'));
+      return;
+    }
     setLoading(true); setError('');
     try {
       const quantity = Number(deductForm.quantity);
@@ -388,11 +394,12 @@ const Warehouse = () => {
       }
       if (!deductForm.reason) { setError(t('inventory.messages.enterReason')); setLoading(false); return; }
       const res = await updateWarehouseStock(selectedItem.id || selectedItem._id, {
-        type: deductForm.type, quantity, reason: deductForm.reason, date: deductForm.date,
+        type: deductForm.type, quantity, reason: toCanonicalReason(deductForm.reason), date: deductForm.date,
       });
       if (res) {
         toast.success(deductForm.type === 'adjustment' ? t('inventory.notifications.stockAdjusted') : t('inventory.notifications.stockDeducted'));
         await fetchWarehouseItems(); setShowDeductModal(false);
+        setDeductCustomReason(false);
         setDeductForm({ quantity: '', reason: '', type: 'out', date: getCairoDateTime(timezone) });
         setError('');
       } else { setError(t('inventory.notifications.stockUpdateError')); }
@@ -405,7 +412,7 @@ const Warehouse = () => {
     let orgDateTime = '';
     if (movement.timestamp) {
       const movementDate = new Date(movement.timestamp);
-      const orgTime = new Date(movementDate.toLocaleString('en-US', { timeZone: timezone }));
+      const orgTime = new Date(movementDate.toLocaleString('en-US', { timeZone: timezone || 'Africa/Cairo' }));
       const year = orgTime.getFullYear(); const month = String(orgTime.getMonth() + 1).padStart(2, '0');
       const day = String(orgTime.getDate()).padStart(2, '0');
       const hours = String(orgTime.getHours()).padStart(2, '0'); const minutes = String(orgTime.getMinutes()).padStart(2, '0');
@@ -421,6 +428,10 @@ const Warehouse = () => {
   const handleEditMovementSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedItem || !editingMovement) return;
+    if (!hasPermission('canEditWarehouseMovement')) {
+      setError(t('common.permissionDenied'));
+      return;
+    }
     setLoading(true); setError('');
     try {
       const quantity = Number(editMovementForm.quantity);
@@ -428,7 +439,7 @@ const Warehouse = () => {
       if (!quantity || quantity <= 0) { setError(t('inventory.messages.enterValidQuantity')); setLoading(false); return; }
       if (!editMovementForm.reason) { setError(t('inventory.messages.enterReason')); setLoading(false); return; }
       const response = await api.put(`/warehouse/${selectedItem.id || selectedItem._id}/movements/${editingMovement._id}`, {
-        quantity, price, reason: editMovementForm.reason, date: editMovementForm.date,
+        quantity, price, reason: toCanonicalReason(editMovementForm.reason), date: editMovementForm.date,
       });
       if (response?.data?.success || response?.success) {
         toast.success(t('inventory.notifications.movementUpdated'));
@@ -449,6 +460,10 @@ const Warehouse = () => {
 
   const confirmDeleteMovement = async () => {
     if (!selectedItem || !deletingMovementId) return;
+    if (!hasPermission('canDeleteWarehouseMovement')) {
+      toast.error(t('common.permissionDenied'));
+      return;
+    }
     setLoading(true);
     try {
       const response = await api.delete(`/warehouse/${selectedItem.id || selectedItem._id}/movements/${deletingMovementId}`);
@@ -464,6 +479,7 @@ const Warehouse = () => {
 
   const handleAddTypeChange = (type: 'existing' | 'new') => {
     setAddType(type);
+    setCostStatusDirty(false);
     setProductSearchTerm('');
     setShowProductDropdown(false);
     setAddForm({
@@ -474,20 +490,30 @@ const Warehouse = () => {
 
   const handleFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
+    if (name === 'costStatus') {
+      setCostStatusDirty(true);
+      setAddForm(prev => {
+        const next = { ...prev, [name]: value };
+        if (value === 'paid') {
+          const totalCost = (parseFloat(prev.quantity) || 0) * (parseFloat(prev.price) || 0);
+          next.paidAmount = totalCost.toString();
+        }
+        return next;
+      });
+      return;
+    }
     if (name === 'paidAmount') {
+      // Empty means unpaid (don't force '0' — user must be able to clear the field)
+      if (value === '') {
+        setAddForm(prev => ({ ...prev, [name]: '' }));
+        return;
+      }
       const quantity = parseFloat(addForm.quantity) || 0;
       const price = parseFloat(addForm.price) || 0;
       const totalCost = quantity * price;
       let paidAmount = parseFloat(value) || 0;
       if (paidAmount > totalCost) paidAmount = totalCost;
       setAddForm(prev => ({ ...prev, [name]: paidAmount.toString() }));
-    } else if (name === 'costStatus' && value === 'paid') {
-      const quantity = parseFloat(addForm.quantity) || 0;
-      const price = parseFloat(addForm.price) || 0;
-      const totalCost = quantity * price;
-      setAddForm(prev => ({ ...prev, [name]: value, paidAmount: totalCost.toString() }));
-    } else if (name === 'paidAmount' && value === '') {
-      setAddForm(prev => ({ ...prev, [name]: '0' }));
     } else {
       setAddForm(prev => ({ ...prev, [name]: value }));
     }
@@ -501,17 +527,29 @@ const Warehouse = () => {
   const closeAlert = () => { setShowAlert(false); };
 
   const handleAddSubmit = async (e: React.FormEvent) => {
-    e.preventDefault(); setLoading(true); setError(''); setSuccess('');
+    e.preventDefault();
+    if (!hasPermission('canAddWarehouseItem')) {
+      setError(t('common.permissionDenied'));
+      return;
+    }
+    setLoading(true); setError(''); setSuccess('');
     try {
       if (addType === 'existing') {
         if (!addForm.productId || !addForm.quantity) {
           setError(t('inventory.messages.enterAllFields')); showAlertMessage(t('inventory.messages.fillAllFields'), 'error'); setLoading(false); return;
         }
+        const targetItem = warehouseItems.find(w => String(w.id || w._id) === String(addForm.productId));
         const res = await updateWarehouseStock(addForm.productId, {
-          type: 'in', quantity: Number(addForm.quantity), reason: t('warehouse.addStock'),
-          date: getCairoDateTime(timezone), costStatus: addForm.costStatus,
+          type: 'in', quantity: Number(addForm.quantity), reason: 'شراء مخزون جديد',
+          date: addForm.date || getCairoDateTime(timezone),
+          price: addForm.price ? Number(addForm.price) : undefined,
+          costStatus: addForm.costStatus,
           paidAmount: Number(addForm.paidAmount) || 0,
         });
+        // Supplier isn't accepted by the stock endpoint — persist it on the item itself
+        if (res && addForm.supplier && targetItem && addForm.supplier !== targetItem.supplier) {
+          await updateWarehouseItem(addForm.productId, { supplier: addForm.supplier });
+        }
         if (res) {
           setSuccess(t('inventory.notifications.productAdded')); toast.success(t('inventory.notifications.productAdded'));
           await fetchWarehouseItems(); setShowAddModal(false);
@@ -523,10 +561,11 @@ const Warehouse = () => {
           setError(t('inventory.messages.enterAllFields')); showAlertMessage(t('inventory.messages.fillAllFields'), 'error'); setLoading(false); return;
         }
         const res = await createWarehouseItem({
-          name: addForm.name, category: addForm.category, currentStock: Number(addForm.quantity),
-          minStock: Number(addForm.minStock), unit: addForm.unit, price: Number(addForm.price),
+          name: addForm.name, category: toCanonicalCategory(addForm.category), currentStock: Number(addForm.quantity),
+          minStock: Number(addForm.minStock), unit: toCanonicalUnit(addForm.unit), price: Number(addForm.price),
           supplier: addForm.supplier, costStatus: addForm.costStatus,
           paidAmount: Number(addForm.paidAmount) || 0, isRawMaterial: addForm.isRawMaterial,
+          date: addForm.date || undefined,
         });
         if (res) {
           setSuccess(t('inventory.notifications.productAdded')); toast.success(t('inventory.notifications.productAdded'));
@@ -542,15 +581,20 @@ const Warehouse = () => {
   };
 
   const handleEditSubmit = async (e: React.FormEvent) => {
-    e.preventDefault(); setLoading(true); setError(''); setSuccess('');
+    e.preventDefault();
+    if (!hasPermission('canEditWarehouseItem')) {
+      setError(t('common.permissionDenied'));
+      return;
+    }
+    setLoading(true); setError(''); setSuccess('');
     try {
       if (!selectedItem) { const msg = t('inventory.messages.noProductSelected'); setError(msg); showAlertMessage(msg, 'error'); setLoading(false); return; }
       if (!addForm.name || !addForm.category || !addForm.price || !addForm.unit || !addForm.minStock) {
         setError(t('inventory.messages.enterAllFields')); showAlertMessage(t('inventory.messages.enterAllFields'), 'error'); setLoading(false); return;
       }
       const res = await updateWarehouseItem(selectedItem.id || selectedItem._id, {
-        name: addForm.name, category: addForm.category, price: Number(addForm.price),
-        minStock: Number(addForm.minStock), unit: addForm.unit, supplier: addForm.supplier, isRawMaterial: addForm.isRawMaterial,
+        name: addForm.name, category: toCanonicalCategory(addForm.category), price: Number(addForm.price),
+        minStock: Number(addForm.minStock), unit: toCanonicalUnit(addForm.unit), supplier: addForm.supplier, isRawMaterial: addForm.isRawMaterial,
       });
       if (res) {
         setSuccess(t('inventory.notifications.productUpdated')); toast.success(t('inventory.notifications.productUpdated'));
@@ -564,18 +608,21 @@ const Warehouse = () => {
 
   const handleDelete = async () => {
     if (!deleteTarget) return;
+    if (!hasPermission('canDeleteWarehouseItem')) {
+      const denyMsg = t('common.permissionDenied');
+      setError(denyMsg); showAlertMessage(denyMsg, 'error');
+      return;
+    }
     setLoading(true); setError('');
     try {
       const res = await api.deleteWarehouseItem(deleteTarget.id || deleteTarget._id);
       if (res.success) {
         toast.success(t('inventory.notifications.productDeleted')); showAlertMessage(t('inventory.notifications.productDeleted'), 'success');
-        fetchWarehouseItems(); setShowDeleteModal(false);
+        await fetchWarehouseItems(); setShowDeleteModal(false); setDeleteTarget(null);
       } else { const msg = t('inventory.notifications.productDeleteError'); setError(msg); showAlertMessage(msg, 'error'); }
     } catch (err) { const msg = t('inventory.notifications.productDeleteError'); setError(msg); showAlertMessage(msg, 'error'); }
     finally { setLoading(false); }
   };
-
-  const navigate = useNavigate();
 
   return (
     <ConfigProvider direction={i18n.language === 'ar' ? 'rtl' : 'ltr'} locale={getAntdLocale()}>
@@ -587,7 +634,7 @@ const Warehouse = () => {
         }`}>
           <div className="flex items-center justify-between">
             <span>{alertMessage}</span>
-            <button onClick={closeAlert} className="mr-4 text-white hover:text-gray-200">
+            <button onClick={closeAlert} className={`${isRTL ? 'mr-4' : 'ml-4'} text-white hover:text-gray-200`}>
               <X className="h-4 w-4" />
             </button>
           </div>
@@ -619,7 +666,7 @@ const Warehouse = () => {
             <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900 rounded-lg flex items-center justify-center">
               <Package className="h-6 w-6 text-blue-600 dark:text-blue-400" />
             </div>
-            <div className="mr-4">
+            <div className={isRTL ? 'mr-4' : 'ml-4'}>
               <p className="text-sm font-medium text-gray-600 dark:text-gray-300">{t('inventory.stats.totalProducts')}</p>
               <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">{formatDecimal(warehouseItems.length, i18n.language)}</p>
             </div>
@@ -630,7 +677,7 @@ const Warehouse = () => {
             <div className="w-12 h-12 bg-red-100 dark:bg-red-900 rounded-lg flex items-center justify-center">
               <AlertTriangle className="h-6 w-6 text-red-600 dark:text-red-400" />
             </div>
-            <div className="mr-4">
+            <div className={isRTL ? 'mr-4' : 'ml-4'}>
               <p className="text-sm font-medium text-gray-600 dark:text-gray-300">{t('inventory.stats.lowStock')}</p>
               <p className="text-2xl font-bold text-red-600 dark:text-red-400">{formatDecimal(lowStockItems.length, i18n.language)}</p>
             </div>
@@ -641,9 +688,9 @@ const Warehouse = () => {
             <div className="w-12 h-12 bg-green-100 dark:bg-green-900 rounded-lg flex items-center justify-center">
               <Package className="h-6 w-6 text-green-600 dark:text-green-400" />
             </div>
-            <div className="mr-4">
+            <div className={isRTL ? 'mr-4' : 'ml-4'}>
               <p className="text-sm font-medium text-gray-600 dark:text-gray-300">{t('inventory.stats.inventoryValue')}</p>
-              <p className="text-2xl font-bold text-green-600 dark:text-green-400">{formatCurrency(totalValue)}</p>
+              <p className="text-2xl font-bold text-green-600 dark:text-green-400">{formatCurrency(totalValue, i18n.language)}</p>
             </div>
           </div>
         </div>
@@ -652,7 +699,7 @@ const Warehouse = () => {
             <div className="w-12 h-12 bg-purple-100 dark:bg-purple-900 rounded-lg flex items-center justify-center">
               <Package className="h-6 w-6 text-purple-600 dark:text-purple-400" />
             </div>
-            <div className="mr-4">
+            <div className={isRTL ? 'mr-4' : 'ml-4'}>
               <p className="text-sm font-medium text-gray-600 dark:text-gray-300">{t('inventory.stats.categories')}</p>
               <p className="text-2xl font-bold text-purple-600 dark:text-purple-400">{formatDecimal(categoriesCount, i18n.language)}</p>
             </div>
@@ -663,7 +710,7 @@ const Warehouse = () => {
             <div className="w-12 h-12 bg-orange-100 dark:bg-orange-900 rounded-lg flex items-center justify-center">
               <Package className="h-6 w-6 text-orange-600 dark:text-orange-400" />
             </div>
-            <div className="mr-4">
+            <div className={isRTL ? 'mr-4' : 'ml-4'}>
               <p className="text-sm font-medium text-gray-600 dark:text-gray-300">{t('inventory.stats.rawMaterials')}</p>
               <p className="text-2xl font-bold text-orange-600 dark:text-orange-400">{formatDecimal(rawMaterialsCount, i18n.language)}</p>
             </div>
@@ -675,7 +722,7 @@ const Warehouse = () => {
       {lowStockItems.length > 0 && (
         <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 rounded-lg p-4">
           <div className="flex items-center mb-3">
-            <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400 ml-2" />
+            <AlertTriangle className={`h-5 w-5 text-red-600 dark:text-red-400 ${isRTL ? 'ml-2' : 'mr-2'}`} />
             <h3 className="text-lg font-semibold text-red-800 dark:text-red-200">{t('inventory.alerts.lowStockTitle')}</h3>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -714,7 +761,7 @@ const Warehouse = () => {
                     <select value={filterCategory} onChange={e => setFilterCategory(e.target.value)}
                       className="border border-gray-300 dark:border-gray-600 rounded-lg px-4 py-2.5 dark:bg-gray-700 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-orange-500">
                       <option value="">{t('inventory.filters.allCategories')}</option>
-                      {categoryOptions.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                      {categoryOptions.map(cat => <option key={cat.value} value={cat.value}>{cat.label}</option>)}
                     </select>
                     <select value={filterType} onChange={e => setFilterType(e.target.value)}
                       className="border border-gray-300 dark:border-gray-600 rounded-lg px-4 py-2.5 dark:bg-gray-700 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-orange-500">
@@ -743,7 +790,14 @@ const Warehouse = () => {
               {showDateFilters && (
                 <div className="p-4">
                   <div className="flex flex-wrap gap-3 items-center">
-                    <select value={dateFilterType} onChange={e => setDateFilterType(e.target.value as 'range' | 'month' | 'year')}
+                    <select value={dateFilterType} onChange={e => {
+                      const v = e.target.value as 'range' | 'month' | 'year';
+                      setDateFilterType(v);
+                      // Clear the other types so stale values can't AND into an empty list
+                      if (v === 'range') { setFilterMonth(''); setFilterYear(''); }
+                      if (v === 'month') { setFilterDateFrom(''); setFilterDateTo(''); setFilterYear(''); }
+                      if (v === 'year') { setFilterDateFrom(''); setFilterDateTo(''); setFilterMonth(''); }
+                    }}
                       className="border border-gray-300 dark:border-gray-600 rounded-lg px-4 py-2.5 dark:bg-gray-700 dark:text-gray-100">
                       <option value="range">{t('inventory.filters.range')}</option>
                       <option value="month">{t('inventory.filters.specificMonth')}</option>
@@ -806,7 +860,7 @@ const Warehouse = () => {
                     </div>
                   </td>
                 </tr>
-              ) : (filteredItems.map(item => {
+              ) : (pagedItems.map(item => {
                 const stock = getStockStatus(item.currentStock, item.minStock);
                 return (
                   <tr key={item.id || item._id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
@@ -824,8 +878,8 @@ const Warehouse = () => {
                     </td>
                     <td className={`px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100 ${isRTL ? 'text-right' : 'text-left'}`}>{formatQuantity(item.minStock, translateUnit(item.unit), i18n.language)}</td>
                     <td className={`px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100 ${isRTL ? 'text-right' : 'text-left'}`}>{translateUnit(item.unit)}</td>
-                    <td className={`px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100 ${isRTL ? 'text-right' : 'text-left'}`}>{formatCurrency(item.price)}</td>
-                    <td className={`px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900 dark:text-gray-100 ${isRTL ? 'text-right' : 'text-left'}`}>{formatCurrency(item.totalValue || (item.currentStock * item.price))}</td>
+                    <td className={`px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100 ${isRTL ? 'text-right' : 'text-left'}`}>{formatCurrency(item.price, i18n.language)}</td>
+                    <td className={`px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900 dark:text-gray-100 ${isRTL ? 'text-right' : 'text-left'}`}>{formatCurrency(item.totalValue || (item.currentStock * item.price), i18n.language)}</td>
                     <td className={`px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100 ${isRTL ? 'text-right' : 'text-left'}`}>{item.supplier || <span className="text-gray-400">—</span>}</td>
                     <td className={`px-6 py-4 whitespace-nowrap text-sm ${isRTL ? 'text-right' : 'text-left'}`}>
                       <div className="flex items-center gap-1">
@@ -865,6 +919,51 @@ const Warehouse = () => {
             </tbody>
           </table>
         </div>
+        {whTotalPages > 1 && (
+          <div className="flex items-center justify-between mt-4 p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700">
+            <div className="text-sm text-gray-600 dark:text-gray-400">
+              <span>{t('inventory.pagination.page')} {formatDecimal(whPage, i18n.language)} {t('inventory.pagination.of')} {formatDecimal(whTotalPages, i18n.language)}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setWhPage(p => Math.max(1, p - 1))}
+                disabled={whPage <= 1}
+                className="px-3 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                {t('inventory.pagination.previous')}
+              </button>
+              <div className="flex items-center gap-1">
+                {(() => {
+                  let start = Math.max(1, Math.min(whPage - 2, whTotalPages - 4));
+                  const end = Math.min(whTotalPages, start + 4);
+                  start = Math.max(1, end - 4);
+                  const pages: number[] = [];
+                  for (let p = start; p <= end; p++) pages.push(p);
+                  return pages.map(pageNum => (
+                    <button
+                      key={pageNum}
+                      onClick={() => setWhPage(pageNum)}
+                      className={`w-8 h-8 rounded-lg text-sm font-medium transition-colors ${
+                        whPage === pageNum
+                          ? 'bg-orange-600 text-white'
+                          : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+                      }`}
+                    >
+                      {formatDecimal(pageNum, i18n.language)}
+                    </button>
+                  ));
+                })()}
+              </div>
+              <button
+                onClick={() => setWhPage(p => Math.min(whTotalPages, p + 1))}
+                disabled={whPage >= whTotalPages}
+                className="px-3 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                {t('inventory.pagination.next')}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Add Modal */}
@@ -949,7 +1048,7 @@ const Warehouse = () => {
                                   setProductSearchTerm(item.name);
                                   setShowProductDropdown(false);
                                 }}
-                                className="w-full text-right px-4 py-3 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors border-b border-gray-100 dark:border-gray-700 last:border-b-0"
+                                className={`w-full ${isRTL ? 'text-right' : 'text-left'} px-4 py-3 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors border-b border-gray-100 dark:border-gray-700 last:border-b-0`}
                               >
                                 <div className="font-medium text-gray-900 dark:text-gray-100">{item.name}</div>
                                 <div className="text-sm text-gray-600 dark:text-gray-400">
@@ -1035,7 +1134,7 @@ const Warehouse = () => {
                       />
                       {addForm.paidAmount && (
                         <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                          {t('inventory.addModal.remaining')}: {formatCurrency(calculateRemainingAmount())}
+                          {t('inventory.addModal.remaining')}: {formatCurrency(calculateRemainingAmount(), i18n.language)}
                         </div>
                       )}
                     </div>
@@ -1049,17 +1148,17 @@ const Warehouse = () => {
                       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 text-sm">
                         <div>
                           <span className="text-gray-600 dark:text-gray-400">{t('inventory.addModal.totalCost')}:</span>
-                          <div className="text-lg font-bold text-gray-900 dark:text-gray-100">{formatCurrency(parseFloat(addForm.price || '0') * parseFloat(addForm.quantity || '0'))}</div>
+                          <div className="text-lg font-bold text-gray-900 dark:text-gray-100">{formatCurrency(parseFloat(addForm.price || '0') * parseFloat(addForm.quantity || '0'), i18n.language)}</div>
                         </div>
                         {addForm.paidAmount && (
                           <>
                             <div>
                               <span className="text-gray-600 dark:text-gray-400">{t('inventory.addModal.paid')}:</span>
-                              <div className="text-lg font-bold text-green-600 dark:text-green-400">{formatCurrency(parseFloat(addForm.paidAmount || '0'))}</div>
+                              <div className="text-lg font-bold text-green-600 dark:text-green-400">{formatCurrency(parseFloat(addForm.paidAmount || '0'), i18n.language)}</div>
                             </div>
                             <div>
                               <span className="text-gray-600 dark:text-gray-400">{t('inventory.addModal.remaining')}:</span>
-                              <div className="text-lg font-bold text-red-600 dark:text-red-400">{formatCurrency(calculateRemainingAmount())}</div>
+                              <div className="text-lg font-bold text-red-600 dark:text-red-400">{formatCurrency(calculateRemainingAmount(), i18n.language)}</div>
                             </div>
                           </>
                         )}
@@ -1095,7 +1194,7 @@ const Warehouse = () => {
                     <select name="category" value={addForm.category} onChange={handleFormChange} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100" required>
                       <option value="">{t('inventory.addModal.selectCategory')}</option>
                       {categoryOptions.map(option => (
-                        <option key={option} value={option}>{option}</option>
+                        <option key={option.value} value={option.value}>{option.label}</option>
                       ))}
                     </select>
                   </div>
@@ -1107,8 +1206,8 @@ const Warehouse = () => {
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('inventory.addModal.unit')}</label>
                     <select name="unit" value={addForm.unit} onChange={handleFormChange} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100" required>
                       <option value="">{t('inventory.addModal.selectUnit')}</option>
-                      {unitOptions.map(option => (
-                        <option key={option} value={option}>{option}</option>
+                      {UNIT_CANONICAL.map((ar, i) => (
+                        <option key={ar} value={ar}>{t(UNIT_LABEL_KEYS[i])}</option>
                       ))}
                     </select>
                   </div>
@@ -1173,7 +1272,7 @@ const Warehouse = () => {
                         />
                         {addForm.paidAmount && (
                           <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                            {t('inventory.addModal.remaining')}: {formatCurrency(calculateRemainingAmount())}
+                            {t('inventory.addModal.remaining')}: {formatCurrency(calculateRemainingAmount(), i18n.language)}
                           </div>
                         )}
                       </div>
@@ -1189,7 +1288,7 @@ const Warehouse = () => {
                         {addForm.paidAmount && (
                           <>
                             <div>{t('inventory.addModal.paid')}: {formatCurrency(parseFloat(addForm.paidAmount || '0'))}</div>
-                            <div>{t('inventory.addModal.remaining')}: {formatCurrency(calculateRemainingAmount())}</div>
+                            <div>{t('inventory.addModal.remaining')}: {formatCurrency(calculateRemainingAmount(), i18n.language)}</div>
                           </>
                         )}
                       </div>
@@ -1200,17 +1299,6 @@ const Warehouse = () => {
               {error && (
                 <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-600 rounded-lg p-3">
                   <p className="text-sm text-red-800 dark:text-red-200">{error}</p>
-                </div>
-              )}
-              {success !== '' && (
-                <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-600 rounded-lg p-3">
-                  <p className="text-sm text-green-800 dark:text-green-200">{success}</p>
-                  <p className="text-xs text-green-700 dark:text-green-300 mt-1">{t('inventory.addModal.successMessage')}</p>
-                  <button
-                    type="button"
-                    className="text-sm underline text-blue-700 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300 mt-2"
-                    onClick={() => navigate('/costs')}
-                  >{t('inventory.addModal.viewCosts')}</button>
                 </div>
               )}
               <div className="flex gap-3 pt-4">
@@ -1270,7 +1358,7 @@ const Warehouse = () => {
                     <select name="category" value={addForm.category} onChange={handleFormChange}
                       className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-4 py-2 dark:bg-gray-700 dark:text-gray-100" required>
                       <option value="">{t('inventory.addModal.selectCategory')}</option>
-                      {categoryOptions.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                      {categoryOptions.map(cat => <option key={cat.value} value={cat.value}>{cat.label}</option>)}
                     </select>
                   </div>
                   <div>
@@ -1288,7 +1376,7 @@ const Warehouse = () => {
                     <select name="unit" value={addForm.unit} onChange={handleFormChange}
                       className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-4 py-2 dark:bg-gray-700 dark:text-gray-100" required>
                       <option value="">{t('inventory.addModal.selectUnit')}</option>
-                      {unitOptions.map(u => <option key={u} value={u}>{u}</option>)}
+                      {UNIT_CANONICAL.map((ar, i) => <option key={ar} value={ar}>{t(UNIT_LABEL_KEYS[i])}</option>)}
                     </select>
                   </div>
                   <div>
@@ -1390,11 +1478,21 @@ const Warehouse = () => {
                       }
                     }}
                     className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-4 py-2 dark:bg-gray-700 dark:text-gray-100" required />
+                  {deductForm.type === 'adjustment' && deductForm.quantity !== '' && (
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      {t('inventory.deductModal.currentLabel')}: {formatDecimal(selectedItem.currentStock, i18n.language)} → {formatDecimal(Number(deductForm.quantity) || 0, i18n.language)}
+                    </p>
+                  )}
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('inventory.deductModal.reason')}</label>
-                  <select value={deductForm.reason} onChange={e => setDeductForm({...deductForm, reason: e.target.value})}
+                  <select value={deductForm.reason} onChange={e => {
+                    const value = e.target.value;
+                    const isOther = value === t('inventory.deductModal.reasons.other');
+                    setDeductCustomReason(isOther);
+                    setDeductForm({ ...deductForm, reason: isOther ? '' : value });
+                  }}
                     className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-4 py-2 dark:bg-gray-700 dark:text-gray-100">
                     <option value="">{t('inventory.deductModal.selectReason')}</option>
                     <option value="تالف">{t('inventory.deductModal.reasons.damaged')}</option>
@@ -1405,8 +1503,8 @@ const Warehouse = () => {
                     <option value="إرجاع للمورد">{t('inventory.deductModal.reasons.returnToSupplier')}</option>
                     <option value={t('inventory.deductModal.reasons.other')}>{t('inventory.deductModal.reasons.other')}</option>
                   </select>
-                  {deductForm.reason === t('inventory.deductModal.reasons.other') && (
-                    <input type="text" value={deductForm.reason === t('inventory.deductModal.reasons.other') ? '' : deductForm.reason}
+                  {deductCustomReason && (
+                    <input type="text" value={deductForm.reason}
                       onChange={e => setDeductForm({...deductForm, reason: e.target.value})}
                       className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 mt-2 dark:bg-gray-700 dark:text-gray-100"
                       placeholder={t('inventory.deductModal.enterReason')} required />
@@ -1417,8 +1515,7 @@ const Warehouse = () => {
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('inventory.deductModal.date')}</label>
                   <DatePicker showTime value={deductForm.date ? dayjs(deductForm.date) : null}
                     onChange={(date) => setDeductForm({...deductForm, date: date ? date.format('YYYY-MM-DDTHH:mm') : ''})}
-                    className="w-full" format="YYYY-MM-DD HH:mm"
-                    locale={i18n.language === 'ar' ? undefined : undefined} />
+                    className="w-full" format="YYYY-MM-DD HH:mm" />
                 </div>
 
                 {error && <p className="text-red-600 text-sm bg-red-50 dark:bg-red-900/20 p-3 rounded-lg">{error}</p>}
@@ -1529,12 +1626,14 @@ const Warehouse = () => {
                               </span>
                             </td>
                             <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100 whitespace-nowrap">{movement.price ? formatCurrency(movement.price, i18n.language) : <span className="text-gray-400">—</span>}</td>
-                            <td className="px-4 py-3 text-sm font-semibold text-gray-900 dark:text-gray-100 whitespace-nowrap">{formatDecimal(movement.balanceAfter, i18n.language)}</td>
+                            <td className="px-4 py-3 text-sm font-semibold text-gray-900 dark:text-gray-100 whitespace-nowrap">{movement.balanceAfter === null || movement.balanceAfter === undefined ? <span className="text-gray-400">—</span> : formatDecimal(movement.balanceAfter, i18n.language)}</td>
                             <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-300 max-w-[200px] truncate" title={movement.reason}>{translateReason(movement.reason)}</td>
                             <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-300 whitespace-nowrap">{movement.user?.name || <span className="text-gray-400 italic">{t('inventory.movementsModal.system')}</span>}</td>
                             <td className="px-4 py-3 text-sm whitespace-nowrap">
                               <div className="flex items-center gap-2">
-                                {movement.type !== 'transfer_out' && movement.type !== 'transfer_in' && (
+                                {(movement.type === 'transfer_out' || movement.type === 'transfer_in' || isOrderLinkedReason(movement.reason)) ? (
+                                  <span className="text-xs text-gray-400 italic">{t('inventory.movementsModal.linkedToOrder')}</span>
+                                ) : (
                                   <>
                                     <PermissionGuard requiredPermissions={['canEditWarehouseMovement', 'all']}>
                                       <button onClick={() => openEditMovementModal(movement)}
@@ -1549,9 +1648,6 @@ const Warehouse = () => {
                                       </button>
                                     </PermissionGuard>
                                   </>
-                                )}
-                                {(movement.type === 'transfer_out' || movement.type === 'transfer_in') && (
-                                  <span className="text-xs text-gray-400 italic">{t('inventory.movementsModal.linkedToOrder')}</span>
                                 )}
                               </div>
                             </td>

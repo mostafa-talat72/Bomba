@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { Package, Plus, AlertTriangle, Edit, Trash2, History, Minus, ChevronDown, ChevronUp, Edit2, ArrowLeftFromLine, ArrowRightFromLine, QrCode } from 'lucide-react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { Package, Plus, AlertTriangle, Edit, Trash2, History, Minus, ChevronDown, ChevronUp, Edit2, ArrowLeftFromLine, ArrowRightFromLine } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { InventoryItem, MenuItem, WarehouseItem } from '../services/api';
 type IngredientItem = string | { _id?: string; id?: string };
@@ -12,7 +12,6 @@ import { API_BASE_URL } from '../utils/apiBase';
 import { useTranslation } from 'react-i18next';
 import { useLanguage } from '../context/LanguageContext';
 import { useOrganization } from '../context/OrganizationContext';
-import { formatCurrency as formatCurrencyUtil } from '../utils/formatters';
 import { toast } from 'react-toastify';
 import { DatePicker, ConfigProvider } from 'antd';
 import arEG from 'antd/locale/ar_EG';
@@ -24,16 +23,22 @@ import 'dayjs/locale/en';
 import 'dayjs/locale/fr';
 import customParseFormat from 'dayjs/plugin/customParseFormat';
 import PermissionGuard from '../components/PermissionGuard';
+import {
+  UNIT_CANONICAL, UNIT_LABEL_KEYS, CATEGORY_CANONICAL, CATEGORY_LABEL_KEYS,
+  toCanonicalUnit, toCanonicalCategory, toCanonicalReason, isOrderLinkedReason,
+  TRANSFER_REASON_AR, RETURN_REASON_AR,
+} from '../utils/canonicalInventory';
 
 // Configure dayjs
 dayjs.extend(customParseFormat);
 
 // Helper function to get current date/time in organization timezone
 // Returns format: YYYY-MM-DDTHH:mm for datetime-local input
-const getCairoDateTime = (timezone: string) => {
+const getCairoDateTime = (timezone?: string) => {
   const now = new Date();
+  const tz = timezone || 'Africa/Cairo';
   // Convert to organization timezone
-  const orgTime = new Date(now.toLocaleString('en-US', { timeZone: timezone }));
+  const orgTime = new Date(now.toLocaleString('en-US', { timeZone: tz }));
   // Format as YYYY-MM-DDTHH:mm for datetime-local input
   const year = orgTime.getFullYear();
   const month = String(orgTime.getMonth() + 1).padStart(2, '0');
@@ -85,7 +90,6 @@ const Inventory = () => {
 
   // Modal states
   const [showAddModal, setShowAddModal] = useState(false);
-  const [showProductDropdown, setShowProductDropdown] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showMovementsModal, setShowMovementsModal] = useState(false);
@@ -95,6 +99,7 @@ const Inventory = () => {
   const [itemMovements, setItemMovements] = useState<any[]>([]);
   
   // Deduct form state
+  const [deductCustomReason, setDeductCustomReason] = useState(false);
   const [deductForm, setDeductForm] = useState({
     quantity: '',
     reason: '',
@@ -133,6 +138,11 @@ const Inventory = () => {
   const [showBasicFilters, setShowBasicFilters] = useState(true); // Toggle basic filters
   const [showDateFilters, setShowDateFilters] = useState(false); // Toggle date filters
 
+  // Display pagination (client-side slice; full list stays in context for other screens)
+  const [invPage, setInvPage] = useState(1);
+  const INV_PAGE_SIZE = 50;
+  useEffect(() => { setInvPage(1); }, [searchTerm, filterCategory, filterType, filterStock, dateFilterType, filterDateFrom, filterDateTo, filterMonth, filterYear]);
+
   // Edit movement states
   const [showEditMovementModal, setShowEditMovementModal] = useState(false);
   const [showDeleteMovementModal, setShowDeleteMovementModal] = useState(false);
@@ -168,99 +178,14 @@ const Inventory = () => {
   const [alertType, setAlertType] = useState<'success' | 'error'>('success');
   const [menuCategories, setMenuCategories] = useState<Array<{ id: string; name: string }>>([]);
 
-  // القيم المسموحة للوحدة
-  const unitOptions = useMemo(() => [
-    t('inventory.units.piece'),
-    t('inventory.units.kilo'),
-    t('inventory.units.gram'),
-    t('inventory.units.liter'),
-    t('inventory.units.ml'),
-    t('inventory.units.box'),
-    t('inventory.units.bag'),
-    t('inventory.units.bottle')
-  ], [t]);
-
-  // دالة لتحويل الوحدة من قاعدة البيانات إلى القيمة المترجمة الحالية
-  const normalizeUnit = useCallback((unit: string): string => {
-    if (!unit) return '';
-    
-    // خريطة الوحدات بجميع اللغات
-    const unitMap: { [key: string]: string } = {
-      // Arabic
-      'قطعة': t('inventory.units.piece'),
-      'كيلو': t('inventory.units.kilo'),
-      'جرام': t('inventory.units.gram'),
-      'لتر': t('inventory.units.liter'),
-      'مل': t('inventory.units.ml'),
-      'علبة': t('inventory.units.box'),
-      'كيس': t('inventory.units.bag'),
-      'زجاجة': t('inventory.units.bottle'),
-      // English
-      'Piece': t('inventory.units.piece'),
-      'Kilo': t('inventory.units.kilo'),
-      'Gram': t('inventory.units.gram'),
-      'Liter': t('inventory.units.liter'),
-      'ML': t('inventory.units.ml'),
-      'Box': t('inventory.units.box'),
-      'Bag': t('inventory.units.bag'),
-      'Bottle': t('inventory.units.bottle'),
-      // French
-      'Pièce': t('inventory.units.piece'),
-      'Gramme': t('inventory.units.gram'),
-      'Litre': t('inventory.units.liter'),
-      'Boîte': t('inventory.units.box'),
-      'Sac': t('inventory.units.bag'),
-      'Bouteille': t('inventory.units.bottle'),
-    };
-
-    return unitMap[unit] || unit;
-  }, [t]);
-
-  // دالة لتحويل الفئة من قاعدة البيانات إلى القيمة المترجمة الحالية
-  const normalizeCategory = useCallback((category: string): string => {
-    if (!category) return '';
-    
-    // خريطة الفئات بجميع اللغات
-    const categoryMap: { [key: string]: string } = {
-      // Arabic
-      'مشروبات ساخنة': t('inventory.categories.hotDrinks'),
-      'مشروبات باردة': t('inventory.categories.coldDrinks'),
-      'طعام': t('inventory.categories.food'),
-      'حلويات': t('inventory.categories.desserts'),
-      'مواد خام': t('inventory.categories.rawMaterials'),
-      'أخرى': t('inventory.categories.other'),
-      // English
-      'Hot Drinks': t('inventory.categories.hotDrinks'),
-      'Cold Drinks': t('inventory.categories.coldDrinks'),
-      'Food': t('inventory.categories.food'),
-      'Desserts': t('inventory.categories.desserts'),
-      'Raw Materials': t('inventory.categories.rawMaterials'),
-      'Other': t('inventory.categories.other'),
-      // French
-      'Boissons chaudes': t('inventory.categories.hotDrinks'),
-      'Boissons froides': t('inventory.categories.coldDrinks'),
-      'Nourriture': t('inventory.categories.food'),
-      'Matières premières': t('inventory.categories.rawMaterials'),
-      'Autre': t('inventory.categories.other'),
-    };
-
-    return categoryMap[category] || category;
-  }, [t]);
-  
-  // الفئات الافتراضية + الفئات من المنيو
-  const defaultCategories = useMemo(() => [
-    t('inventory.categories.hotDrinks'),
-    t('inventory.categories.coldDrinks'),
-    t('inventory.categories.food'),
-    t('inventory.categories.desserts'),
-    t('inventory.categories.rawMaterials'),
-    t('inventory.categories.other')
-  ], [t]);
+  // الفئات الافتراضية + الفئات من المنيو (القيمة معيارية، والتسمية مترجمة)
   const categoryOptions = useMemo(() => {
-    const menuCategoryNames = menuCategories.map(cat => cat.name);
-    const allCategories = [...new Set([...defaultCategories, ...menuCategoryNames])];
-    return allCategories.sort();
-  }, [menuCategories]);
+    const defaults = CATEGORY_CANONICAL.map((ar, i) => ({ value: ar, label: t(CATEGORY_LABEL_KEYS[i]) }));
+    const menuCats = menuCategories.map(cat => ({ value: cat.name, label: cat.name }));
+    const merged = [...defaults, ...menuCats.filter(m => !defaults.some(d => d.value === m.value))];
+    return merged.sort((a, b) => a.label.localeCompare(b.label, i18n.language));
+  }, [menuCategories, t, i18n.language]);
+
   const costStatusOptions = useMemo(() => [
     { value: 'pending', label: t('inventory.addModal.pending') },
     { value: 'paid', label: t('inventory.addModal.paid') },
@@ -279,13 +204,10 @@ const Inventory = () => {
     // eslint-disable-next-line
   }, []);
 
-  // Socket.IO connection for real-time updates
+  // Socket.IO connection for real-time updates (single connection, refs avoid reconnect storms)
+  const modalStateRef = useRef({ show: showMovementsModal, item: selectedItem });
+  modalStateRef.current = { show: showMovementsModal, item: selectedItem };
   useEffect(() => {
-    // Prevent duplicate connections in React Strict Mode
-    if (socketRef.current) {
-      return;
-    }
-
     // Initialize Socket.IO connection
     const apiUrl = API_BASE_URL;
     const socketUrl = apiUrl.replace(/\/api\/?$/, '');
@@ -308,8 +230,9 @@ const Inventory = () => {
       await fetchInventoryItems();
       
       // If movements modal is open, refresh movements
-      if (showMovementsModal && selectedItem) {
-        await refreshStockMovements(selectedItem.id || selectedItem._id);
+      const { show, item } = modalStateRef.current;
+      if (show && item) {
+        await refreshStockMovements(item.id || item._id);
       }
     });
 
@@ -321,19 +244,14 @@ const Inventory = () => {
     });
 
     return () => {
-      if (import.meta.env.DEV) {
-        socket.off('inventory-update');
-        socket.off('connect');
-        socket.off('disconnect');
-      } else {
-        socket.off('inventory-update');
-        socket.off('connect');
-        socket.off('disconnect');
-        socket.disconnect();
-        socketRef.current = null;
-      }
+      socket.off('inventory-update');
+      socket.off('connect');
+      socket.off('disconnect');
+      socket.disconnect();
+      socketRef.current = null;
     };
-  }, [showMovementsModal, selectedItem]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   
   // جلب فئات المنيو
   const fetchMenuCategories = async () => {
@@ -362,25 +280,16 @@ const Inventory = () => {
         setShowDeductModal(false);
         setShowTransferFromWarehouseModal(false);
         setShowReturnToWarehouseModal(false);
-        setShowProductDropdown(false);
         setShowEditMovementModal(false);
         setShowDeleteMovementModal(false);
         setDeletingMovementId(null);
-      }
-    };
-
-    const handleClickOutside = (e: MouseEvent) => {
-      const target = e.target as HTMLElement;
-      if (!target.closest('.product-dropdown-container')) {
-        setShowProductDropdown(false);
+        setError('');
       }
     };
 
     document.addEventListener('keydown', handleEscape);
-    document.addEventListener('mousedown', handleClickOutside);
     return () => {
       document.removeEventListener('keydown', handleEscape);
-      document.removeEventListener('mousedown', handleClickOutside);
     };
   }, []);
 
@@ -522,8 +431,8 @@ const Inventory = () => {
         }
       }
       
-      // Category filter
-      if (filterCategory && item.category !== filterCategory) {
+      // Category filter (canonical compare so old translated rows still match)
+      if (filterCategory && toCanonicalCategory(item.category) !== toCanonicalCategory(filterCategory)) {
         return false;
       }
       
@@ -542,10 +451,35 @@ const Inventory = () => {
       if (filterStock === 'out' && item.currentStock > 0) {
         return false;
       }
+
+      // Date filter on creation date
+      const created = (item as any).createdAt ? new Date((item as any).createdAt) : null;
+      if (dateFilterType === 'range') {
+        if (filterDateFrom && (!created || created < new Date(filterDateFrom + 'T00:00:00'))) {
+          return false;
+        }
+        if (filterDateTo && (!created || created > new Date(filterDateTo + 'T23:59:59'))) {
+          return false;
+        }
+      } else if (dateFilterType === 'month' && filterMonth) {
+        if (!created) return false;
+        const ym = `${created.getFullYear()}-${String(created.getMonth() + 1).padStart(2, '0')}`;
+        if (ym !== filterMonth) return false;
+      } else if (dateFilterType === 'year' && filterYear) {
+        if (!created) return false;
+        if (String(created.getFullYear()) !== filterYear) return false;
+      }
       
       return true;
     });
-  }, [inventoryItems, searchTerm, filterCategory, filterType, filterStock]);
+  }, [inventoryItems, searchTerm, filterCategory, filterType, filterStock, dateFilterType, filterDateFrom, filterDateTo, filterMonth, filterYear]);
+
+  const pagedItems = useMemo(() =>
+    filteredItems.slice((invPage - 1) * INV_PAGE_SIZE, invPage * INV_PAGE_SIZE),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [filteredItems, invPage]
+  );
+  const invTotalPages = Math.max(1, Math.ceil(filteredItems.length / INV_PAGE_SIZE));
 
   const getStockStatus = (current: number, min: number) => {
     if (current <= min) return { status: 'low', color: 'text-red-600', bgColor: 'bg-red-50' };
@@ -576,12 +510,12 @@ const Inventory = () => {
     setAddForm({
       productId: item.id || item._id,
       name: item.name,
-      category: normalizeCategory(item.category),
+      category: toCanonicalCategory(item.category),
       quantity: '',
       price: String(item.price),
       supplier: item.supplier || '',
       minStock: String(item.minStock || ''),
-      unit: normalizeUnit(item.unit || ''),
+      unit: toCanonicalUnit(item.unit || ''),
       date: getCairoDateTime(timezone),
       costStatus: 'pending',
       paidAmount: '',
@@ -603,6 +537,7 @@ const Inventory = () => {
   // فتح نافذة عرض حركات المخزون
   const openMovementsModal = async (item: InventoryItem) => {
     setSelectedItem(item);
+    setError('');
     setLoading(true);
     try {
       // Fetch updated item data with totalValue
@@ -650,6 +585,7 @@ const Inventory = () => {
   // فتح نافذة خصم الكمية
   const openDeductModal = (item: InventoryItem) => {
     setSelectedItem(item);
+    setDeductCustomReason(false);
     setDeductForm({
       quantity: '',
       reason: '',
@@ -664,6 +600,10 @@ const Inventory = () => {
   const handleDeductSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedItem) return;
+    if (!hasPermission(deductForm.type === 'out' ? 'canRemoveStock' : 'canAdjustStock')) {
+      setError(t('common.permissionDenied'));
+      return;
+    }
 
     setLoading(true);
     setError('');
@@ -671,7 +611,8 @@ const Inventory = () => {
     try {
       const quantity = Number(deductForm.quantity);
       
-      if (!quantity || quantity <= 0) {
+      // 'out' يتطلب كمية موجبة، أما 'adjustment' فيسمح بالصفر (تصفير الرصيد)
+      if (deductForm.quantity === '' || isNaN(quantity) || quantity < 0 || (deductForm.type === 'out' && quantity <= 0)) {
         setError(t('inventory.messages.enterValidQuantity'));
         setLoading(false);
         return;
@@ -694,8 +635,8 @@ const Inventory = () => {
 
       const res = await updateStock(selectedItem.id || selectedItem._id, {
         type: deductForm.type,
-        quantity: deductForm.type === 'adjustment' ? quantity : quantity,
-        reason: deductForm.reason,
+        quantity,
+        reason: toCanonicalReason(deductForm.reason),
         date: deductForm.date,
       });
 
@@ -713,6 +654,7 @@ const Inventory = () => {
         setShowDeductModal(false);
         
         // Reset form
+        setDeductCustomReason(false);
         setDeductForm({
           quantity: '',
           reason: '',
@@ -743,7 +685,7 @@ const Inventory = () => {
         quantity: '',
         price: '',
         date: getCairoDateTime(timezone),
-        reason: t('inventory.transferModal.title'),
+        reason: TRANSFER_REASON_AR,
       });
     } else {
       setTransferForm({
@@ -751,7 +693,7 @@ const Inventory = () => {
         quantity: '',
         price: '',
         date: getCairoDateTime(timezone),
-        reason: t('inventory.transferModal.title'),
+        reason: TRANSFER_REASON_AR,
       });
     }
     fetchWarehouseItems();
@@ -762,6 +704,10 @@ const Inventory = () => {
   const handleTransferFromWarehouse = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedItem) return;
+    if (!hasPermission('canTransferToInventory')) {
+      setError(t('common.permissionDenied'));
+      return;
+    }
     setLoading(true);
     setError('');
     try {
@@ -771,13 +717,27 @@ const Inventory = () => {
         setLoading(false);
         return;
       }
+      if (!transferForm.warehouseItemId) {
+        setError(t('inventory.messages.notLinkedToWarehouse'));
+        setLoading(false);
+        return;
+      }
+      const wItem = warehouseItems.find(w => String(w.id || w._id) === String(transferForm.warehouseItemId));
+      if (wItem && quantity > Number(wItem.currentStock)) {
+        setError(t('inventory.messages.quantityExceedsStock', {
+          stock: wItem.currentStock,
+          unit: translateUnit(wItem.unit),
+        }));
+        setLoading(false);
+        return;
+      }
       const res = await transferToInventory({
         warehouseItemId: transferForm.warehouseItemId,
         inventoryItemId: selectedItem.id || selectedItem._id,
         quantity,
         price: transferForm.price ? Number(transferForm.price) : undefined,
         date: transferForm.date,
-        reason: transferForm.reason,
+        reason: toCanonicalReason(transferForm.reason) || TRANSFER_REASON_AR,
       });
       if (res) {
         setShowTransferFromWarehouseModal(false);
@@ -804,7 +764,7 @@ const Inventory = () => {
       quantity: '',
       price: '',
       date: getCairoDateTime(timezone),
-      reason: t('inventory.returnModal.title'),
+      reason: RETURN_REASON_AR,
     });
     fetchWarehouseItems();
     setShowReturnToWarehouseModal(true);
@@ -813,13 +773,17 @@ const Inventory = () => {
   // إنشاء عنصر في المخزن الرئيسي من عنصر المخزون غير المرتبط
   const handleCreateWarehouseFromInventory = async () => {
     if (!selectedItem) return;
+    if (!hasPermission('canAddWarehouseItem')) {
+      setError(t('common.permissionDenied'));
+      return;
+    }
     setLoading(true);
     setError('');
     try {
       const res = await createWarehouseItem({
         name: selectedItem.name,
-        category: selectedItem.category,
-        unit: selectedItem.unit,
+        category: toCanonicalCategory(selectedItem.category),
+        unit: toCanonicalUnit(selectedItem.unit),
         minStock: selectedItem.minStock || 0,
         price: selectedItem.price,
         supplier: selectedItem.supplier || '',
@@ -853,6 +817,10 @@ const Inventory = () => {
   const handleReturnToWarehouse = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedItem) return;
+    if (!hasPermission('canReturnToWarehouse')) {
+      setError(t('common.permissionDenied'));
+      return;
+    }
     setLoading(true);
     setError('');
     try {
@@ -878,7 +846,7 @@ const Inventory = () => {
         quantity,
         price: returnForm.price ? Number(returnForm.price) : undefined,
         date: returnForm.date,
-        reason: returnForm.reason,
+        reason: toCanonicalReason(returnForm.reason) || RETURN_REASON_AR,
       });
       if (res) {
         setShowReturnToWarehouseModal(false);
@@ -925,6 +893,10 @@ const Inventory = () => {
   const handleEditMovementSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedItem || !editingMovement) return;
+    if (!hasPermission('canEditStockMovement')) {
+      setError(t('common.permissionDenied'));
+      return;
+    }
 
     setLoading(true);
     setError('');
@@ -950,7 +922,7 @@ const Inventory = () => {
         {
           quantity,
           price,
-          reason: editMovementForm.reason,
+          reason: toCanonicalReason(editMovementForm.reason),
           date: editMovementForm.date,
         }
       );
@@ -996,6 +968,10 @@ const Inventory = () => {
   // تأكيد حذف الحركة
   const confirmDeleteMovement = async () => {
     if (!selectedItem || !deletingMovementId) return;
+    if (!hasPermission('canDeleteStockMovement')) {
+      toast.error(t('common.permissionDenied'));
+      return;
+    }
 
     setLoading(true);
 
@@ -1054,6 +1030,10 @@ const Inventory = () => {
   // إضافة كمية جديدة أو منتج جديد
   const handleAddSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!hasPermission('canAddInventoryItem')) {
+      setError(t('common.permissionDenied'));
+      return;
+    }
     setLoading(true);
     setError('');
     setSuccess('');
@@ -1065,10 +1045,10 @@ const Inventory = () => {
       }
       const res = await createInventoryItem({
         name: addForm.name,
-        category: addForm.category,
+        category: toCanonicalCategory(addForm.category),
         currentStock: 0,
         minStock: Number(addForm.minStock),
-        unit: addForm.unit,
+        unit: toCanonicalUnit(addForm.unit),
         price: addForm.price ? Number(addForm.price) : 0,
         supplier: addForm.supplier,
         barcode: addForm.barcode || undefined,
@@ -1113,6 +1093,10 @@ const Inventory = () => {
   // تعديل منتج
   const handleEditSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!hasPermission('canEditInventoryItem')) {
+      setError(t('common.permissionDenied'));
+      return;
+    }
     setLoading(true);
     setError('');
     setSuccess('');
@@ -1133,10 +1117,10 @@ const Inventory = () => {
       }
       const res = await updateInventoryItem(selectedItem.id || selectedItem._id, {
         name: addForm.name,
-        category: addForm.category,
+        category: toCanonicalCategory(addForm.category),
         price: Number(addForm.price),
         minStock: Number(addForm.minStock),
-        unit: addForm.unit,
+        unit: toCanonicalUnit(addForm.unit),
         supplier: addForm.supplier,
         barcode: addForm.barcode || null,
         isRawMaterial: addForm.isRawMaterial,
@@ -1185,29 +1169,28 @@ const Inventory = () => {
     }
   };
 
-  // التحقق مما إذا كان المنتج مستخدماً في قائمة الطعام
+  // التحقق مما إذا كان المنتج مستخدماً في قائمة الطعام (فشل مغلق: عند الخطأ نمنع الحذف)
   const isItemUsedInMenu = async (itemId: string): Promise<{isUsed: boolean; menuItems?: Array<{name: string}>, itemName: string}> => {
     try {
       // جلب جميع عناصر القائمة مع تفاصيل المكونات
       const response = await api.getMenuItems({
-        limit: 1000 // جلب عدد أكبر من العناصر للتأكد
+        limit: 5000 // حد أعلى لتغطية القوائم الكبيرة
       });
 
       if (response.success && response.data) {
         // البحث في كل عنصر في القائمة
-        const itemName = inventoryItems.find(item => item.id === itemId || item._id === itemId)?.name || t('inventory.messages.thisProduct');
+        const itemName = inventoryItems.find(item => String(item.id || item._id) === String(itemId))?.name || t('inventory.messages.thisProduct');
         const menuItems = response.data.filter((menuItem: MenuItem) => {
           // التحقق من وجود مكونات للعنصر
           if (!menuItem.ingredients || !Array.isArray(menuItem.ingredients)) {
             return false;
           }
-          // البحث عن المكون في قائمة المكونات
+          // البحث عن المكون في قائمة المكونات (يقارن نصياً ليشمل _id و id)
           return menuItem.ingredients.some((ing: Ingredient) => {
-            // التحقق من أن المكون موجود وأن المعرف متطابق
-            const item = typeof ing.item === 'string'
+            const raw = typeof ing.item === 'string'
               ? ing.item
-              : (ing.item as { _id?: string; id?: string })?.id || (ing.item as { _id?: string; id?: string })?._id;
-            return item === itemId;
+              : ((ing.item as { _id?: string; id?: string })?._id || (ing.item as { _id?: string; id?: string })?.id);
+            return raw != null && String(raw) === String(itemId);
           });
         });
 
@@ -1219,9 +1202,11 @@ const Inventory = () => {
         };
       }
       const fallback = t('inventory.messages.thisProduct');
-      return { isUsed: false, itemName: fallback };
+      // فشل مغلق: تعذر التحقق → نمنع الحذف
+      return { isUsed: true, itemName: fallback };
     } catch (err) {
       const fallback = t('inventory.messages.thisProduct');
+      // فشل مغلق: أي خطأ شبكة → نمنع الحذف بدل المخاطرة
       return { isUsed: true, itemName: fallback };
     }
   };
@@ -1229,15 +1214,28 @@ const Inventory = () => {
   // حذف منتج
   const handleDelete = async () => {
     if (!deleteTarget) return;
+    if (!hasPermission('canDeleteInventoryItem')) {
+      const denyMsg = t('common.permissionDenied');
+      setError(denyMsg);
+      showAlertMessage(denyMsg, 'error');
+      return;
+    }
 
     // التحقق مما إذا كان المنتج مستخدماً في قائمة الطعام
     const { isUsed, menuItems, itemName } = await isItemUsedInMenu(deleteTarget.id || deleteTarget._id);
-    if (isUsed && menuItems && menuItems.length > 0) {
-      const menuItemsList = menuItems.map(item => `- ${item.name}`).join('\n');
-      const errorMsg = t('inventory.messages.cannotDeleteInUse', { name: itemName, list: menuItemsList });
+    if (isUsed) {
+      if (menuItems && menuItems.length > 0) {
+        const menuItemsList = menuItems.map(item => `- ${item.name}`).join('\n');
+        const errorMsg = t('inventory.messages.cannotDeleteInUse', { name: itemName, list: menuItemsList });
 
-      setError(errorMsg);
-      showAlertMessage(t('inventory.messages.cannotDeleteSummary', { name: itemName, count: menuItems.length }), 'error');
+        setError(errorMsg);
+        showAlertMessage(t('inventory.messages.cannotDeleteSummary', { name: itemName, count: menuItems.length }), 'error');
+      } else {
+        // تعذر التحقق من الارتباط — نمنع الحذف احترازياً
+        const errorMsg = t('inventory.messages.cannotDeleteUnknown', { name: itemName });
+        setError(errorMsg);
+        showAlertMessage(errorMsg, 'error');
+      }
       setLoading(false);
       setShowDeleteModal(false);
       return;
@@ -1250,15 +1248,16 @@ const Inventory = () => {
       if (res) {
         toast.success(t('inventory.notifications.productDeleted'));
         showAlertMessage(t('inventory.notifications.productDeleted'), 'success');
-        fetchInventoryItems();
+        await fetchInventoryItems();
         setShowDeleteModal(false);
+        setDeleteTarget(null);
       } else {
-        const errorMsg = 'حدث خطأ أثناء حذف المنتج';
+        const errorMsg = t('inventory.notifications.productDeleteError');
         setError(errorMsg);
         showAlertMessage(errorMsg, 'error');
       }
     } catch (err) {
-      const errMsg = t('inventory.notifications.productDeleteError');
+      const errMsg = (err as Error)?.message || t('inventory.notifications.productDeleteError');
       setError(errMsg);
       showAlertMessage(errMsg, 'error');
     } finally {
@@ -1266,17 +1265,16 @@ const Inventory = () => {
     }
   };
 
-  // أضف دالة حذف المنتج من المخزون
+  // أضف دالة حذف المنتج من المخزون (تُظهر سبب السيرفر بدل إخفائه)
   const deleteInventoryItemApi = async (id: string) => {
-    try {
-      if (typeof api.deleteInventoryItem === 'function') {
-        const response = await api.deleteInventoryItem(id);
-        return response.success;
+    if (typeof api.deleteInventoryItem === 'function') {
+      const response = await api.deleteInventoryItem(id);
+      if (response && response.success === false) {
+        throw new Error((response as any).message || t('inventory.notifications.productDeleteError'));
       }
-      return false;
-    } catch {
-      return false;
+      return response.success;
     }
+    return false;
   };
 
   const navigate = useNavigate();
@@ -1338,7 +1336,7 @@ const Inventory = () => {
             </div>
             <div className="mr-4">
               <p className="text-sm font-medium text-gray-600 dark:text-gray-300">{t('inventory.stats.inventoryValue')}</p>
-              <p className="text-2xl font-bold text-green-600 dark:text-green-400">{formatCurrency(totalValue)}</p>
+              <p className="text-2xl font-bold text-green-600 dark:text-green-400">{formatCurrency(totalValue, i18n.language)}</p>
             </div>
           </div>
         </div>
@@ -1436,7 +1434,7 @@ const Inventory = () => {
                       >
                         <option value="">{t('inventory.filters.allCategories')}</option>
                         {categoryOptions.map(cat => (
-                          <option key={cat} value={cat}>{cat}</option>
+                          <option key={cat.value} value={cat.value}>{cat.label}</option>
                         ))}
                       </select>
                     </div>
@@ -1666,7 +1664,7 @@ const Inventory = () => {
             <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-100 dark:divide-gray-700">
               {filteredItems.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="px-6 py-12 text-center text-gray-500 dark:text-gray-400">
+                  <td colSpan={11} className="px-6 py-12 text-center text-gray-500 dark:text-gray-400">
                     <div className="flex flex-col items-center">
                       <Package className="h-12 w-12 text-gray-400 mb-4" />
                       <p className="text-lg font-medium text-gray-500 dark:text-gray-400">
@@ -1678,7 +1676,7 @@ const Inventory = () => {
                   </td>
                 </tr>
               ) : (
-                filteredItems.map((item) => {
+                pagedItems.map((item) => {
                 const stockStatus = getStockStatus(item.currentStock, item.minStock);
                 return (
                   <tr key={item.id || item._id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
@@ -1703,9 +1701,9 @@ const Inventory = () => {
                     <td className={`px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100 ${isRTL ? 'text-right' : 'text-left'}`}>{formatQuantity(item.minStock, translateUnit(item.unit), i18n.language)}</td>
                     <td className={`px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100 ${isRTL ? 'text-right' : 'text-left'}`}>{translateUnit(item.unit)}</td>
                     <td className={`px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-900 dark:text-gray-100 ${isRTL ? 'text-right' : 'text-left'}`}>{item.barcode || <span className="text-gray-400">—</span>}</td>
-                    <td className={`px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100 ${isRTL ? 'text-right' : 'text-left'}`}>{formatCurrency(item.price)}</td>
+                    <td className={`px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100 ${isRTL ? 'text-right' : 'text-left'}`}>{formatCurrency(item.price, i18n.language)}</td>
                     <td className={`px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900 dark:text-gray-100 ${isRTL ? 'text-right' : 'text-left'}`}>
-                      {formatCurrency(item.totalValue || (item.currentStock * item.price))}
+                      {formatCurrency(item.totalValue || (item.currentStock * item.price), i18n.language)}
                     </td>
                     <td className={`px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100 ${isRTL ? 'text-right' : 'text-left'}`}>{item.supplier || <span className="text-gray-400">—</span>}</td>
                     <td className={`px-6 py-4 whitespace-nowrap text-sm ${isRTL ? 'text-right' : 'text-left'}`}>
@@ -1773,6 +1771,51 @@ const Inventory = () => {
             </tbody>
           </table>
         </div>
+        {invTotalPages > 1 && (
+          <div className="flex items-center justify-between mt-4 p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700">
+            <div className="text-sm text-gray-600 dark:text-gray-400">
+              <span>{t('inventory.pagination.page')} {formatDecimal(invPage, i18n.language)} {t('inventory.pagination.of')} {formatDecimal(invTotalPages, i18n.language)}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setInvPage(p => Math.max(1, p - 1))}
+                disabled={invPage <= 1}
+                className="px-3 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                {t('inventory.pagination.previous')}
+              </button>
+              <div className="flex items-center gap-1">
+                {(() => {
+                  let start = Math.max(1, Math.min(invPage - 2, invTotalPages - 4));
+                  const end = Math.min(invTotalPages, start + 4);
+                  start = Math.max(1, end - 4);
+                  const pages: number[] = [];
+                  for (let p = start; p <= end; p++) pages.push(p);
+                  return pages.map(pageNum => (
+                    <button
+                      key={pageNum}
+                      onClick={() => setInvPage(pageNum)}
+                      className={`w-8 h-8 rounded-lg text-sm font-medium transition-colors ${
+                        invPage === pageNum
+                          ? 'bg-orange-600 text-white'
+                          : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+                      }`}
+                    >
+                      {formatDecimal(pageNum, i18n.language)}
+                    </button>
+                  ));
+                })()}
+              </div>
+              <button
+                onClick={() => setInvPage(p => Math.min(invTotalPages, p + 1))}
+                disabled={invPage >= invTotalPages}
+                className="px-3 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                {t('inventory.pagination.next')}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Modal إضافة منتج جديد */}
@@ -1824,7 +1867,7 @@ const Inventory = () => {
                   <select name="category" value={addForm.category} onChange={handleFormChange} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100" required>
                     <option value="">{t('inventory.addModal.selectCategory')}</option>
                     {categoryOptions.map(option => (
-                      <option key={option} value={option}>{option}</option>
+                      <option key={option.value} value={option.value}>{option.label}</option>
                     ))}
                   </select>
                 </div>
@@ -1832,8 +1875,8 @@ const Inventory = () => {
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('inventory.addModal.unit')}</label>
                   <select name="unit" value={addForm.unit} onChange={handleFormChange} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100" required>
                     <option value="">{t('inventory.addModal.selectUnit')}</option>
-                    {unitOptions.map(option => (
-                      <option key={option} value={option}>{option}</option>
+                    {UNIT_CANONICAL.map((ar, i) => (
+                      <option key={ar} value={ar}>{t(UNIT_LABEL_KEYS[i])}</option>
                     ))}
                   </select>
                 </div>
@@ -1858,9 +1901,6 @@ const Inventory = () => {
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('inventory.barcode')}</label>
                   <div className="flex gap-2">
                     <input type="text" name="barcode" value={addForm.barcode} onChange={handleFormChange} placeholder={t('inventory.barcodePlaceholder')} className="flex-1 border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100 font-mono" />
-                    <button type="button" className="p-2 text-gray-500 hover:text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-900/20 rounded-lg transition-colors" title={t('common.scan')}>
-                      <QrCode className="h-5 w-5" />
-                    </button>
                   </div>
                 </div>
                 <div className="md:col-span-2">
@@ -1961,7 +2001,7 @@ const Inventory = () => {
                 <select name="category" value={addForm.category} onChange={handleFormChange} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100" required>
                   <option value="">{t('inventory.addModal.selectCategory')}</option>
                   {categoryOptions.map(option => (
-                    <option key={option} value={option}>{option}</option>
+                    <option key={option.value} value={option.value}>{option.label}</option>
                   ))}
                 </select>
               </div>
@@ -1969,8 +2009,8 @@ const Inventory = () => {
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('inventory.addModal.unit')}</label>
                 <select name="unit" value={addForm.unit} onChange={handleFormChange} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100" required>
                   <option value="">{t('inventory.addModal.selectUnit')}</option>
-                  {unitOptions.map(option => (
-                    <option key={option} value={option}>{option}</option>
+                  {UNIT_CANONICAL.map((ar, i) => (
+                    <option key={ar} value={ar}>{t(UNIT_LABEL_KEYS[i])}</option>
                   ))}
                 </select>
               </div>
@@ -1991,9 +2031,6 @@ const Inventory = () => {
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('inventory.barcode')}</label>
                 <div className="flex gap-2">
                   <input type="text" name="barcode" value={addForm.barcode} onChange={handleFormChange} placeholder={t('inventory.barcodePlaceholder')} className="flex-1 border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100 font-mono" />
-                  <button type="button" className="p-2 text-gray-500 hover:text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-900/20 rounded-lg transition-colors" title={t('common.scan')}>
-                    <QrCode className="h-5 w-5" />
-                  </button>
                 </div>
               </div>
               <div>
@@ -2197,33 +2234,35 @@ const Inventory = () => {
                     value={deductForm.reason}
                     onChange={(e) => {
                       const value = e.target.value;
-                      setDeductForm({ ...deductForm, reason: value === t('inventory.deductModal.reasons.other') ? '' : value });
+                      const isOther = value === t('inventory.deductModal.reasons.other');
+                      setDeductCustomReason(isOther);
+                      setDeductForm({ ...deductForm, reason: isOther ? '' : value });
                     }}
                     className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100 mb-2"
                   >
                     <option value="">{t('inventory.deductModal.selectReason')}</option>
                     {deductForm.type === 'out' ? (
                       <>
-                        <option value={t('inventory.deductModal.reasons.sale')}>{t('inventory.deductModal.reasons.sale')}</option>
-                        <option value={t('inventory.deductModal.reasons.production')}>{t('inventory.deductModal.reasons.production')}</option>
-                        <option value={t('inventory.deductModal.reasons.damaged')}>{t('inventory.deductModal.reasons.damaged')}</option>
-                        <option value={t('inventory.deductModal.reasons.expired')}>{t('inventory.deductModal.reasons.expired')}</option>
-                        <option value={t('inventory.deductModal.reasons.returnToSupplier')}>{t('inventory.deductModal.reasons.returnToSupplier')}</option>
+                        <option value="بيع">{t('inventory.deductModal.reasons.sale')}</option>
+                        <option value="استهلاك في الإنتاج">{t('inventory.deductModal.reasons.production')}</option>
+                        <option value="تالف">{t('inventory.deductModal.reasons.damaged')}</option>
+                        <option value="منتهي الصلاحية">{t('inventory.deductModal.reasons.expired')}</option>
+                        <option value="إرجاع للمورد">{t('inventory.deductModal.reasons.returnToSupplier')}</option>
                         <option value={t('inventory.deductModal.reasons.other')}>{t('inventory.deductModal.reasons.other')}</option>
                       </>
                     ) : (
                       <>
-                        <option value={t('inventory.deductModal.reasons.periodicInventory')}>{t('inventory.deductModal.reasons.periodicInventory')}</option>
-                        <option value={t('inventory.deductModal.reasons.errorCorrection')}>{t('inventory.deductModal.reasons.errorCorrection')}</option>
-                        <option value={t('inventory.deductModal.reasons.loss')}>{t('inventory.deductModal.reasons.loss')}</option>
+                        <option value="جرد دوري">{t('inventory.deductModal.reasons.periodicInventory')}</option>
+                        <option value="تصحيح خطأ">{t('inventory.deductModal.reasons.errorCorrection')}</option>
+                        <option value="فقدان">{t('inventory.deductModal.reasons.loss')}</option>
                         <option value={t('inventory.deductModal.reasons.other')}>{t('inventory.deductModal.reasons.other')}</option>
                       </>
                     )}
                   </select>
-                  {(!deductForm.reason || deductForm.reason === t('inventory.deductModal.reasons.other')) && (
+                  {deductCustomReason && (
                     <input
                       type="text"
-                      value={deductForm.reason === t('inventory.deductModal.reasons.other') ? '' : deductForm.reason}
+                      value={deductForm.reason}
                       onChange={(e) => setDeductForm({ ...deductForm, reason: e.target.value })}
                       className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100"
                       placeholder={t('inventory.deductModal.enterReason')}
@@ -2700,9 +2739,9 @@ const Inventory = () => {
                             </td>
                             <td className="px-4 py-3 whitespace-nowrap">
                               <span className={`text-sm font-bold ${
-                                movement.type === 'in' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
+                                movement.type === 'in' || movement.type === 'transfer_in' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
                               }`}>
-                                {movement.type === 'in' ? '+' : '−'}{formatQuantity(movement.quantity, translateUnit(selectedItem.unit), i18n.language)}
+                                {(movement.type === 'in' || movement.type === 'transfer_in') ? '+' : '−'}{formatQuantity(movement.quantity, translateUnit(selectedItem.unit), i18n.language)}
                               </span>
                             </td>
                             <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
@@ -2723,11 +2762,13 @@ const Inventory = () => {
                               {translateReason(movement.reason)}
                             </td>
                             <td className="px-4 py-3 whitespace-nowrap text-sm font-semibold text-gray-900 dark:text-gray-100">
-                              {formatQuantity(movement.balanceAfter, translateUnit(selectedItem.unit), i18n.language)}
+                              {movement.balanceAfter === null || movement.balanceAfter === undefined
+                                ? <span className="text-gray-400">—</span>
+                                : formatQuantity(movement.balanceAfter, translateUnit(selectedItem.unit), i18n.language)}
                             </td>
                             <td className="px-4 py-3 whitespace-nowrap text-sm">
                               <div className={`flex gap-1 ${isRTL ? 'justify-start' : 'justify-end'}`}>
-                                {!movement.reason?.includes('طلب رقم') && !movement.reason?.includes('فاتورة') ? (
+                                {!isOrderLinkedReason(movement.reason) ? (
                                   <>
                                     <PermissionGuard requiredPermissions={['canEditStockMovement', 'all']}>
                                       <button onClick={() => openEditMovementModal(movement)}

@@ -17,6 +17,7 @@ import { exportReportToPDF, generatePDFFilename } from '../utils/pdfExport';
 import { useTranslation } from 'react-i18next';
 import { formatDecimal, formatCurrency as formatCurrencyUtil, replaceAMPM } from '../utils/formatters';
 import { useCurrency } from '../hooks/useCurrency';
+import { canExportReports } from '../utils/permissionHelper';
 import { useOrganization } from '../context/OrganizationContext';
 
 // Configure dayjs
@@ -1281,6 +1282,7 @@ const Reports = () => {
 
   // Export PDF function
   const handleExportPDF = useCallback(async (reportType: 'sales' | 'financial' | 'sessions' | 'inventory') => {
+    if (!canExportReports(user)) { showNotification(t('common.permissionDenied'), 'error'); return; }
     try {
       const filter = buildFilter();
       
@@ -1328,13 +1330,14 @@ const Reports = () => {
       console.error('PDF Export Error:', error);
       showNotification(t('reports.errors.exportPDF'), 'error');
     }
-  }, [reports, buildFilter, showNotification, t, i18n.language]);
+  }, [reports, buildFilter, showNotification, t, i18n.language, user]);
 
   // Keep old Excel export for backward compatibility
   const handleExport = useCallback(async (
     exportFunc: (reportType: string, filter: Record<string, unknown>) => Promise<void>,
     reportType: string
   ) => {
+    if (!canExportReports(user)) { showNotification(t('common.permissionDenied'), 'error'); return; }
     try {
       const filter = buildFilter();
       await exportFunc(reportType, filter);
@@ -1342,7 +1345,7 @@ const Reports = () => {
     } catch {
       showNotification(t('reports.errors.exportExcel'), 'error');
     }
-  }, [buildFilter, showNotification, t]);
+  }, [buildFilter, showNotification, t, user]);
 
   const renderFilterControls = () => {
     return (

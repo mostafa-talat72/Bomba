@@ -8,6 +8,8 @@ import 'dayjs/locale/en';
 import 'dayjs/locale/fr';
 import relativeTime from 'dayjs/plugin/relativeTime';
 import { useTranslation } from 'react-i18next';
+import { useApp } from '../../context/AppContext';
+import { canApproveAdvance } from '../../utils/permissionHelper';
 import { useLanguage } from '../../context/LanguageContext';
 import { useOrganization } from '../../context/OrganizationContext';
 import { replaceAMPM } from '../../utils/formatters';
@@ -47,7 +49,8 @@ interface PendingAdvancesProps {
 }
 
 const PendingAdvances: React.FC<PendingAdvancesProps> = ({ onUpdate }) => {
-  const { t, i18n } = useTranslation();
+const { t, i18n } = useTranslation();
+const { user } = useApp();
   const { isRTL } = useLanguage();
   const { getCurrencySymbol } = useOrganization();
   const [loading, setLoading] = useState(false);
@@ -94,6 +97,7 @@ const PendingAdvances: React.FC<PendingAdvancesProps> = ({ onUpdate }) => {
 
   const confirmAction = async () => {
     if (!selectedAdvance) return;
+    if (!canApproveAdvance(user)) { message.error(t('common.permissionDenied')); return; }
 
     try {
       setLoading(true);

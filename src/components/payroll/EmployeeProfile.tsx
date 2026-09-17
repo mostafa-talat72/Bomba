@@ -14,6 +14,8 @@ import { pdf } from '@react-pdf/renderer';
 import EmployeePDFDocument from './EmployeePDFDocument';
 import { numberOnlyInputProps } from '../../utils/inputHelpers';
 import { useTranslation } from 'react-i18next';
+import { useApp } from '../../context/AppContext';
+import { canEditEmployee } from '../../utils/permissionHelper';
 import { useLanguage } from '../../context/LanguageContext';
 import { useOrganization } from '../../context/OrganizationContext';
 import './EmployeeProfile.css';
@@ -31,6 +33,12 @@ interface EmployeeProfileProps {
 
 const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, onAdvanceAdded }) => {
   const { t, i18n } = useTranslation();
+  const { user } = useApp();
+  // حراسة الصلاحيات: كل عمليات الإضافة/التعديل/الحذف داخل ملف الموظف تتطلب canEditEmployee
+  const requireEditPerm = () => {
+    if (!canEditEmployee(user)) { message.error(t('common.permissionDenied')); return false; }
+    return true;
+  };
   const { currentLanguage, isRTL } = useLanguage();
   const { getCurrencySymbol } = useOrganization();
   
@@ -246,6 +254,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
   const stats = calculateStats();
 
   const handlePayment = async () => {
+    if (!requireEditPerm()) return;
     // حساب المبلغ المتاح للدفع
     // إذا كان الرصيد موجب: يمكن الدفع حتى الرصيد المتاح
     // إذا كان الرصيد سالب (مديون): يمكن الدفع من راتب الشهر الحالي فقط
@@ -471,6 +480,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
   };
 
   const handleUpdateAttendance = async (values: any) => {
+    if (!requireEditPerm()) return;
     try {
       await api.put(`/payroll/attendance/${editingAttendance._id}`, {
         status: values.status,
@@ -490,6 +500,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
   };
 
   const handleDeleteAttendance = async (id: string) => {
+    if (!requireEditPerm()) return;
     Modal.confirm({
       title: t('payroll.employeeProfile.confirmDelete.title'),
       content: t('payroll.employeeProfile.confirmDelete.attendance'),
@@ -519,6 +530,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
   };
 
   const handleUpdateAdvance = async (values: any) => {
+    if (!requireEditPerm()) return;
     try {
       await api.put(`/payroll/advances/${editingAdvance._id}`, {
         amount: values.amount,
@@ -536,6 +548,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
   };
 
   const handleDeleteAdvance = async (id: string) => {
+    if (!requireEditPerm()) return;
     Modal.confirm({
       title: t('payroll.employeeProfile.confirmDelete.title'),
       content: t('payroll.employeeProfile.confirmDelete.advance'),
@@ -566,6 +579,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
   };
 
   const handleUpdateDeduction = async (values: any) => {
+    if (!requireEditPerm()) return;
     try {
       await api.put(`/payroll/deductions/${editingDeduction._id}`, {
         amount: values.amount,
@@ -584,6 +598,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
   };
 
   const handleDeleteDeduction = async (id: string) => {
+    if (!requireEditPerm()) return;
     Modal.confirm({
       title: t('payroll.employeeProfile.confirmDelete.title'),
       content: t('payroll.employeeProfile.confirmDelete.deduction'),
@@ -614,6 +629,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
   };
 
   const handleUpdatePayment = async (values: any) => {
+    if (!requireEditPerm()) return;
     try {
       await api.put(`/payroll/payments/${editingPayment._id}`, {
         amount: values.amount,
@@ -632,6 +648,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
   };
 
   const handleDeletePayment = async (id: string) => {
+    if (!requireEditPerm()) return;
     Modal.confirm({
       title: t('payroll.employeeProfile.confirmDelete.title'),
       content: t('payroll.employeeProfile.confirmDelete.payment'),
@@ -702,6 +719,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
   };
 
   const handleSubmitAttendance = async (values: any) => {
+    if (!requireEditPerm()) return;
     try {
       const dates = values.dates || [];
       const status = values.status;
@@ -792,6 +810,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
 
   // Advance handlers
   const handleSubmitAdvance = async (values: any) => {
+    if (!requireEditPerm()) return;
     try {
       const advanceDate = values.requestDate || dayjs();
       const payload = {
@@ -829,6 +848,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
 
   // Deduction handlers
   const handleSubmitDeduction = async (values: any) => {
+    if (!requireEditPerm()) return;
     try {
    
       const deductionDate = values.date || dayjs();
@@ -858,6 +878,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
 
   // Bonus handlers
   const handleSubmitBonus = async (values: any) => {
+    if (!requireEditPerm()) return;
     try {
       const bonusDate = values.date || dayjs();
       const payload = {
@@ -895,6 +916,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
   };
 
   const handleUpdateBonus = async (values: any) => {
+    if (!requireEditPerm()) return;
     try {
       await api.put(`/payroll/bonuses/${editingBonus._id}`, {
         type: values.type,
@@ -914,6 +936,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
   };
 
   const handleDeleteBonus = async (id: string) => {
+    if (!requireEditPerm()) return;
     Modal.confirm({
       title: t('payroll.bonusManagement.confirmDelete.title'),
       content: t('payroll.bonusManagement.confirmDelete.content'),
@@ -934,6 +957,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
 
   // Edit employee handler
   const handleEditEmployee = async (values: any) => {
+    if (!requireEditPerm()) return;
     try {
       const payload = {
         personalInfo: {

@@ -1,12 +1,13 @@
-import React, { useState, useEffect } from 'react';
-import { Bell, Filter, Search, Eye, Trash2, X, AlertCircle, Info, CheckCircle } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Bell, Filter, Search, Eye, Trash2, X, Check, CheckCheck, AlertCircle, Info, CheckCircle } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import PermissionGuard from '../components/PermissionGuard';
+import { api } from '../services/api';
 import { formatDecimal } from '../utils/formatters';
 import { getLocaleFromLanguage } from '../utils/localeMapper';
 import { useTranslation } from 'react-i18next';
 import { useOrganization } from '../context/OrganizationContext';
-import i18n from '../i18n/config';
 
 interface Notification {
   _id: string;
@@ -37,7 +38,9 @@ interface NotificationStats {
 
 const NotificationManagement = () => {
   const { t, i18n } = useTranslation();
-  const { user, getNotifications, getNotificationStats, markNotificationAsRead, markAllNotificationsAsRead, deleteNotification, showNotification, isLoggingOut } = useApp();
+  const { user, getNotifications, getNotificationStats, markNotificationAsRead, markAllNotificationsAsRead, deleteNotification, showNotification, isLoggingOut, orders, bills } = useApp() as any;
+  const navigate = useNavigate();
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [stats, setStats] = useState<NotificationStats | null>(null);
   const [loading, setLoading] = useState(false);
@@ -78,13 +81,14 @@ const NotificationManagement = () => {
     { id: 'billing', name: t('notificationManagement.categories.billing'), color: 'text-purple-600' },
     { id: 'system', name: t('notificationManagement.categories.system'), color: 'text-red-600' },
     { id: 'security', name: t('notificationManagement.categories.security'), color: 'text-yellow-600' },
+    { id: 'backup', name: t('notificationManagement.categories.backup'), color: 'text-teal-600' },
   ];
 
-  const priorityColors = {
-    low: 'text-gray-500',
-    medium: 'text-blue-500',
-    high: 'text-orange-500',
-    urgent: 'text-red-500'
+  const priorityStyles = {
+    low: 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300',
+    medium: 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300',
+    high: 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300',
+    urgent: 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300'
   };
 
   const typeIcons = {
@@ -99,32 +103,25 @@ const NotificationManagement = () => {
     system: Bell
   };
 
+  // تعليم تلقائي كمقروء مرة واحدة عند فتح الصفحة فقط (وليس عند تغيير الفلاتر)
+  const didAutoMarkRef = useRef(false);
   useEffect(() => {
-    if (!user || isLoggingOut) return; // لا تحمل البيانات إذا لم يكن المستخدم مصادق عليه أو أثناء تسجيل الخروج
+    if (!user || isLoggingOut) return;
     loadNotifications();
     loadStats();
-    // تحديد جميع الإشعارات كمقروءة عند فتح الصفحة
-    handleMarkAllAsReadOnPageLoad();
-
-    // تحديد جميع الإشعارات كمقروءة عند مغادرة الصفحة
-    return () => {
-      handleMarkAllAsReadOnPageLoad();
-    };
-  }, [filterCategory, filterUnread, user, isLoggingOut]);
-
-  const handleMarkAllAsReadOnPageLoad = async () => {
-    if (isMarkingAllAsRead) return; // تجنب الاستدعاءات المتكررة
-
-    try {
-      setIsMarkingAllAsRead(true);
-      await markAllNotificationsAsRead();
-      await loadNotifications();
-      await loadStats();
-    } catch (error) {
-      } finally {
-      setIsMarkingAllAsRead(false);
+    if (!didAutoMarkRef.current) {
+      didAutoMarkRef.current = true;
+      (async () => {
+        try {
+          setIsMarkingAllAsRead(true);
+          await markAllNotificationsAsRead();
+          await loadNotifications();
+          await loadStats();
+        } catch { /* ignore */ }
+        finally { setIsMarkingAllAsRead(false); }
+      })();
     }
-  };
+  }, [filterCategory, filterUnread, user, isLoggingOut]);
 
   const loadNotifications = async () => {
     try {
@@ -197,6 +194,7 @@ const NotificationManagement = () => {
   const handleDeleteNotification = async (notificationId: string) => {
     try {
       await deleteNotification(notificationId);
+      setConfirmDeleteId(null);
       await loadNotifications();
       await loadStats();
       showNotification(t('notificationManagement.messages.deleted'), 'success');
@@ -205,13 +203,69 @@ const NotificationManagement = () => {
     }
   };
 
+  // عرض الطلب من الإشعار (نفس سلوك نافذة الإشعارات)
+  const handleViewOrder = async (n: Notification) => {
+    const md = (n?.metadata || {}) as any;
+    const orderId = md.orderId ? String(md.orderId) : '';
+    const orderNumLabel = md.orderNumber ? `#${md.orderNumber}` : t('notificationManagement.actions.viewOrder');
+    if (!orderId) return;
+    try { await markNotificationAsRead(n._id); } catch { /* ignore */ }
+    let order: any = (orders || []).find((o: any) => String(o._id || o.id) === orderId);
+    if (!order) {
+      try {
+        const r: any = await api.getOrder(orderId);
+        if (r?.success && r.data) order = r.data;
+      } catch { /* ignore */ }
+    }
+    if (!order || !(order as any)._id) {
+      showNotification(t('notificationCenter.messages.orderNotFound', { order: orderNumLabel }), 'error');
+      return;
+    }
+    const bRef = (order as any).bill;
+    const billId = bRef ? String((bRef as any)?._id || (bRef as any)?.id || bRef) : (md.billId ? String(md.billId) : '');
+    let bill: any = billId ? (bills || []).find((b: any) => String(b._id || b.id) === billId) : null;
+    if (!bill && billId) {
+      try {
+        const rb: any = await api.getBill(billId);
+        if (rb?.success && rb.data) bill = rb.data;
+      } catch { /* ignore */ }
+    }
+    if (!bill) {
+      showNotification(t('notificationCenter.messages.billNotFound', { order: orderNumLabel }), 'error');
+      return;
+    }
+    if ((bill as any)?.status === 'cancelled') {
+      showNotification(t('notificationCenter.messages.billCancelled', { order: orderNumLabel }), 'error');
+      return;
+    }
+    const fulfillment = (bill as any)?.fulfillmentType || (order as any)?.fulfillmentType || md.fulfillmentType || 'dine_in';
+    const tRaw = (order as any)?.table ?? (bill as any)?.table ?? md.tableId ?? null;
+    const tableId = tRaw ? String((tRaw as any)?._id || (tRaw as any)?.id || tRaw) : '';
+    const realBillId = String((bill as any)._id || (bill as any).id || billId);
+    const realOrderId = String((order as any)._id || (order as any).id || orderId);
+    if ((bill as any)?.status === 'paid') {
+      navigate(fulfillment === 'takeaway' ? '/takeaway' : fulfillment === 'delivery' ? '/delivery' : '/tables',
+        { state: { openPaymentForBill: realBillId } });
+      return;
+    }
+    if (tableId) {
+      navigate('/tables', { state: { openTableModal: true, tableId, previewOrderId: realOrderId } });
+      return;
+    }
+    navigate(fulfillment === 'delivery' ? '/delivery' : '/takeaway', { state: { openPaymentForBill: realBillId } });
+  };
+
   const getFilteredNotifications = () => {
     if (!notifications) return [];
+    const q = searchTerm.trim().toLowerCase();
 
     return notifications.filter(notification => {
+      // البحث يشمل النص المترجم المعروض وليس الخام فقط
       const matchesSearch = searchTerm === '' ||
-        notification.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        notification.message.toLowerCase().includes(searchTerm.toLowerCase());
+        notification.title.toLowerCase().includes(q) ||
+        notification.message.toLowerCase().includes(q) ||
+        getNotificationText(notification, 'title').toLowerCase().includes(q) ||
+        getNotificationText(notification, 'message').toLowerCase().includes(q);
 
       return matchesSearch;
     });
@@ -246,7 +300,14 @@ const NotificationManagement = () => {
           <p className="text-xs sm:text-base text-gray-600 dark:text-gray-300 mr-2 sm:mr-4">{t('notificationManagement.subtitle')}</p>
         </div>
         <div className="flex items-center gap-2">
-          {/* ضع هنا أزرار الإجراءات مثل إرسال إشعار */}
+          <button
+            onClick={handleMarkAllAsRead}
+            disabled={isMarkingAllAsRead}
+            className="flex items-center gap-1.5 px-3 py-2 text-xs sm:text-sm font-bold text-orange-700 dark:text-orange-300 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-lg hover:bg-orange-100 dark:hover:bg-orange-900/30 transition-colors disabled:opacity-50"
+          >
+            <CheckCheck className="h-4 w-4" />
+            {t('notificationManagement.actions.markAllAsRead')}
+          </button>
         </div>
       </div>
 
@@ -367,7 +428,7 @@ const NotificationManagement = () => {
                         <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
                           {getNotificationText(notification, 'title')}
                         </h3>
-                        <span className={`text-xs px-2 py-1 rounded-full ${priorityColors[notification.priority as keyof typeof priorityColors] || 'text-gray-500'}`}>
+                        <span className={`text-xs px-2 py-1 rounded-full font-bold ${priorityStyles[notification.priority as keyof typeof priorityStyles] || 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300'}`}>
                           {notification.priority === 'low' ? t('notificationManagement.priority.low') :
                            notification.priority === 'medium' ? t('notificationManagement.priority.medium') :
                            notification.priority === 'high' ? t('notificationManagement.priority.high') :
@@ -397,14 +458,42 @@ const NotificationManagement = () => {
                         <Eye className="h-4 w-4" />
                       </button>
                     )}
-                    <PermissionGuard requiredPermissions={['users']}>
+                    {(notification.metadata as any)?.orderId && (
                       <button
-                        onClick={() => handleDeleteNotification(notification._id)}
-                        className="p-1 text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition-colors"
-                        title={t('notificationManagement.actions.delete')}
+                        onClick={() => handleViewOrder(notification)}
+                        className="p-1 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+                        title={t('notificationManagement.actions.viewOrder')}
                       >
-                        <Trash2 className="h-4 w-4" />
+                        <Eye className="h-4 w-4" />
                       </button>
+                    )}
+                    <PermissionGuard requiredPermissions={['canDeleteNotification', 'users']}>
+                      {confirmDeleteId === notification._id ? (
+                        <span className="flex items-center gap-1">
+                          <button
+                            onClick={() => handleDeleteNotification(notification._id)}
+                            className="p-1 text-red-600 dark:text-red-400 hover:text-red-800 transition-colors"
+                            title={t('notificationManagement.actions.confirmDelete')}
+                          >
+                            <Check className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() => setConfirmDeleteId(null)}
+                            className="p-1 text-gray-400 hover:text-gray-600 transition-colors"
+                            title={t('common.cancel')}
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                        </span>
+                      ) : (
+                        <button
+                          onClick={() => setConfirmDeleteId(notification._id)}
+                          className="p-1 text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition-colors"
+                          title={t('notificationManagement.actions.delete')}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      )}
                     </PermissionGuard>
                   </div>
                 </div>

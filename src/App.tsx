@@ -259,14 +259,22 @@ const ProtectedRoute = ({ children, requiredPermissions = [], requiredRole }: {
         { path: '/tables', permission: 'tables' },
         { path: '/tables', permission: 'cafe' },
         { path: '/tables', permission: 'billing' },
+        { path: '/takeaway', permission: 'takeaway' },
+        { path: '/delivery', permission: 'delivery' },
         { path: '/menu', permission: 'menu' },
         { path: '/reports', permission: 'reports' },
+        { path: '/consumption-report', permission: 'consumption' },
+        { path: '/sold-items', permission: 'soldItems' },
+        { path: '/kitchen-display', permission: 'kitchenDisplay' },
         { path: '/inventory', permission: 'inventory' },
         { path: '/warehouse', permission: 'warehouse' },
         { path: '/kitchen-display', permission: 'kitchenDisplay' },
         { path: '/costs', permission: 'costs' },
         { path: '/users', permission: 'users' },
+        { path: '/payroll', permission: 'payroll' },
         { path: '/settings', permission: 'settings' },
+        { path: '/subscription', permission: 'subscription' },
+        { path: '/notifications', permission: 'notifications' },
         { path: '/shifts', permission: 'shifts' },
         { path: '/audit-log', permission: 'auditLog' },
         { path: '/sync-status', permission: 'syncStatus' },
@@ -395,12 +403,12 @@ const RouteHandler = () => {
             </ProtectedRoute>
           } />
           <Route path="takeaway" element={
-            <ProtectedRoute requiredPermissions={['tables', 'cafe', 'billing']}>
+            <ProtectedRoute requiredPermissions={['tables', 'cafe', 'billing', 'takeaway']}>
               <Takeaway />
             </ProtectedRoute>
           } />
           <Route path="delivery" element={
-            <ProtectedRoute requiredPermissions={['tables', 'cafe', 'billing']}>
+            <ProtectedRoute requiredPermissions={['tables', 'cafe', 'billing', 'delivery']}>
               <Delivery />
             </ProtectedRoute>
           } />
@@ -415,7 +423,7 @@ const RouteHandler = () => {
             </ProtectedRoute>
           } />
           <Route path="consumption-report" element={
-            <ProtectedRoute requiredPermissions={['reports']}>
+            <ProtectedRoute requiredPermissions={['reports', 'consumption']}>
               <ConsumptionReport />
             </ProtectedRoute>
           } />
@@ -445,7 +453,7 @@ const RouteHandler = () => {
             </ProtectedRoute>
           } />
           <Route path="payroll" element={
-            <ProtectedRoute requiredPermissions={['users']}>
+            <ProtectedRoute requiredPermissions={['users', 'payroll']}>
               <Payroll />
             </ProtectedRoute>
           } />
@@ -475,11 +483,15 @@ const RouteHandler = () => {
             </ProtectedRoute>
           } />
           <Route path="notifications" element={
-            <ProtectedRoute requiredPermissions={['dashboard', 'playstation', 'computer', 'tables', 'cafe', 'menu', 'billing', 'reports', 'inventory', 'warehouse', 'costs', 'users', 'settings']}>
+            <ProtectedRoute requiredPermissions={['dashboard', 'playstation', 'computer', 'tables', 'cafe', 'menu', 'billing', 'reports', 'inventory', 'warehouse', 'costs', 'users', 'settings', 'notifications']}>
               <NotificationManagement />
             </ProtectedRoute>
           } />
-          <Route path="/subscription" element={<Subscription />} />
+          <Route path="/subscription" element={
+            <ProtectedRoute requiredPermissions={['subscription']}>
+              <Subscription />
+            </ProtectedRoute>
+          } />
         </Route>
       {/* fallback — يوجه حسب حالة الدخول */}
               <Route path="*" element={<Navigate to={isAuthenticated ? "/" : "/login"} replace />} />

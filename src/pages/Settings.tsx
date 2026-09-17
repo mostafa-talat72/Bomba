@@ -1,4 +1,8 @@
 ﻿import { useState, useEffect, FC, useRef } from 'react';
+// ── معمارية الصفحة: محتويات التبويبات الكبيرة/المنقولة مكونات مستقلة بمستوى
+// الموديول (GeneralSaveButton, DevicesTabContent, MyPrintTabContent,
+// MaintenanceTabContent). الباقي (عام/حساب/كلمة سر/إشعارات/منظمة) مضمّن عمدًا:
+// صغير أو مستقر — يُستخرج عند أول لمس وظيفي له (boy-scout rule).
 import { Settings as SettingsIcon, Save, Bell, BellRing, User, Lock, Eye, EyeOff, Building2, LucideIcon, Facebook, Instagram, Twitter, Linkedin, Youtube, MessageCircle, Send, Globe, Phone, Mail, MapPin, Users, Check, X, Clock, Search, Printer, Smartphone, Wrench } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
@@ -141,6 +145,450 @@ interface Manager {
   name: string;
   email: string;
 }
+
+// زر حفظ الإعدادات العامة — مكون مستقل بمستوى الموديول (يُستخدم في تبويبي عام/صيانة
+// دون إعادة تركيب عند كل render، بعكس تعريفه داخل المكون).
+const GeneralSaveButton: FC<{ onSave: () => void; saving: boolean }> = ({ onSave, saving }) => {
+  const { t } = useTranslation();
+  return (
+    <div className="mt-6">
+      <button
+        onClick={onSave}
+        disabled={saving}
+        className="flex items-center space-x-2 bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 text-white px-4 py-2 rounded-md disabled:opacity-50 min-w-40 justify-center"
+      >
+        {saving ? (
+          <>
+            <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            <span>{t('common.saving')}</span>
+          </>
+        ) : (
+          <>
+            <Save className="h-4 w-4" />
+            <span>{t('settings.general.saveSettings')}</span>
+          </>
+        )}
+      </button>
+    </div>
+  );
+};
+
+// محتوى تبويب الأجهزة والربط — مكون مستقل (إقران الموبايل للكل + قائمة الأجهزة للإدارة)
+const DevicesTabContent: FC<{ showChromeOption: boolean; canManage: boolean }> = ({ showChromeOption, canManage }) => (
+  <>
+    <div>
+      <MobileConnectCard showChromeOption={showChromeOption} />
+    </div>
+    {canManage && (
+      <div>
+        <ConnectedDevicesCard />
+      </div>
+    )}
+  </>
+);
+
+// محتوى تبويب طابعتي — مكون مستقل (يُعرض من التبويب المخصص له)
+interface MyPrintTabProps {
+  myPrint: any;
+  setMyPrint: (v: any) => void;
+  myPrintLoading: boolean;
+  myPrintSaving: boolean;
+  testingDrawer: boolean;
+  menuSections: any;
+  availablePrinters: any[];
+  detectingPrinters: boolean;
+  onImport: () => void;
+  onTestDrawer: () => void;
+  onSave: () => void;
+  onDetectPrinters: () => void;
+  onTestPrinter: (printer: any) => void;
+}
+const MyPrintTabContent: FC<MyPrintTabProps> = ({
+  myPrint, setMyPrint, myPrintLoading, myPrintSaving, testingDrawer,
+  menuSections, availablePrinters, detectingPrinters,
+  onImport, onTestDrawer, onSave, onDetectPrinters, onTestPrinter,
+}) => {
+  const { t } = useTranslation();
+  return (
+                <div>
+                  <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">{t('settings.myPrint.title')}</h3>
+                  <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">{t('settings.myPrint.desc')}</p>
+                  {myPrintLoading ? (
+                    <p className="text-gray-500 dark:text-gray-400">{t('settings.organization.loading')}</p>
+                  ) : (
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between bg-gray-50 dark:bg-gray-700 p-4 rounded-lg">
+                        <div>
+                          <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                            {t('settings.myPrint.useCustom')}
+                          </h4>
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                            {t('settings.myPrint.useCustomDesc')}
+                          </p>
+                        </div>
+                        <label className="relative inline-flex items-center cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={myPrint.useCustom}
+                            onChange={(e) => setMyPrint((prev) => ({ ...prev, useCustom: e.target.checked }))}
+                            className="sr-only peer"
+                          />
+                          <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-orange-300 dark:peer-focus:ring-orange-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-orange-600"></div>
+                        </label>
+                      </div>
+
+                      {myPrint.useCustom && (
+                        <>
+                          <div className="flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              onClick={onImport}
+                              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 flex items-center gap-2"
+                            >
+                              {t('settings.myPrint.import')}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={onTestDrawer}
+                              disabled={testingDrawer}
+                              className="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 disabled:bg-gray-400 flex items-center gap-2"
+                            >
+                              {t('settings.myPrint.testDrawer')}
+                            </button>
+                          </div>
+
+                          <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg">
+                            <PrinterSettingsForm
+                              settings={myPrint.settings}
+                              onPatch={(patch) => setMyPrint((prev) => ({ ...prev, settings: { ...prev.settings, ...patch } }))}
+                              menuSections={menuSections}
+                              availablePrinters={availablePrinters}
+                              detecting={detectingPrinters}
+                              onDetect={onDetectPrinters}
+                              onSelectDetected={(printer) => {
+                                const id = String(printer.path || printer.name);
+                                setMyPrint((prev) => {
+                                  if ((prev.settings.printers || []).some((item: any) => item.id === id)) return prev;
+                                  return {
+                                    ...prev,
+                                    settings: {
+                                      ...prev.settings,
+                                      printers: [...(prev.settings.printers || []), { id, name: printer.name, printerName: printer.name, printerPath: printer.path || '', paperWidthMm: 80 }],
+                                    },
+                                  };
+                                });
+                              }}
+                              onTestPrinter={onTestPrinter}
+                            />
+                          </div>
+
+                          <div>
+                            <button
+                              onClick={onSave}
+                              disabled={myPrintSaving}
+                              className="flex items-center space-x-2 bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 text-white px-4 py-2 rounded-md disabled:opacity-50 min-w-40 justify-center"
+                            >
+                              {myPrintSaving ? <span>{t('common.saving')}</span> : <span>{t('settings.myPrint.save')}</span>}
+                            </button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+  );
+};
+
+
+// محتوى تبويب النسخ والصيانة — مكون مستقل (نسخ/سيرفر/تنبيهات/فحص/حفظ/احتياطي)
+interface MaintenanceTabProps {
+  canAccess: any;
+  generalSettings: any;
+  setGeneralSettings: any;
+  backupPassword: any;
+  setBackupPassword: any;
+  backupBusy: any;
+  lastBackup: any;
+  folderInputRef: any;
+  importInputRef: any;
+  importBusy: any;
+  backups: any;
+  backupsLoading: any;
+  verifyBusy: any;
+  restoreBusy: any;
+  serverUrlDisplay: any;
+  setShowServerModal: any;
+  smartCfg: any;
+  setSmartCfg: any;
+  smartCfgLoading: any;
+  smartCfgSaving: any;
+  typeAuditRunning: any;
+  typeAuditResult: any;
+  generalSaving: any;
+  handleBrowseBackupFolder: any;
+  handleFolderInputChange: any;
+  handleBackupNow: any;
+  loadBackups: any;
+  handleVerifyBackup: any;
+  handleDownloadBackup: any;
+  handleRestoreBackup: any;
+  handleImportBackup: any;
+  handleSmartCfgSave: any;
+  handleTypeAuditRun: any;
+  handleGeneralSettingsUpdate: any;
+}
+const MaintenanceTabContent: FC<MaintenanceTabProps> = ({ canAccess, generalSettings, setGeneralSettings, backupPassword, setBackupPassword, backupBusy, lastBackup, folderInputRef, importInputRef, importBusy, backups, backupsLoading, verifyBusy, restoreBusy, serverUrlDisplay, setShowServerModal, smartCfg, setSmartCfg, smartCfgLoading, smartCfgSaving, typeAuditRunning, typeAuditResult, generalSaving, handleBrowseBackupFolder, handleFolderInputChange, handleBackupNow, loadBackups, handleVerifyBackup, handleDownloadBackup, handleRestoreBackup, handleImportBackup, handleSmartCfgSave, handleTypeAuditRun, handleGeneralSettingsUpdate }) => {
+  const { t } = useTranslation();
+  const { currentLanguage } = useLanguage();
+  return (
+    <>
+                    {/* Backup settings (owner/admins only) */}
+                    {canAccess && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        {t('settings.backupMsg.pathLabel')}
+                      </label>
+                      <div className="flex space-x-2 space-x-reverse">
+                        <input
+                          type="text"
+                          value={generalSettings.backupPath}
+                          onChange={(e) => setGeneralSettings({ ...generalSettings, backupPath: e.target.value })}
+                          placeholder="C:\Backups\Bomba"
+                          className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                        />
+                        <button
+                          type="button"
+                          onClick={handleBrowseBackupFolder}
+                          className="px-3 py-2 bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300"
+                        >
+                          {t('settings.backupUi.browse')}
+                        </button>
+                      </div>
+                      <input
+                        ref={folderInputRef}
+                        type="file"
+                        style={{ display: 'none' }}
+                        {...({ webkitdirectory: true, directory: true } as React.InputHTMLAttributes<HTMLInputElement> & { webkitdirectory?: boolean; directory?: boolean })}
+                        onChange={handleFolderInputChange}
+                      />
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                        {t('settings.backupUi.folderHint')}
+                      </p>
+                      <input
+                        type="password"
+                        value={backupPassword}
+                        onChange={(e) => setBackupPassword(e.target.value)}
+                        placeholder={t('settings.backupUi.pwdPlaceholder')}
+                        autoComplete="new-password"
+                        className="mt-2 w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                      />
+                      <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1">
+                        {t('settings.backupUi.pwdHint')}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={handleBackupNow}
+                        disabled={backupBusy}
+                        className="mt-2 px-4 py-2 bg-green-600 hover:bg-green-700 dark:bg-green-500 dark:hover:bg-green-600 text-white rounded-md disabled:opacity-50 min-w-40"
+                      >
+                        {backupBusy ? t('settings.backupUi.creatingBackup') : t('settings.backupUi.backupNow')}
+                      </button>
+                      {lastBackup?.at && (
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                          {t('settings.backupUi.lastBackup')}: {new Date(lastBackup.at).toLocaleString(currentLanguage === 'ar' ? 'ar-EG' : currentLanguage)} — {lastBackup.success ? `${t('settings.backupUi.backupOk')} (${lastBackup.fileName || ''})` : `${t('settings.backupUi.backupFail')} (${lastBackup.error || ''})`}
+                        </p>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => importInputRef.current?.click()}
+                        disabled={importBusy}
+                        className="mt-2 mr-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 text-white rounded-md disabled:opacity-50 min-w-40"
+                      >
+                        {importBusy ? t('settings.backupUi.importing') : t('settings.backupUi.importFromDevice')}
+                      </button>
+                      <input
+                        ref={importInputRef}
+                        type="file"
+                        accept=".gz"
+                        style={{ display: 'none' }}
+                        onChange={handleImportBackup}
+                      />
+                      <div className="mt-3">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{t('settings.backupUi.savedBackups')}</span>
+                          <button
+                            type="button"
+                            onClick={loadBackups}
+                            disabled={backupsLoading}
+                            className="text-xs text-orange-600 hover:text-orange-700 dark:text-orange-400 disabled:opacity-50"
+                          >
+                            {backupsLoading ? t('settings.backupUi.updating') : t('settings.backupUi.refreshList')}
+                          </button>
+                        </div>
+                        {backups.length === 0 && !backupsLoading && (
+                          <p className="text-xs text-gray-500 dark:text-gray-400">{t('settings.backupUi.noBackups')}</p>
+                        )}
+                        <div className="space-y-2 max-h-48 overflow-y-auto">
+                          {backups.map((b: any) => (
+                            <div key={b.fileName} className="flex items-center justify-between gap-2 px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md">
+                              <div className="min-w-0 flex-1">
+                                <p className="text-xs font-mono text-gray-800 dark:text-gray-200 truncate" dir="ltr">
+                                  {b.encrypted ? '🔒 ' : ''}{b.fileName}
+                                </p>
+                                <p className="text-[11px] text-gray-500 dark:text-gray-400">
+                                  {b.size ? `${(b.size / 1024 / 1024).toFixed(2)} MB` : ''}{b.createdAt ? ` — ${new Date(b.createdAt).toLocaleString('ar-EG')}` : ''}
+                                </p>
+                              </div>
+                              <div className="flex gap-1 flex-shrink-0">
+                                <button
+                                  type="button"
+                                  onClick={() => handleVerifyBackup(b.fileName)}
+                                  disabled={verifyBusy !== null || restoreBusy !== null}
+                                  title={t('settings.backupUi.verifyTitle')}
+                                  className="px-2 py-1 text-xs bg-gray-500 hover:bg-gray-600 text-white rounded-md disabled:opacity-50"
+                                >
+                                  {verifyBusy === b.fileName ? t('settings.backupUi.verifying') : t('settings.backupUi.verify')}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDownloadBackup(b.fileName)}
+                                  disabled={restoreBusy !== null}
+                                  title={t('settings.backupUi.downloadTitle')}
+                                  className="px-2 py-1 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded-md disabled:opacity-50"
+                                >
+                                  {t('settings.backupUi.download')}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRestoreBackup(b.fileName)}
+                                  disabled={restoreBusy !== null}
+                                  className="px-2 py-1 text-xs bg-orange-600 hover:bg-orange-700 text-white rounded-md disabled:opacity-50"
+                                >
+                                  {restoreBusy === b.fileName ? t('settings.backupUi.restoring') : t('settings.backupUi.restore')}
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                        <p className="text-[11px] text-red-500 dark:text-red-400 mt-2">
+                          {t('settings.backupUi.restoreWarn')}
+                        </p>
+                      </div>
+                    </div>
+                    )}
+
+                    {canAccess && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        {t('serverConnection.title')}
+                      </label>
+                      <div className="flex space-x-2 space-x-reverse">
+                        <input
+                          type="text"
+                          value={serverUrlDisplay}
+                          readOnly
+                          dir="ltr"
+                          className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-300 font-mono text-sm"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowServerModal(true)}
+                          className="px-3 py-2 bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300"
+                        >
+                          {t('serverConnection.newUrl')}
+                        </button>
+                      </div>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                        {t('serverConnection.desc')}
+                      </p>
+                    </div>
+                    )}
+                {/* Smart alerts thresholds (org-wide, managers only) */}
+                {canAccess && (
+                  <div>
+                    <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">{t('smartCfg.title')}</h3>
+                    <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">{t('smartCfg.desc')}</p>
+                    {smartCfgLoading ? (
+                      <p className="text-gray-500 dark:text-gray-400">{t('settings.organization.loading')}</p>
+                    ) : (
+                      <div className="space-y-3 bg-gray-50 dark:bg-gray-700 p-4 rounded-lg">
+                        <label className="flex items-center justify-between gap-3">
+                          <span className="text-sm font-medium text-gray-700 dark:text-gray-200">{t('smartCfg.minutes')}</span>
+                          <input
+                            type="number"
+                            min={5}
+                            max={480}
+                            value={smartCfg.idleTableMinutes}
+                            onChange={(e) => setSmartCfg((p) => ({ ...p, idleTableMinutes: Math.max(5, Number(e.target.value) || 45) }))}
+                            className="w-24 px-2 py-1 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                          />
+                        </label>
+                        <label className="flex items-center justify-between gap-3 cursor-pointer">
+                          <span className="text-sm font-medium text-gray-700 dark:text-gray-200">{t('smartCfg.excludeActive')}</span>
+                          <input
+                            type="checkbox"
+                            checked={smartCfg.idleExcludeActiveSessions}
+                            onChange={(e) => setSmartCfg((p) => ({ ...p, idleExcludeActiveSessions: e.target.checked }))}
+                            className="h-4 w-4"
+                          />
+                        </label>
+                        <div>
+                          <button
+                            onClick={handleSmartCfgSave}
+                            disabled={smartCfgSaving}
+                            className="bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 text-white px-4 py-2 rounded-md disabled:opacity-50 min-w-40"
+                          >
+                            {smartCfgSaving ? <span>{t('common.saving')}</span> : <span>{t('notifPrefs.save')}</span>}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Database maintenance (owner/admins only) */}
+                {canAccess && (
+                  <div>
+                    <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">{t('settings.maintenance.title')}</h3>
+                    <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">{t('settings.maintenance.desc')}</p>
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={handleTypeAuditRun}
+                        disabled={typeAuditRunning}
+                        className="flex items-center space-x-2 bg-teal-600 hover:bg-teal-700 text-white px-4 py-2 rounded-md disabled:opacity-50 min-w-40 justify-center"
+                      >
+                        {typeAuditRunning ? <span>{t('settings.maintenance.running')}</span> : <span>{t('settings.maintenance.runAudit')}</span>}
+                      </button>
+                    </div>
+                    {typeAuditResult && (
+                      <p className="text-sm text-gray-600 dark:text-gray-300 mt-2">{typeAuditResult}</p>
+                    )}
+                  </div>
+                )}
+
+                {canAccess && (
+                  <GeneralSaveButton onSave={handleGeneralSettingsUpdate} saving={generalSaving} />
+                )}
+                {!canAccess && (
+                  <div className="text-center py-6">
+                    <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100 dark:bg-red-900">
+                      <Wrench className="h-6 w-6 text-red-600 dark:text-red-400" />
+                    </div>
+                    <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-gray-100">
+                      {t('settings.organization.noPermission.title')}
+                    </h3>
+                    <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                      {t('settings.organization.noPermission.message')}
+                    </p>
+                  </div>
+                )}
+    </>
+  );
+};
+
 
 const Settings: FC = () => {
   const { t } = useTranslation();
@@ -1330,32 +1778,6 @@ const Settings: FC = () => {
     }
   };
 
-  // زر حفظ الإعدادات العامة — يُعرض في تبويبي "عام" و"النسخ والصيانة" (نفس المعالج)
-  const GeneralSaveButton = () => (
-    <div className="mt-6">
-      <button
-        onClick={handleGeneralSettingsUpdate}
-        disabled={generalSaving}
-        className="flex items-center space-x-2 bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 text-white px-4 py-2 rounded-md disabled:opacity-50 min-w-40 justify-center"
-      >
-        {generalSaving ? (
-          <>
-            <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-            </svg>
-            <span>{t('common.saving')}</span>
-          </>
-        ) : (
-          <>
-            <Save className="h-4 w-4" />
-            <span>{t('settings.general.saveSettings')}</span>
-          </>
-        )}
-      </button>
-    </div>
-  );
-
   const tabs: TabType[] = [
     { id: 'profile', name: t('settings.tabs.profile'), icon: User },
     { id: 'password', name: t('settings.tabs.password'), icon: Lock },
@@ -1647,351 +2069,71 @@ const Settings: FC = () => {
                         ))}
                         </select>
                       </div>
-
-                    {/* Backup settings (owner/admins only) */}
-                    {activeTab === 'maintenance' && canAccessSystemSections && (
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        {t('settings.backupMsg.pathLabel')}
-                      </label>
-                      <div className="flex space-x-2 space-x-reverse">
-                        <input
-                          type="text"
-                          value={generalSettings.backupPath}
-                          onChange={(e) => setGeneralSettings({ ...generalSettings, backupPath: e.target.value })}
-                          placeholder="C:\Backups\Bomba"
-                          className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                        />
-                        <button
-                          type="button"
-                          onClick={handleBrowseBackupFolder}
-                          className="px-3 py-2 bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300"
-                        >
-                          {t('settings.backupUi.browse')}
-                        </button>
-                      </div>
-                      <input
-                        ref={folderInputRef}
-                        type="file"
-                        style={{ display: 'none' }}
-                        {...({ webkitdirectory: true, directory: true } as React.InputHTMLAttributes<HTMLInputElement> & { webkitdirectory?: boolean; directory?: boolean })}
-                        onChange={handleFolderInputChange}
-                      />
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                        {t('settings.backupUi.folderHint')}
-                      </p>
-                      <input
-                        type="password"
-                        value={backupPassword}
-                        onChange={(e) => setBackupPassword(e.target.value)}
-                        placeholder={t('settings.backupUi.pwdPlaceholder')}
-                        autoComplete="new-password"
-                        className="mt-2 w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                      />
-                      <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1">
-                        {t('settings.backupUi.pwdHint')}
-                      </p>
-                      <button
-                        type="button"
-                        onClick={handleBackupNow}
-                        disabled={backupBusy}
-                        className="mt-2 px-4 py-2 bg-green-600 hover:bg-green-700 dark:bg-green-500 dark:hover:bg-green-600 text-white rounded-md disabled:opacity-50 min-w-40"
-                      >
-                        {backupBusy ? t('settings.backupUi.creatingBackup') : t('settings.backupUi.backupNow')}
-                      </button>
-                      {lastBackup?.at && (
-                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
-                          {t('settings.backupUi.lastBackup')}: {new Date(lastBackup.at).toLocaleString(currentLanguage === 'ar' ? 'ar-EG' : currentLanguage)} — {lastBackup.success ? `${t('settings.backupUi.backupOk')} (${lastBackup.fileName || ''})` : `${t('settings.backupUi.backupFail')} (${lastBackup.error || ''})`}
-                        </p>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => importInputRef.current?.click()}
-                        disabled={importBusy}
-                        className="mt-2 mr-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 text-white rounded-md disabled:opacity-50 min-w-40"
-                      >
-                        {importBusy ? t('settings.backupUi.importing') : t('settings.backupUi.importFromDevice')}
-                      </button>
-                      <input
-                        ref={importInputRef}
-                        type="file"
-                        accept=".gz"
-                        style={{ display: 'none' }}
-                        onChange={handleImportBackup}
-                      />
-                      <div className="mt-3">
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{t('settings.backupUi.savedBackups')}</span>
-                          <button
-                            type="button"
-                            onClick={loadBackups}
-                            disabled={backupsLoading}
-                            className="text-xs text-orange-600 hover:text-orange-700 dark:text-orange-400 disabled:opacity-50"
-                          >
-                            {backupsLoading ? t('settings.backupUi.updating') : t('settings.backupUi.refreshList')}
-                          </button>
-                        </div>
-                        {backups.length === 0 && !backupsLoading && (
-                          <p className="text-xs text-gray-500 dark:text-gray-400">{t('settings.backupUi.noBackups')}</p>
-                        )}
-                        <div className="space-y-2 max-h-48 overflow-y-auto">
-                          {backups.map((b: any) => (
-                            <div key={b.fileName} className="flex items-center justify-between gap-2 px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md">
-                              <div className="min-w-0 flex-1">
-                                <p className="text-xs font-mono text-gray-800 dark:text-gray-200 truncate" dir="ltr">
-                                  {b.encrypted ? '🔒 ' : ''}{b.fileName}
-                                </p>
-                                <p className="text-[11px] text-gray-500 dark:text-gray-400">
-                                  {b.size ? `${(b.size / 1024 / 1024).toFixed(2)} MB` : ''}{b.createdAt ? ` — ${new Date(b.createdAt).toLocaleString('ar-EG')}` : ''}
-                                </p>
-                              </div>
-                              <div className="flex gap-1 flex-shrink-0">
-                                <button
-                                  type="button"
-                                  onClick={() => handleVerifyBackup(b.fileName)}
-                                  disabled={verifyBusy !== null || restoreBusy !== null}
-                                  title={t('settings.backupUi.verifyTitle')}
-                                  className="px-2 py-1 text-xs bg-gray-500 hover:bg-gray-600 text-white rounded-md disabled:opacity-50"
-                                >
-                                  {verifyBusy === b.fileName ? t('settings.backupUi.verifying') : t('settings.backupUi.verify')}
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleDownloadBackup(b.fileName)}
-                                  disabled={restoreBusy !== null}
-                                  title={t('settings.backupUi.downloadTitle')}
-                                  className="px-2 py-1 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded-md disabled:opacity-50"
-                                >
-                                  {t('settings.backupUi.download')}
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleRestoreBackup(b.fileName)}
-                                  disabled={restoreBusy !== null}
-                                  className="px-2 py-1 text-xs bg-orange-600 hover:bg-orange-700 text-white rounded-md disabled:opacity-50"
-                                >
-                                  {restoreBusy === b.fileName ? t('settings.backupUi.restoring') : t('settings.backupUi.restore')}
-                                </button>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                        <p className="text-[11px] text-red-500 dark:text-red-400 mt-2">
-                          {t('settings.backupUi.restoreWarn')}
-                        </p>
-                      </div>
-                    </div>
-                    )}
-
-                    {activeTab === 'maintenance' && canAccessSystemSections && (
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        {t('serverConnection.title')}
-                      </label>
-                      <div className="flex space-x-2 space-x-reverse">
-                        <input
-                          type="text"
-                          value={serverUrlDisplay}
-                          readOnly
-                          dir="ltr"
-                          className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-300 font-mono text-sm"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowServerModal(true)}
-                          className="px-3 py-2 bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300"
-                        >
-                          {t('serverConnection.newUrl')}
-                        </button>
-                      </div>
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                        {t('serverConnection.desc')}
-                      </p>
-                    </div>
-                    )}
-
-<GeneralSaveButton />
+                  <div className={activeTab === 'general' ? '' : 'hidden'}>
+                    <GeneralSaveButton onSave={handleGeneralSettingsUpdate} saving={generalSaving} />
+                  </div>
+                {/* Maintenance tab content (backup/server/alerts/audit) */}
+                {activeTab === 'maintenance' && (
+                  <MaintenanceTabContent
+                    canAccess={canAccessSystemSections}
+                    generalSettings={generalSettings}
+                    setGeneralSettings={setGeneralSettings}
+                    backupPassword={backupPassword}
+                    setBackupPassword={setBackupPassword}
+                    backupBusy={backupBusy}
+                    lastBackup={lastBackup}
+                    folderInputRef={folderInputRef}
+                    importInputRef={importInputRef}
+                    importBusy={importBusy}
+                    backups={backups}
+                    backupsLoading={backupsLoading}
+                    verifyBusy={verifyBusy}
+                    restoreBusy={restoreBusy}
+                    serverUrlDisplay={serverUrlDisplay}
+                    setShowServerModal={setShowServerModal}
+                    smartCfg={smartCfg}
+                    setSmartCfg={setSmartCfg}
+                    smartCfgLoading={smartCfgLoading}
+                    smartCfgSaving={smartCfgSaving}
+                    typeAuditRunning={typeAuditRunning}
+                    typeAuditResult={typeAuditResult}
+                    generalSaving={generalSaving}
+                    handleBrowseBackupFolder={handleBrowseBackupFolder}
+                    handleFolderInputChange={handleFolderInputChange}
+                    handleBackupNow={handleBackupNow}
+                    loadBackups={loadBackups}
+                    handleVerifyBackup={handleVerifyBackup}
+                    handleDownloadBackup={handleDownloadBackup}
+                    handleRestoreBackup={handleRestoreBackup}
+                    handleImportBackup={handleImportBackup}
+                    handleSmartCfgSave={handleSmartCfgSave}
+                    handleTypeAuditRun={handleTypeAuditRun}
+                    handleGeneralSettingsUpdate={handleGeneralSettingsUpdate}
+                  />
+                )}
                   </div>
                 </div>
-
-                {/* My printer settings (per-user override with org fallback) */}
-                <div className={activeTab === 'myprint' ? '' : 'hidden'}>
-                  <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">{t('settings.myPrint.title')}</h3>
-                  <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">{t('settings.myPrint.desc')}</p>
-                  {myPrintLoading ? (
-                    <p className="text-gray-500 dark:text-gray-400">{t('settings.organization.loading')}</p>
-                  ) : (
-                    <div className="space-y-4">
-                      <div className="flex items-center justify-between bg-gray-50 dark:bg-gray-700 p-4 rounded-lg">
-                        <div>
-                          <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                            {t('settings.myPrint.useCustom')}
-                          </h4>
-                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                            {t('settings.myPrint.useCustomDesc')}
-                          </p>
-                        </div>
-                        <label className="relative inline-flex items-center cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={myPrint.useCustom}
-                            onChange={(e) => setMyPrint((prev) => ({ ...prev, useCustom: e.target.checked }))}
-                            className="sr-only peer"
-                          />
-                          <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-orange-300 dark:peer-focus:ring-orange-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-orange-600"></div>
-                        </label>
-                      </div>
-
-                      {myPrint.useCustom && (
-                        <>
-                          <div className="flex flex-wrap gap-2">
-                            <button
-                              type="button"
-                              onClick={handleMyPrintImport}
-                              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 flex items-center gap-2"
-                            >
-                              {t('settings.myPrint.import')}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={handleMyPrintTestDrawer}
-                              disabled={testingDrawer}
-                              className="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 disabled:bg-gray-400 flex items-center gap-2"
-                            >
-                              {t('settings.myPrint.testDrawer')}
-                            </button>
-                          </div>
-
-                          <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg">
-                            <PrinterSettingsForm
-                              settings={myPrint.settings}
-                              onPatch={(patch) => setMyPrint((prev) => ({ ...prev, settings: { ...prev.settings, ...patch } }))}
-                              menuSections={menuSections}
-                              availablePrinters={availablePrinters}
-                              detecting={detectingPrinters}
-                              onDetect={detectPrinters}
-                              onSelectDetected={(printer) => {
-                                const id = String(printer.path || printer.name);
-                                setMyPrint((prev) => {
-                                  if ((prev.settings.printers || []).some((item: any) => item.id === id)) return prev;
-                                  return {
-                                    ...prev,
-                                    settings: {
-                                      ...prev.settings,
-                                      printers: [...(prev.settings.printers || []), { id, name: printer.name, printerName: printer.name, printerPath: printer.path || '', paperWidthMm: 80 }],
-                                    },
-                                  };
-                                });
-                              }}
-                              onTestPrinter={testPrinter}
-                            />
-                          </div>
-
-                          <div>
-                            <button
-                              onClick={handleMyPrintSave}
-                              disabled={myPrintSaving}
-                              className="flex items-center space-x-2 bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 text-white px-4 py-2 rounded-md disabled:opacity-50 min-w-40 justify-center"
-                            >
-                              {myPrintSaving ? <span>{t('common.saving')}</span> : <span>{t('settings.myPrint.save')}</span>}
-                            </button>
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                {/* Smart alerts thresholds (org-wide, managers only) */}
-                {activeTab === 'maintenance' && canAccessSystemSections && (
-                  <div>
-                    <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">{t('smartCfg.title')}</h3>
-                    <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">{t('smartCfg.desc')}</p>
-                    {smartCfgLoading ? (
-                      <p className="text-gray-500 dark:text-gray-400">{t('settings.organization.loading')}</p>
-                    ) : (
-                      <div className="space-y-3 bg-gray-50 dark:bg-gray-700 p-4 rounded-lg">
-                        <label className="flex items-center justify-between gap-3">
-                          <span className="text-sm font-medium text-gray-700 dark:text-gray-200">{t('smartCfg.minutes')}</span>
-                          <input
-                            type="number"
-                            min={5}
-                            max={480}
-                            value={smartCfg.idleTableMinutes}
-                            onChange={(e) => setSmartCfg((p) => ({ ...p, idleTableMinutes: Math.max(5, Number(e.target.value) || 45) }))}
-                            className="w-24 px-2 py-1 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
-                          />
-                        </label>
-                        <label className="flex items-center justify-between gap-3 cursor-pointer">
-                          <span className="text-sm font-medium text-gray-700 dark:text-gray-200">{t('smartCfg.excludeActive')}</span>
-                          <input
-                            type="checkbox"
-                            checked={smartCfg.idleExcludeActiveSessions}
-                            onChange={(e) => setSmartCfg((p) => ({ ...p, idleExcludeActiveSessions: e.target.checked }))}
-                            className="h-4 w-4"
-                          />
-                        </label>
-                        <div>
-                          <button
-                            onClick={handleSmartCfgSave}
-                            disabled={smartCfgSaving}
-                            className="bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 text-white px-4 py-2 rounded-md disabled:opacity-50 min-w-40"
-                          >
-                            {smartCfgSaving ? <span>{t('common.saving')}</span> : <span>{t('notifPrefs.save')}</span>}
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
+                {/* My printer settings (per-user override with org fallback) */}
+                {activeTab === 'myprint' && (
+                  <MyPrintTabContent
+                    myPrint={myPrint}
+                    setMyPrint={setMyPrint}
+                    myPrintLoading={myPrintLoading}
+                    myPrintSaving={myPrintSaving}
+                    testingDrawer={testingDrawer}
+                    menuSections={menuSections}
+                    availablePrinters={availablePrinters}
+                    detectingPrinters={detectingPrinters}
+                    onImport={handleMyPrintImport}
+                    onTestDrawer={handleMyPrintTestDrawer}
+                    onSave={handleMyPrintSave}
+                    onDetectPrinters={detectPrinters}
+                    onTestPrinter={testPrinter}
+                  />
                 )}
 
-                {/* Database maintenance (owner/admins only) */}
-                {activeTab === 'maintenance' && canAccessSystemSections && (
-                  <div>
-                    <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">{t('settings.maintenance.title')}</h3>
-                    <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">{t('settings.maintenance.desc')}</p>
-                    <div className="flex items-center gap-3">
-                      <button
-                        onClick={handleTypeAuditRun}
-                        disabled={typeAuditRunning}
-                        className="flex items-center space-x-2 bg-teal-600 hover:bg-teal-700 text-white px-4 py-2 rounded-md disabled:opacity-50 min-w-40 justify-center"
-                      >
-                        {typeAuditRunning ? <span>{t('settings.maintenance.running')}</span> : <span>{t('settings.maintenance.runAudit')}</span>}
-                      </button>
-                    </div>
-                    {typeAuditResult && (
-                      <p className="text-sm text-gray-600 dark:text-gray-300 mt-2">{typeAuditResult}</p>
-                    )}
-                  </div>
-                )}
-
-                {activeTab === 'maintenance' && canAccessSystemSections && (
-                  <GeneralSaveButton />
-                )}
-                {activeTab === 'maintenance' && !canAccessSystemSections && (
-                  <div className="text-center py-6">
-                    <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100 dark:bg-red-900">
-                      <Wrench className="h-6 w-6 text-red-600 dark:text-red-400" />
-                    </div>
-                    <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-gray-100">
-                      {t('settings.organization.noPermission.title')}
-                    </h3>
-                    <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                      {t('settings.organization.noPermission.message')}
-                    </p>
-                  </div>
-                )}
-
-                {/* Connect mobile over LAN */}
-                <div className={activeTab === 'devices' ? '' : 'hidden'}>
-                  <MobileConnectCard showChromeOption={isManager} />
-                </div>
-
-                {/* Connected devices + per-device print permission (owner/admins only) */}
-                {activeTab === 'devices' && canAccessSystemSections && (
-                  <div>
-                    <ConnectedDevicesCard />
-                  </div>
+                {activeTab === 'devices' && (
+                  <DevicesTabContent showChromeOption={isManager} canManage={canAccessSystemSections} />
                 )}
               </div>
             )}

@@ -4,6 +4,7 @@ import { formatCurrency } from '../utils/formatters';
 import * as LucideIcons from 'lucide-react';
 import { api } from '../services/api';
 import { useApp } from '../context/AppContext';
+import { canEditCost } from '../utils/permissionHelper';
 import ConfirmDialog from './ConfirmDialog';
 import { useTranslation } from 'react-i18next';
 import { useLanguage } from '../context/LanguageContext';
@@ -66,7 +67,7 @@ interface CostDetailsModalProps {
 }
 
 const CostDetailsModal = ({ isOpen, onClose, cost, onRefresh, onEdit, onDelete, onAddPayment }: CostDetailsModalProps) => {
-  const { showNotification } = useApp();
+  const { showNotification, user } = useApp();
   const { t, i18n } = useTranslation();
   const { isRTL } = useLanguage();
   const { formatDate: formatOrgDate } = useOrganization();
@@ -80,6 +81,10 @@ const CostDetailsModal = ({ isOpen, onClose, cost, onRefresh, onEdit, onDelete, 
   if (!isOpen || !cost) return null;
 
   const handleIncreaseAmount = async () => {
+    if (!canEditCost(user)) {
+      showNotification(t('common.permissionDenied'), 'error');
+      return;
+    }
     const amount = parseFloat(additionalAmount);
     
     if (isNaN(amount) || amount <= 0) {
@@ -119,6 +124,8 @@ const CostDetailsModal = ({ isOpen, onClose, cost, onRefresh, onEdit, onDelete, 
       if (onRefresh) onRefresh();
       onClose();
     } catch (error: any) {
+      // Permission denial already toasted by the caller — don't double-toast
+      if (error?.message === 'permission') return;
       showNotification(error.response?.data?.message || t('costs.modals.costDetails.notifications.deleteError'), 'error');
     } finally {
       setDeleteLoading(false);
@@ -468,8 +475,8 @@ const CostDetailsModal = ({ isOpen, onClose, cost, onRefresh, onEdit, onDelete, 
                 </div>
               </button>
             </div>
-          ) : (
-            // Show only increase button when payment is not available
+          ) : cost.status !== 'cancelled' ? (
+            // Show only increase button when payment is not available (never on cancelled costs)
             <div className="mb-3">
               <button
                 onClick={() => setShowIncreaseModal(true)}
@@ -482,7 +489,7 @@ const CostDetailsModal = ({ isOpen, onClose, cost, onRefresh, onEdit, onDelete, 
                 </div>
               </button>
             </div>
-          )}
+          ) : null}
 
           <div className={`grid gap-3 ${cost.status === 'paid' ? 'grid-cols-2' : 'grid-cols-2 sm:grid-cols-3'}`}>
             {/* Edit Button */}

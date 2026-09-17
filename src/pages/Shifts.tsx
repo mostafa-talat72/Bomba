@@ -3,6 +3,8 @@ import { useTranslation } from 'react-i18next';
 import { Play, Square, History } from 'lucide-react';
 import { toast } from 'react-toastify';
 import ConfirmModal from '../components/ConfirmModal';
+import { useApp } from '../context/AppContext';
+import { canManageShifts } from '../utils/permissionHelper';
 import api from '../services/api';
 
 // In-app notice (replaces blocking browser alert): error by default.
@@ -12,6 +14,7 @@ const fmtMoney = (n: any) => `${Number(n || 0).toFixed(2)}`;
 
 const Shifts = () => {
   const { t, i18n } = useTranslation();
+  const { user } = useApp();
   const rtl = i18n.language === 'ar';
   const [current, setCurrent] = useState<any>(null);
   const [history, setHistory] = useState<any[]>([]);
@@ -38,6 +41,7 @@ const Shifts = () => {
   useEffect(() => { load(); }, [load]);
 
   const handleOpen = async () => {
+    if (!canManageShifts(user)) { palert(t('common.permissionDenied')); return; }
     setBusy(true);
     try {
       const res: any = await api.openShift({ openingCash: Number(openingCash) || 0, notes: notes || undefined });
@@ -50,6 +54,7 @@ const Shifts = () => {
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
 
   const handleCloseAsk = () => {
+    if (!canManageShifts(user)) { palert(t('common.permissionDenied')); return; }
     if (actualCash === '' || Number(actualCash) < 0) { palert('أدخل المبلغ الفعلي'); return; }
     setShowCloseConfirm(true);
   };

@@ -611,7 +611,70 @@
       "canEditWarehouseMovementDesc": "Allow editing warehouse movements",
       "canDeleteWarehouseMovement": "Delete Warehouse Movement",
       "canDeleteWarehouseMovementDesc": "Allow deleting warehouse movements",
-      "notifications": "Notifications"
+      "notifications": "Notifications",
+      "canViewInventory": "View inventory",
+      "canViewInventoryDesc": "View the inventory and products list",
+      "canAddInventoryItem": "Add inventory item",
+      "canAddInventoryItemDesc": "Add new products to inventory",
+      "canEditInventoryItem": "Edit inventory item",
+      "canEditInventoryItemDesc": "Edit product information",
+      "canDeleteInventoryItem": "Delete inventory item",
+      "canDeleteInventoryItemDesc": "Delete products from inventory",
+      "canAddStock": "Add stock",
+      "canAddStockDesc": "Add new quantities to products",
+      "canRemoveStock": "Remove stock",
+      "canRemoveStockDesc": "Deduct quantities from products",
+      "canAdjustStock": "Adjust stock",
+      "canAdjustStockDesc": "Adjust the actual stock balance",
+      "canViewStockMovements": "View stock movements",
+      "canViewStockMovementsDesc": "View the stock movements log",
+      "canEditStockMovement": "Edit stock movement",
+      "canEditStockMovementDesc": "Edit stock movements",
+      "canDeleteStockMovement": "Delete stock movement",
+      "canDeleteStockMovementDesc": "Delete stock movements",
+      "takeaway": "Takeaway",
+      "takeawayDesc": "Access the takeaway orders page",
+      "delivery": "Delivery",
+      "deliveryDesc": "Access the delivery orders page",
+      "payroll": "Payroll",
+      "payrollDesc": "Access the payroll and employees page",
+      "notificationsDesc": "Access the notifications page",
+      "subscription": "Subscription",
+      "subscriptionDesc": "Access the subscription and plans page",
+      "canAddMenuItem": "Add menu item",
+      "canAddMenuItemDesc": "Add new items, sections and categories",
+      "canEditMenuItem": "Edit menu",
+      "canEditMenuItemDesc": "Edit menu items and sections",
+      "canDeleteMenuItem": "Delete from menu",
+      "canDeleteMenuItemDesc": "Delete menu items and sections",
+      "canAddDevice": "Add device",
+      "canAddDeviceDesc": "Add new PlayStation/computer devices",
+      "canEditDevice": "Edit device",
+      "canEditDeviceDesc": "Edit device details",
+      "canDeleteDevice": "Delete device",
+      "canDeleteDeviceDesc": "Delete devices",
+      "canAddCost": "Add cost",
+      "canAddCostDesc": "Add new expenses",
+      "canEditCost": "Edit cost",
+      "canEditCostDesc": "Edit expenses, payments and categories",
+      "canDeleteCost": "Delete cost",
+      "canDeleteCostDesc": "Delete expenses",
+      "canManageShifts": "Manage shifts",
+      "canManageShiftsDesc": "Open and close shifts",
+      "canAddEmployee": "Add employee",
+      "canAddEmployeeDesc": "Add new employees",
+      "canEditEmployee": "Edit employee",
+      "canEditEmployeeDesc": "Edit employee data and payments",
+      "canDeleteEmployee": "Delete employee",
+      "canDeleteEmployeeDesc": "Terminate and delete employees",
+      "canApproveAdvance": "Approve advances",
+      "canApproveAdvanceDesc": "Approve or reject employee advances",
+      "canUpdateOrderStatus": "Update order status",
+      "canUpdateOrderStatusDesc": "Change order status on kitchen display",
+      "canDeleteNotification": "Delete notifications",
+      "canDeleteNotificationDesc": "Delete notifications",
+      "canExportReports": "Export reports",
+      "canExportReportsDesc": "Export reports as PDF and Excel"
     },
     "status": "the condition",
     "totalUsers": "Users",
@@ -708,7 +771,8 @@
       "updating": "Updating...",
       "saving": "Saving...",
       "updateUser": "User update",
-      "addUser": "Add user"
+      "addUser": "Add user",
+      "selfLockNote": "You cannot change your own role or permissions"
     },
     "updateUserData": "Update user data",
     "addNewUserToSystem": "Add a new user to the system",
@@ -774,6 +838,31 @@
       "suspendedWarning": "⚠️ The user will be temporarily suspended and will not be able to access the system.",
       "updating": "Updating...",
       "updateStatus": "Status update"
+    },
+    "permissionGroups": {
+      "general": "Full access",
+      "pages": "System pages",
+      "orders": "Orders",
+      "bills": "Bills & payments",
+      "sessions": "Sessions & shifts",
+      "menu": "Menu",
+      "devices": "Devices",
+      "inventory": "Inventory",
+      "warehouse": "Warehouse",
+      "costs": "Costs",
+      "payroll": "Payroll & employees",
+      "kitchen": "Kitchen",
+      "extras": "Extra tools",
+      "other": "Other"
+    },
+    "permissionsUI": {
+      "search": "Search permissions...",
+      "selectAll": "Select all",
+      "clear": "Clear",
+      "clearAll": "Clear all",
+      "expandAll": "Expand all",
+      "collapseAll": "Collapse all",
+      "noResults": "No matching permissions"
     }
   },
   "billing": {
@@ -2657,7 +2746,8 @@
       "cannotDeleteSummary": "Cannot delete {{name}} because it is used in {{count}} items in the list",
       "warehouseItemCreated": "Warehouse item created and linked to product",
       "warehouseItemCreateError": "Failed to create warehouse item",
-      "creating": "Creating..."
+      "creating": "Creating...",
+      "cannotDeleteUnknown": "Cannot delete {{name}} — menu link check failed, please retry"
     },
     "notifications": {
       "quantityAdded": "Quantity added successfully!",
@@ -2700,6 +2790,12 @@
       "returning": "Returning...",
       "noLinkMessage": "This product must first be linked to a warehouse item. You can edit the product and select the linked warehouse item.",
       "createWarehouseItem": "Create warehouse item"
+    },
+    "pagination": {
+      "previous": "Previous",
+      "next": "Next",
+      "page": "Page",
+      "of": "of"
     }
   },
   "kitchenDisplay": {
@@ -2775,7 +2871,8 @@
       "edit": "amendment",
       "delete": "delete",
       "addPayment": "Add batch",
-      "refresh": "to update"
+      "refresh": "to update",
+      "exportCsv": "Export CSV"
     },
     "notifications": {
       "costAdded": "The cost has been added successfully",
@@ -2919,7 +3016,8 @@
           "created": "The cost has been added successfully",
           "updated": "The cost has been updated successfully",
           "error": "Failed to save cost"
-        }
+        },
+        "editPaidNote": "When editing, the paid amount is managed via payments only"
       },
       "paymentAddition": {
         "title": "Add batch",
@@ -2994,6 +3092,10 @@
           "deleteError": "Failed to delete cost"
         }
       }
+    },
+    "messages": {
+      "exported": "Costs exported successfully",
+      "exportError": "Failed to export costs"
     }
   },
   "payroll": {
@@ -4230,7 +4332,10 @@
     },
     "messages": {
       "loading": "Loading...",
-      "noNotifications": "No notifications"
+      "noNotifications": "No notifications",
+      "orderNotFound": "Order {{order}} not found — it may have been deleted",
+      "billNotFound": "Could not find the bill for order {{order}}",
+      "billCancelled": "Order {{order}} belongs to a cancelled bill"
     },
     "muteToastsTitle": "Mute alerts",
     "muteToasts": {
@@ -4242,7 +4347,13 @@
     "seenBy": "Seen by:",
     "kitchenAlarmAck": "Acknowledged — stop alarm",
     "kitchenAlarm": "Kitchen alarm",
-    "kitchenAlarmHint": "Repeating sound for every new order until acknowledged (kitchen screens)"
+    "kitchenAlarmHint": "Repeating sound for every new order until acknowledged (kitchen screens)",
+    "viewOrder": "View order",
+    "fulfillment": {
+      "delivery": "Delivery",
+      "takeaway": "Takeaway"
+    },
+    "mobileSource": "Mobile"
   },
   "notificationManagement": {
     "title": "Manage notifications",
@@ -4266,7 +4377,8 @@
       "inventory": "Inventory",
       "billing": "Invoices",
       "system": "order",
-      "security": "Security"
+      "security": "Security",
+      "backup": "Backup"
     },
     "priority": {
       "low": "Low",
@@ -4277,7 +4389,9 @@
     "actions": {
       "markAsRead": "Mark as read",
       "markAllAsRead": "Mark all as read",
-      "delete": "Delete the notification"
+      "delete": "Delete the notification",
+      "viewOrder": "View order",
+      "confirmDelete": "Confirm delete?"
     },
     "messages": {
       "loading": "Loading notifications...",
