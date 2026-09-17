@@ -334,7 +334,7 @@ export const getBills = async (req, res) => {
                 ? {
                     // الأصناف خاماً للعدّ والعرض — بلا تعبئة menuItem (الأثقل).
                     path: "orders",
-                    select: "_id orderNumber status totalAmount finalAmount createdAt items",
+                    select: "_id orderNumber status totalAmount finalAmount fulfillmentType createdAt items",
                 }
                 : {
                     path: "orders",
@@ -425,7 +425,12 @@ export const getBills = async (req, res) => {
                 ? bill.orders.reduce((sum, o) => sum + (Number(o.finalAmount) || Number(o.totalAmount) || 0), 0)
                 : 0;
             let liveSubtotal;
-            if (ordersTotal > 0 || (Array.isArray(bill.orders) && bill.orders.length > 0 && typeof bill.orders[0] === 'object' && 'totalAmount' in bill.orders[0])) {
+            // رسوم التوصيل متى وُجدت (دليفري أو وثائق قديمة بلا نوع) — التيك أوي مستثنى.
+            // مسارها يبني من الأجزاء + الرسوم متجاوزاً المشتق المخزن الذي قد يفتقدها.
+            const liveDeliveryFee = (bill.fulfillmentType !== 'takeaway' ? Number(bill.deliveryInfo?.deliveryFee) || 0 : 0);
+            if (liveDeliveryFee > 0) {
+                liveSubtotal = ordersTotal + liveSessionsTotal + liveDeliveryFee;
+            } else if (ordersTotal > 0 || (Array.isArray(bill.orders) && bill.orders.length > 0 && typeof bill.orders[0] === 'object' && 'totalAmount' in bill.orders[0])) {
                 liveSubtotal = ordersTotal + liveSessionsTotal;
             } else {
                 const staleSessions = bill.sessions.reduce((sum, s) => sum + (Number(s.totalCost) || Number(s.finalCost) || 0), 0);
@@ -445,6 +450,25 @@ export const getBills = async (req, res) => {
             bill.total = liveTotal;
             bill.remaining = liveRemaining;
             if (bill.discountPercentage) bill.discount = discountAmt;
+            // شفاء قرائي: فواتير الرسوم بلا جلسات نشطة — المشتق المخزن قد يفتقدها
+            if ((!bill.sessions || !bill.sessions.some((s) => s.status === 'active')) && bill.fulfillmentType !== 'takeaway' && (Number(bill.deliveryInfo?.deliveryFee) || 0) > 0) {
+                const feeOnly = Number(bill.deliveryInfo.deliveryFee) || 0;
+                const oOnly = Array.isArray(bill.orders)
+                    ? bill.orders.reduce((sum, o) => sum + (Number(o.finalAmount) || Number(o.totalAmount) || 0), 0)
+                    : 0;
+                const sOnly = Array.isArray(bill.sessions)
+                    ? bill.sessions.reduce((sum, s) => sum + (Number(s.finalCost) || Number(s.totalCost) || 0), 0)
+                    : 0;
+                const sub2 = oOnly + sOnly + feeOnly;
+                let disc2 = 0;
+                if (bill.discountPercentage && bill.discountPercentage > 0) disc2 = Math.round((sub2 * bill.discountPercentage) / 100);
+                else disc2 = Number(bill.discount) || 0;
+                const tot2 = Math.max(0, sub2 + (Number(bill.tax) || 0) - disc2);
+                bill.subtotal = sub2;
+                bill.total = tot2;
+                bill.remaining = Math.max(0, tot2 - (Number(bill.paid) || 0));
+                if (bill.discountPercentage) bill.discount = disc2;
+            }
         }
 
         const total = await Bill.countDocuments(query);
@@ -706,7 +730,11 @@ export const getBill = async (req, res) => {
                     ? bill.orders.reduce((sum, o) => sum + (Number(o.finalAmount) || Number(o.totalAmount) || 0), 0)
                     : 0;
                 let liveSubtotal;
-                if (ordersTotal > 0 || (Array.isArray(bill.orders) && bill.orders.length > 0)) {
+                // رسوم التوصيل متى وُجدت (دليفري أو وثائق قديمة بلا نوع) — التيك أوي مستثنى.
+                const liveDeliveryFee = (bill.fulfillmentType !== 'takeaway' ? Number(bill.deliveryInfo?.deliveryFee) || 0 : 0);
+                if (liveDeliveryFee > 0) {
+                    liveSubtotal = ordersTotal + liveSessionsTotal + liveDeliveryFee;
+                } else if (ordersTotal > 0 || (Array.isArray(bill.orders) && bill.orders.length > 0)) {
                     liveSubtotal = ordersTotal + liveSessionsTotal;
                 } else {
                     const staleSess = bill.sessions.reduce((sum, s) => sum + (Number(s.totalCost) || Number(s.finalCost) || 0), 0);
@@ -728,6 +756,32 @@ export const getBill = async (req, res) => {
             }
         } catch (e) {
             Logger.warn('live calc failed for getBill', e);
+        }
+
+        // فواتير التوصيل بلا جلسات نشطة: المجاميع المخزنة قد تسبق إصلاح الرسوم —
+        // أعد بناء العرض من الأجزاء + الرسوم (قراءة فقط، بلا حفظ).
+        try {
+            const hasActiveNow = Array.isArray(bill.sessions) && bill.sessions.some((s) => s.status === 'active');
+            const readFee = (bill.fulfillmentType !== 'takeaway' ? Number(bill.deliveryInfo?.deliveryFee) || 0 : 0);
+            if (readFee > 0 && !hasActiveNow) {
+                const oTotal = Array.isArray(bill.orders)
+                    ? bill.orders.reduce((sum, o) => sum + (Number(o.finalAmount) || Number(o.totalAmount) || 0), 0)
+                    : 0;
+                const sTotal = Array.isArray(bill.sessions)
+                    ? bill.sessions.reduce((sum, s) => sum + (Number(s.finalCost) || Number(s.totalCost) || 0), 0)
+                    : 0;
+                const sub = oTotal + sTotal + readFee;
+                let disc = 0;
+                if (bill.discountPercentage && bill.discountPercentage > 0) disc = Math.round((sub * bill.discountPercentage) / 100);
+                else disc = Number(bill.discount) || 0;
+                const tot = Math.max(0, sub + (Number(bill.tax) || 0) - disc);
+                bill.subtotal = sub;
+                bill.total = tot;
+                bill.remaining = Math.max(0, tot - (Number(bill.paid) || 0));
+                if (bill.discountPercentage) bill.discount = disc;
+            }
+        } catch (e) {
+            Logger.warn('fee read-heal failed for getBill', e);
         }
 
         // cache for 10s (fire-and-forget, active bills will be re-calculated on next fetch after TTL)
@@ -1186,6 +1240,12 @@ export const updateBill = async (req, res) => {
                             { $set: { table: newTableId, bill: existingBillInNewTable._id } }
                         );
                         Logger.info(`✅ STEP 1a: تم إضافة ${oldBillOrders.length} طلب إلى الفاتورة ${existingBillInNewTable.billNumber}`);
+                        // توحيد نوع التنفيذ: أي فاتورة على طاولة تصبح dine_in وطلباتها المنقولة تتبعها
+                        existingBillInNewTable.fulfillmentType = 'dine_in';
+                        await Order.updateMany(
+                            { _id: { $in: oldBillOrders } },
+                            { $set: { fulfillmentType: 'dine_in' } }
+                        );
                     }
                     
                     if (oldBillSessions.length > 0) {
@@ -1356,6 +1416,12 @@ export const updateBill = async (req, res) => {
                     
                     // تحديث طاولة الفاتورة
                     bill.table = newTableId;
+                    // توحيد نوع التنفيذ: النقل لطاولة يجعلها dine_in وطلباتها تتبعها
+                    bill.fulfillmentType = 'dine_in';
+                    await Order.updateMany(
+                        { bill: bill._id },
+                        { $set: { fulfillmentType: 'dine_in' } }
+                    );
                     
                     // تحديث اسم العميل ليكون اسم الطاولة الجديدة
                     const Table = (await import('../models/Table.js')).default;
@@ -1417,6 +1483,14 @@ export const updateBill = async (req, res) => {
         }
 
         bill.updatedBy = req.user._id;
+
+        // توحيد نوع التنفيذ لطلبات الفاتورة مع نوعها (يغطي التحويل الصريح بدون نقل)
+        if (!movedFromTableId && req.body.fulfillmentType !== undefined && bill.fulfillmentType) {
+            await Order.updateMany(
+                { bill: bill._id },
+                { $set: { fulfillmentType: bill.fulfillmentType } }
+            );
+        }
 
         // Recalculate totals
         await bill.calculateSubtotal();

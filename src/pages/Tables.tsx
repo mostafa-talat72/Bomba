@@ -18,6 +18,7 @@ import { formatCurrency as formatCurrencyUtil, formatDecimal, getShortBillNumber
 import { getId, sameId } from '../utils/id';
 import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
 import { printOrder } from '../utils/printOrder';
+import { resolveMenuItem } from '../utils/orderSectionPrint';
 import { preloadBillReceipt, printBill } from '../utils/printBill';
 import { getCachedDevicePrinter, printThroughLocalBridge } from '../utils/localPrintBridge';
 import { getPrintFlagFresh } from '../utils/freshPrintSettings';
@@ -525,13 +526,20 @@ const loadInitialData = async () => {
   // ── Update tableOrders ───────────────────────────────────────────────────
   useEffect(() => {
     if (selectedTable) {
-      const tableId = selectedTable._id || (selectedTable as any).id;
+      const tableId = String(selectedTable._id || (selectedTable as any).id);
       setTableOrders(orders.filter((o: any) => {
         const oid = o.table?._id || o.table?.id || o.table;
-        return oid === tableId;
+        if (String(oid || '') === tableId) return true;
+        // انتماء عبر الفاتورة: طلب فاتورته على هذه الطاولة (يغطي انحراف table القديم)
+        const ob = o.bill?._id || o.bill?.id || o.bill;
+        if (!ob) return false;
+        return bills.some((b: any) =>
+          String(b._id || b.id) === String(ob) &&
+          String(b.table?._id || b.table?.id || b.table || '') === tableId
+        );
       }));
     }
-  }, [selectedTable, orders]);
+  }, [selectedTable, orders, bills]);
 
   // ── selectedBill sync ────────────────────────────────────────────────────
   useEffect(() => {
@@ -1137,6 +1145,17 @@ const loadInitialData = async () => {
       if (target) {
         setTimeout(() => { handleTableClick(target); }, 100);
         if (state.tableNumber) showNotification(t('cafe.tableOpened') + ' ' + state.tableNumber, 'info');
+        // معاينة طلب قادم من الإشعارات — يُثبّت بعد فتح النافذة
+        if (state?.previewOrderId) {
+          const poid = String(state.previewOrderId);
+          setTimeout(() => {
+            const ord = orders.find((o: any) => String(o._id || o.id) === poid);
+            if (ord) {
+              setPinnedOrder(ord);
+              setActiveTab('orders'); setActiveTab3('orders');
+            }
+          }, 450);
+        }
       }
       navigate(location.pathname, { replace: true, state: {} });
     }
@@ -1154,7 +1173,29 @@ const loadInitialData = async () => {
       }
       navigate(location.pathname, { replace: true, state: {} });
     }
-  }, [tables, bills, location.state]);
+  if (state?.openPaymentForBill && !showPaymentModal) {
+      const bid = String(state.openPaymentForBill);
+      navigate(location.pathname, { replace: true, state: {} });
+      const openIt = (b: Bill) => {
+        const tableTmp = tables.find((tb: Table) => {
+          const btid = (b.table as any)?._id || (b.table as any)?.id || b.table;
+          return String(tb._id || (tb as any).id) === String(btid || '');
+        });
+        if (tableTmp) { setSelectedTable(tableTmp); setShowUnifiedTableModal(true); }
+        setActiveTab('billing'); setActiveTab3('billing');
+        handlePaymentClick(b);
+      };
+      const found = bills.find((b: Bill) => String(b._id || b.id) === bid);
+      if (found) openIt(found);
+      else {
+        // الفواتير المدفوعة خارج الـ state — تُجلب مباشرة
+        api.getBill(bid).then((r: any) => {
+          if (r?.success && r.data) { setBills(prev => [...prev, r.data]); openIt(r.data); }
+          else showNotification('تعذر فتح فاتورة الطلب', 'error');
+        }).catch(() => showNotification('تعذر فتح فاتورة الطلب', 'error'));
+      }
+    }
+  }, [tables, bills, orders, location.state]);
 
   // ── Memos ────────────────────────────────────────────────────────────────
   const activeTableSections = useMemo(() => {
@@ -2068,7 +2109,7 @@ const loadInitialData = async () => {
     const normalizedOrder = { ...order, items: order.items.map((item: any, idx: number) => ({ ...item, _id: item._id || item.id || `temp-${idx}` })), createdAt: order.createdAt instanceof Date ? order.createdAt.toISOString() : order.createdAt } as any;
     const sectionMap = new Map<string, string>();
     order.items.forEach((item: any) => {
-      const menuItem = typeof item.menuItem === 'object' ? item.menuItem : map.get(item.menuItem);
+      const menuItem = resolveMenuItem(item, map);
       const section = menuItem?.category?.section;
       const id = typeof section === 'object' ? section?._id || section?.id : section;
       if (id) {

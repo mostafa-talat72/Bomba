@@ -45,6 +45,7 @@ interface Order {
   totalAmount?: number;
   finalAmount?: number;
   notes?: string;
+  fulfillmentType?: 'dine_in' | 'takeaway' | 'delivery';
   createdAt: string | Date;
   updatedAt?: string;
   organization?: string | { _id: string; name: string };
@@ -290,7 +291,10 @@ const printAllSectionsInOnePage = (
         <!-- Order info for each section -->
         <div class="order-info">
           <div style="margin-bottom: 2px;">
-            <div style="font-size: 19px; font-weight: 700; margin: 2px 0;">${splitDailySeq(order.orderNumber).head}<strong style="font-size: 32px; font-weight: 900; background: #000; color: #fff; padding: 0 8px; border-radius: 6px;">${splitDailySeq(order.orderNumber).seq}</strong></div>
+            <div style="font-size: 19px; font-weight: 700; margin: 2px 0;">${splitDailySeq(order.orderNumber).head}<strong style="font-size: 22px; font-weight: 900; background: #000; color: #fff; padding: 0 8px; border-radius: 6px;">${splitDailySeq(order.orderNumber).seq}</strong></div>
+            ${order.fulfillmentType === 'delivery' ? `
+            <div style="font-size: 1.4em; font-weight: 900; margin: 2px 0; text-align: center;"><span style="background: #000; color: #fff; padding: 2px 12px; border-radius: 4px;">🛵 دليفري</span></div>` : order.fulfillmentType === 'takeaway' ? `
+            <div style="font-size: 1.4em; font-weight: 900; margin: 2px 0; text-align: center;"><span style="background: #000; color: #fff; padding: 2px 12px; border-radius: 4px;">🥡 تيك أوي</span></div>` : ''}
             <div style="font-size: 1.15em; font-weight: 900; color: #333; margin: 2px 0;">${dateTimeString}</div>
             ${order.table?.number ? `
               <div style="font-size: 1.15em; font-weight: 900; margin: 2px 0; text-align: center;">

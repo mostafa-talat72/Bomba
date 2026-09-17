@@ -22,7 +22,7 @@ export const getReportEligibleOrderIds = async (organization, { startDate, endDa
 
     const orderMatch = {
         organization: organizationObjectId,
-        isDeleted: false,
+        isDeleted: { $in: [false, null] },
     };
     if (startDate || endDate) {
         orderMatch.createdAt = {};
@@ -112,7 +112,7 @@ export const findReportEligibleOrders = async (organization, filter = {}) => {
         ...rest,
         ...(createdAt ? { createdAt } : {}),
         organization: organizationId,
-        isDeleted: false,
+        isDeleted: { $in: [false, null] },
         _id: { $in: orderIds },
     }).lean();
 };

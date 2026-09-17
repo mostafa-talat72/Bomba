@@ -23,6 +23,18 @@ export interface PreparedBillOrders {
   menuItemsMap: Map<string, any>;
 }
 
+/** حل صنف المنيو: خريطة المنيو الكاملة أولاً (فيها category/section)، ثم الكائن المضمّن.
+ *  ضروري لأن استجابات الحفظ تحمل menuItem معبأ جزئياً (name/price بلا category). */
+export function resolveMenuItem(item: any, map: Map<string, any>): any {
+  const raw = item?.menuItem;
+  const key = raw && typeof raw === 'object' ? String(raw._id || raw.id || '') : String(raw || '');
+  if (key) {
+    const fromMap = map.get(key);
+    if (fromMap) return fromMap;
+  }
+  return raw && typeof raw === 'object' ? raw : undefined;
+}
+
 /**
  * منطق طباعة أقسام التحضير المشترك (تيك أوي/دليفري) — نفس قواعد الطاولات:
  * مطابقة الأصناف بالأقسام عبر خريطة المنيو، ثم إعدادات (تلقائي/سؤال/الكل)،
@@ -52,7 +64,7 @@ export function prepareBillSections(bill: any, ctx: SectionPrintCtx): PreparedBi
   const sectionMap = new Map<string, string>();
   normalized.forEach((order: any) => {
     (order.items || []).forEach((item: any) => {
-      const menuItem = typeof item.menuItem === 'object' ? item.menuItem : map.get(item.menuItem);
+      const menuItem = resolveMenuItem(item, map);
       const section = menuItem?.category?.section;
       const id = typeof section === 'object' ? section?._id || section?.id : section;
       if (id) {
@@ -77,7 +89,7 @@ async function resolvePrintSettings(user: any): Promise<any> {
 function orderSectionIds(order: any, map: Map<string, any>): string[] {
   const ids = new Set<string>();
   (order.items || []).forEach((item: any) => {
-    const menuItem = typeof item.menuItem === 'object' ? item.menuItem : map.get(item.menuItem);
+    const menuItem = resolveMenuItem(item, map);
     const section = menuItem?.category?.section;
     const id = typeof section === 'object' ? section?._id || section?.id : section;
     ids.add(id ? String(id) : 'other');

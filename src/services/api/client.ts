@@ -154,7 +154,9 @@ class ApiClient {
             }
           } catch {}
           const inner = (data as any)?.data !== undefined ? (data as any).data as T : data as T;
-          return { success: true, data: inner, message: data.message };
+          // تمرير الفاتورة الكاملة المرفقة (رحلة واحدة للفاعل) — endpoints مختارة فقط
+          const extraBill = (data as any)?.bill;
+          return { success: true, data: inner, message: data.message, ...(extraBill ? { bill: extraBill } : {}) };
     } catch (error: unknown) {
       if (error instanceof TypeError && error.message.includes('fetch')) {
         return {

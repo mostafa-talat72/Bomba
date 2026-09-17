@@ -690,13 +690,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         });
 
         if (bill) {
-          setBills(prev => {
-            const bid = String(bill._id || bill.id);
-            const exists = prev.some((b: any) => String(b._id || b.id) === bid);
-            return exists
-              ? prev.map((b: any) => String(b._id || b.id) === bid ? { ...b, ...bill } : b)
-              : [bill, ...prev];
-          });
+          applyResponseBill(bill);
           if (session.table) {
             const tid = String((session.table as any)?._id || (session.table as any)?.id || session.table);
             setTables(prev => prev.map((table: any) =>
@@ -756,6 +750,52 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
+  // حارس الطابع الزمني: لا تطبق بيانات فاتورة أقدم من الحالة الحالية (يمنع انعكاس التزامن)
+  const isNewerBill = (incoming: any, current: any): boolean => {
+    try {
+      if (!current) return true;
+      const a = incoming?.updatedAt ? new Date(incoming.updatedAt).getTime() : 0;
+      const b = current?.updatedAt ? new Date(current.updatedAt).getTime() : 0;
+      if (!a || !b) return true;
+      return a >= b;
+    } catch { return true; }
+  };
+
+  // دمج ذكي لفاتورة واردة: يحمي المصفوفات المعبأة من النسخ الخام (ids فقط)
+  // فلا تُمحى طلبات/جلسات معروضة عند وصول حمولة جزئية — مع حارس زمني.
+  const mergeBillResponse = (current: any, incoming: any): any => {
+    const out = { ...current, ...incoming };
+    try {
+      for (const k of ['orders', 'sessions', 'itemPayments', 'sessionPayments', 'payments']) {
+        const iv = incoming?.[k];
+        const cv = current?.[k];
+        if (Array.isArray(iv) && iv.length > 0 && iv.every((x: any) => typeof x !== 'object' || x === null)) {
+          if (Array.isArray(cv) && cv.some((x: any) => typeof x === 'object' && x !== null)) out[k] = cv;
+        }
+      }
+    } catch {}
+    return out;
+  };
+  // تطبيق فاتورة رد/حدث مباشرة: رحلة واحدة للفاعل — دمج محروس زمنيًا وذكي المصفوفات
+  const applyResponseBill = (bill: any): void => {
+    try {
+      if (!bill) return;
+      const bid = bill._id || bill.id;
+      if (!bid) return;
+      const id = String(bid);
+      setBills(prev => {
+        const idx = prev.findIndex((b: any) => String(b._id || b.id) === id);
+        if (idx === -1) return [...prev, { ...bill, id, _id: id }];
+        if (!isNewerBill(bill, prev[idx])) return prev;
+        const copy = [...prev] as any[];
+        const merged = mergeBillResponse(copy[idx], { ...bill, id, _id: id });
+        if (merged && typeof merged === 'object') delete (merged as any)._optimistic;
+        copy[idx] = merged;
+        return copy;
+      });
+    } catch {}
+  };
+
   const endSession = async (id: string, customerName?: string): Promise<Session | null> => {
     let snapshot: Session[] = [];
     let ended: Session | null = null;
@@ -776,12 +816,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         setSessions(prev => prev.filter((s: any) => String(s._id || s.id) !== String(id)));
         // update bills with server bill
         if (bill) {
-          setBills(prev => {
-            const bid = String(bill._id || bill.id);
-            const exists = prev.some((b: any) => String(b._id || b.id) === bid);
-            if (exists) return prev.map((b: any) => String(b._id || b.id) === bid ? { ...b, ...bill } : b);
-            return [...prev, bill];
-          });
+          applyResponseBill(bill);
           if (bill.table) {
             const tid = String((bill.table as any)?._id || (bill.table as any)?.id || bill.table);
             // keep table occupied until bill paid — but if session ended, table may still be occupied via other sessions/orders
@@ -823,7 +858,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           if (exists) return without.map((s: any) => String(s._id || s.id) === String(session._id || session.id) ? { ...s, ...session } : s);
           return [session, ...without];
         });
-        if (bill) setBills(prev => prev.map((b: any) => String(b._id || b.id) === String(bill._id || bill.id) ? { ...b, ...bill } : b));
+        if (bill) applyResponseBill(bill);
         showNotification(t('toast.session.startedWithBill', { deviceName: session.deviceName, billNumber: bill?.billNumber || '' }), 'success');
         return session;
       }
@@ -849,12 +884,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (response.success && response.data) {
         const { session, bill } = response.data as any;
         if (session) setSessions(prev => prev.map((s: any) => String(s._id || s.id) === String(sessionId) ? { ...s, ...session, _optimistic: undefined } : s));
-        if (bill) setBills(prev => {
-          const bid = String(bill._id || bill.id);
-          const exists = prev.some((b: any) => String(b._id || b.id) === bid);
-          if (exists) return prev.map((b: any) => String(b._id || b.id) === bid ? { ...b, ...bill } : b);
-          return [...prev, bill];
-        });
+        if (bill) applyResponseBill(bill);
         if (!silent) showNotification('تم نقل الجلسة بنجاح', 'success');
         return response.data;
       }
@@ -878,12 +908,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (response.success && response.data) {
         const { session, bill } = response.data as any;
         if (session) setSessions(prev => prev.map((s: any) => String(s._id || s.id) === String(sessionId) ? { ...s, ...session, _optimistic: undefined } : s));
-        if (bill) setBills(prev => {
-          const bid = String(bill._id || bill.id);
-          const exists = prev.some((b: any) => String(b._id || b.id) === bid);
-          if (exists) return prev.map((b: any) => String(b._id || b.id) === bid ? { ...b, ...bill } : b);
-          return [...prev, bill];
-        });
+        if (bill) applyResponseBill(bill);
         if (!silent) showNotification('تم ربط الجلسة بالطاولة', 'success');
         return response.data;
       }
@@ -906,12 +931,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (response.success && response.data) {
         const { session, bill } = response.data as any;
         if (session) setSessions(prev => prev.map((s: any) => String(s._id || s.id) === String(sessionId) ? { ...s, ...session, _optimistic: undefined } : s));
-        if (bill) setBills(prev => {
-          const bid = String(bill._id || bill.id);
-          const exists = prev.some((b: any) => String(b._id || b.id) === bid);
-          if (exists) return prev.map((b: any) => String(b._id || b.id) === bid ? { ...b, ...bill } : b);
-          return [...prev, bill];
-        });
+        if (bill) applyResponseBill(bill);
         if (!silent) showNotification('تم فك ربط الجلسة', 'success');
         return response.data;
       }
@@ -940,6 +960,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const response = await api.updateSessionTimes(sessionId, data);
       if (response.success && response.data) {
         setSessions(prev => prev.map((s: any) => String(s._id || s.id) === String(sessionId) ? { ...s, ...response.data, _optimistic: undefined } : s));
+        applyResponseBill((response as any).bill);
         const sess = response.data as any;
         if (sess.bill) setBills(prev => prev.map((b: any) => String(b._id || b.id) === String(sess.bill?._id || sess.bill) ? { ...b, sessions: (b.sessions || []).map((ss: any) => String(ss._id || ss.id || ss) === String(sessionId) ? sess : ss) } : b));
         if (!silent) showNotification('تم تعديل أوقات الجلسة', 'success');
@@ -968,6 +989,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const response = await api.updateSessionStartTime(sessionId, data);
       if (response.success && response.data) {
         setSessions(prev => prev.map((s: any) => String(s._id || s.id) === String(sessionId) ? { ...s, ...response.data, _optimistic: undefined } : s));
+        applyResponseBill((response as any).bill);
         showNotification('تم تعديل وقت البداية', 'success');
         return response.data;
       }
@@ -1008,6 +1030,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const response = await api.updateControllersPeriodTime(sessionId, periodIndex, newStartTime, newEndTime, true);
       if (response.success && response.data) {
         setSessions(prev => prev.map((s: any) => String(s._id || s.id) === String(sessionId) ? { ...s, ...response.data, _optimistic: undefined } : s));
+        applyResponseBill((response as any).bill);
         if (!silent) showNotification('تم تعديل فترة الدراعات', 'success');
         return response.data;
       }
@@ -1029,7 +1052,10 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (response.success && response.data) {
         const data: any = response.data;
         setSessions(prev => prev.map((s: any) => String(s._id || s.id) === String(sessionId) ? { ...s, totalCost: data.totalCost, finalCost: data.currentCost, _optimistic: undefined } : s));
-        if (data.billUpdated) fetchBills().catch(()=>{});
+        // رحلة واحدة: طبّق فاتورة الرد، والجلب احتياطي فقط
+        const costRespBill = (response as any).bill;
+        if (costRespBill && (costRespBill._id || costRespBill.id)) applyResponseBill(costRespBill);
+        else if (data.billUpdated) fetchBills().catch(()=>{});
         return response.data;
       }
       setSessions(snapshot);
@@ -1108,7 +1134,13 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           return [newOrder, ...withoutOptimistic];
         });
 
-        refreshSingleBill((orderData as any).bill || (newOrder as any).bill);
+        // رحلة واحدة: طبّق فاتورة الرد مباشرة (مع حارس الزمن) بدل جلب إضافي
+        const respBill = (response as any).bill;
+        if (respBill && (respBill._id || respBill.id)) {
+          applyResponseBill(respBill);
+        } else {
+          refreshSingleBill((orderData as any).bill || (newOrder as any).bill);
+        }
 
         showNotification(t('toast.order.created', { orderNumber: newOrder.orderNumber }), 'success');
         updateNotificationCount(1);
@@ -1207,8 +1239,10 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             return b;
           }));
         }
-        // إجماليات الفاتورة من السيرفر مباشرة (طلب واحد سريع بدل fetchBills الكامل).
-        refreshSingleBill((response.data as any).bill || (updates as any)?.bill);
+        // إجماليات الفاتورة من الرد مباشرة (رحلة واحدة) بدل الجلب الكامل — مع احتياطي.
+        const updRespBill = (response as any).bill;
+        if (updRespBill && (updRespBill._id || updRespBill.id)) applyResponseBill(updRespBill);
+        else refreshSingleBill((response.data as any).bill || (updates as any)?.bill);
         showNotification(t('toast.order.updated'), 'success');
         return response.data;
       }
@@ -1311,6 +1345,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const response = await api.updateOrderStatus(orderId, status);
       if (response.success && response.data) {
         setOrders(prev => prev.map((order: any) => String(order._id || order.id) === String(orderId) ? { ...order, ...response.data, _optimistic: undefined } : order));
+        applyResponseBill((response as any).bill);
         const statusKey = `toast.order.status${status.charAt(0).toUpperCase() + status.slice(1)}`;
         showNotification(t(statusKey), 'success');
         updateNotificationCount(1);
@@ -1340,8 +1375,10 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (response && response.success === true) {
         // also remove from bills optimistically
         setBills(prev => prev.map((b: any) => ({ ...b, orders: (b.orders || []).filter((o: any) => String(o._id || o.id || o) !== String(id)) })));
-        // إجماليات الفاتورة من السيرفر مباشرة (طلب واحد سريع).
-        refreshSingleBill((deleted as any)?.bill);
+        // رحلة واحدة: طبّق فاتورة الرد (قد تكون null لو حُذفت الفاتورة — السوكيت يعالجه)
+        const delRespBill = (response as any)?.bill;
+        if (delRespBill && (delRespBill._id || delRespBill.id)) applyResponseBill(delRespBill);
+        else refreshSingleBill((deleted as any)?.bill);
         return true;
       }
       if (deleted) setOrders(snapshot);
@@ -1441,6 +1478,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const response = await api.cancelOrder(orderId);
       if (response.success && response.data) {
         setOrders(prev => prev.map((o: any) => String(o._id || o.id) === String(orderId) ? { ...o, ...response.data, _optimistic: undefined } : o));
+        applyResponseBill((response as any).bill);
         return response.data;
       }
       if (didOptimistic) setOrders(snapshot);
@@ -1520,7 +1558,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     try {
       const response = await api.createBill(billData);
       if (response.success && response.data) {
-        setBills(prev => [...prev, response.data!]);
+        applyResponseBill(response.data as any);
         showNotification(t('toast.bill.created'), 'success');
         updateNotificationCount(1);
         return response.data;
@@ -1554,9 +1592,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
       const response = await api.updateBill(id, updates);
       if (response.success && response.data) {
-        setBills(prev => prev.map((bill: any) =>
-          String(bill._id || bill.id) === String(id) ? { ...bill, ...response.data, _optimistic: undefined } : bill
-        ));
+        applyResponseBill(response.data as any);
         if ((response.data as any).table) {
           const tid = String((response.data as any).table?._id || (response.data as any).table?.id || (response.data as any).table);
           if (tid) setTables(prev => prev.map((t: any) => String(t._id || t.id) === tid ? { ...t, status: (response.data as any).status === 'paid' || (response.data as any).status === 'cancelled' ? 'empty' : 'occupied' } : t));
@@ -1596,7 +1632,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       });
       const response = await api.addPayment(id, paymentData);
       if (response.success && response.data) {
-        setBills(prev => prev.map((bill: any) => String(bill._id || bill.id) === String(id) ? { ...bill, ...response.data, _optimistic: undefined } : bill));
+        applyResponseBill(response.data as any);
         const { amount, method } = paymentData;
         const methodText = t(`toast.paymentMethods.${method}`, method);
         showNotification(t('toast.bill.paymentAdded', { amount, method: methodText }), 'success');
@@ -1690,9 +1726,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       });
       const response = await api.addPartialPayment(id, paymentData);
       if (response.success && response.data) {
-        setBills(prev => prev.map((bill: any) =>
-          String(bill._id || bill.id) === String(id) ? { ...bill, ...response.data, _optimistic: undefined } : bill
-        ));
+        applyResponseBill(response.data as any);
         showNotification(t('toast.bill.partialPayment'), 'success');
         return response.data;
       }
@@ -1717,7 +1751,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       });
       const response = await api.addPartialPaymentAggregated(id, paymentData);
       if (response.success && response.data) {
-        setBills(prev => prev.map((b: any) => String(b._id || b.id) === String(id) ? { ...b, ...response.data, _optimistic: undefined } : b));
+        applyResponseBill(response.data as any);
         showNotification(t('toast.bill.partialPayment'), 'success');
         return response.data;
       }
@@ -1737,7 +1771,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       });
       const response = await api.payForItems(id, paymentData);
       if (response.success && response.data) {
-        setBills(prev => prev.map((b: any) => String(b._id || b.id) === String(id) ? { ...b, ...response.data, _optimistic: undefined } : b));
+        applyResponseBill(response.data as any);
         showNotification(t('toast.bill.partialPayment'), 'success');
         return response.data;
       }
@@ -1757,7 +1791,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       });
       const response = await api.paySessionPartial(id, paymentData);
       if (response.success && response.data) {
-        setBills(prev => prev.map((b: any) => String(b._id || b.id) === String(id) ? { ...b, ...response.data, _optimistic: undefined } : b));
+        applyResponseBill(response.data as any);
         showNotification(t('toast.bill.partialPayment'), 'success');
         return response.data;
       }
@@ -1777,7 +1811,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       });
       const response = await api.updateBillAggregatedItems(id, data);
       if (response.success && response.data) {
-        setBills(prev => prev.map((b: any) => String(b._id || b.id) === String(id) ? { ...b, ...response.data, _optimistic: undefined } : b));
+        applyResponseBill(response.data as any);
         showNotification(t('toast.bill.updated'), 'success');
         return response.data;
       }
@@ -2720,7 +2754,11 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setBills(prev => {
         const exists = prev.some((b: any) => sameId(b, bid));
         const normalized = { ...bill, id: bid, _id: bid };
-        if (exists) return prev.map((b: any) => sameId(b, bid) ? { ...b, ...normalized } : b);
+        if (exists) return prev.map((b: any) => {
+          if (!sameId(b, bid)) return b;
+          if (!isNewerBill(normalized, b)) return b;
+          return mergeBillResponse(b, normalized);
+        });
         if (bill.status && ['paid','cancelled'].includes(bill.status)) return prev.filter((b: any) => !sameId(b, bid));
         return [...prev, normalized];
       });

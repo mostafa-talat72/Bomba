@@ -773,11 +773,11 @@ export const buildBillPrintHTML = async (
         ${typeof organizationData?.phone === 'string' && organizationData.phone.trim()
           ? `<div class="org-phone">${t('billPrint.phone')}: ${organizationData.phone.trim()}</div>`
           : ''}
-        <div class="title" style="font-weight: 700; font-size: 19px;">${splitDailySeq(bill.billNumber).head}<span style="font-size: 32px; font-weight: 900; background: #000; color: #fff; padding: 0 8px; border-radius: 6px;">${splitDailySeq(bill.billNumber).seq}</span></div>
+        <div class="title" style="font-weight: 700; font-size: 19px;">${splitDailySeq(bill.billNumber).head}<span style="font-size: 22px; font-weight: 900; background: #000; color: #fff; padding: 0 8px; border-radius: 6px;">${splitDailySeq(bill.billNumber).seq}</span></div>
         <div class="info" style="font-weight: 900; font-size: 1.15em;">${formatDate(bill.createdAt || new Date())}</div>
-        ${bill.table?.number ? `<div class="info" style="font-weight: 900; font-size: 1.25em; color: #000; margin: 8px 0;"><span style="background: #000; color: #fff; padding: 2px 8px; border-radius: 3px;">${t('billPrint.table')}</span> <strong style="font-size: 1.5em;">${bill.table.number}${tableSectionName ? ` — (${tableSectionName})` : ''}</strong></div>` : ((bill.customerName || bill.deliveryInfo?.customerName) ? `<div class="info" style="font-weight: 900; font-size: 1.15em;">${t('billPrint.customer')}: ${bill.customerName || bill.deliveryInfo?.customerName}</div>` : '')}
+        ${bill.table?.number ? `<div class="info" style="font-weight: 900; font-size: 1.25em; color: #000; margin: 8px 0;"><span style="background: #000; color: #fff; padding: 2px 8px; border-radius: 3px;">${t('billPrint.table')}</span> <strong style="font-size: 1.5em;">${bill.table.number}${tableSectionName ? ` — (${tableSectionName})` : ''}</strong></div>` : ((bill.customerName || bill.deliveryInfo?.customerName) ? ((bill.fulfillmentType === 'delivery' || bill.fulfillmentType === 'takeaway') ? `<div class="info" style="font-weight: 900; font-size: 1.35em;">${bill.fulfillmentType === 'delivery' ? '🛵' : '🥡'} ${bill.customerName || bill.deliveryInfo?.customerName}</div>` : `<div class="info" style="font-weight: 900; font-size: 1.15em;">${t('billPrint.customer')}: ${bill.customerName || bill.deliveryInfo?.customerName}</div>`) : ((bill.fulfillmentType === 'delivery' || bill.fulfillmentType === 'takeaway') ? `<div class="info" style="font-weight: 900; font-size: 1.35em;">${bill.fulfillmentType === 'delivery' ? '🛵 دليفري' : '🥡 تيك أوي'}</div>` : ''))}
         ${(bill.customerPhone || bill.deliveryInfo?.phone) ? `<div class="info" style="font-weight: 900; font-size: 1.15em;">${t('billPrint.phone')}: ${bill.customerPhone || bill.deliveryInfo?.phone}</div>` : ''}
-        ${bill.fulfillmentType && bill.fulfillmentType !== 'dine_in' ? `<div class="info" style="font-weight: 900; font-size: 1.2em; background:#f97316; color:#fff; padding:4px 8px; border-radius:4px; display:inline-block; margin:4px 0;">${bill.fulfillmentType === 'delivery' ? '🛵 دليفري' : '🥡 تيك أوي'}${bill.deliveryInfo?.phone ? ` — ${bill.deliveryInfo.phone}` : ''}</div>${bill.deliveryInfo?.address ? `<div class="info" style="font-weight: 900; font-size: 1em;">📍 ${bill.deliveryInfo.address}${bill.deliveryInfo?.deliveryFee ? ` — رسوم: ${formatNumber(bill.deliveryInfo.deliveryFee)} ${currencySymbol}` : ''}</div>` : ''}` : ''}
+        ${bill.fulfillmentType === 'delivery' && bill.deliveryInfo?.address ? `<div class="info" style="font-weight: 900; font-size: 1em;">📍 ${bill.deliveryInfo.address}</div>` : ''}
       </div>
 
       ${bill.orders && bill.orders.length > 0 ? generateOrderItemsTable(bill.orders, bill.itemPayments, bill.status, bill.paid, bill.total) : ''}
@@ -793,6 +793,9 @@ export const buildBillPrintHTML = async (
         ` : ''}
         ${bill.tax && bill.tax > 0 ? `
           <tr class="tax"><th>${t('billPrint.tax')}</th><td>${formatNumber(bill.tax)} ${currencySymbol}</td></tr>
+        ` : ''}
+        ${bill.fulfillmentType !== 'takeaway' && Number(bill.deliveryInfo?.deliveryFee) > 0 ? `
+        <tr class="delivery-fee"><th>${t('billPrint.deliveryFee', 'رسوم التوصيل')}</th><td>${formatNumber(bill.deliveryInfo.deliveryFee)} ${currencySymbol}</td></tr>
         ` : ''}
         <tr class="grand-total"><th>${t('billPrint.total')}</th><td>${formatNumber(bill.total || 0)} ${currencySymbol}</td></tr>
         <tr class="paid"><th>${t('billPrint.paid')}</th><td>${formatNumber(bill.paid || 0)} ${currencySymbol}</td></tr>

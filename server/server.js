@@ -404,6 +404,13 @@ mongoose.connection.once("open", async () => {
     } else {
         Logger.info("ℹ️  Sync system is disabled");
     }
+
+        // تعبئة نوع التنفيذ للوثائق القديمة — خلفية لمرة واحدة (marker داخل القاعدة نفسها)
+        setTimeout(() => {
+            import("./utils/backfillFulfillment.js")
+                .then((m) => { try { return (m.backfillFulfillmentType || m.default)(); } catch {} })
+                .catch(() => {});
+        }, 25000);
 }); // End of mongoose.connection.once callback
 
 // Function to initialize bidirectional sync (via polling for M0 Free)

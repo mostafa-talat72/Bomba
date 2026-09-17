@@ -91,7 +91,7 @@ router.get("/sold-items", authorize("soldItems", "all"), async (req, res) => {
         });
         const orders = await Order.find({
             organization: req.user.organization,
-            isDeleted: false,
+            isDeleted: { $in: [false, null] },
             _id: { $in: reportOrderIds },
             status: { $ne: 'cancelled' },
             items: { $exists: true, $ne: [], $type: 'array' },

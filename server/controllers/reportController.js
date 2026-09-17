@@ -49,7 +49,7 @@ export const getDashboardStats = async (req, res) => {
                 {
                     $match: {
                         createdAt: { $gte: startDate, $lte: endDate },
-                        isDeleted: false,
+                        isDeleted: { $in: [false, null] },
                         organization: getOrganizationId(req.user),
                         _id: { $in: reportOrderIds },
                     },
@@ -116,7 +116,7 @@ export const getDashboardStats = async (req, res) => {
             Order.countDocuments({
                 status: { $in: ["pending", "preparing", "ready"] },
                 organization: getOrganizationId(req.user),
-                isDeleted: false,
+                isDeleted: { $in: [false, null] },
                 _id: { $in: reportOrderIds },
             })
         ]);
@@ -464,7 +464,7 @@ export const getFinancialReport = async (req, res) => {
             createdAt: { $gte: startDate, $lte: endDate },
             status: { $ne: "cancelled" },
             organization: organizationId,
-            isDeleted: false,
+            isDeleted: { $in: [false, null] },
             _id: { $in: reportOrderIds },
         });
 
@@ -668,7 +668,7 @@ export const getConsumptionReport = async (req, res) => {
         const [orders, sessions, menuItems, menuSections] = await Promise.all([
             Order.find({
                 createdAt: { $gte: startDate, $lte: endDate },
-                isDeleted: false,
+                isDeleted: { $in: [false, null] },
                 organization,
                 _id: { $in: ids },
             }).select("items").lean(),
@@ -875,7 +875,7 @@ export const getRecentActivity = async (req, res) => {
         for (let page = 0; page < 20 && recentOrders.length < perType; page++) {
             const batch = await Order.find({
                 organization: getOrganizationId(req.user),
-                isDeleted: false,
+                isDeleted: { $in: [false, null] },
             })
                 .sort({ createdAt: -1 })
                 .skip(page * LINK_BATCH)
@@ -1294,7 +1294,7 @@ const getSalesReportData = async (organization, startDate, endDate, eligibleOrde
     // Projection: only fields used below (items/finalAmount) — full docs are ~10x bigger.
     const orders = await Order.find({
         createdAt: { $gte: startDate, $lte: endDate },
-        isDeleted: false,
+        isDeleted: { $in: [false, null] },
         organization: organizationId,
         _id: { $in: reportOrderIds },
     }).select('items finalAmount').lean();
@@ -1615,7 +1615,7 @@ const getTopProductsBySection = async (organization, startDate, endDate, eligibl
         // Projection: only items are consumed below.
         const orders = await Order.find({
             createdAt: { $gte: startDate, $lte: endDate },
-            isDeleted: false,
+            isDeleted: { $in: [false, null] },
             organization: organizationId,
             _id: { $in: reportOrderIds }
         }).select('items').lean();
@@ -1843,7 +1843,7 @@ const getPeakHoursData = async (organization, startDate, endDate, eligibleOrderI
         // Get ALL orders (not just specific statuses) — only consumed fields.
         const orders = await Order.find({
             createdAt: { $gte: startDate, $lte: endDate },
-            isDeleted: false,
+            isDeleted: { $in: [false, null] },
             organization: organizationId,
             _id: { $in: reportOrderIds }
         }).select('finalAmount createdAt').lean();
@@ -1911,7 +1911,7 @@ const getStaffPerformanceData = async (organization, startDate, endDate, eligibl
         // Get ALL orders (not just delivered) — only consumed fields.
         const orders = await Order.find({
             createdAt: { $gte: startDate, $lte: endDate },
-            isDeleted: false,
+            isDeleted: { $in: [false, null] },
             organization: organizationId,
             _id: { $in: reportOrderIds }
         }).select('finalAmount createdBy').populate('createdBy', 'name').lean();

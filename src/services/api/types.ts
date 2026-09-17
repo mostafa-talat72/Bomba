@@ -8,6 +8,8 @@ export interface ApiResponse<T = any> {
   data?: T;
   count?: number;
   total?: number;
+  /** فاتورة كاملة مرفقة اختيارية (رحلة واحدة للفاعل) — تمررها endpoints مختارة */
+  bill?: any;
 }
 
 export interface User {
@@ -115,6 +117,7 @@ export interface Order {
   finalAmount?: number;
   totalCost?: number;
   notes?: string;
+  fulfillmentType?: 'dine_in' | 'takeaway' | 'delivery';
   preparationTime?: number;
   estimatedReadyTime?: Date;
   actualReadyTime?: Date;

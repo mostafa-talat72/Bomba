@@ -29,6 +29,21 @@ const BILL_FOR_EMIT_POPULATE = [
     { path: "createdBy", select: "name" },
 ];
 
+// مزامنة مرجع الطاولة في طلبات/جلسات الفاتورة مع طاولة الفاتورة نفسها.
+// يمنع انحراف العرض (طلبات قديمة بـ table=null بعد ربط فاتورة بطاولة عبر الجلسات).
+async function syncBillChildrenTable(bill) {
+    try {
+        if (!bill?._id) return;
+        const tableId = bill.table?._id || bill.table || null;
+        const OrderM = mongoose.model("Order");
+        const SessionM = mongoose.model("Session");
+        await OrderM.updateMany({ bill: bill._id }, { $set: { table: tableId } });
+        await SessionM.updateMany({ bill: bill._id }, { $set: { table: tableId } });
+    } catch (e) {
+        Logger.error("syncBillChildrenTable failed:", e?.message || e);
+    }
+}
+
 function emitSessionInstant(req, session, bill, type = "updated") {
     // fire-and-forget Atlas writes — local save already done before emit
     try { if (session?._id) writeToAtlas('sessions', 'upsert', session.toObject ? session.toObject() : session, { _id: session._id }); } catch {}
@@ -133,7 +148,7 @@ const fixSessionPaymentData = (sessionPayment) => {
 };
 
 // Helper function to perform cleanup - defined outside the controller object
-const performCleanupHelper = async (organizationId) => {
+const performCleanupHelper = async (organizationId, io = null) => {
     // Ensure organizationId is a string/ObjectId, not a populated object
     const orgId = organizationId?._id ? organizationId._id : organizationId;
     
@@ -143,6 +158,8 @@ const performCleanupHelper = async (organizationId) => {
     const sessions = await Session.find({ organization: orgId }).sort({ createdAt: -1 });
     let cleanedCount = 0;
     let deletedBillsCount = 0;
+    const affectedBillIds = new Set();
+    const deletedBillIds = new Set();
     
     Logger.info(`📊 Found ${sessions.length} sessions to check (processing from newest to oldest)`);
     
@@ -191,6 +208,7 @@ const performCleanupHelper = async (organizationId) => {
                     await bill.calculateSubtotal();
                     await bill.save();
                     cleanedCount++;
+                    affectedBillIds.add(bill._id.toString());
                     Logger.info(`✅ Successfully cleaned bill ${bill.billNumber}`);
                     
                     // If bill is now empty (no sessions and no orders), try to merge it
@@ -226,12 +244,15 @@ const performCleanupHelper = async (organizationId) => {
                                 
                                 // Add merge information to target bill notes
                                 const currentNotes = targetBillForMerge.notes || '';
-                                const userLanguage = getUserLanguage(req.user);
+                                // background job: no req scope — fixed locale
+                                const userLanguage = 'ar';
                                 targetBillForMerge.notes = currentNotes + `\n[${t('mergedEmptyBill', userLanguage)} ${bill.billNumber}]`;
                                 
                                 // Update target bill
                                 await targetBillForMerge.calculateSubtotal();
                                 await targetBillForMerge.save();
+                                affectedBillIds.add(targetBillForMerge._id.toString());
+                                
                                 
                                 Logger.info(`✅ Successfully merged empty bill ${bill.billNumber} with ${targetBillForMerge.billNumber}`);
                             } else {
@@ -244,6 +265,8 @@ const performCleanupHelper = async (organizationId) => {
                             try { await createTombstone('bills', billIdForTomb, billOrgForTomb, null); } catch (e) {}
                             await bill.deleteOne();
                             deletedBillsCount++;
+                            deletedBillIds.add(bill._id.toString());
+                            affectedBillIds.delete(bill._id.toString());
                             Logger.info(`✅ Successfully processed empty bill ${bill.billNumber}`);
                             
                         } catch (mergeError) {
@@ -272,13 +295,33 @@ const performCleanupHelper = async (organizationId) => {
                 await correctBill.calculateSubtotal();
                 await correctBill.save();
                 cleanedCount++;
+                affectedBillIds.add(correctBill._id.toString());
             }
         }
     }
     
     Logger.info(`🧹 Automatic cleanup completed. Fixed ${cleanedCount} duplicates, deleted ${deletedBillsCount} empty bills.`);
+
+    // بث ما تغيّر في الخلفية — وإلا بقيت الأجهزة الأخرى قديمة حتى عملية لاحقة
+    if (io) {
+        try {
+            const BillM = mongoose.model('Bill');
+            for (const bid of affectedBillIds) {
+                try {
+                    if (deletedBillIds.has(bid)) continue;
+                    const fresh = await BillM.findById(bid).lean();
+                    if (fresh) {
+                        try { io.notifyBillUpdate("updated", fresh, orgId, { silent: true }); } catch {}
+                    }
+                } catch {}
+            }
+            for (const bid of deletedBillIds) {
+                try { io.notifyBillUpdate("deleted", { _id: bid }, orgId, { silent: true }); } catch {}
+            }
+        } catch {}
+    }
     
-    return { cleanedCount, deletedBillsCount };
+    return { cleanedCount, deletedBillsCount, affectedBills: affectedBillIds.size, deletedBills: [...deletedBillIds] };
 };
 
 /**
@@ -1275,6 +1318,7 @@ const sessionController = {
                 success: true,
                 message: "تم تحديث وقت فترة الدراعات بنجاح",
                 data: session,
+                bill: updatedBillForEmit ? (updatedBillForEmit.toObject ? updatedBillForEmit.toObject() : updatedBillForEmit) : null,
             });
         } catch (err) {
             Logger.error("updateControllersPeriodTime error:", err);
@@ -1378,7 +1422,25 @@ const sessionController = {
 
             session.updatedBy = req.user._id;
             await session.save();
-            emitSessionInstant(req, session, null);
+            // إعادة حساب الفاتورة (الأوقات تغيرت) + بث كامل — رحلة واحدة للفاعل
+            let conflictBillForEmit = null;
+            if (session.bill) {
+                try {
+                    const BillM = mongoose.model('Bill');
+                    const cb = await BillM.findById(session.bill);
+                    if (cb) {
+                        await cb.calculateSubtotal();
+                        cb.updatedBy = req.user._id;
+                        await cb.save();
+                        writeToAtlas('bills', 'upsert', cb.toObject ? cb.toObject() : cb, { _id: cb._id });
+                        await cb.populate(BILL_FOR_EMIT_POPULATE);
+                        conflictBillForEmit = cb;
+                    }
+                } catch (billError) {
+                    Logger.error("bill update failed after conflict resolve:", billError);
+                }
+            }
+            emitSessionInstant(req, session, conflictBillForEmit);
             await session.populate(["createdBy", "updatedBy"], "name");
 
             Logger.info(`Controllers period conflict resolved for session ${sessionId}:`, {
@@ -1392,7 +1454,8 @@ const sessionController = {
                 success: true,
                 message: "تم حل التداخل وتحديث أوقات الفترات بنجاح",
                 data: session,
-                appliedResolution: resolutionAction
+                appliedResolution: resolutionAction,
+                bill: conflictBillForEmit ? (conflictBillForEmit.toObject ? conflictBillForEmit.toObject() : conflictBillForEmit) : null,
             });
 
         } catch (err) {
@@ -1440,6 +1503,7 @@ const sessionController = {
 
             // تحديث الفاتورة المرتبطة إذا وجدت
             let billUpdated = false;
+            let costBillForEmit = null;
             if (session.bill) {
                 const billId = session.bill._id || session.bill;
                 for (let attempt = 0; attempt < 3 && !billUpdated; attempt++) {
@@ -1447,7 +1511,10 @@ const sessionController = {
                         const bill = await Bill.findById(billId);
                         if (bill) {
                             await bill.calculateSubtotal();
+                            await bill.save();
+                            await bill.populate(BILL_FOR_EMIT_POPULATE);
                             billUpdated = true;
+                            costBillForEmit = bill;
                             
                             // Fire-and-forget Atlas write for bill
                             writeToAtlas('bills', 'upsert', bill.toObject ? bill.toObject() : bill, { _id: bill._id });
@@ -1465,7 +1532,7 @@ const sessionController = {
 
             // Save session and fire-and-forget Atlas write
             await session.save();
-            emitSessionInstant(req, session, null);
+            emitSessionInstant(req, session, costBillForEmit);
             writeToAtlas('sessions', 'upsert', session.toObject ? session.toObject() : session, { _id: session._id });
 
             // Prepare minimal response data
@@ -1488,6 +1555,7 @@ const sessionController = {
                 success: true,
                 message: "تم تحديث تكلفة الجلسة بنجاح",
                 data: responseData,
+                bill: costBillForEmit ? (costBillForEmit.toObject ? costBillForEmit.toObject() : costBillForEmit) : null,
             });
 
         } catch (err) {
@@ -2048,6 +2116,8 @@ await updatedBill.populate([
                 await updateTableStatusIfNeeded(table || updatedBill.table, req.user.organization, req.io);
             }
             // ── Instant emit <100ms before response ──
+            // توحيد مراجع الطاولة قبل البث
+            await syncBillChildrenTable(updatedBill);
             emitSessionInstant(req, session, updatedBill, "started");
 
             // إرسال إشعار بدء الجلسة — fire-and-forget (background).
@@ -2450,7 +2520,7 @@ await updatedBill.populate([
             Logger.info("🧹 Scheduling automatic cleanup in background after unlinking...");
             
             // Run cleanup in background without blocking the response
-            performCleanupHelper(getOrganizationId(req.user))
+            performCleanupHelper(getOrganizationId(req.user), req.io)
                 .then(cleanupResult => {
                     Logger.info(`✅ Background cleanup completed: ${cleanupResult.cleanedCount} references cleaned, ${cleanupResult.deletedBillsCount} bills deleted`);
                 })
@@ -2896,7 +2966,7 @@ await updatedBill.populate([
             Logger.info("🧹 Scheduling automatic cleanup in background after linking...");
             
             // Run cleanup in background without blocking the response
-            performCleanupHelper(getOrganizationId(req.user))
+            performCleanupHelper(getOrganizationId(req.user), req.io)
                 .then(cleanupResult => {
                     Logger.info(`✅ Background cleanup completed: ${cleanupResult.cleanedCount} references cleaned, ${cleanupResult.deletedBillsCount} bills deleted`);
                 })
@@ -2966,6 +3036,8 @@ await updatedBill.populate([
             try {
                 writeToAtlas('sessions', 'upsert', updatedSession.toObject ? updatedSession.toObject() : updatedSession, { _id: updatedSession._id });
                 writeToAtlas('bills', 'upsert', finalBill.toObject ? finalBill.toObject() : finalBill, { _id: finalBill._id });
+                // توحيد مراجع الطاولة قبل البث
+                await syncBillChildrenTable(finalBill);
                 emitSessionInstant(req, updatedSession, finalBill);
                 if (req.io) {
                     const orgStr = String(getOrganizationId(req.user));
@@ -3605,7 +3677,7 @@ await updatedBill.populate([
             Logger.info("🧹 Scheduling automatic cleanup in background after table change...");
             
             // Run cleanup in background without blocking the response
-            performCleanupHelper(getOrganizationId(req.user))
+            performCleanupHelper(getOrganizationId(req.user), req.io)
                 .then(cleanupResult => {
                     Logger.info(`✅ Background cleanup completed: ${cleanupResult.cleanedCount} references cleaned, ${cleanupResult.deletedBillsCount} bills deleted`);
                 })
@@ -3689,6 +3761,8 @@ await updatedBill.populate([
             try {
                 writeToAtlas('sessions', 'upsert', updatedSession.toObject ? updatedSession.toObject() : updatedSession, { _id: updatedSession._id });
                 writeToAtlas('bills', 'upsert', finalBill.toObject ? finalBill.toObject() : finalBill, { _id: finalBill._id });
+                // توحيد مراجع الطاولة قبل البث
+                await syncBillChildrenTable(finalBill);
                 emitSessionInstant(req, updatedSession, finalBill);
                 if (req.io) {
                     const orgStr = String(getOrganizationId(req.user));
@@ -3737,7 +3811,7 @@ await updatedBill.populate([
     // Clean up duplicate session references in bills - can be called automatically
     cleanupDuplicateSessionReferences: async (req, res) => {
         try {
-            const result = await performCleanupHelper(getOrganizationId(req.user));
+            const result = await performCleanupHelper(getOrganizationId(req.user), req.io);
             
             res.json({
                 success: true,
@@ -3908,6 +3982,7 @@ await updatedBill.populate([
                 success: true,
                 message: "تم تعديل وقت بدء الجلسة بنجاح",
                 data: session,
+                bill: billForEmit ? (billForEmit.toObject ? billForEmit.toObject() : billForEmit) : null,
             });
 
         } catch (err) {
@@ -4090,6 +4165,7 @@ await updatedBill.populate([
                 success: true,
                 message: "تم تعديل أوقات الجلسة بنجاح",
                 data: session,
+                bill: billForEmitTimes ? (billForEmitTimes.toObject ? billForEmitTimes.toObject() : billForEmitTimes) : null,
             });
 
         } catch (err) {
@@ -4175,6 +4251,9 @@ await updatedBill.populate([
             sessionsCount: targetBill.sessions.length,
             ordersCount: targetBill.orders.length,
         });
+
+        // توحيد مراجع الطاولة لكل ما نُقل للفاتورة الهدف قبل الحذف
+        await syncBillChildrenTable(targetBill);
 
         return targetBill;
 

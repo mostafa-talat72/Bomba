@@ -1762,9 +1762,9 @@ billSchema.methods.calculateSubtotal = async function () {
                 }
             }
         }
-        // أضف رسوم التوصيل للدليفري
-        if (this.fulfillmentType === 'delivery' && this.deliveryInfo?.deliveryFee) {
-            subtotal += Number(this.deliveryInfo.deliveryFee) || 0;
+        // رسوم التوصيل تُحتسب متى وُجدت (دليفري أو وثائق قديمة بلا نوع) — التيك أوي بلا رسوم
+        if (this.fulfillmentType !== 'takeaway') {
+            subtotal += Number(this.deliveryInfo?.deliveryFee) || 0;
         }
     }
 

@@ -423,6 +423,9 @@ class PrintController {
     if (bill.tax && bill.tax > 0) {
       content += `Tax: ${bill.tax}\n`;
     }
+    if (bill.fulfillmentType !== 'takeaway' && Number(bill.deliveryInfo?.deliveryFee) > 0) {
+      content += `Delivery fee: ${bill.deliveryInfo.deliveryFee}\n`;
+    }
     
     content += `TOTAL: ${bill.total || 0}\n`;
     content += `PAID: ${bill.paid || 0}\n`;
@@ -448,6 +451,8 @@ class PrintController {
 
     content += this.centerText(orgName, charsPerLine) + '\n';
     content += this.centerText(`Order ${bracketSeq(order.orderNumber)}`, charsPerLine) + '\n';
+    if (order.fulfillmentType === 'delivery') content += this.centerText('*** DELIVERY ***', charsPerLine) + '\n';
+    else if (order.fulfillmentType === 'takeaway') content += this.centerText('*** TAKEAWAY ***', charsPerLine) + '\n';
     content += this.centerText(new Date(order.createdAt || new Date()).toLocaleString(language), charsPerLine) + '\n';
     
     if (order.table?.number) {

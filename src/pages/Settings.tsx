@@ -1,5 +1,5 @@
 ﻿import { useState, useEffect, FC, useRef } from 'react';
-import { Settings as SettingsIcon, Save, Bell, BellRing, User, Lock, Eye, EyeOff, Building2, LucideIcon, Facebook, Instagram, Twitter, Linkedin, Youtube, MessageCircle, Send, Globe, Phone, Mail, MapPin, Users, Check, X, Clock, Search } from 'lucide-react';
+import { Settings as SettingsIcon, Save, Bell, BellRing, User, Lock, Eye, EyeOff, Building2, LucideIcon, Facebook, Instagram, Twitter, Linkedin, Youtube, MessageCircle, Send, Globe, Phone, Mail, MapPin, Users, Check, X, Clock, Search, Printer, Smartphone, Wrench } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
 import { clearFreshPrintSettingsCache } from '../utils/freshPrintSettings';
@@ -154,6 +154,13 @@ const Settings: FC = () => {
   // Sensitive sections (backups, server address, DB maintenance, device
   // management, chrome-only QR): owner + admins only.
   const isManager = user?.role === 'admin' || user?.role === 'owner';
+  // ── نموذج صلاحيات موحد لأقسام النظام الحساسة (نسخ/سيرفر/تنبيهات/صيانة/أجهزة) ──
+  // Tier 1 (نظام/تدميري): المالك + المدير العام فقط — عمدًا خارج مفتاح التفويض
+  // (allowManagersToEditOrganization يخص بيانات المنظمة في تبويبها فقط).
+  // السيرفر هو الحارس النهائي (403)؛ الواجهة هنا للعرض فقط.
+  // للتوسيع للمديرين المفوضين: أضف || organizationPermissions.canEdit
+  // + محاذاة السيرفر (type-audit/backup تشترط أدوارًا هناك).
+  const canAccessSystemSections = user?.role === 'owner' || user?.role === 'admin';
 
   // UI State
   const [activeTab, setActiveTab] = useState('profile');
@@ -707,13 +714,13 @@ const Settings: FC = () => {
       const res: any = await api.createBackup(path || undefined, pwd || undefined);
       if (res?.success) {
         const d = res.data || {};
-        showAlertMessage(`تم إنشاء النسخة الاحتياطية بنجاح (${d.fileName || ''}${d.documents ? ` — ${d.documents} سجل` : ''})`);
+        showAlertMessage(`${t('settings.backupMsg.created')} (${d.fileName || ''}${d.documents ? ` — ${d.documents} ${t('settings.backupMsg.records')}` : ''})`);
         loadBackups();
       } else {
-        showAlertMessage(res?.message || 'فشل إنشاء النسخة الاحتياطية', 'error');
+        showAlertMessage(res?.message || t('settings.backupMsg.createFailed'), 'error');
       }
     } catch (error: any) {
-      showAlertMessage(error?.message || 'فشل إنشاء النسخة الاحتياطية', 'error');
+      showAlertMessage(error?.message || t('settings.backupMsg.createFailed'), 'error');
     } finally {
       setBackupBusy(false);
     }
@@ -746,12 +753,12 @@ const Settings: FC = () => {
       }
       if (res?.success) {
         const d = res.data || {};
-        showAlertMessage(`النسخة سليمة ✅ (${d.collections || 0} جداول — ${d.documents || 0} سجل)`);
+        showAlertMessage(`${t('settings.backupMsg.valid')} ${t('settings.backupMsg.validDetail', { tables: d.collections || 0, docs: d.documents || 0 })}`);
       } else {
-        showAlertMessage(res?.message || 'النسخة تالفة', 'error');
+        showAlertMessage(res?.message || t('settings.backupMsg.corrupted'), 'error');
       }
     } catch (error: any) {
-      showAlertMessage(error?.message || 'فشل الفحص', 'error');
+      showAlertMessage(error?.message || t('settings.backupMsg.checkFailed'), 'error');
     } finally {
       setVerifyBusy(null);
     }
@@ -761,12 +768,12 @@ const Settings: FC = () => {
     try {
       const res = await api.downloadBackup(fileName);
       if (res?.ok) {
-        showAlertMessage(`بدأ تنزيل النسخة (${fileName}) — انسخها لفلاشة لنقلها لجهاز آخر`);
+        showAlertMessage(t('settings.backupMsg.downloadStarted', { file: fileName }));
       } else {
-        showAlertMessage(res?.message || 'فشل التنزيل', 'error');
+        showAlertMessage(res?.message || t('settings.backupMsg.downloadFailed'), 'error');
       }
     } catch (error: any) {
-      showAlertMessage(error?.message || 'فشل التنزيل', 'error');
+      showAlertMessage(error?.message || t('settings.backupMsg.downloadFailed'), 'error');
     }
   };
 
@@ -793,13 +800,13 @@ const Settings: FC = () => {
         return;
       }
       if (res?.success) {
-        showAlertMessage('تمت الاستعادة بنجاح — سيتم إعادة تحميل الصفحة الآن');
+        showAlertMessage(t('settings.backupMsg.restoredOk'));
         setTimeout(() => window.location.reload(), 2500);
       } else {
-        showAlertMessage(res?.message || 'فشلت الاستعادة', 'error');
+        showAlertMessage(res?.message || t('settings.backupMsg.restoreFailed'), 'error');
       }
     } catch (error: any) {
-      showAlertMessage(error?.message || 'فشلت الاستعادة', 'error');
+      showAlertMessage(error?.message || t('settings.backupMsg.restoreFailed'), 'error');
     } finally {
       setRestoreBusy(null);
     }
@@ -818,9 +825,9 @@ const Settings: FC = () => {
           const res: any = await api.verifyBackup(ctx.fileName, pwd);
           if (res?.success) {
             const d = res.data || {};
-            showAlertMessage(`النسخة سليمة ✅ (${d.collections || 0} جداول — ${d.documents || 0} سجل)`);
+            showAlertMessage(`${t('settings.backupMsg.valid')} ${t('settings.backupMsg.validDetail', { tables: d.collections || 0, docs: d.documents || 0 })}`);
           } else {
-            showAlertMessage(res?.message || 'النسخة تالفة', 'error');
+            showAlertMessage(res?.message || t('settings.backupMsg.corrupted'), 'error');
           }
         } finally {
           setVerifyBusy(null);
@@ -830,17 +837,17 @@ const Settings: FC = () => {
         try {
           const res: any = await api.restoreBackup(ctx.fileName, pwd);
           if (res?.success) {
-            showAlertMessage('تمت الاستعادة بنجاح — سيتم إعادة تحميل الصفحة الآن');
+            showAlertMessage(t('settings.backupMsg.restoredOk'));
             setTimeout(() => window.location.reload(), 2500);
           } else {
-            showAlertMessage(res?.message || 'فشلت الاستعادة', 'error');
+            showAlertMessage(res?.message || t('settings.backupMsg.restoreFailed'), 'error');
           }
         } finally {
           setRestoreBusy(null);
         }
       }
     } catch (error: any) {
-      showAlertMessage(error?.message || 'فشل العملية', 'error');
+      showAlertMessage(error?.message || t('settings.backupMsg.opFailed'), 'error');
     }
   };
 
@@ -849,20 +856,20 @@ const Settings: FC = () => {
     event.target.value = '';
     if (!file) return;
     if (!file.name.toLowerCase().endsWith('.json.gz')) {
-      showAlertMessage('الملف يجب أن يكون نسخة احتياطية بصيغة .json.gz', 'error');
+      showAlertMessage(t('settings.backupMsg.mustBeGz'), 'error');
       return;
     }
     setImportBusy(true);
     try {
       const res: any = await api.importBackup(file);
       if (res?.success) {
-        showAlertMessage(`تم استيراد النسخة بنجاح (${res.data?.fileName || file.name})`);
+        showAlertMessage(t('settings.backupMsg.importedOk', { file: res.data?.fileName || file.name }));
         loadBackups();
       } else {
-        showAlertMessage(res?.message || 'فشل الاستيراد', 'error');
+        showAlertMessage(res?.message || t('settings.backupMsg.importFailed'), 'error');
       }
     } catch (error: any) {
-      showAlertMessage(error?.message || 'فشل الاستيراد', 'error');
+      showAlertMessage(error?.message || t('settings.backupMsg.importFailed'), 'error');
     } finally {
       setImportBusy(false);
     }
@@ -1055,7 +1062,7 @@ const Settings: FC = () => {
         if (printers.length > 0) {
           showAlertMessage(t('settings.organization.printSettings.printersDetected', { count: printers.length }), 'success');
         } else {
-          showAlertMessage('لا توجد طابعات متصلة — تأكد من توصيل الطابعة وتشغيلها ثم حاول again', 'info');
+          showAlertMessage(t('settings.organization.printSettings.noPrinters'), 'info');
         }
       } else {
         showAlertMessage(response.message || t('settings.organization.printSettings.detectFailed'), 'error');
@@ -1289,13 +1296,13 @@ const Settings: FC = () => {
         tableSectionName: 'Sample',
       });
       if (response.success) {
-        showAlertMessage('تمت طباعة نموذج الفاتورة بنجاح', 'success');
+        showAlertMessage(t('settings.organization.printSettings.sampleOk'), 'success');
       } else {
-        showAlertMessage(response.message || 'فشل في طباعة نموذج الفاتورة', 'error');
+        showAlertMessage(response.message || t('settings.organization.printSettings.sampleFailed'), 'error');
       }
     } catch (error) {
       console.error('Error printing sample receipt:', error);
-      showAlertMessage('فشل في طباعة نموذج الفاتورة', 'error');
+      showAlertMessage(t('settings.organization.printSettings.sampleFailed'), 'error');
     }
   };
 
@@ -1323,12 +1330,41 @@ const Settings: FC = () => {
     }
   };
 
+  // زر حفظ الإعدادات العامة — يُعرض في تبويبي "عام" و"النسخ والصيانة" (نفس المعالج)
+  const GeneralSaveButton = () => (
+    <div className="mt-6">
+      <button
+        onClick={handleGeneralSettingsUpdate}
+        disabled={generalSaving}
+        className="flex items-center space-x-2 bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 text-white px-4 py-2 rounded-md disabled:opacity-50 min-w-40 justify-center"
+      >
+        {generalSaving ? (
+          <>
+            <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            <span>{t('common.saving')}</span>
+          </>
+        ) : (
+          <>
+            <Save className="h-4 w-4" />
+            <span>{t('settings.general.saveSettings')}</span>
+          </>
+        )}
+      </button>
+    </div>
+  );
+
   const tabs: TabType[] = [
     { id: 'profile', name: t('settings.tabs.profile'), icon: User },
     { id: 'password', name: t('settings.tabs.password'), icon: Lock },
 
     { id: 'mynotifications', name: t('settings.tabs.myNotifications'), icon: BellRing },
     { id: 'general', name: t('settings.tabs.general'), icon: SettingsIcon },
+    { id: 'myprint', name: t('settings.tabs.myprint'), icon: Printer },
+    { id: 'devices', name: t('settings.tabs.devices'), icon: Smartphone },
+    { id: 'maintenance', name: t('settings.tabs.maintenance'), icon: Wrench },
     { id: 'organization', name: t('settings.tabs.organization'), icon: Building2 },
   ];
 
@@ -1353,10 +1389,8 @@ const Settings: FC = () => {
               <SettingsIcon className={`h-5 w-5 sm:h-6 sm:w-6 text-orange-600 dark:text-orange-400 ${isRTL ? 'ml-2' : 'mr-2'}`} />
               {t('settings.title')}
             </h1>
-              <p className="text-xs sm:text-base text-gray-600 dark:text-gray-300 ${isRTL ? 'mr-2 sm:mr-4' : 'ml-2 sm:ml-4'}">{t('settings.subtitle')}</p>
+              <p className={`text-xs sm:text-base text-gray-600 dark:text-gray-300 ${isRTL ? 'mr-2 sm:mr-4' : 'ml-2 sm:ml-4'}`}>{t('settings.subtitle')}</p>
             </div>
-            <div className="flex items-center gap-2">
-          </div>
       </div>
 
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
@@ -1577,9 +1611,9 @@ const Settings: FC = () => {
             {/* Notifications Tab */}
 
             {/* General Tab */}
-            {activeTab === 'general' && (
+            {['general', 'myprint', 'devices', 'maintenance'].includes(activeTab) && (
               <div className="space-y-6">
-                <div>
+                <div className={activeTab === 'general' ? '' : 'hidden'}>
                   <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">{t('settings.general.title')}</h3>
                   <div className="space-y-4">
                     <div>
@@ -1615,10 +1649,10 @@ const Settings: FC = () => {
                       </div>
 
                     {/* Backup settings (owner/admins only) */}
-                    {isManager && (
+                    {activeTab === 'maintenance' && canAccessSystemSections && (
                     <div>
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        مسار النسخ الاحتياطي
+                        {t('settings.backupMsg.pathLabel')}
                       </label>
                       <div className="flex space-x-2 space-x-reverse">
                         <input
@@ -1633,7 +1667,7 @@ const Settings: FC = () => {
                           onClick={handleBrowseBackupFolder}
                           className="px-3 py-2 bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300"
                         >
-                          استعراض
+                          {t('settings.backupUi.browse')}
                         </button>
                       </div>
                       <input
@@ -1644,18 +1678,18 @@ const Settings: FC = () => {
                         onChange={handleFolderInputChange}
                       />
                       <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                        سيتم حفظ النسخ الاحتياطية في هذا المجلد على هذا الجهاز فقط
+                        {t('settings.backupUi.folderHint')}
                       </p>
                       <input
                         type="password"
                         value={backupPassword}
                         onChange={(e) => setBackupPassword(e.target.value)}
-                        placeholder="كلمة سر للنسخة (اختياري — للتشفير)"
+                        placeholder={t('settings.backupUi.pwdPlaceholder')}
                         autoComplete="new-password"
                         className="mt-2 w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                       />
                       <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1">
-                        بدون كلمة سر تُحفظ النسخة عادية — مع كلمة سر تُشفَّر ولا تُفتح بدونها
+                        {t('settings.backupUi.pwdHint')}
                       </p>
                       <button
                         type="button"
@@ -1663,11 +1697,11 @@ const Settings: FC = () => {
                         disabled={backupBusy}
                         className="mt-2 px-4 py-2 bg-green-600 hover:bg-green-700 dark:bg-green-500 dark:hover:bg-green-600 text-white rounded-md disabled:opacity-50 min-w-40"
                       >
-                        {backupBusy ? 'جاري إنشاء النسخة...' : 'نسخ احتياطي الآن'}
+                        {backupBusy ? t('settings.backupUi.creatingBackup') : t('settings.backupUi.backupNow')}
                       </button>
                       {lastBackup?.at && (
                         <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
-                          آخر نسخة: {new Date(lastBackup.at).toLocaleString('ar-EG')} — {lastBackup.success ? `ناجحة (${lastBackup.fileName || ''})` : `فاشلة (${lastBackup.error || ''})`}
+                          {t('settings.backupUi.lastBackup')}: {new Date(lastBackup.at).toLocaleString(currentLanguage === 'ar' ? 'ar-EG' : currentLanguage)} — {lastBackup.success ? `${t('settings.backupUi.backupOk')} (${lastBackup.fileName || ''})` : `${t('settings.backupUi.backupFail')} (${lastBackup.error || ''})`}
                         </p>
                       )}
                       <button
@@ -1676,7 +1710,7 @@ const Settings: FC = () => {
                         disabled={importBusy}
                         className="mt-2 mr-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 text-white rounded-md disabled:opacity-50 min-w-40"
                       >
-                        {importBusy ? 'جاري الاستيراد...' : 'استيراد نسخة من جهاز آخر'}
+                        {importBusy ? t('settings.backupUi.importing') : t('settings.backupUi.importFromDevice')}
                       </button>
                       <input
                         ref={importInputRef}
@@ -1687,18 +1721,18 @@ const Settings: FC = () => {
                       />
                       <div className="mt-3">
                         <div className="flex items-center justify-between mb-2">
-                          <span className="text-sm font-medium text-gray-700 dark:text-gray-300">النسخ المحفوظة</span>
+                          <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{t('settings.backupUi.savedBackups')}</span>
                           <button
                             type="button"
                             onClick={loadBackups}
                             disabled={backupsLoading}
                             className="text-xs text-orange-600 hover:text-orange-700 dark:text-orange-400 disabled:opacity-50"
                           >
-                            {backupsLoading ? 'جاري التحديث...' : 'تحديث القائمة'}
+                            {backupsLoading ? t('settings.backupUi.updating') : t('settings.backupUi.refreshList')}
                           </button>
                         </div>
                         {backups.length === 0 && !backupsLoading && (
-                          <p className="text-xs text-gray-500 dark:text-gray-400">لا توجد نسخ محفوظة بعد</p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400">{t('settings.backupUi.noBackups')}</p>
                         )}
                         <div className="space-y-2 max-h-48 overflow-y-auto">
                           {backups.map((b: any) => (
@@ -1716,19 +1750,19 @@ const Settings: FC = () => {
                                   type="button"
                                   onClick={() => handleVerifyBackup(b.fileName)}
                                   disabled={verifyBusy !== null || restoreBusy !== null}
-                                  title="فحص سلامة النسخة دون استعادتها"
+                                  title={t('settings.backupUi.verifyTitle')}
                                   className="px-2 py-1 text-xs bg-gray-500 hover:bg-gray-600 text-white rounded-md disabled:opacity-50"
                                 >
-                                  {verifyBusy === b.fileName ? 'يفحص...' : 'فحص'}
+                                  {verifyBusy === b.fileName ? t('settings.backupUi.verifying') : t('settings.backupUi.verify')}
                                 </button>
                                 <button
                                   type="button"
                                   onClick={() => handleDownloadBackup(b.fileName)}
                                   disabled={restoreBusy !== null}
-                                  title="تنزيل الملف لنقله لجهاز آخر عبر فلاشة"
+                                  title={t('settings.backupUi.downloadTitle')}
                                   className="px-2 py-1 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded-md disabled:opacity-50"
                                 >
-                                  تنزيل
+                                  {t('settings.backupUi.download')}
                                 </button>
                                 <button
                                   type="button"
@@ -1736,20 +1770,20 @@ const Settings: FC = () => {
                                   disabled={restoreBusy !== null}
                                   className="px-2 py-1 text-xs bg-orange-600 hover:bg-orange-700 text-white rounded-md disabled:opacity-50"
                                 >
-                                  {restoreBusy === b.fileName ? 'جاري الاستعادة...' : 'استعادة'}
+                                  {restoreBusy === b.fileName ? t('settings.backupUi.restoring') : t('settings.backupUi.restore')}
                                 </button>
                               </div>
                             </div>
                           ))}
                         </div>
                         <p className="text-[11px] text-red-500 dark:text-red-400 mt-2">
-                          تنبيه: الاستعادة تستبدل قاعدة البيانات الحالية بالكامل (يتم أخذ نسخة أمان تلقائياً أولاً)
+                          {t('settings.backupUi.restoreWarn')}
                         </p>
                       </div>
                     </div>
                     )}
 
-                    {isManager && (
+                    {activeTab === 'maintenance' && canAccessSystemSections && (
                     <div>
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                         {t('serverConnection.title')}
@@ -1776,33 +1810,12 @@ const Settings: FC = () => {
                     </div>
                     )}
 
-                    <div className="mt-6">
-                      <button
-                        onClick={handleGeneralSettingsUpdate}
-                        disabled={generalSaving}
-                        className="flex items-center space-x-2 bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 text-white px-4 py-2 rounded-md disabled:opacity-50 min-w-40 justify-center"
-                      >
-                        {generalSaving ? (
-                          <>
-                            <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                            </svg>
-                            <span>{t('common.saving')}</span>
-                          </>
-                        ) : (
-                          <>
-                            <Save className="h-4 w-4" />
-                            <span>{t('settings.general.saveSettings')}</span>
-                          </>
-                        )}
-                      </button>
-                    </div>
+<GeneralSaveButton />
                   </div>
                 </div>
 
                 {/* My printer settings (per-user override with org fallback) */}
-                <div>
+                <div className={activeTab === 'myprint' ? '' : 'hidden'}>
                   <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">{t('settings.myPrint.title')}</h3>
                   <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">{t('settings.myPrint.desc')}</p>
                   {myPrintLoading ? (
@@ -1890,7 +1903,7 @@ const Settings: FC = () => {
                 </div>
 
                 {/* Smart alerts thresholds (org-wide, managers only) */}
-                {isManager && (
+                {activeTab === 'maintenance' && canAccessSystemSections && (
                   <div>
                     <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">{t('smartCfg.title')}</h3>
                     <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">{t('smartCfg.desc')}</p>
@@ -1933,7 +1946,7 @@ const Settings: FC = () => {
                 )}
 
                 {/* Database maintenance (owner/admins only) */}
-                {isManager && (
+                {activeTab === 'maintenance' && canAccessSystemSections && (
                   <div>
                     <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">{t('settings.maintenance.title')}</h3>
                     <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">{t('settings.maintenance.desc')}</p>
@@ -1952,13 +1965,30 @@ const Settings: FC = () => {
                   </div>
                 )}
 
+                {activeTab === 'maintenance' && canAccessSystemSections && (
+                  <GeneralSaveButton />
+                )}
+                {activeTab === 'maintenance' && !canAccessSystemSections && (
+                  <div className="text-center py-6">
+                    <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100 dark:bg-red-900">
+                      <Wrench className="h-6 w-6 text-red-600 dark:text-red-400" />
+                    </div>
+                    <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-gray-100">
+                      {t('settings.organization.noPermission.title')}
+                    </h3>
+                    <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                      {t('settings.organization.noPermission.message')}
+                    </p>
+                  </div>
+                )}
+
                 {/* Connect mobile over LAN */}
-                <div>
+                <div className={activeTab === 'devices' ? '' : 'hidden'}>
                   <MobileConnectCard showChromeOption={isManager} />
                 </div>
 
                 {/* Connected devices + per-device print permission (owner/admins only) */}
-                {isManager && (
+                {activeTab === 'devices' && canAccessSystemSections && (
                   <div>
                     <ConnectedDevicesCard />
                   </div>
@@ -1979,6 +2009,28 @@ const Settings: FC = () => {
                     )}
                   </div>
 
+                  {/* شريط أقسام سريع — قفز ناعم لبطاقات التبويب */}
+                  <div className="sticky top-2 z-10 flex flex-wrap gap-1.5 p-2 bg-gray-50/90 dark:bg-gray-900/90 backdrop-blur rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
+                    {[
+                      ['org-sec-basic', t('settings.organization.basicInfo')],
+                      ['org-sec-website', t('settings.organization.generatedWebsite.title')],
+                      ['org-sec-print', t('settings.organization.printSettings.title')],
+                      ['org-sec-social', t('settings.organization.socialLinks.title')],
+                      ['org-sec-hours', t('settings.organization.workingHours.title')],
+                      ['org-sec-perms', t('settings.organization.permissions.title')],
+                      ['org-sec-payroll', t('settings.organization.payroll.title')],
+                    ].map(([secId, label]) => (
+                      <button
+                        key={secId}
+                        type="button"
+                        onClick={() => document.getElementById(secId)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+                        className="text-[11px] font-bold rounded-full px-2.5 py-1 border bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-600 hover:border-orange-400 hover:text-orange-600 dark:hover:text-orange-400 transition-colors"
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+
                   {/* Loading state */}
                   {organizationSaving && (
                     <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
@@ -1994,7 +2046,7 @@ const Settings: FC = () => {
 
                   {/* Basic Information */}
                   <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg mb-6">
-                    <h4 className="text-md font-medium text-gray-900 dark:text-gray-100 mb-4 flex items-center">
+                    <h4 id="org-sec-basic" className="text-md font-medium text-gray-900 dark:text-gray-100 mb-4 flex items-center scroll-mt-24">
                       <Building2 className="h-5 w-5 ml-2" />
                       {t('settings.organization.basicInfo')}
                     </h4>
@@ -2113,9 +2165,9 @@ const Settings: FC = () => {
                   {/* Generated Website Section */}
                   {organization.websiteUrl && (
                     <div className="bg-green-50 dark:bg-green-900/20 p-4 rounded-lg mb-6">
-                      <h4 className="text-md font-medium text-gray-900 dark:text-gray-100 mb-4 flex items-center">
-                        <Globe className="h-5 w-5 ml-2 text-green-600" />
-                        {t('settings.organization.generatedWebsite.title')}
+<h4 id="org-sec-website" className="text-md font-medium text-gray-900 dark:text-gray-100 mb-4 flex items-center scroll-mt-24">
+                      <Globe className="h-5 w-5 ml-2 text-green-600" />
+                      {t('settings.organization.generatedWebsite.title')}
                       </h4>
                       <div className="flex items-center justify-between">
                         <div>
@@ -2143,7 +2195,7 @@ const Settings: FC = () => {
 
                   {/* Print Settings Section */}
                   <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg mb-6">
-                    <h4 className="text-md font-medium text-gray-900 dark:text-gray-100 mb-4">
+                    <h4 id="org-sec-print" className="text-md font-medium text-gray-900 dark:text-gray-100 mb-4 scroll-mt-24">
                       {t('settings.organization.printSettings.title')}
                     </h4>
                     
@@ -2161,7 +2213,7 @@ const Settings: FC = () => {
 
                   {/* Social Links */}
                   <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg mb-6">
-                    <h4 className="text-md font-medium text-gray-900 dark:text-gray-100 mb-4">
+                    <h4 id="org-sec-social" className="text-md font-medium text-gray-900 dark:text-gray-100 mb-4 scroll-mt-24">
                       {t('settings.organization.socialLinks.title')}
                     </h4>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
@@ -2313,7 +2365,7 @@ const Settings: FC = () => {
 
                   {/* Working Hours */}
                   <div className="bg-gray-50 dark:bg-gray-700 p-3 sm:p-4 rounded-lg mb-4 sm:mb-6">
-                    <h4 className="text-base sm:text-md font-medium text-gray-900 dark:text-gray-100 mb-3 sm:mb-4 flex items-center">
+                    <h4 id="org-sec-hours" className="text-base sm:text-md font-medium text-gray-900 dark:text-gray-100 mb-3 sm:mb-4 flex items-center scroll-mt-24">
                       <Clock className="h-5 w-5 ml-2" />
                       {t('settings.organization.workingHours.title')}
                     </h4>
@@ -2488,9 +2540,7 @@ const Settings: FC = () => {
                   {/* Permissions Section - Only for Owner */}
                   {organizationPermissions.isOwner && (
                     <div className="bg-yellow-50 dark:bg-yellow-900/20 p-4 rounded-lg mb-6">
-                      <h4 className="text-md font-medium text-gray-900 dark:text-gray-100 mb-4 flex items-center">
-                        <Users className="h-5 w-5 ml-2" />
-                        {t('settings.organization.permissions.title')}
+<h4 id="org-sec-perms" className="text-md font-medium text-gray-900 dark:text-gray-100 mb-4 flex items-center scroll-mt-24">
                       </h4>
                       
                       {/* Enable/Disable Permission */}
@@ -2765,16 +2815,16 @@ const Settings: FC = () => {
                       {testingPrinter ? '...' : t('settings.organization.printSettings.test')}
                     </button>
                     <button onClick={testDrawer} disabled={testingDrawer} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm disabled:opacity-50 disabled:cursor-not-allowed">
-                      {testingDrawer ? '...' : (currentLanguage === 'ar' ? 'اختبار درج الكاشير' : 'Test cash drawer')}
+                      {testingDrawer ? '...' : t('settings.myPrint.testDrawer')}
                     </button>
                     <button onClick={printSampleReceipt} className="px-4 py-2 bg-violet-600 text-white rounded-lg hover:bg-violet-700 text-sm">
-                      {currentLanguage === 'ar' ? 'طباعة نموذج فواتير' : 'Print sample receipt'}
+                      {t('settings.organization.printSettings.printSample')}
                     </button>
                   </div>
                   <div className="mb-3 flex items-center gap-2 text-sm">
                     <span className={`inline-block h-2.5 w-2.5 rounded-full ${printerStatus === 'ready' ? 'bg-emerald-500' : printerStatus === 'offline' ? 'bg-red-500' : 'bg-gray-400'}`} />
                     <span className="text-gray-700 dark:text-gray-300">
-                      {printerStatus === 'ready' ? (currentLanguage === 'ar' ? 'الطابعة جاهزة' : 'Printer ready') : printerStatus === 'offline' ? (currentLanguage === 'ar' ? 'الطابعة غير متصلة' : 'Printer offline') : (currentLanguage === 'ar' ? 'في انتظار اختبار الطابعة' : 'Waiting for printer test')}
+                      {printerStatus === 'ready' ? t('settings.organization.printSettings.printerReady') : printerStatus === 'offline' ? t('settings.organization.printSettings.printerOffline') : t('settings.organization.printSettings.printerWaiting')}
                     </span>
                   </div>
                   {availablePrinters.length > 0 && (
@@ -2868,10 +2918,10 @@ const Settings: FC = () => {
         isOpen={restoreConfirm !== null}
         onClose={() => setRestoreConfirm(null)}
         onConfirm={confirmRestoreBackup}
-        title="استعادة نسخة احتياطية"
-        message={`سيتم استبدال قاعدة البيانات الحالية بمحتوى النسخة "${restoreConfirm || ''}". سيتم إنشاء نسخة احتياطية تلقائية أولاً للسلامة. متابعة؟`}
-        confirmText="استعادة"
-        cancelText="تراجع"
+        title={t('settings.backupMsg.restoreTitle')}
+        message={t('settings.backupMsg.restoreMessage', { file: restoreConfirm || '' })}
+        confirmText={t('settings.backupMsg.continueBtn')}
+        cancelText={t('settings.backupMsg.goBack')}
         confirmColor="bg-orange-600 hover:bg-orange-700"
         loading={restoreBusy !== null}
       />
@@ -2882,7 +2932,7 @@ const Settings: FC = () => {
           <div className="fixed inset-0 z-[360] flex items-center justify-center bg-black/60 p-4" onClick={() => setPwdModal(null)}>
             <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-sm border border-gray-200 dark:border-gray-700 overflow-hidden" onClick={e => e.stopPropagation()}>
               <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700">
-                <h3 className="font-bold text-gray-900 dark:text-gray-100">النسخة مشفرة</h3>
+                <h3 className="font-bold text-gray-900 dark:text-gray-100">{t('settings.backupMsg.pwdTitle')}</h3>
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 break-all" dir="ltr">{pwdModal.fileName}</p>
               </div>
               <div className="p-4 space-y-3">
@@ -2892,12 +2942,12 @@ const Settings: FC = () => {
                   value={pwdValue}
                   onChange={e => setPwdValue(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter' && pwdValue) submitBackupPassword(); }}
-                  placeholder="أدخل كلمة السر"
+                  placeholder={t('settings.backupMsg.pwdPlaceholder')}
                   className="w-full border border-gray-300 dark:border-gray-600 rounded-xl px-3 py-2.5 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 outline-none focus:ring-2 focus:ring-orange-400"
                 />
                 <div className="flex gap-2">
-                  <button onClick={() => setPwdModal(null)} className="flex-1 py-2.5 border border-gray-300 dark:border-gray-600 rounded-xl text-gray-600 dark:text-gray-300 font-bold">تراجع</button>
-                  <button onClick={submitBackupPassword} disabled={!pwdValue} className="flex-1 py-2.5 bg-orange-600 hover:bg-orange-700 text-white rounded-xl font-bold disabled:opacity-50">متابعة</button>
+                  <button onClick={() => setPwdModal(null)} className="flex-1 py-2.5 border border-gray-300 dark:border-gray-600 rounded-xl text-gray-600 dark:text-gray-300 font-bold">{t('settings.backupMsg.goBack')}</button>
+                  <button onClick={submitBackupPassword} disabled={!pwdValue} className="flex-1 py-2.5 bg-orange-600 hover:bg-orange-700 text-white rounded-xl font-bold disabled:opacity-50">{t('settings.backupMsg.continueBtn')}</button>
                 </div>
               </div>
             </div>

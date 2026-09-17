@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import ModalPortal from './ModalPortal';
-import { Bell, X, Check, Trash2, AlertCircle, Info, CheckCircle, Clock } from 'lucide-react';
+import { Bell, X, Check, Trash2, AlertCircle, Info, CheckCircle, Clock, Eye } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import { useNavigate } from 'react-router-dom';
+import { api } from '../services/api';
 import NotificationSound from './NotificationSound';
 import { getLocaleFromLanguage } from '../utils/localeMapper';
 import { useTranslation } from 'react-i18next';
@@ -40,6 +42,7 @@ interface NotificationRead {
 
 const NotificationCenter: React.FC = () => {
   const { t, i18n } = useTranslation();
+  const navigate = useNavigate();
   const {
     getNotifications,
     getNotificationStats,
@@ -48,6 +51,9 @@ const NotificationCenter: React.FC = () => {
     deleteNotification,
     user,
     users,
+    orders,
+    bills,
+    showNotification,
     notifications, // استخدم notifications من context
     forceRefreshNotifications,
   } = useApp() as any;
@@ -313,6 +319,65 @@ const NotificationCenter: React.FC = () => {
       await loadStats(); // تحديث الإحصائيات فوراً
     } catch (error) {
       }
+  };
+
+// عرض الطلب من الإشعار: يفتح الطاولة + معاينة، أو إدارة الدفع حسب حالة الفاتورة/نوعها
+  const handleViewOrder = async (n: any) => {
+    const md = (n?.metadata || {}) as any;
+    const orderId = md.orderId ? String(md.orderId) : '';
+    const orderNumLabel = md.orderNumber ? `#${md.orderNumber}` : 'الطلب';
+    if (!orderId) return;
+    try { await markNotificationAsRead(n.id || n._id); } catch {}
+    setIsOpen(false);
+    // 1) الطلب: من الذاكرة ثم جلب مباشر
+    let order: any = (orders || []).find((o: any) => String(o._id || o.id) === orderId);
+    if (!order) {
+      try {
+        const r: any = await api.getOrder(orderId);
+        if (r?.success && r.data) order = r.data;
+      } catch {}
+    }
+    if (!order || !(order as any)._id) {
+      showNotification(`الطلب ${orderNumLabel} غير موجود — ربما حُذف`, 'error');
+      return;
+    }
+    // 2) الفاتورة: من الذاكرة ثم جلب مباشر (المدفوعة خارج الـ state)
+    const bRef = (order as any).bill;
+    const billId = bRef ? String((bRef as any)?._id || (bRef as any)?.id || bRef) : (md.billId ? String(md.billId) : '');
+    let bill: any = billId ? (bills || []).find((b: any) => String(b._id || b.id) === billId) : null;
+    if (!bill && billId) {
+      try {
+        const rb: any = await api.getBill(billId);
+        if (rb?.success && rb.data) bill = rb.data;
+      } catch {}
+    }
+    const billStatus = (bill as any)?.status;
+    const billNumLabel = (bill as any)?.billNumber ? `#${(bill as any).billNumber}` : (md.billNumber ? `#${md.billNumber}` : 'الفاتورة');
+    if (!bill) {
+      showNotification(`تعذر العثور على فاتورة الطلب ${orderNumLabel}`, 'error');
+      return;
+    }
+    if (billStatus === 'cancelled') {
+      showNotification(`الطلب ${orderNumLabel} يتبع فاتورة ملغاة ${billNumLabel}`, 'error');
+      return;
+    }
+    const fulfillment = (bill as any)?.fulfillmentType || (order as any)?.fulfillmentType || md.fulfillmentType || 'dine_in';
+    const tRaw = (order as any)?.table ?? (bill as any)?.table ?? md.tableId ?? null;
+    const tableId = tRaw ? String((tRaw as any)?._id || (tRaw as any)?.id || tRaw) : '';
+    const realBillId = String((bill as any)._id || (bill as any).id || billId);
+    const realOrderId = String((order as any)._id || (order as any).id || orderId);
+    // 3) التوجيه: مدفوعة → إدارة الدفع على صفحتها / غير مدفوعة بطاولة → النافذة + معاينة
+    if (billStatus === 'paid') {
+      const target = fulfillment === 'takeaway' ? '/takeaway' : fulfillment === 'delivery' ? '/delivery' : '/tables';
+      navigate(target, { state: { openPaymentForBill: realBillId } });
+      return;
+    }
+    if (tableId) {
+      navigate('/tables', { state: { openTableModal: true, tableId, previewOrderId: realOrderId } });
+      return;
+    }
+    const target2 = fulfillment === 'delivery' ? '/delivery' : '/takeaway';
+    navigate(target2, { state: { openPaymentForBill: realBillId } });
   };
 
   const handleDelete = async (notificationId: string) => {
@@ -692,6 +757,14 @@ const NotificationCenter: React.FC = () => {
                           className="mt-2 text-xs sm:text-sm text-orange-600 dark:text-orange-400 hover:text-orange-800 dark:hover:text-orange-300 font-medium"
                         >
                           {notification.actionText}
+                        </button>
+                      )}
+                      {((notification as any).category === 'order' || (notification as any).type === 'order') && (notification.metadata as any)?.orderId && (
+                        <button
+                          onClick={() => handleViewOrder(notification)}
+                          className="mt-2 text-xs sm:text-sm text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 font-medium flex items-center gap-1"
+                        >
+                          <Eye className="h-3.5 w-3.5" /> عرض الطلب
                         </button>
                       )}
                       <div className={`flex flex-col sm:flex-row sm:items-center sm:justify-between mt-2 text-xs space-y-1 sm:space-y-0 ${

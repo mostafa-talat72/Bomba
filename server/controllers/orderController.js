@@ -485,7 +485,9 @@ export const getOrders = async (req, res) => {
         }
         if (table) query.table = table;
         Object.assign(query, organizationFilter(req.user));
-        query.isDeleted = false;
+        // $in بدل المساواة: وثائق ما قبل الحذف الناعم بلا حقل isDeleted أصلاً
+        // والمساواة false تستبعدها — بينما null تطابق الغائب ويستخدَم الفهرس.
+        query.isDeleted = { $in: [false, null] };
         if (reportEligible === "true") {
             const reportOrderIds = await getReportEligibleOrderIds(req.user.organization, {
                 startDate: startDate || undefined,
@@ -1114,7 +1116,10 @@ export const createOrder = async (req, res) => {
                     await billDoc.save();
                     realtimeBill = await Bill.findById(billDoc._id)
                         .populate('orders')
-                        .populate('sessions')
+                        .populate({
+                            path: 'sessions',
+                            populate: { path: 'deviceId', select: 'type hourlyRate playstationRates' },
+                        })
                         .populate('table');
                 }
             } catch (billError) {
@@ -1187,10 +1192,12 @@ export const createOrder = async (req, res) => {
         }
 
         // Return response IMMEDIATELY after local save
+        // الفاتورة الكاملة مرفقة: رحلة واحدة للفاعل (تُطبق مباشرة بدل انتظار الصدى+الجلب)
         res.status(201).json({
             success: true,
             message: "تم إنشاء الطلب بنجاح",
             data: responseData,
+            bill: realtimeBill ? (realtimeBill.toObject ? realtimeBill.toObject() : realtimeBill) : null,
         });
 
         // Background work — inventory deduction already done above, only notifications left
@@ -1894,6 +1901,20 @@ export const updateOrder = async (req, res) => {
             .populate("organization", "name")
             .lean();
 
+        // Recalculate bill totals SYNCHRONOUSLY before emit+response (single-roundtrip for actor)
+        let updatedBillForEmit = null;
+        if (order.bill) {
+            try {
+                const BillModelSync = (await import("../models/Bill.js")).default;
+                const rbDoc = await BillModelSync.findById(order.bill);
+                if (rbDoc) {
+                    await rbDoc.calculateSubtotal();
+                    await rbDoc.save();
+                    updatedBillForEmit = rbDoc.toObject ? rbDoc.toObject() : rbDoc;
+                }
+            } catch (recalcErr) { Logger.error('Error updating bill totals:', recalcErr); }
+        }
+
         // ── Real-time emit (<100ms) — before response
         if (req.io) {
             try {
@@ -1909,31 +1930,18 @@ export const updateOrder = async (req, res) => {
                     req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('table-status-update', tblData);
                 }
                 if (order.bill) {
-                    // also emit bill updated because order change affects bill
+                    // also emit bill updated because order change affects bill (fresh totals above)
                     try {
-                        const BillModel = (await import("../models/Bill.js")).default;
-                        const bdoc = await BillModel.findById(order.bill).lean();
-                        if (bdoc) {
-                            req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('bill:updated', bdoc);
-                            req.io.notifyBillUpdate("updated", bdoc, getOrganizationId(req.user), { silent: true });
+                        if (updatedBillForEmit) {
+                            req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('bill:updated', updatedBillForEmit);
+                            req.io.notifyBillUpdate("updated", updatedBillForEmit, getOrganizationId(req.user), { silent: true });
                         }
                     } catch {}
                 }
             } catch (emitErr) { Logger.error('Emit order:updated failed', emitErr); }
         }
 
-        // Update bill totals in background (non-blocking)
-        if (order.bill) {
-            setImmediate(() => {
-                Bill.findById(order.bill).then(billDoc => {
-                    if (billDoc) {
-                        return billDoc.calculateSubtotal();
-                    }
-                }).catch(err => {
-                    Logger.error('Error updating bill totals:', err);
-                });
-            });
-        }
+        // (bill totals already recalculated synchronously above — no background pass needed)
 
         // Emit Socket.IO event in background (legacy — already emitted above for instant)
         if (req.io) {
@@ -1950,6 +1958,7 @@ export const updateOrder = async (req, res) => {
             success: true,
             message: "تم تحديث الطلب بنجاح",
             data: updatedOrder,
+            bill: updatedBillForEmit,
         });
     } catch (error) {
         // Handle specific error types
@@ -2196,6 +2205,14 @@ export const deleteOrder = async (req, res) => {
             Logger.info(`🔓 Sync middleware re-enabled`);
         }
 
+        // الفاتورة الباقية للبث والرد معاً (رحلة واحدة للفاعل + لحظية للباقين)
+        let deletedRespBill = null;
+        try {
+            if (typeof billId !== 'undefined' && billId) {
+                const rbCheck = await Bill.findById(billId);
+                if (rbCheck) deletedRespBill = rbCheck.toObject ? rbCheck.toObject() : rbCheck;
+            }
+        } catch {}
         // Emit Socket.IO event for order deletion — instant <100ms with colon
         if (req.io) {
             try {
@@ -2204,20 +2221,27 @@ export const deleteOrder = async (req, res) => {
                 req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('order:deleted', { _id: req.params.id });
                 req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('order:updated', { _id: req.params.id, _deleted: true });
                 req.io.notifyOrderUpdate("deleted", { _id: req.params.id, orderNumber, table: tableIdToUpdate }, getOrganizationId(req.user));
+                // إجماليات الفاتورة الباقية لباقي الأجهزة (كانت تُترك قديمة حتى عملية لاحقة)
+                if (deletedRespBill) {
+                    try { req.io.notifyBillUpdate("updated", deletedRespBill, getOrganizationId(req.user), { silent: true }); } catch {}
+                }
                 if (tableIdToUpdate) {
-                    const tblData = { tableId: tableIdToUpdate, status: 'empty' };
-                    req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('table:statusChanged', tblData);
-                    req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('table-status-update', tblData);
+                    // حالة محسوبة من الفواتير غير المدفوعة (لا 'empty' مكتوبة يدوياً)
+                    try {
+                        const { updateTableStatusIfNeeded } = await import("../utils/tableUtils.js");
+                        await updateTableStatusIfNeeded(tableIdToUpdate, getOrganizationId(req.user), req.io);
+                    } catch {}
                 }
             } catch (socketError) {
                 Logger.error('فشل إرسال حدث Socket.IO', socketError);
             }
         }
 
-        // إرجاع الاستجابة مع معلومات الاسترداد
+        // إرجاع الاستجابة مع معلومات الاسترداد (الفاتورة جُلبت أعلاه للبث والرد معاً)
         const response = {
             success: true,
             message: "تم حذف الطلب بنجاح",
+            bill: deletedRespBill,
         };
 
         if (refundedAmount > 0) {
@@ -2365,6 +2389,7 @@ export const cancelOrder = async (req, res) => {
                 : `سبب الإلغاء: ${reason}`;
         }
         // إزالة ربط الطلب من الفاتورة وتحديث الفاتورة
+        let cancelledRespBill = null;
         if (order.bill) {
             const Bill = (await import("../models/Bill.js")).default;
             const billDoc = await Bill.findById(order.bill); // بدون populate
@@ -2377,6 +2402,7 @@ export const cancelOrder = async (req, res) => {
                 if (billDocAfter) {
                     await billDocAfter.calculateSubtotal();
                     await billDocAfter.save();
+                    cancelledRespBill = billDocAfter;
                 }
                 order.bill = undefined;
             }
@@ -2390,6 +2416,10 @@ export const cancelOrder = async (req, res) => {
                 req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('order:updated', order);
                 req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('order:deleted', { _id: order._id });
                 req.io.notifyOrderUpdate("updated", order, getOrganizationId(req.user));
+                // إجماليات الفاتورة الباقية لباقي الأجهزة
+                if (typeof cancelledRespBill !== 'undefined' && cancelledRespBill) {
+                    try { req.io.notifyBillUpdate("updated", cancelledRespBill, getOrganizationId(req.user), { silent: true }); } catch {}
+                }
             } catch {}
         }
 
@@ -2397,6 +2427,7 @@ export const cancelOrder = async (req, res) => {
             success: true,
             message: "تم إلغاء الطلب بنجاح",
             data: order,
+            bill: cancelledRespBill ? (cancelledRespBill.toObject ? cancelledRespBill.toObject() : cancelledRespBill) : null,
         });
     } catch (error) {
         res.status(500).json({
@@ -2567,9 +2598,25 @@ export const updateOrderStatus = async (req, res) => {
             //
         }
 
+        // الإلغاء يخرج الطلب من الإجماليات — حساب متزامن + بث للجميع + إرفاق (رحلة واحدة)
+        let statusRespBill = null;
+        if (status === 'cancelled' && updatedOrder?.bill) {
+            try {
+                const BillModelSt = (await import("../models/Bill.js")).default;
+                const stBillId = updatedOrder.bill._id || updatedOrder.bill;
+                const stBill = await BillModelSt.findById(stBillId);
+                if (stBill) {
+                    await stBill.calculateSubtotal();
+                    await stBill.save();
+                    statusRespBill = stBill.toObject ? stBill.toObject() : stBill;
+                }
+            } catch (stErr) { Logger.error('Error updating bill totals on cancel:', stErr); }
+        }
+
         // Emit socket event for real-time updates — instant <100ms with colon events
         if (req.io) {
             try {
+                if (statusRespBill) { try { req.io.notifyBillUpdate("updated", statusRespBill, getOrganizationId(req.user), { silent: true }); } catch {} }
                 const orgId = getOrganizationId(req.user);
                 const orgStr = String(orgId);
                 req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('order:updated', updatedOrder);
@@ -2585,6 +2632,7 @@ export const updateOrderStatus = async (req, res) => {
             success: true,
             message: "تم تحديث حالة الطلب بنجاح",
             data: updatedOrder,
+            bill: statusRespBill,
         });
     } catch (error) {
         res.status(500).json({

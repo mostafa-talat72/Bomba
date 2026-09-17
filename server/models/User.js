@@ -244,6 +244,8 @@ userSchema.pre("validate", function(next) {
 
 // Compare password method
 userSchema.methods.comparePassword = async function (candidatePassword) {
+    // حساب بلا كلمة سر (دعوة غير مكتملة/مستورد) → رفض نظيف بدل انفجار bcrypt
+    if (!candidatePassword || !this.password) return false;
     return await bcrypt.compare(candidatePassword, this.password);
 };
 

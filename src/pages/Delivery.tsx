@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, memo, useRef } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { useTranslation } from 'react-i18next';
 import { io, Socket } from 'socket.io-client';
@@ -148,7 +149,11 @@ const Delivery = () => {
     if (!prepSelection || prepSelected.length === 0) return;
     const sel = prepSelection;
     setPrepSelection(null);
-    await confirmBillPrep(sel.orders, prepSelected, sel.menuItemsMap, prepCtx()).catch(() => palert('فشل طباعة التحضير'));
+    try {
+      const r = await confirmBillPrep(sel.orders, prepSelected, sel.menuItemsMap, prepCtx());
+      if (r.printed === 0) palert('لا توجد أقسام مطابقة للطباعة');
+      else palert(`تم إرسال ${r.printed} للطباعة`);
+    } catch { palert('فشل طباعة التحضير'); }
   };
 
   const handlePrint = async (bill: any) => {
@@ -604,6 +609,24 @@ const Delivery = () => {
   };
 
   const [payItemsBill, setPayItemsBill] = useState<any | null>(null);
+
+  // فتح إدارة الدفع من إشعار "عرض الطلب" — تُجلب الفاتورة (مدفوعة غالبًا) ثم تُفتح
+  const location = useLocation();
+  const navigate = useNavigate();
+  useEffect(() => {
+    const st = (location.state as any) || {};
+    if (st?.openPaymentForBill) {
+      const bid = String(st.openPaymentForBill);
+      navigate(location.pathname, { replace: true, state: {} });
+      (async () => {
+        try {
+          const r: any = await api.getBill(bid);
+          if (r?.success && r.data) setPayItemsBill(r.data);
+          else palert('تعذر فتح فاتورة الطلب');
+        } catch { palert('تعذر فتح فاتورة الطلب'); }
+      })();
+    }
+  }, [location.state]);
 
   const handleWhatsApp = (bill: any) => {
     const phone = String(bill.deliveryInfo?.phone || bill.customerPhone || '').replace(/[^0-9]/g, '');

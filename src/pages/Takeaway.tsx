@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, memo, useRef } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { useTranslation } from 'react-i18next';
 import api from '../services/api';
@@ -70,7 +71,11 @@ const Takeaway = () => {
     if (!prepSelection || prepSelected.length === 0) return;
     const sel = prepSelection;
     setPrepSelection(null);
-    await confirmBillPrep(sel.orders, prepSelected, sel.menuItemsMap, prepCtx()).catch(() => showNotification('فشل طباعة التحضير', 'error'));
+    try {
+      const r = await confirmBillPrep(sel.orders, prepSelected, sel.menuItemsMap, prepCtx());
+      if (r.printed === 0) showNotification('لا توجد أقسام مطابقة للطباعة', 'error');
+      else showNotification(`تم إرسال ${r.printed} للطباعة`, 'success');
+    } catch { showNotification('فشل طباعة التحضير', 'error'); }
   };
 
   const handlePrint = async (bill: any) => {
@@ -148,6 +153,24 @@ const Takeaway = () => {
       }
     } catch (e: any) { showNotification(e?.message || 'فشل الحذف', 'error'); refreshSingleBill?.({ _id: id }); }
   };
+  // فتح إدارة الدفع من إشعار "عرض الطلب" — تُجلب الفاتورة (مدفوعة غالبًا) ثم تُفتح
+  const location = useLocation();
+  const navigate = useNavigate();
+  useEffect(() => {
+    const st = (location.state as any) || {};
+    if (st?.openPaymentForBill) {
+      const bid = String(st.openPaymentForBill);
+      navigate(location.pathname, { replace: true, state: {} });
+      (async () => {
+        try {
+          const r: any = await api.getBill(bid);
+          if (r?.success && r.data) setPayItemsBill(r.data);
+          else showNotification('تعذر فتح فاتورة الطلب', 'error');
+        } catch { showNotification('تعذر فتح فاتورة الطلب', 'error'); }
+      })();
+    }
+  }, [location.state]);
+
   useEffect(() => {
     (async () => {
       try {

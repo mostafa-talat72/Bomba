@@ -261,6 +261,12 @@ const BillTableCard = React.memo<BillTableCardProps>(({
               </div>
               </div>
               )}
+              <button
+                onClick={(e) => { e.stopPropagation(); if (confirmDel) { setConfirmDel(false); onDelete(bill); } else { setConfirmDel(true); setTimeout(() => setConfirmDel(false), 3000); } }}
+                className={`mt-1 w-full py-1 text-xs font-bold rounded-md flex items-center justify-center gap-1 shadow border transition-all ${confirmDel ? 'bg-red-700 text-white border-red-800 animate-pulse' : 'bg-red-500 hover:bg-red-600 text-white border-red-600'}`}
+                title="حذف الفاتورة">
+                <span>{confirmDel ? 'تأكيد الحذف؟' : '🗑 حذف'}</span>
+              </button>
               </div>
             </div>
         )}
