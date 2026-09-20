@@ -665,7 +665,21 @@
       "canDeleteNotification": "حذف الإشعارات",
       "canDeleteNotificationDesc": "السماح بحذف الإشعارات",
       "canExportReports": "تصدير التقارير",
-      "canExportReportsDesc": "السماح بتصدير التقارير PDF وExcel"
+      "canExportReportsDesc": "السماح بتصدير التقارير PDF وExcel",
+      "canManageActiveSessions": "التحكم في الجلسات النشطة",
+      "canManageActiveSessionsDesc": "السماح ببدء وإنهاء الجلسات النشطة وتعديل اليدات وربط الطاولات وأوقاتها",
+      "canStartSession": "بدء جلسة",
+      "canStartSessionDesc": "السماح ببدء جلسة جديدة على الأجهزة",
+      "canEndSession": "إنهاء جلسة",
+      "canEndSessionDesc": "السماح بإنهاء الجلسات النشطة",
+      "canEditActiveSessionTime": "تعديل وقت الجلسة",
+      "canEditActiveSessionTimeDesc": "السماح بتعديل وقت بداية الجلسة النشطة",
+      "canEditControllers": "تعديل عدد الأذرعة",
+      "canEditControllersDesc": "السماح بتعديل عدد أذرعة الجلسة النشطة",
+      "canEditControllersTime": "تعديل وقت الأذرعة",
+      "canEditControllersTimeDesc": "السماح بتعديل فترات الأذرعة للجلسة النشطة",
+      "canLinkSessionTable": "ربط الطاولة بالجلسة",
+      "canLinkSessionTableDesc": "السماح بربط وفك وتغيير طاولة الجلسة النشطة"
     },
     "status": "الحالة",
     "totalUsers": "المستخدمين",
@@ -844,7 +858,10 @@
       "payroll": "الرواتب والموظفين",
       "kitchen": "المطبخ",
       "extras": "أدوات إضافية",
-      "other": "أخرى"
+      "other": "أخرى",
+      "activeSessions": "الجلسات النشطة",
+      "completedSessions": "الجلسات المنتهية",
+      "shifts": "الورديات"
     },
     "permissionsUI": {
       "search": "ابحث عن صلاحية...",
@@ -853,7 +870,8 @@
       "clearAll": "مسح الكل",
       "expandAll": "فتح الكل",
       "collapseAll": "طي الكل",
-      "noResults": "لا توجد صلاحيات مطابقة للبحث"
+      "noResults": "لا توجد صلاحيات مطابقة للبحث",
+      "unknownPermission": "قيمة قديمة غير معروفة — ألغِ تحديدها"
     }
   },
   "billing": {
@@ -1974,7 +1992,11 @@
         "printerWaiting": "في انتظار اختبار الطابعة",
         "noPrinters": "لا توجد طابعات متصلة — تأكد من توصيل الطابعة وتشغيلها ثم حاول مجددًا",
         "sampleOk": "تمت طباعة نموذج الفاتورة بنجاح",
-        "sampleFailed": "فشل في طباعة نموذج الفاتورة"
+        "sampleFailed": "فشل في طباعة نموذج الفاتورة",
+        "multiTitle": "الطابعات المتعددة وتوجيه الطباعة",
+        "multiDesc": "أضف الطابعات المكتشفة ثم اربط كل قسم أو نوع مستند بالطابعة المناسبة.",
+        "drawerShortcut": "اختصار فتح درج الكاشير (F12)",
+        "drawerShortcutDesc": "تفعيل أو تعطيل فتح درج الكاشير مباشرة باستخدام زر F12"
       },
       "saveSettings": "حفظ الإعدادات",
       "saveAllSettings": "تم حفظ جميع الإعدادات بنجاح",
@@ -2005,7 +2027,11 @@
       "imported": "تم استيراد إعدادات المنشأة — راجعها ثم اضغط حفظ",
       "testDrawer": "اختبار درج الكاشير",
       "save": "حفظ إعدادات طابعتي",
-      "saved": "تم حفظ إعدادات الطباعة الخاصة بك بنجاح"
+      "saved": "تم حفظ إعدادات الطباعة الخاصة بك بنجاح",
+      "printBothDelivery": "طباعة مزدوجة للدليفري",
+      "printBothDeliveryDesc": "عند التفعيل: أزرار الحفظ والتحضير والفاتورة والدفع تطبع التحضير والفاتورة معاً",
+      "printBothTakeaway": "طباعة مزدوجة للتيك أوي",
+      "printBothTakeawayDesc": "عند التفعيل: أزرار الحفظ والتحضير والفاتورة والدفع تطبع التحضير والفاتورة معاً"
     },
     "maintenance": {
       "title": "صيانة قاعدة البيانات",
@@ -2014,7 +2040,12 @@
       "running": "جاري الفحص...",
       "done": "اكتمل الفحص ({{collections}} مجموعة): تم إصلاح {{docs}} مستند ({{fields}} حقل)",
       "allOk": "اكتمل الفحص ({{collections}} مجموعة): كل البيانات سليمة",
-      "failed": "فشل الفحص"
+      "failed": "فشل الفحص",
+      "instanceIdTitle": "بصمة هذا الجهاز",
+      "instanceIdDesc": "تظهر في أرقام الفواتير والطلبات (BILL-XXXXXX-...). لا تولّد جديدة إلا عند الاشتباه في استنساخ الجهاز — الأرقام القديمة لا تتأثر.",
+      "instanceIdRegen": "توليد بصمة جديدة",
+      "instanceIdConfirm": "تأكيد التوليد؟",
+      "instanceIdCancel": "تراجع"
     },
     "mobile": {
       "title": "ربط موبايل عبر الواي فاي",
@@ -2664,7 +2695,8 @@
       "delete": "حذف",
       "close": "إغلاق",
       "system": "النظام",
-      "user": "المستخدم"
+      "user": "المستخدم",
+      "archived": "مؤرشف"
     },
     "editMovementModal": {
       "title": "تعديل حركة المخزون",

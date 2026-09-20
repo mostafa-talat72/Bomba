@@ -173,10 +173,12 @@ async function deductInventoryForOrder(order, userId, billNumber = null) {
                     type: "out",
                     quantity: convertedQuantityNeeded,
                     reason,
+                    reasonCode: "order",
                     user: userId,
-                    orderId: order._id.toString(),
+                    orderId: order._id,
+                    reference: order._id.toString(),
+                    billId: order.bill?._id || order.bill || null,
                     price: finalPrice,
-                    warehouse: null,
                     totalCost: finalTotalCost,
                     timestamp: new Date(),
                 }},
@@ -233,11 +235,11 @@ export async function restoreInventoryForOrder(order, userId) {
                 inventoryItem.unit
             );
 
-            // البحث عن حركة الخصم الأصلية لهذا الطلب
+            // البحث عن حركة الخصم الأصلية لهذا الطلب (orderId الجديد أو reference القديم)
             const deductMovement = inventoryItem.stockMovements
                 .filter(m =>
                     m.type === 'out' &&
-                    sameId(m.reference, order._id)
+                    (sameId(m.orderId, order._id) || sameId(m.reference, order._id))
                 )
                 .sort((a, b) => {
                     const aTime = new Date(a.timestamp || a.date).getTime() || 0;
@@ -262,7 +264,8 @@ export async function restoreInventoryForOrder(order, userId) {
                 order._id.toString(),
                 priceToRestore,
                 null,
-                totalCostToRestore
+                totalCostToRestore,
+                { orderId: order._id, billId: order.bill?._id || order.bill || null, reasonCode: "order_restore" }
             );
         }
     }
@@ -415,14 +418,15 @@ async function adjustInventoryForOrderUpdate(oldOrder, newOrder, userId) {
                     newOrder._id.toString(),
                     finalPrice,
                     null,
-                    finalTotalCost
+                    finalTotalCost,
+                    { orderId: newOrder._id, billId: newOrder.bill?._id || newOrder.bill || null, reasonCode: "order" }
                 );
             } else {
                 // نقصان في الكمية - إرجاع بنفس السعر من آخر حركة خصم
                 const lastDeductMovement = inventoryItem.stockMovements
                     .filter(m =>
                         m.type === 'out' &&
-                        sameId(m.reference, newOrder._id)
+                        (sameId(m.orderId, newOrder._id) || sameId(m.reference, newOrder._id))
                     )
                     .sort((a, b) => {
                         const aTime = new Date(a.timestamp || a.date).getTime() || 0;
@@ -448,7 +452,8 @@ async function adjustInventoryForOrderUpdate(oldOrder, newOrder, userId) {
                     newOrder._id.toString(),
                     priceToRestore,
                     null,
-                    totalCostToRestore
+                    totalCostToRestore,
+                    { orderId: newOrder._id, billId: newOrder.bill?._id || newOrder.bill || null, reasonCode: "order_restore" }
                 );
             }
         }

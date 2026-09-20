@@ -153,10 +153,12 @@ class ApiClient {
               if (match && match[1]) invalidateBillCache(match[1]);
             }
           } catch {}
-          const inner = (data as any)?.data !== undefined ? (data as any).data as T : data as T;
+          const raw = (data && typeof data === 'object' && !Array.isArray(data)) ? data : {};
+          const inner = (raw as any)?.data !== undefined ? (raw as any).data as T : data as T;
           // تمرير الفاتورة الكاملة المرفقة (رحلة واحدة للفاعل) — endpoints مختارة فقط
-          const extraBill = (data as any)?.bill;
-          return { success: true, data: inner, message: data.message, ...(extraBill ? { bill: extraBill } : {}) };
+          const extraBill = (raw as any)?.bill;
+          // تمرير كل الحقول الإضافية (totalStats/pagination/breakdowns/...) — إسقاطها كان يُصفّر الإحصائيات
+          return { ...raw, success: true, data: inner, message: (raw as any)?.message, ...(extraBill ? { bill: extraBill } : {}) };
     } catch (error: unknown) {
       if (error instanceof TypeError && error.message.includes('fetch')) {
         return {

@@ -133,7 +133,7 @@ class PrintController {
       printSettings = resolvedBill.settings;
 
       // توليد محتوى الفاتورة للطباعة
-      const content = await this.generateBillContent(bill, organization, language, tableSectionName, printSettings);
+      const content = await this.generateBillContent(bill, organization, language, tableSectionName, printSettings, req?.user?.name || '');
 
       // طباعة الفاتورة مع فتح درج الكاشير إذا كان مفعلاً
       // (printJob: اتصال دافئ + تسلسل المهام — بدون قطع الاتصال بعده)
@@ -224,7 +224,7 @@ class PrintController {
       }
       printSettings = resolvedOrder.settings;
 
-      const content = await this.generateOrderContent(order, organization, language, printSettings);
+      const content = await this.generateOrderContent(order, organization, language, printSettings, req?.user?.name || '');
 
       // نفس HTML المصمم للديسكتوب: ترحيل للوكيل المحلي أولاً (نفس الشكل 100%).
       if (typeof relayHtml === 'string' && relayHtml.length > 0) {
@@ -337,7 +337,7 @@ class PrintController {
   /**
    * توليد محتوى الفاتورة للطباعة
    */
-  async generateBillContent(bill, organization, language, tableSectionName, printSettings) {
+  async generateBillContent(bill, organization, language, tableSectionName, printSettings, printedBy = '') {
     const orgName = organization?.name || 'Cafe Management System';
     const charsPerLine = printSettings.charactersPerLine || 48;
     const isRTL = language === 'ar';
@@ -348,7 +348,7 @@ class PrintController {
     if (printSettings.printHeader !== false) {
       content += this.centerText(orgName, charsPerLine) + '\n';
       content += this.centerText(bracketSeq(bill.billNumber), charsPerLine) + '\n';
-      content += this.centerText(new Date(bill.createdAt || new Date()).toLocaleString(language), charsPerLine) + '\n';
+      content += this.centerText(new Date(bill.createdAt || new Date()).toLocaleString(language) + (printedBy ? ` - ${printedBy}` : ''), charsPerLine) + '\n';
       
       if (bill.table?.number) {
         content += this.centerText(`Table: ${bill.table.number}${tableSectionName ? ` (${tableSectionName})` : ''}`, charsPerLine) + '\n';
@@ -443,7 +443,7 @@ class PrintController {
   /**
    * توليد محتوى الطلب للطباعة
    */
-  async generateOrderContent(order, organization, language, printSettings) {
+  async generateOrderContent(order, organization, language, printSettings, printedBy = '') {
     const orgName = organization?.name || 'Cafe Management System';
     const charsPerLine = printSettings.charactersPerLine || 48;
 
@@ -453,7 +453,7 @@ class PrintController {
     content += this.centerText(`Order ${bracketSeq(order.orderNumber)}`, charsPerLine) + '\n';
     if (order.fulfillmentType === 'delivery') content += this.centerText('*** DELIVERY ***', charsPerLine) + '\n';
     else if (order.fulfillmentType === 'takeaway') content += this.centerText('*** TAKEAWAY ***', charsPerLine) + '\n';
-    content += this.centerText(new Date(order.createdAt || new Date()).toLocaleString(language), charsPerLine) + '\n';
+    content += this.centerText(new Date(order.createdAt || new Date()).toLocaleString(language) + (printedBy ? ` - ${printedBy}` : ''), charsPerLine) + '\n';
     
     if (order.table?.number) {
       content += this.centerText(`Table: ${order.table.number}`, charsPerLine) + '\n';
@@ -794,7 +794,7 @@ class PrintController {
       };
 
       // 5. توليد محتوى الفاتورة للطباعة
-      const content = await this.generateBillContent(bill, organization, language, tableSectionName, autoDetectedSettings);
+      const content = await this.generateBillContent(bill, organization, language, tableSectionName, autoDetectedSettings, req?.user?.name || '');
 
       // 5ب. ترحيل HTML المصمم أولاً (نفس شكل الديسكتوب 100%) إن وُجد.
       if (typeof relayHtml === 'string' && relayHtml.length > 0) {
@@ -891,7 +891,7 @@ class PrintController {
       };
 
       // 5. توليد محتوى الطلب للطباعة
-      const content = await this.generateOrderContent(order, organization, language, autoDetectedSettings);
+      const content = await this.generateOrderContent(order, organization, language, autoDetectedSettings, req?.user?.name || '');
 
       // 5ب. ترحيل HTML المصمم أولاً (نفس شكل الديسكتوب 100%) إن وُجد.
       if (typeof relayHtml === 'string' && relayHtml.length > 0) {

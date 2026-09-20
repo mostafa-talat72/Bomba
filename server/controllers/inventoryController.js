@@ -7,6 +7,7 @@ import Cost from "../models/Cost.js";
 import CostCategory from "../models/CostCategory.js";
 import { writeToAtlas } from "../utils/atlasWrite.js";
 import { actorFromReq } from "../utils/actorInfo.js";
+import { getMergedMovements, getSnapshotBalance, hasArchivedMovements } from "../utils/movementArchive.js";
 
 // @desc    Get all inventory items
 // @route   GET /api/inventory
@@ -659,7 +660,8 @@ export const updateStock = async (req, res) => {
         }
 
         // Update reasons: oldest movement should be "المخزون الأولي", others "شراء مخزون جديد"
-        if (type === 'in') {
+        // (مع الأرشفة: الأقدم الحي ليس الأقدم الحقيقي — نتخطى إن وُجد أرشيف)
+        if (type === 'in' && !(await hasArchivedMovements(getOrganizationId(req.user), "inventory", item._id))) {
             const inMovements = item.stockMovements
                 .filter(m => m.type === 'in')
                 .sort((a, b) => {
@@ -856,35 +858,16 @@ export const getStockMovements = async (req, res) => {
         }
 
         // Sort movements by timestamp (oldest first for calculation)
-        const movements = item.stockMovements
-            .map((movement) => movement.toObject())
-            .sort((a, b) => {
-                const aTime = new Date(a.timestamp || a.date).getTime();
-                const bTime = new Date(b.timestamp || b.date).getTime();
-                return aTime - bTime; // Ascending order (oldest first)
-            });
-        
-        // Calculate balance after each movement (forward from oldest)
-        let balance = 0;
-        const movementsWithBalance = movements.map((movement) => {
-            // Calculate balance after this movement
-            if (movement.type === 'in') {
-                balance += movement.quantity;
-            } else if (movement.type === 'out') {
-                balance -= movement.quantity;
-            } else if (movement.type === 'adjustment') {
-                balance = movement.quantity;
-            }
-            
-            return {
-                ...movement,
-                balanceAfter: balance
-            };
+        // مدمجة مع الأرشيف: الأرصدة محسوبة من لقطة القطع فلا تُفقد ولا تُضاعف
+        const data = await getMergedMovements({
+            organization: getOrganizationId(req.user),
+            itemType: "inventory",
+            item,
         });
 
         res.json({
             success: true,
-            data: movementsWithBalance.reverse(), // Reverse to show newest first
+            data,
         });
     } catch (error) {
         res.status(500).json({
@@ -1000,8 +983,8 @@ export const deleteStockMovement = async (req, res) => {
             return aTime - bTime;
         });
 
-        // Simulate deletion and recalculate stock
-        let simulatedStock = 0;
+        // Simulate deletion and recalculate stock (seeded from archive snapshot when present)
+        let simulatedStock = await getSnapshotBalance(getOrganizationId(req.user), "inventory", item._id);
         let canDelete = true;
         let errorMessage = "";
 
@@ -1067,6 +1050,8 @@ export const deleteStockMovement = async (req, res) => {
         }
 
         // Update reasons (oldest = المخزون الأولي, others = شراء مخزون جديد)
+        // (نتخطى إن وُجد أرشيف — الأقدم الحقيقي مؤرشف)
+        if (!(await hasArchivedMovements(getOrganizationId(req.user), "inventory", item._id))) {
         const inMovementsSorted = item.stockMovements
             .filter(m => m.type === 'in')
             .sort((a, b) => {
@@ -1086,6 +1071,7 @@ export const deleteStockMovement = async (req, res) => {
                 }
             }
         });
+        }
 
         await item.save();
 
@@ -1288,7 +1274,7 @@ export const updateStockMovement = async (req, res) => {
             return aTime - bTime;
         });
 
-        let simulatedStock = 0;
+        let simulatedStock = await getSnapshotBalance(getOrganizationId(req.user), "inventory", item._id);
         let isValid = true;
         let errorMessage = "";
 
@@ -1335,6 +1321,7 @@ export const updateStockMovement = async (req, res) => {
         }
 
         // Update reasons (oldest = المخزون الأولي, others = شراء مخزون جديد)
+        // (نتخطى إن وُجد أرشيف — الأقدم الحقيقي مؤرشف)
         const inMovementsSorted = item.stockMovements
             .filter(m => m.type === 'in')
             .sort((a, b) => {
@@ -1343,6 +1330,7 @@ export const updateStockMovement = async (req, res) => {
                 return aTime - bTime;
             });
 
+        if (!(await hasArchivedMovements(getOrganizationId(req.user), "inventory", item._id))) {
         inMovementsSorted.forEach((mov, index) => {
             if (index === 0) {
                 if (mov.reason === "شراء مخزون جديد" || mov.reason === "المخزون الأولي") {
@@ -1354,6 +1342,7 @@ export const updateStockMovement = async (req, res) => {
                 }
             }
         });
+        }
 
         await item.save();
 

@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import {
-  Crown, LayoutGrid, ShoppingCart, Receipt, Timer, UtensilsCrossed, Gamepad2,
+  Crown, LayoutGrid, ShoppingCart, Receipt, Timer, History, Clock, UtensilsCrossed, Gamepad2,
   Package, Warehouse, Wallet, Banknote, ChefHat, Wrench, Folder, Search,
   ChevronDown, Check, X,
 } from 'lucide-react';
@@ -28,6 +28,8 @@ export const GROUP_ICONS: Record<string, React.ComponentType<{ className?: strin
   cart: ShoppingCart,
   receipt: Receipt,
   timer: Timer,
+  history: History,
+  clock: Clock,
   menu: UtensilsCrossed,
   gamepad: Gamepad2,
   package: Package,
@@ -64,11 +66,14 @@ const PermissionPicker: React.FC<PermissionPickerProps> = ({
   }, []);
 
   // Safety net: any catalog permission missing from the groups still shows up.
+  // Plus: unknown SELECTED ids (stale/legacy stored values) show under "other" so the admin sees and can remove them.
   const groups = useMemo(() => {
     const ungrouped = permissions.filter(p => !groupedIds.has(p.id)).map(p => p.id);
-    if (ungrouped.length === 0) return PERMISSION_GROUPS;
-    return [...PERMISSION_GROUPS, { id: 'other', titleKey: 'users.permissionGroups.other', icon: 'other', permissionIds: ungrouped }];
-  }, [permissions, groupedIds]);
+    const unknownSelected = selected.filter(id => !byId.has(id) && !groupedIds.has(id));
+    const extra = [...ungrouped, ...unknownSelected.filter(id => !ungrouped.includes(id))];
+    if (extra.length === 0) return PERMISSION_GROUPS;
+    return [...PERMISSION_GROUPS, { id: 'other', titleKey: 'users.permissionGroups.other', icon: 'other', permissionIds: extra }];
+  }, [permissions, groupedIds, selected, byId]);
 
   const allSelected = selected.includes('all');
 
@@ -240,7 +245,7 @@ const PermissionPicker: React.FC<PermissionPickerProps> = ({
         <div className="space-y-3">
           {groups.map(g => {
             const items = g.permissionIds
-              .map(id => byId.get(id))
+              .map(id => byId.get(id) || { id, name: id, description: t('users.permissionsUI.unknownPermission') })
               .filter((p): p is NonNullable<typeof p> => !!p);
             if (items.length === 0) return null;
             const count = items.filter(p => selected.includes(p.id)).length;

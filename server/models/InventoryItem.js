@@ -120,6 +120,23 @@ const inventoryItemSchema = new mongoose.Schema(
                     type: String,
                     default: null,
                 },
+                // ربط الحركة بمستند المصدر (تحويل/طلب/فاتورة) — حقول اختيارية لا تمس القديم
+                transferId: {
+                    type: mongoose.Schema.Types.ObjectId,
+                    default: null,
+                },
+                orderId: {
+                    type: mongoose.Schema.Types.ObjectId,
+                    default: null,
+                },
+                billId: {
+                    type: mongoose.Schema.Types.ObjectId,
+                    default: null,
+                },
+                reasonCode: {
+                    type: String,
+                    default: null,
+                },
                 user: {
                     type: mongoose.Schema.Types.ObjectId,
                     ref: "User",
@@ -259,7 +276,8 @@ inventoryItemSchema.methods.addStockMovement = function (
     reference = null,
     price = null,
     timestamp = null,
-    totalCost = null
+    totalCost = null,
+    extras = {}
 ) {
     // Validate inputs
     if (!type || !['in', 'out', 'adjustment'].includes(type)) {
@@ -287,6 +305,10 @@ inventoryItemSchema.methods.addStockMovement = function (
         reference,
         user,
         timestamp: timestamp || new Date(),
+        transferId: extras.transferId || null,
+        orderId: extras.orderId || null,
+        billId: extras.billId || null,
+        reasonCode: extras.reasonCode || null,
     });
 
     if (type === "in") {

@@ -61,6 +61,33 @@ export const canEditSessionTime = (user: UserPermissions | null): boolean => {
 };
 
 /**
+ * Active session controls — one permission per action (PlayStation / Computer / Tables)
+ */
+export const canStartSession = (user: UserPermissions | null): boolean => {
+  return hasPermission(user, 'canStartSession');
+};
+
+export const canEndSession = (user: UserPermissions | null): boolean => {
+  return hasPermission(user, 'canEndSession');
+};
+
+export const canEditActiveSessionTime = (user: UserPermissions | null): boolean => {
+  return hasPermission(user, 'canEditActiveSessionTime');
+};
+
+export const canEditControllers = (user: UserPermissions | null): boolean => {
+  return hasPermission(user, 'canEditControllers');
+};
+
+export const canEditControllersTime = (user: UserPermissions | null): boolean => {
+  return hasPermission(user, 'canEditControllersTime');
+};
+
+export const canLinkSessionTable = (user: UserPermissions | null): boolean => {
+  return hasPermission(user, 'canLinkSessionTable');
+};
+
+/**
  * Check if user can pay full bill
  */
 export const canPayFullBill = (user: UserPermissions | null): boolean => {

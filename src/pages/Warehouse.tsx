@@ -1609,12 +1609,17 @@ const Warehouse = () => {
                                 movement.type === 'transfer_out' ? 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400 ring-1 ring-purple-200 dark:ring-purple-800' :
                                 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400 ring-1 ring-yellow-200 dark:ring-yellow-800'
                               }`}>
-                                {movement.type === 'in' ? t('inventory.movementsModal.types.in') :
-                                 movement.type === 'transfer_in' ? t('warehouse.transferIn') :
-                                 movement.type === 'out' ? t('inventory.movementsModal.types.out') :
-                                 movement.type === 'transfer_out' ? t('warehouse.transferOut') :
-                                 t('inventory.movementsModal.types.adjustment')}
+                                 {movement.type === 'in' ? t('inventory.movementsModal.types.in') :
+                                  movement.type === 'transfer_in' ? t('warehouse.transferIn') :
+                                  movement.type === 'out' ? t('inventory.movementsModal.types.out') :
+                                  movement.type === 'transfer_out' ? t('warehouse.transferOut') :
+                                  t('inventory.movementsModal.types.adjustment')}
                               </span>
+                              {movement.archived && (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-gray-200 dark:bg-gray-600 text-gray-600 dark:text-gray-300 mr-1">
+                                  {t('inventory.movementsModal.archived')}
+                                </span>
+                              )}
                             </td>
                             <td className="px-4 py-3 whitespace-nowrap">
                               <span className={`text-sm font-bold ${

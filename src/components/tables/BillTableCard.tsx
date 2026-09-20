@@ -144,6 +144,35 @@ const BillTableCard = React.memo<BillTableCardProps>(({
         </div>
         {children}
 
+        {/* زر تحصيل بارز دائم الظهور (للجوال حيث لا يوجد hover) — تأكيد بخطوتين */}
+        {kind === 'delivery' && isOccupied && totalRemaining > 0 && (
+          <div className="sm:hidden px-1.5 pb-1.5" onClick={e => e.stopPropagation()} onKeyDown={e => e.stopPropagation()}>
+            {!confirmPay ? (
+              <button
+                onClick={() => setConfirmPay(true)}
+                className="w-full py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-extrabold shadow"
+              >
+                تحصيل {formatCurrencyUtil(totalRemaining, i18n.language, localStorage.getItem('organizationCurrency') || 'EGP')}
+              </button>
+            ) : (
+              <div className="flex gap-1">
+                <button
+                  onClick={() => setConfirmPay(false)}
+                  className="flex-1 py-2 rounded-xl bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 text-xs font-bold"
+                >
+                  تراجع
+                </button>
+                <button
+                  onClick={() => { setConfirmPay(false); onCollect(bill, method); }}
+                  className="flex-[2] py-2 rounded-xl bg-emerald-600 text-white text-sm font-extrabold shadow animate-pulse"
+                >
+                  تأكيد ({methodLabel})
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
         <div className={`absolute inset-0 rounded-xl sm:rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none ${styles.hover}`} />
 
         {isOccupied && (

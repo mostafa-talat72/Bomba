@@ -1,6 +1,7 @@
 import { getOrganizationId, organizationFilter, sameObjectId } from '../utils/organization.js';
 import User from "../models/User.js";
 import { createTombstone } from "../utils/tombstoneHelper.js";
+import Logger from "../middleware/logger.js";
 // bcrypt is not needed here as password hashing is handled in the User model
 
 // @desc    Get all users
@@ -162,13 +163,19 @@ export const createUser = async (req, res) => {
                 });
             }
         }
+        // تنظيف القيم المجهولة (قديمة/مدخلة يدوياً) حتى لا يفشل الحفظ كله
+        const cleanPermissions = User.sanitizePermissions(permissions || []);
+        const droppedCreate = (permissions || []).filter((p) => !cleanPermissions.includes(p));
+        if (droppedCreate.length > 0) {
+            Logger.warn(`createUser: dropped unknown permissions: ${droppedCreate.join(",")}`);
+        }
         const user = await User.create({
             name,
             email,
             password,
             username: username?.trim().toLowerCase(),
             role: role || "staff",
-            permissions: permissions || [],
+            permissions: cleanPermissions,
             phone,
             address,
             department,
@@ -306,7 +313,8 @@ export const updateUser = async (req, res) => {
                 });
             }
 
-            const isCurrentUserOwner = req.user._id.toString() === organization.owner.toString();
+            const isCurrentUserOwner = organization.owner &&
+                (req.user._id.toString() === organization.owner.toString() || req.user.role === 'owner');
 
             if (!isCurrentUserOwner) {
                 return res.status(403).json({
@@ -367,7 +375,14 @@ export const updateUser = async (req, res) => {
         if (password) user.password = password; // Will be hashed by pre-save middleware
         if (username) user.username = username.trim().toLowerCase();
         if (role) user.role = role;
-        if (permissions) user.permissions = permissions;
+        if (permissions) {
+            const clean = User.sanitizePermissions(permissions);
+            const dropped = permissions.filter((p) => !clean.includes(p));
+            if (dropped.length > 0) {
+                Logger.warn(`updateUser ${user._id}: dropped unknown permissions: ${dropped.join(",")}`);
+            }
+            user.permissions = clean;
+        }
         if (status) user.status = status;
         if (phone !== undefined) user.phone = phone;
         if (address !== undefined) user.address = address;
@@ -468,7 +483,8 @@ export const deleteUser = async (req, res) => {
                 });
             }
 
-            const isCurrentUserOwner = req.user._id.toString() === organization.owner.toString();
+            const isCurrentUserOwner = organization.owner &&
+                (req.user._id.toString() === organization.owner.toString() || req.user.role === 'owner');
 
             if (!isCurrentUserOwner) {
                 return res.status(403).json({
@@ -711,7 +727,12 @@ export const updateUserPermissions = async (req, res) => {
             }
         }
 
-        user.permissions = permissions;
+        const cleanPermissions = User.sanitizePermissions(permissions);
+        const droppedPerms = permissions.filter((p) => !cleanPermissions.includes(p));
+        if (droppedPerms.length > 0) {
+            Logger.warn(`updateUserPermissions ${user._id}: dropped unknown permissions: ${droppedPerms.join(",")}`);
+        }
+        user.permissions = cleanPermissions;
         await user.save();
 
         // Remove password from response

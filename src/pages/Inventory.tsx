@@ -2736,6 +2736,11 @@ const Inventory = () => {
                               }`}>
                                 {t(`inventory.movementsModal.types.${movement.type}`)}
                               </span>
+                              {movement.archived && (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-gray-200 dark:bg-gray-600 text-gray-600 dark:text-gray-300 mr-1">
+                                  {t('inventory.movementsModal.archived')}
+                                </span>
+                              )}
                             </td>
                             <td className="px-4 py-3 whitespace-nowrap">
                               <span className={`text-sm font-bold ${

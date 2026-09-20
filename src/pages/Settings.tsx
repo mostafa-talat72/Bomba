@@ -7,6 +7,7 @@ import { Settings as SettingsIcon, Save, Bell, BellRing, User, Lock, Eye, EyeOff
 import { useApp } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
 import { clearFreshPrintSettingsCache } from '../utils/freshPrintSettings';
+import { getInstanceId, clearInstanceIdCache } from '../utils/instanceId';
 import { useTranslation } from 'react-i18next';
 import { useLanguage } from '../context/LanguageContext';
 import { useTheme } from '../context/ThemeContext';
@@ -240,6 +241,27 @@ const MyPrintTabContent: FC<MyPrintTabProps> = ({
                         </label>
                       </div>
 
+                      {/* طباعة مزدوجة (تحضير + فاتورة معاً) — منفصلة للدليفري والتيك أوي */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {([
+                          ['printBothDelivery', t('settings.myPrint.printBothDelivery'), t('settings.myPrint.printBothDeliveryDesc')],
+                          ['printBothTakeaway', t('settings.myPrint.printBothTakeaway'), t('settings.myPrint.printBothTakeawayDesc')],
+                        ] as const).map(([key, title, desc]) => (
+                          <label key={key} className="flex items-start gap-3 bg-gray-50 dark:bg-gray-700 p-4 rounded-lg cursor-pointer border border-gray-200 dark:border-gray-600">
+                            <input
+                              type="checkbox"
+                              checked={!!myPrint.settings?.[key]}
+                              onChange={(e) => setMyPrint((prev: any) => ({ ...prev, settings: { ...(prev.settings || {}), [key]: e.target.checked } }))}
+                              className="mt-1 h-5 w-5 accent-orange-600 flex-shrink-0"
+                            />
+                            <span>
+                              <span className="block text-sm font-bold text-gray-900 dark:text-gray-100">{title}</span>
+                              <span className="block text-xs text-gray-500 dark:text-gray-400 mt-1">{desc}</span>
+                            </span>
+                          </label>
+                        ))}
+                      </div>
+
                       {myPrint.useCustom && (
                         <>
                           <div className="flex flex-wrap gap-2">
@@ -343,6 +365,23 @@ interface MaintenanceTabProps {
 const MaintenanceTabContent: FC<MaintenanceTabProps> = ({ canAccess, generalSettings, setGeneralSettings, backupPassword, setBackupPassword, backupBusy, lastBackup, folderInputRef, importInputRef, importBusy, backups, backupsLoading, verifyBusy, restoreBusy, serverUrlDisplay, setShowServerModal, smartCfg, setSmartCfg, smartCfgLoading, smartCfgSaving, typeAuditRunning, typeAuditResult, generalSaving, handleBrowseBackupFolder, handleFolderInputChange, handleBackupNow, loadBackups, handleVerifyBackup, handleDownloadBackup, handleRestoreBackup, handleImportBackup, handleSmartCfgSave, handleTypeAuditRun, handleGeneralSettingsUpdate }) => {
   const { t } = useTranslation();
   const { currentLanguage } = useLanguage();
+  // بصمة الجهاز للترقيم — عرض وتوليد بحذر (خطوتان)
+  const [deviceId, setDeviceId] = useState('');
+  const [confirmRegen, setConfirmRegen] = useState(false);
+  useEffect(() => {
+    try {
+      setDeviceId(getInstanceId());
+    } catch { setDeviceId(''); }
+  }, []);
+  const handleRegenInstanceId = () => {
+    if (!confirmRegen) { setConfirmRegen(true); return; }
+    try {
+      try { localStorage.removeItem('bomba_instance_id'); } catch {}
+      clearInstanceIdCache();
+      setDeviceId(getInstanceId());
+    } catch {}
+    setConfirmRegen(false);
+  };
   return (
     <>
                     {/* Backup settings (owner/admins only) */}
@@ -354,7 +393,7 @@ const MaintenanceTabContent: FC<MaintenanceTabProps> = ({ canAccess, generalSett
                       <div className="flex space-x-2 space-x-reverse">
                         <input
                           type="text"
-                          value={generalSettings.backupPath}
+                          value={generalSettings?.backupPath || ''}
                           onChange={(e) => setGeneralSettings({ ...generalSettings, backupPath: e.target.value })}
                           placeholder="C:\Backups\Bomba"
                           className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
@@ -428,11 +467,11 @@ const MaintenanceTabContent: FC<MaintenanceTabProps> = ({ canAccess, generalSett
                             {backupsLoading ? t('settings.backupUi.updating') : t('settings.backupUi.refreshList')}
                           </button>
                         </div>
-                        {backups.length === 0 && !backupsLoading && (
+                        {(backups || []).length === 0 && !backupsLoading && (
                           <p className="text-xs text-gray-500 dark:text-gray-400">{t('settings.backupUi.noBackups')}</p>
                         )}
                         <div className="space-y-2 max-h-48 overflow-y-auto">
-                          {backups.map((b: any) => (
+                          {(backups || []).map((b: any) => (
                             <div key={b.fileName} className="flex items-center justify-between gap-2 px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md">
                               <div className="min-w-0 flex-1">
                                 <p className="text-xs font-mono text-gray-800 dark:text-gray-200 truncate" dir="ltr">
@@ -506,6 +545,52 @@ const MaintenanceTabContent: FC<MaintenanceTabProps> = ({ canAccess, generalSett
                       </p>
                     </div>
                     )}
+                    {/* بصمة هذا الجهاز (تدخل في أرقام الفواتير والطلبات) */}
+                    {canAccess && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        {t('settings.maintenance.instanceIdTitle')}
+                      </label>
+                      <div className="flex space-x-2 space-x-reverse">
+                        <input
+                          type="text"
+                          value={deviceId}
+                          readOnly
+                          dir="ltr"
+                          className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-300 font-mono text-sm tracking-widest text-center"
+                        />
+                        {!confirmRegen ? (
+                          <button
+                            type="button"
+                            onClick={() => setConfirmRegen(true)}
+                            className="px-3 py-2 bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 text-sm font-bold whitespace-nowrap"
+                          >
+                            {t('settings.maintenance.instanceIdRegen')}
+                          </button>
+                        ) : (
+                          <>
+                            <button
+                              type="button"
+                              onClick={handleRegenInstanceId}
+                              className="px-3 py-2 bg-red-600 hover:bg-red-700 text-white rounded-md text-sm font-bold whitespace-nowrap"
+                            >
+                              {t('settings.maintenance.instanceIdConfirm')}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setConfirmRegen(false)}
+                              className="px-3 py-2 bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 text-sm font-bold"
+                            >
+                              {t('settings.maintenance.instanceIdCancel')}
+                            </button>
+                          </>
+                        )}
+                      </div>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                        {t('settings.maintenance.instanceIdDesc')}
+                      </p>
+                    </div>
+                    )}
                 {/* Smart alerts thresholds (org-wide, managers only) */}
                 {canAccess && (
                   <div>
@@ -521,7 +606,7 @@ const MaintenanceTabContent: FC<MaintenanceTabProps> = ({ canAccess, generalSett
                             type="number"
                             min={5}
                             max={480}
-                            value={smartCfg.idleTableMinutes}
+                            value={smartCfg?.idleTableMinutes ?? 45}
                             onChange={(e) => setSmartCfg((p) => ({ ...p, idleTableMinutes: Math.max(5, Number(e.target.value) || 45) }))}
                             className="w-24 px-2 py-1 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
                           />
@@ -530,7 +615,7 @@ const MaintenanceTabContent: FC<MaintenanceTabProps> = ({ canAccess, generalSett
                           <span className="text-sm font-medium text-gray-700 dark:text-gray-200">{t('smartCfg.excludeActive')}</span>
                           <input
                             type="checkbox"
-                            checked={smartCfg.idleExcludeActiveSessions}
+                            checked={smartCfg?.idleExcludeActiveSessions !== false}
                             onChange={(e) => setSmartCfg((p) => ({ ...p, idleExcludeActiveSessions: e.target.checked }))}
                             className="h-4 w-4"
                           />
@@ -1630,8 +1715,8 @@ const Settings: FC = () => {
       const base = cur?.success && cur.data ? cur.data : {};
       const res: any = await (api as any).updateNotificationSettings?.({
         ...base,
-        idleTableMinutes: smartCfg.idleTableMinutes,
-        idleExcludeActiveSessions: smartCfg.idleExcludeActiveSessions,
+        idleTableMinutes: smartCfg?.idleTableMinutes ?? 45,
+        idleExcludeActiveSessions: smartCfg?.idleExcludeActiveSessions !== false,
       });
       if (res?.success) showAlertMessage(t('notifPrefs.saved'), 'success');
       else showAlertMessage(t('notifPrefs.loadError'), 'error');
@@ -2072,7 +2157,10 @@ const Settings: FC = () => {
                   <div className={activeTab === 'general' ? '' : 'hidden'}>
                     <GeneralSaveButton onSave={handleGeneralSettingsUpdate} saving={generalSaving} />
                   </div>
-                {/* Maintenance tab content (backup/server/alerts/audit) */}
+                  </div>
+                  </div>
+
+                {/* Maintenance tab content (backup/server/alerts/audit) */}
                 {activeTab === 'maintenance' && (
                   <MaintenanceTabContent
                     canAccess={canAccessSystemSections}
@@ -2111,9 +2199,8 @@ const Settings: FC = () => {
                     handleGeneralSettingsUpdate={handleGeneralSettingsUpdate}
                   />
                 )}
-                  </div>
-                </div>
-                {/* My printer settings (per-user override with org fallback) */}
+
+                {/* My printer settings (per-user override with org fallback) */}
                 {activeTab === 'myprint' && (
                   <MyPrintTabContent
                     myPrint={myPrint}
@@ -2351,6 +2438,27 @@ const Settings: FC = () => {
                       onSelectDetected={selectPrinter}
                       onTestPrinter={testPrinter}
                     />
+
+                    {/* طباعة مزدوجة على مستوى المنشأة (تحضير + فاتورة معاً) — تسري على الكل كافتراضي */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
+                      {([
+                        ['printBothDelivery', t('settings.myPrint.printBothDelivery'), t('settings.myPrint.printBothDeliveryDesc')],
+                        ['printBothTakeaway', t('settings.myPrint.printBothTakeaway'), t('settings.myPrint.printBothTakeawayDesc')],
+                      ] as const).map(([key, title, desc]) => (
+                        <label key={key} className="flex items-start gap-3 bg-white dark:bg-gray-800 p-4 rounded-lg cursor-pointer border border-gray-200 dark:border-gray-600">
+                          <input
+                            type="checkbox"
+                            checked={!!organization.printSettings?.[key]}
+                            onChange={(e) => setOrganization((prev: any) => ({ ...prev, printSettings: { ...(prev.printSettings || {}), [key]: e.target.checked } }))}
+                            className="mt-1 h-5 w-5 accent-orange-600 flex-shrink-0"
+                          />
+                          <span>
+                            <span className="block text-sm font-bold text-gray-900 dark:text-gray-100">{title}</span>
+                            <span className="block text-xs text-gray-500 dark:text-gray-400 mt-1">{desc}</span>
+                          </span>
+                        </label>
+                      ))}
+                    </div>
                   </div>
 
                   {/* Social Links */}

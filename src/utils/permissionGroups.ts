@@ -47,10 +47,22 @@ export const PERMISSION_GROUPS: PermissionGroupDef[] = [
     ],
   },
   {
-    id: 'sessions',
-    titleKey: 'users.permissionGroups.sessions',
+    id: 'activeSessions',
+    titleKey: 'users.permissionGroups.activeSessions',
     icon: 'timer',
-    permissionIds: ['canEditSessionTime', 'canManageShifts'],
+    permissionIds: ['canStartSession', 'canEndSession', 'canEditActiveSessionTime', 'canEditControllers', 'canEditControllersTime', 'canLinkSessionTable'],
+  },
+  {
+    id: 'completedSessions',
+    titleKey: 'users.permissionGroups.completedSessions',
+    icon: 'history',
+    permissionIds: ['canEditSessionTime'],
+  },
+  {
+    id: 'shifts',
+    titleKey: 'users.permissionGroups.shifts',
+    icon: 'clock',
+    permissionIds: ['canManageShifts'],
   },
   {
     id: 'menu',

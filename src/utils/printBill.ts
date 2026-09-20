@@ -774,7 +774,7 @@ export const buildBillPrintHTML = async (
           ? `<div class="org-phone">${t('billPrint.phone')}: ${organizationData.phone.trim()}</div>`
           : ''}
         <div class="title" style="font-weight: 700; font-size: 19px;">${splitDailySeq(bill.billNumber).head}<span style="font-size: 22px; font-weight: 900; background: #000; color: #fff; padding: 0 8px; border-radius: 6px;">${splitDailySeq(bill.billNumber).seq}</span></div>
-        <div class="info" style="font-weight: 900; font-size: 1.15em;">${formatDate(bill.createdAt || new Date())}</div>
+        <div class="info" style="font-weight: 900; font-size: 1.15em;">${formatDate(bill.createdAt || new Date())}${(() => { try { const n = (getCurrentUserCache() as any)?.name; return n ? ` — 👤 ${n}` : ''; } catch { return ''; } })()}</div>
         ${bill.table?.number ? `<div class="info" style="font-weight: 900; font-size: 1.25em; color: #000; margin: 8px 0;"><span style="background: #000; color: #fff; padding: 2px 8px; border-radius: 3px;">${t('billPrint.table')}</span> <strong style="font-size: 1.5em;">${bill.table.number}${tableSectionName ? ` — (${tableSectionName})` : ''}</strong></div>` : ((bill.customerName || bill.deliveryInfo?.customerName) ? ((bill.fulfillmentType === 'delivery' || bill.fulfillmentType === 'takeaway') ? `<div class="info" style="font-weight: 900; font-size: 1.35em;">${bill.fulfillmentType === 'delivery' ? '🛵' : '🥡'} ${bill.customerName || bill.deliveryInfo?.customerName}</div>` : `<div class="info" style="font-weight: 900; font-size: 1.15em;">${t('billPrint.customer')}: ${bill.customerName || bill.deliveryInfo?.customerName}</div>`) : ((bill.fulfillmentType === 'delivery' || bill.fulfillmentType === 'takeaway') ? `<div class="info" style="font-weight: 900; font-size: 1.35em;">${bill.fulfillmentType === 'delivery' ? '🛵 دليفري' : '🥡 تيك أوي'}</div>` : ''))}
         ${(bill.customerPhone || bill.deliveryInfo?.phone) ? `<div class="info" style="font-weight: 900; font-size: 1.15em;">${t('billPrint.phone')}: ${bill.customerPhone || bill.deliveryInfo?.phone}</div>` : ''}
         ${bill.fulfillmentType === 'delivery' && bill.deliveryInfo?.address ? `<div class="info" style="font-weight: 900; font-size: 1em;">📍 ${bill.deliveryInfo.address}</div>` : ''}
@@ -979,10 +979,12 @@ export const printBill = async (
   const orgPrintSettings = settingsResponse?.success === true ? settingsResponse.data?.printSettings : undefined;
   const mainOverride = resolveUserPrintSettings(getCurrentUserCache());
   const printSettings = mainOverride ? { ...orgPrintSettings, ...mainOverride } : orgPrintSettings;
-  const billPrinterId = printSettings?.documentPrinterMap?.bill;
+  const fulfillKey = ['takeaway', 'delivery'].includes((billForPrint as any)?.fulfillmentType) ? `bill_${(billForPrint as any).fulfillmentType}` : 'bill';
+  const billPrinterId = printSettings?.documentPrinterMap?.[fulfillKey] || printSettings?.documentPrinterMap?.bill;
   const billProfile = printSettings?.printers?.find((item: any) => item.id === billPrinterId);
   const selectedPrinterName = printerName || billProfile?.printerName || savedPrinter?.data?.printerName || savedPrinter?.data?.name;
   const paperWidthMm = billProfile?.paperWidthMm || 80;
+  const billCopies = Math.min(5, Math.max(1, Number(printSettings?.documentCopies?.[fulfillKey] ?? printSettings?.documentCopies?.bill ?? 1) || 1));
   const settingName = drawerMode === 'payment' ? 'openCashDrawerOnPayment' : 'openCashDrawer';
   const openDrawer = printSettings?.[settingName] !== false;
   if (openDrawer) {
@@ -999,6 +1001,7 @@ export const printBill = async (
   const receiptHTML = await getCachedReceiptHTML(billForPrint, fallbackOrganizationName, language, t, tableSectionName);
   const bridgePrinted = await printThroughLocalBridge(receiptHTML, selectedPrinterName, {
     paperWidthMm,
+    copies: billCopies,
     openDrawer: false,
     drawerMode: effectiveDrawerMode,
     organization: settingsResponse?.data,

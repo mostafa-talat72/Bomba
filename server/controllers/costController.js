@@ -1,6 +1,7 @@
 import Cost from "../models/Cost.js";
 import { writeToAtlas } from "../utils/atlasWrite.js";
 import { createTombstone } from "../utils/tombstoneHelper.js";
+import { organizationFilter } from "../utils/organization.js";
 import Logger from "../middleware/logger.js";
 
 // @desc    Get all costs
@@ -19,7 +20,19 @@ export const getCosts = async (req, res) => {
             search,
         } = req.query;
 
-        const query = { organization: req.user.organization };
+        const query = {};
+
+        // Organization filter — unified for find() AND aggregation $match.
+        // (find() auto-casts ObjectId/string/object, $match does NOT, so a raw
+        // organization value made the list show while all aggregations returned 0.)
+        const orgFilter = organizationFilter(req.user);
+        const andClauses = [];
+        if (orgFilter.$and) {
+            andClauses.push(...orgFilter.$and);
+        } else {
+            // Null org → match nothing (fail closed instead of leaking all orgs)
+            Object.assign(query, orgFilter);
+        }
 
         // Category filter (Requirements 6.1)
         if (category) {
@@ -31,7 +44,6 @@ export const getCosts = async (req, res) => {
         // 'overdue' is COMPUTED (pending + past dueDate) — never written to the DB.
         const todayStart = new Date();
         todayStart.setHours(0, 0, 0, 0);
-        const andClauses = [];
         if (status === 'overdue') {
             andClauses.push({ status: 'pending' }, { dueDate: { $lt: todayStart } });
         } else if (status === 'pending') {
@@ -110,14 +122,15 @@ export const getCosts = async (req, res) => {
         const total = await Cost.countDocuments(query);
 
         // Calculate comprehensive statistics for all matching costs (not just paginated)
+        // $convert with onError (not $toDouble): a single bad value (e.g. "") must not kill the whole aggregation
         const totalStats = await Cost.aggregate([
             { $match: aggregationQuery },
             {
                 $addFields: {
                     // Ensure numeric fields are treated as numbers
-                    numericAmount: { $toDouble: { $ifNull: ["$amount", 0] } },
-                    numericPaidAmount: { $toDouble: { $ifNull: ["$paidAmount", 0] } },
-                    numericRemainingAmount: { $toDouble: { $ifNull: ["$remainingAmount", 0] } }
+                    numericAmount: { $convert: { input: { $ifNull: ["$amount", 0] }, to: "double", onError: 0, onNull: 0 } },
+                    numericPaidAmount: { $convert: { input: { $ifNull: ["$paidAmount", 0] }, to: "double", onError: 0, onNull: 0 } },
+                    numericRemainingAmount: { $convert: { input: { $ifNull: ["$remainingAmount", 0] }, to: "double", onError: 0, onNull: 0 } }
                 }
             },
             { 
@@ -150,14 +163,21 @@ export const getCosts = async (req, res) => {
             },
             { $unwind: { path: '$categoryInfo', preserveNullAndEmptyArrays: true } },
             {
+                $addFields: {
+                    numericAmount: { $convert: { input: { $ifNull: ["$amount", 0] }, to: "double", onError: 0, onNull: 0 } },
+                    numericPaidAmount: { $convert: { input: { $ifNull: ["$paidAmount", 0] }, to: "double", onError: 0, onNull: 0 } },
+                    numericRemainingAmount: { $convert: { input: { $ifNull: ["$remainingAmount", 0] }, to: "double", onError: 0, onNull: 0 } }
+                }
+            },
+            {
                 $group: {
                     _id: '$category',
                     categoryName: { $first: '$categoryInfo.name' },
                     categoryColor: { $first: '$categoryInfo.color' },
                     categoryIcon: { $first: '$categoryInfo.icon' },
-                    total: { $sum: '$amount' },
-                    paid: { $sum: '$paidAmount' },
-                    remaining: { $sum: '$remainingAmount' },
+                    total: { $sum: '$numericAmount' },
+                    paid: { $sum: '$numericPaidAmount' },
+                    remaining: { $sum: '$numericRemainingAmount' },
                     count: { $sum: 1 }
                 }
             },
@@ -167,6 +187,13 @@ export const getCosts = async (req, res) => {
         // Get status breakdown for filtered results ('overdue' is computed, never stored)
         const statusBreakdown = await Cost.aggregate([
             { $match: aggregationQuery },
+            {
+                $addFields: {
+                    numericAmount: { $convert: { input: { $ifNull: ["$amount", 0] }, to: "double", onError: 0, onNull: 0 } },
+                    numericPaidAmount: { $convert: { input: { $ifNull: ["$paidAmount", 0] }, to: "double", onError: 0, onNull: 0 } },
+                    numericRemainingAmount: { $convert: { input: { $ifNull: ["$remainingAmount", 0] }, to: "double", onError: 0, onNull: 0 } }
+                }
+            },
             {
                 $addFields: {
                     effectiveStatus: {
@@ -188,9 +215,9 @@ export const getCosts = async (req, res) => {
             {
                 $group: {
                     _id: '$effectiveStatus',
-                    total: { $sum: '$amount' },
-                    paid: { $sum: '$paidAmount' },
-                    remaining: { $sum: '$remainingAmount' },
+                    total: { $sum: '$numericAmount' },
+                    paid: { $sum: '$numericPaidAmount' },
+                    remaining: { $sum: '$numericRemainingAmount' },
                     count: { $sum: 1 }
                 }
             }
@@ -913,11 +940,14 @@ export const getCostsSummary = async (req, res) => {
                 endDate = new Date(now.getFullYear(), now.getMonth() + 1, 1);
         }
 
+        // Organization matching unified for $match (no auto-cast there unlike find/count)
+        const orgMatch = organizationFilter(req.user);
+
         const summary = await Cost.aggregate([
             {
                 $match: {
                     date: { $gte: startDate, $lt: endDate },
-                    organization: req.user.organization,
+                    ...orgMatch,
                 },
             },
             {
@@ -937,7 +967,7 @@ export const getCostsSummary = async (req, res) => {
             {
                 $match: {
                     date: { $gte: startDate, $lt: endDate },
-                    organization: req.user.organization,
+                    ...orgMatch,
                 },
             },
             {
@@ -952,13 +982,13 @@ export const getCostsSummary = async (req, res) => {
         const pendingCosts = await Cost.countDocuments({
             status: "pending",
             date: { $gte: startDate, $lt: endDate },
-            organization: req.user.organization,
+            ...orgMatch,
         });
 
         const overdueCosts = await Cost.countDocuments({
             status: "overdue",
             date: { $gte: startDate, $lt: endDate },
-            organization: req.user.organization,
+            ...orgMatch,
         });
 
         res.json({

@@ -1174,6 +1174,24 @@ export const initializeScheduler = () => {
     });
     Logger.info("✅ Reservation expiration scheduled: every hour");
 
+    // Archive stock movements older than 30 days — every 4 hours + catch-up 5 min after boot.
+    // Idempotent: re-runs never duplicate (each movement lives in exactly one place).
+    try {
+        import("./movementArchive.js").then((m) => {
+            const fn = async () => {
+                try {
+                    const n = await m.archiveOldStockMovements();
+                    if (n > 0) Logger.info(`✅ Movement archive: ${n} movements archived`);
+                } catch (e) {
+                    Logger.warn("movementArchive failed:", e.message);
+                }
+            };
+            setTimeout(fn, 5 * 60 * 1000); // catch-up after boot
+            cron.schedule("0 */4 * * *", fn, { scheduled: true, timezone: "UTC" });
+            Logger.info("✅ Movement archive scheduled: every 4 hours (+ boot catch-up)");
+        }).catch(() => {});
+    } catch {}
+
     // Initialize organization-specific report schedules
     initializeOrganizationReportSchedules();
     Logger.info("✅ Organization report schedules initialized");

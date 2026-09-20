@@ -161,8 +161,8 @@ const PrinterSettingsForm: React.FC<PrinterSettingsFormProps> = ({
                             </div>
                           )}
                           <div className="mt-4 rounded-xl border border-orange-200 dark:border-gray-600 bg-white/60 dark:bg-gray-800/40 p-4">
-                            <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">الطابعات المتعددة وتوجيه الطباعة</h4>
-                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">أضف الطابعات المكتشفة ثم اربط كل قسم أو نوع مستند بالطابعة المناسبة.</p>
+                            <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">{t('settings.organization.printSettings.multiTitle')}</h4>
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{t('settings.organization.printSettings.multiDesc')}</p>
                             <div className="mt-3 space-y-2">
                               {(organization.printSettings?.printers || []).map(printer => (
                                 <div key={printer.id} className="flex items-center justify-between rounded-lg bg-gray-50 dark:bg-gray-700 p-2">
@@ -187,17 +187,29 @@ const PrinterSettingsForm: React.FC<PrinterSettingsFormProps> = ({
                             <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
                               {[
                                 ['bill', 'الفواتير'],
+                                ['bill_takeaway', 'فواتير التيك أوي'],
+                                ['bill_delivery', 'فواتير الدليفري'],
                                 ['consumptionReport', 'تقرير الاستهلاك'],
                                 ['dailyReport', 'التقرير اليومي'],
                               ].map(([key, label]) => (
-                                <label key={key} className="text-xs text-gray-600 dark:text-gray-300">{label}
-                                  <select value={organization.printSettings?.documentPrinterMap?.[key] || ''} onChange={e => setOrganization(prev => ({ ...prev, printSettings: { ...prev.printSettings, documentPrinterMap: { ...(prev.printSettings?.documentPrinterMap || {}), [key]: e.target.value } } }))} className="mt-1 w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 p-2">
-                                    <option value="">الطابعة الافتراضية</option>
-                                    {(organization.printSettings?.printers || []).map(printer => <option key={printer.id} value={printer.id}>{printer.name}</option>)}
-                                  </select>
-                                </label>
+                                <div key={key} className="rounded-lg border border-gray-200 dark:border-gray-700 p-2">
+                                  <label className="text-xs text-gray-600 dark:text-gray-300">{label}
+                                    <select value={organization.printSettings?.documentPrinterMap?.[key] || ''} onChange={e => setOrganization(prev => ({ ...prev, printSettings: { ...prev.printSettings, documentPrinterMap: { ...(prev.printSettings?.documentPrinterMap || {}), [key]: e.target.value } } }))} className="mt-1 w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 p-2">
+                                      <option value="">الطابعة الافتراضية</option>
+                                      {(organization.printSettings?.printers || []).map(printer => <option key={printer.id} value={printer.id}>{printer.name}</option>)}
+                                    </select>
+                                  </label>
+                                  {key !== 'dailyReport' && (
+                                    <label className="mt-2 flex items-center gap-2 text-xs text-gray-600 dark:text-gray-300">النسخ
+                                      <input type="number" min={1} max={5} step={1} value={organization.printSettings?.documentCopies?.[key] ?? 1} onChange={e => setOrganization(prev => ({ ...prev, printSettings: { ...prev.printSettings, documentCopies: { ...(prev.printSettings?.documentCopies || {}), [key]: Math.min(5, Math.max(1, Number(e.target.value) || 1)) } } }))} className="w-16 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 p-1.5" />
+                                    </label>
+                                  )}
+                                </div>
                               ))}
                             </div>
+                            <label className="mt-3 flex items-center gap-2 text-xs text-gray-600 dark:text-gray-300">نسخ طباعة التحضير (المطبخ)
+                              <input type="number" min={1} max={5} step={1} value={organization.printSettings?.documentCopies?.prep ?? 1} onChange={e => setOrganization(prev => ({ ...prev, printSettings: { ...prev.printSettings, documentCopies: { ...(prev.printSettings?.documentCopies || {}), prep: Math.min(5, Math.max(1, Number(e.target.value) || 1)) } } }))} className="w-16 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 p-1.5" />
+                            </label>
                             <div className="mt-3 space-y-2">
                               {menuSections.map(section => {
                                 const sectionId = String(section._id || section.id);
@@ -297,8 +309,8 @@ const PrinterSettingsForm: React.FC<PrinterSettingsFormProps> = ({
                       {/* Open Cash Drawer On Payment */}
                       <div className="flex items-center justify-between">
                         <div>
-                          <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100">اختصار فتح درج الكاشير (F12)</h4>
-                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">تفعيل أو تعطيل فتح درج الكاشير مباشرة باستخدام زر F12</p>
+                          <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100">{t('settings.organization.printSettings.drawerShortcut')}</h4>
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{t('settings.organization.printSettings.drawerShortcutDesc')}</p>
                         </div>
                         <label className="relative inline-flex items-center cursor-pointer">
                           <input

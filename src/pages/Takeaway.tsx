@@ -46,6 +46,19 @@ const Takeaway = () => {
   const { t, i18n } = useTranslation();
   const [moveBill, setMoveBill] = useState<any | null>(null);
   const [payMethods, setPayMethods] = useState<Record<string, string>>({});
+  // خيار الطباعة المزدوجة (تحضير + فاتورة) الخاص بالتيك أوي من إعدادات الطباعة
+  const [printBoth, setPrintBoth] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const { loadPrintBothFlag } = await import('../utils/printPrefs');
+        const v = await loadPrintBothFlag('printBothTakeaway');
+        if (alive) setPrintBoth(v);
+      } catch {}
+    })();
+    return () => { alive = false; };
+  }, []);
   // طباعة أقسام التحضير (مطبخ/مشويات...) لكل طلبات الفاتورة — نفس قواعد الطاولات.
   const [prepSelection, setPrepSelection] = useState<{ bill: any; orders: any[]; sections: { id: string; name: string }[]; menuItemsMap: Map<string, any> } | null>(null);
   const [prepSelected, setPrepSelected] = useState<string[]>([]);
@@ -440,6 +453,7 @@ const Takeaway = () => {
         menuCategories={menuCategories || []}
         onSuccess={(updated: any) => { applyBill(updated?._id || updated?.id || billToEdit?._id || billToEdit?.id, updated); setBillToEdit(null); }}
         onPrepPrint={handlePrepPrint}
+        printBothTogether={printBoth}
       />
     </div>
   );

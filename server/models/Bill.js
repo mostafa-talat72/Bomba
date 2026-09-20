@@ -56,6 +56,8 @@ const billSchema = new mongoose.Schema(
         billNumber: {
             type: String,
             required: false,
+            // الرقم يُكتب مرة واحدة عند الإنشاء ولا يتغير أبداً (حماية الإيصال المطبوع)
+            immutable: true,
         },
         customerName: {
             type: String,

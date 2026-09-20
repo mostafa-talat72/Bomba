@@ -118,6 +118,12 @@ const [formData, setFormData] = useState({
     { id: 'canEditItemPrice', name: t('users.permissions.canEditItemPrice'), description: t('users.permissions.canEditItemPriceDesc') },
     { id: 'canPartialPayment', name: t('users.permissions.canPartialPayment'), description: t('users.permissions.canPartialPaymentDesc') },
     { id: 'canEditSessionTime', name: t('users.permissions.canEditSessionTime'), description: t('users.permissions.canEditSessionTimeDesc') },
+    { id: 'canStartSession', name: t('users.permissions.canStartSession'), description: t('users.permissions.canStartSessionDesc') },
+    { id: 'canEndSession', name: t('users.permissions.canEndSession'), description: t('users.permissions.canEndSessionDesc') },
+    { id: 'canEditActiveSessionTime', name: t('users.permissions.canEditActiveSessionTime'), description: t('users.permissions.canEditActiveSessionTimeDesc') },
+    { id: 'canEditControllers', name: t('users.permissions.canEditControllers'), description: t('users.permissions.canEditControllersDesc') },
+    { id: 'canEditControllersTime', name: t('users.permissions.canEditControllersTime'), description: t('users.permissions.canEditControllersTimeDesc') },
+    { id: 'canLinkSessionTable', name: t('users.permissions.canLinkSessionTable'), description: t('users.permissions.canLinkSessionTableDesc') },
     { id: 'canPayFullBill', name: t('users.permissions.canPayFullBill'), description: t('users.permissions.canPayFullBillDesc') },
     { id: 'canDeleteBill', name: t('users.permissions.canDeleteBill'), description: t('users.permissions.canDeleteBillDesc') },
     { id: 'canEditPartialPayment', name: t('users.permissions.canEditPartialPayment'), description: t('users.permissions.canEditPartialPaymentDesc') },
@@ -515,16 +521,17 @@ const [formData, setFormData] = useState({
         body: JSON.stringify({ permissions })
       });
 
-      const data = await response.json();
+      const data = await response.json().catch(() => null);
       
-      if (data.success) {
+      if (data?.success) {
         showNotification(t('users.success.permissionsUpdated'), 'success');
         await loadUsers();
       } else {
-        throw new Error(data.message);
+        throw new Error(data?.message || `${t('users.errors.updatePermissions')} (${response.status})`);
       }
-    } catch (error) {
-      showNotification(t('users.errors.updatePermissions'), 'error');
+    } catch (error: any) {
+      // إظهار سبب السيرفر الحقيقي بدل رسالة عامة (مالك/صلاحية/عطل)
+      showNotification(error?.message || t('users.errors.updatePermissions'), 'error');
       throw error;
     }
   };
@@ -540,16 +547,16 @@ const [formData, setFormData] = useState({
         body: JSON.stringify({ status })
       });
 
-      const data = await response.json();
+      const data = await response.json().catch(() => null);
       
-      if (data.success) {
+      if (data?.success) {
         showNotification(t('users.success.statusUpdated'), 'success');
         await loadUsers();
       } else {
-        throw new Error(data.message);
+        throw new Error(data?.message || t('users.errors.updateStatus'));
       }
-    } catch (error) {
-      showNotification(t('users.errors.updateStatus'), 'error');
+    } catch (error: any) {
+      showNotification(error?.message || t('users.errors.updateStatus'), 'error');
       throw error;
     }
   };

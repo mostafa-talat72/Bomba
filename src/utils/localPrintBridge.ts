@@ -37,7 +37,7 @@ export const printInBrowser = (html: string): boolean => {
 const printThroughAgent = async (
   html: string,
   printerName?: string,
-  options: { openDrawer?: boolean; cutPaper?: boolean; paperWidthMm?: number; drawerMode?: 'bill' | 'payment'; organization?: unknown; printKey?: string } = {}
+  options: { openDrawer?: boolean; cutPaper?: boolean; paperWidthMm?: number; copies?: number; drawerMode?: 'bill' | 'payment'; organization?: unknown; printKey?: string } = {}
 ): Promise<boolean> => {
   const token = typeof localStorage !== 'undefined' ? localStorage.getItem('token') : null;
   const response = await fetch(LOCAL_PRINT_URL, {
@@ -168,7 +168,7 @@ const getPrintKey = (html: string, printerName?: string): string => {
 const runPrintJob = async (
   html: string,
   printerName?: string,
-  options: { openDrawer?: boolean; cutPaper?: boolean; paperWidthMm?: number; drawerMode?: 'bill' | 'payment'; organization?: unknown } = {}
+  options: { openDrawer?: boolean; cutPaper?: boolean; paperWidthMm?: number; copies?: number; drawerMode?: 'bill' | 'payment'; organization?: unknown } = {}
 ): Promise<boolean> => {
   try {
     if (await printThroughAgent(html, printerName, options)) return true;
@@ -189,7 +189,7 @@ const runPrintJob = async (
 export const printThroughLocalBridge = (
   html: string,
   printerName?: string,
-  options: { openDrawer?: boolean; cutPaper?: boolean; paperWidthMm?: number; drawerMode?: 'bill' | 'payment'; organization?: unknown; printKey?: string } = {}
+  options: { openDrawer?: boolean; cutPaper?: boolean; paperWidthMm?: number; copies?: number; drawerMode?: 'bill' | 'payment'; organization?: unknown; printKey?: string } = {}
 ): Promise<boolean> => {
   const printKey = options.printKey || getPrintKey(html, printerName);
   const now = Date.now();

@@ -410,6 +410,14 @@ mongoose.connection.once("open", async () => {
             import("./utils/backfillFulfillment.js")
                 .then((m) => { try { return (m.backfillFulfillmentType || m.default)(); } catch {} })
                 .catch(() => {});
+            // مالك ناقص للمنشأة + مصروفات يتيمة بلا organization (مرة واحدة فقط)
+            import("./utils/backfillOwnerCostOrg.js")
+                .then((m) => { try { return (m.backfillOwnerAndCostOrg || m.default)(); } catch {} })
+                .catch(() => {});
+            // تنظيف قيم الصلاحيات المجهولة من المستخدمين (مرة واحدة فقط)
+            import("./utils/backfillOwnerCostOrg.js")
+                .then((m) => { try { return (m.backfillPermissionSanitize || (() => {}))(); } catch {} })
+                .catch(() => {});
         }, 25000);
 }); // End of mongoose.connection.once callback
 
@@ -714,6 +722,8 @@ app.use("/organizations", express.static("public/organizations"));
 setupSocketIO(io);
 // حقن مرجع البث في خدمة الإشعارات (إشعارات لحظية لكل إجراء)
 setNotificationIO(io);
+// جعل io متاحاً للخدمات الخلفية (pollingService, changeProcessor)
+global.__socketIO = io;
 app.use((req, res, next) => {
     req.io = io;
     next();

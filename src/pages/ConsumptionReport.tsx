@@ -643,6 +643,16 @@ const ConsumptionReport = () => {
         </html>
       `;
 
+      // ⚡ إعدادات متزامنة من الذاكرة + طابعة مخزنة — بدون انتظار متسلسل.
+      const [savedPrinter, organizationResponse] = await Promise.all([
+        getCachedDevicePrinter(),
+        (user as any)?.organization?.printSettings
+          ? Promise.resolve({ success: true, data: (user as any).organization })
+          : api.getOrganization().catch(() => null),
+      ]);
+      const settings = organizationResponse?.success === true ? organizationResponse.data?.printSettings : undefined;
+      const reportCopies = Math.min(5, Math.max(1, Number(settings?.documentCopies?.consumptionReport ?? 1) || 1));
+
       // الهاتف/التابلت: لا يوجد agent محلي (127.0.0.1 هو الهاتف نفسه)، فنرسل
       // نفس HTML المصمم للديسكتوب إلى الجهاز الرئيسي الذي يرحّله لوكيله
       // المحلي (نفس الشكل 100%). الفشل يسقط على الجسر/طابعات الهاتف أدناه.
@@ -653,6 +663,7 @@ const ConsumptionReport = () => {
             organization: (user as any)?.organization ?? null,
             language: i18n.language,
             html: printContent,
+            copies: reportCopies,
             printKey: `consumption:${dayjs(dateRange[0]).format('YYYYMMDD')}-${dayjs(dateRange[1]).format('YYYYMMDD')}`,
           });
           if (res?.success) {
@@ -663,17 +674,9 @@ const ConsumptionReport = () => {
         // ملاذ أخير: طابعات الهاتف نفسه (الكود أدناه).
       }
 
-      // ⚡ إعدادات متزامنة من الذاكرة + طابعة مخزنة — بدون انتظار متسلسل.
-      const [savedPrinter, organizationResponse] = await Promise.all([
-        getCachedDevicePrinter(),
-        (user as any)?.organization?.printSettings
-          ? Promise.resolve({ success: true, data: (user as any).organization })
-          : api.getOrganization().catch(() => null),
-      ]);
-      const settings = organizationResponse?.success === true ? organizationResponse.data?.printSettings : undefined;
       const profile = settings?.printers?.find((item: any) => item.id === settings?.documentPrinterMap?.consumptionReport);
       const printerName = profile?.printerName || savedPrinter?.data?.printerName || savedPrinter?.data?.name;
-      if (await printThroughLocalBridge(printContent, printerName)) {
+      if (await printThroughLocalBridge(printContent, printerName, { copies: reportCopies })) {
         toast.success(t('consumptionReport.messages.printOpening'));
         return true;
       }

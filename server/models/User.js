@@ -97,6 +97,48 @@ const userSchema = new mongoose.Schema(
                     "canAdjustWarehouseStock",
                     "canEditWarehouseMovement",
                     "canDeleteWarehouseMovement",
+                    // Page permissions
+                    "takeaway",
+                    "delivery",
+                    "payroll",
+                    "notifications",
+                    "subscription",
+                    "shifts",
+                    "auditLog",
+                    "syncStatus",
+                    "viewCustomerContacts",
+                    // Menu actions
+                    "canAddMenuItem",
+                    "canEditMenuItem",
+                    "canDeleteMenuItem",
+                    // Gaming devices actions
+                    "canAddDevice",
+                    "canEditDevice",
+                    "canDeleteDevice",
+                    // Costs actions
+                    "canAddCost",
+                    "canEditCost",
+                    "canDeleteCost",
+                    // Shifts actions
+                    "canManageShifts",
+                    // Payroll actions
+                    "canAddEmployee",
+                    "canEditEmployee",
+                    "canDeleteEmployee",
+                    "canApproveAdvance",
+                    // Kitchen display actions
+                    "canUpdateOrderStatus",
+                    // Notifications actions
+                    "canDeleteNotification",
+                    // Reports actions
+                    "canExportReports",
+                    // Active sessions actions
+                    "canStartSession",
+                    "canEndSession",
+                    "canEditActiveSessionTime",
+                    "canEditControllers",
+                    "canEditControllersTime",
+                    "canLinkSessionTable",
                 ],
             },
         ],
@@ -394,6 +436,18 @@ userSchema.methods.canAccessPage = function (page) {
     if (!requiredPermissions) return false;
 
     return this.hasAnyPermission(requiredPermissions);
+};
+
+// تنظيف الصلاحيات: إسقاط أي قيم غير معروفة بدل فشل الحفظ كله.
+// (يحمي من قيم قديمة/مدخلة يدوياً في الداتا — المصدر الوحيد هو enum أدناه)
+userSchema.statics.sanitizePermissions = function (permissions) {
+    let allowed = [];
+    try {
+        allowed = userSchema.path("permissions").caster.enumValues || [];
+    } catch {}
+    const set = new Set(allowed);
+    const list = Array.isArray(permissions) ? permissions : [];
+    return list.filter((p) => typeof p === "string" && set.has(p));
 };
 
 // Soft delete fields - isDeleted, deletedAt, deletedBy

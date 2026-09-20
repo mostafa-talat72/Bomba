@@ -12,10 +12,13 @@ export async function getInstanceId() {
   try {
     const data = await fs.readFile(INSTANCE_ID_FILE, 'utf8');
     const parsed = JSON.parse(data);
-    if (parsed.instanceId) {
+    // قبول البصمة المحفوظة فقط إن كانت بالصيغة الصحيحة (6 خانات hex) — غير ذلك تُولَّد جديدة
+    if (parsed.instanceId && /^[0-9A-F]{6}$/.test(String(parsed.instanceId))) {
       cached = parsed.instanceId;
+      console.info(`[instanceId] Loaded persisted device id: ${cached}`);
       return cached;
     }
+    console.warn('[instanceId] Stored id invalid or missing — generating a new one');
   } catch (e) {
   }
   const instanceId = randomBytes(3).toString('hex').toUpperCase();
@@ -29,6 +32,7 @@ export async function getInstanceId() {
     console.warn('[instanceId] Could not persist instance-id.json, using in-memory id:', e.message);
   }
   cached = instanceId;
+  console.info(`[instanceId] Generated NEW device id: ${instanceId} (future bill/order prefixes will use it)`);
   return cached;
 }
 

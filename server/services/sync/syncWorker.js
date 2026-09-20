@@ -35,7 +35,7 @@ class SyncWorker {
     }
 
     /**
-     * Setup handlers for Atlas reconnection/disconnection
+     * Setup handlers for Atlas reconnection/disconnection + real-time enqueue
      */
     setupReconnectionHandlers() {
         // Handle Atlas reconnection
@@ -48,6 +48,20 @@ class SyncWorker {
         dualDatabaseManager.onAtlasDisconnected(() => {
             Logger.warn("⚠️ Atlas disconnected, queue processing will pause");
             this.handleAtlasDisconnection();
+        });
+
+        // Real-time: process immediately when operation is enqueued
+        syncQueueManager.on("enqueued", () => {
+            if (this.isRunning && !this.isPaused && !this._processingNow) {
+                // Cancel pending timer and process immediately
+                if (this.processLoopTimer) {
+                    clearTimeout(this.processLoopTimer);
+                    this.processLoopTimer = null;
+                }
+                this.processQueue()
+                    .then(() => this.scheduleNextProcess())
+                    .catch(() => this.scheduleNextProcess());
+            }
         });
     }
 
@@ -175,6 +189,14 @@ class SyncWorker {
             return;
         }
 
+        // Prevent overlapping runs (event-driven may fire while timer run is active)
+        if (this._processingNow) {
+            return;
+        }
+        this._processingNow = true;
+
+        try {
+
         // Skip if queue is empty
         if (syncQueueManager.isEmpty()) {
             // Reset to base interval when queue is empty
@@ -284,6 +306,9 @@ class SyncWorker {
                 'Batch Sync',
                 `${operations.length} operations in ${duration}ms`
             );
+        }
+        } finally {
+            this._processingNow = false;
         }
     }
 

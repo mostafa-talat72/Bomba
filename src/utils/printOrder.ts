@@ -3,6 +3,7 @@ import { toast } from 'react-toastify';
 import { formatDecimal, getCurrencySymbol, getDisplayNumber, splitDailySeq } from './formatters';
 import type { TFunction } from 'i18next';
 import { getCachedDevicePrinter, printThroughLocalBridge } from './localPrintBridge';
+import { getCurrentUserCache } from './currentUser';
 import { isMobileDevice } from './deviceDetect';
 
 interface OrderItem {
@@ -295,7 +296,7 @@ const printAllSectionsInOnePage = (
             ${order.fulfillmentType === 'delivery' ? `
             <div style="font-size: 1.4em; font-weight: 900; margin: 2px 0; text-align: center;"><span style="background: #000; color: #fff; padding: 2px 12px; border-radius: 4px;">🛵 دليفري</span></div>` : order.fulfillmentType === 'takeaway' ? `
             <div style="font-size: 1.4em; font-weight: 900; margin: 2px 0; text-align: center;"><span style="background: #000; color: #fff; padding: 2px 12px; border-radius: 4px;">🥡 تيك أوي</span></div>` : ''}
-            <div style="font-size: 1.15em; font-weight: 900; color: #333; margin: 2px 0;">${dateTimeString}</div>
+            <div style="font-size: 1.15em; font-weight: 900; color: #333; margin: 2px 0;">${dateTimeString}${(() => { try { const n = (getCurrentUserCache() as any)?.name; return n ? ` — 👤 ${n}` : ''; } catch { return ''; } })()}</div>
             ${order.table?.number ? `
               <div style="font-size: 1.15em; font-weight: 900; margin: 2px 0; text-align: center;">
                 ${t('orderPrint.table')}: <strong style="font-size: 1.3em;">${order.table.number}</strong>${tableSectionName ? `—(${tableSectionName})` : ''}
@@ -584,7 +585,8 @@ export const printOrder = async (
   tableSectionName?: string,
   selectedSectionIds?: string[],
   printerName?: string,
-  paperWidthMm?: number
+  paperWidthMm?: number,
+  copies: number = 1
 ) => {
   // ⚡ إشعار فوري: الطباعة بدأت لحظة الضغط.
   try {
@@ -638,6 +640,7 @@ export const printOrder = async (
           html: orderHtmlForRelay,
           printerName,
           paperWidthMm,
+          copies,
           printKey: `order:${(order as any)?._id || (order as any)?.orderNumber || ''}:${sectionId || 'all'}`,
         };
         let res: any = await api.printOrder(payload);
@@ -674,7 +677,7 @@ export const printOrder = async (
       tableSectionName,
       sectionId ? [sectionId] : selectedSectionIds,
     );
-    return printThroughLocalBridge(printContent, selectedPrinterName, { cutPaper: true, paperWidthMm });
+    return printThroughLocalBridge(printContent, selectedPrinterName, { cutPaper: true, paperWidthMm, copies });
   }));
 };
 

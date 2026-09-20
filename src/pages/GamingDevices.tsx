@@ -10,7 +10,7 @@ import { SessionCostDisplay } from '../components/SessionCostDisplay';
 import ChangeTableModal from '../components/tables/ChangeTableModal';
 import { formatDecimal, formatCurrency, getCurrencySymbol } from '../utils/formatters';
 import { sameId } from '../utils/id';
-import { canAddDevice, canEditDevice, canDeleteDevice, canEditSessionTime } from '../utils/permissionHelper';
+import { canAddDevice, canEditDevice, canDeleteDevice, canStartSession, canEndSession, canEditActiveSessionTime, canEditControllers, canEditControllersTime, canLinkSessionTable } from '../utils/permissionHelper';
 import { formatDateTime } from '../utils/timeFormat';
 import dayjs from 'dayjs';
 import 'dayjs/locale/ar';
@@ -500,6 +500,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
   };
 
   const handleStartSession = async () => {
+    if (!canStartSession(user)) { showNotification(t('common.permissionDenied'), 'error'); return; }
     try {
       setLoadingSession(true);
       setSessionError(null);
@@ -587,7 +588,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
 
   // ????? ??? ??? ??????
   const handleEditStartTime = async () => {
-    if (!canEditSessionTime(user)) { showNotification(t('common.permissionDenied'), 'error'); return; }
+    if (!canEditActiveSessionTime(user)) { showNotification(t('common.permissionDenied'), 'error'); return; }
     if (!selectedSessionForEditTime || !newStartTime) {
       showNotification(t('gaming.newStartTime') + ' ' + t('gaming.required'), 'error');
       return;
@@ -636,6 +637,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
   };
 
   const openEditStartTimeModal = (session: Session) => {
+    if (!canEditActiveSessionTime(user)) { showNotification(t('common.permissionDenied'), 'error'); return; }
     setSelectedSessionForEditTime(session);
     
     // ????? ??? ??? ?????? ?? UTC ??? ??????? ??????? ???????
@@ -656,6 +658,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
 
   // ????? ??????
   const handleEndSession = async (sessionId: string) => {
+    if (!canEndSession(user)) { showNotification(t('common.permissionDenied'), 'error'); return; }
     // Find the session
     const session = sessions.find(s => sameId(s, sessionId));
     if (!session) {
@@ -692,6 +695,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
   // ????? ????? ??????
   const confirmEndSession = async () => {
     if (!sessionToEnd) return;
+    if (!canEndSession(user)) { showNotification(t('common.permissionDenied'), 'error'); return; }
 
     if (!customerNameForEnd.trim()) {
       showNotification(t('gaming.customerNameRequired'), 'error');
@@ -717,6 +721,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
 
   // ??? ????? ????? ????? ??? ?????? (??? ????? ??????? ??????)
   const openControllersEditor = (session: Session) => {
+    if (!canEditControllers(user)) { showNotification(t('common.permissionDenied'), 'error'); return; }
     const currentCount = session.controllers ?? 1;
     setControllersChangeData({
       sessionId: session.id,
@@ -739,6 +744,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
   // ????? ????? ??? ??????
   const confirmUpdateControllers = async () => {
     if (!controllersChangeData) return;
+    if (!canEditControllers(user)) { showNotification(t('common.permissionDenied'), 'error'); return; }
 
     const { sessionId, newCount } = controllersChangeData;
 
@@ -765,6 +771,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
 
   // ???? ??? ????? ????? ??? ???? ????????
   const openEditPeriodTimeModal = (session: Session, periodIndex: number) => {
+    if (!canEditControllersTime(user)) { showNotification(t('common.permissionDenied'), 'error'); return; }
     setSelectedSessionForPeriodEdit(session);
     setSelectedPeriodIndex(periodIndex);
 
@@ -795,7 +802,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
 
   // ???? ????? ??? ???? ????????
   const handleEditPeriodTime = async () => {
-    if (!canEditSessionTime(user)) { showNotification(t('common.permissionDenied'), 'error'); return; }
+    if (!canEditControllersTime(user)) { showNotification(t('common.permissionDenied'), 'error'); return; }
     if (!selectedSessionForPeriodEdit || !newPeriodStartTime) {
       showNotification(t('gaming.newPeriodStartTime') + ' ' + t('gaming.required'), 'error');
       return;
@@ -869,6 +876,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
 
   // ??? ?????? ??????
   const handleLinkTableToSession = async (session: Session, tableId: string | null) => {
+    if (!canLinkSessionTable(user)) { showNotification(t('common.permissionDenied'), 'error'); return; }
     if (!tableId) {
       showNotification(t('gaming.pleaseSelectTable'), 'warning');
       return;
@@ -937,6 +945,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
   // ?? ??? ?????? ?? ???????
   const handleUnlinkTableFromSession = async () => {
     if (!selectedSessionForUnlink) return;
+    if (!canLinkSessionTable(user)) { showNotification(t('common.permissionDenied'), 'error'); return; }
 
     try {
       setUnlinkingTable(true);

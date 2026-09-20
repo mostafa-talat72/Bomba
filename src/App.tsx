@@ -245,9 +245,10 @@ const ProtectedRoute = ({ children, requiredPermissions = [], requiredRole }: {
     return <Navigate to="/login" replace />;
   }
 
-  // التحقق من الصلاحية
+  // التحقق من الصلاحية (دور المدير يتجاوز الكل مثل permissionHelper)
   if (requiredPermissions.length > 0) {
-    const hasPermission = user.permissions.includes('all') ||
+    const hasPermission = user.role === 'admin' ||
+                         user.permissions.includes('all') ||
                          requiredPermissions.some(permission => user.permissions.includes(permission));
     if (!hasPermission) {
       // البحث عن أول صفحة متاحة للمستخدم

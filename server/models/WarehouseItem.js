@@ -100,6 +100,23 @@ const warehouseItemSchema = new mongoose.Schema(
                     type: String,
                     default: null,
                 },
+                // ربط الحركة بمستند المصدر (تحويل/طلب/فاتورة) — حقول اختيارية لا تمس القديم
+                transferId: {
+                    type: mongoose.Schema.Types.ObjectId,
+                    default: null,
+                },
+                orderId: {
+                    type: mongoose.Schema.Types.ObjectId,
+                    default: null,
+                },
+                billId: {
+                    type: mongoose.Schema.Types.ObjectId,
+                    default: null,
+                },
+                reasonCode: {
+                    type: String,
+                    default: null,
+                },
                 referenceModel: {
                     type: String,
                     default: null,
@@ -176,7 +193,8 @@ warehouseItemSchema.methods.addStockMovement = function (
     referenceModel = null,
     price = null,
     timestamp = null,
-    totalCost = null
+    totalCost = null,
+    extras = {}
 ) {
     if (!type || !["in", "out", "adjustment", "transfer_out", "transfer_in"].includes(type)) {
         throw new Error("نوع الحركة غير صحيح");
@@ -200,6 +218,10 @@ warehouseItemSchema.methods.addStockMovement = function (
         referenceModel,
         user,
         timestamp: timestamp || new Date(),
+        transferId: extras.transferId || null,
+        orderId: extras.orderId || null,
+        billId: extras.billId || null,
+        reasonCode: extras.reasonCode || null,
     });
 
     if (type === "in" || type === "transfer_in") {

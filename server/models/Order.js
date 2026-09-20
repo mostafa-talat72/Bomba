@@ -93,6 +93,8 @@ const orderSchema = new mongoose.Schema(
         orderNumber: {
             type: String,
             required: true,
+            // الرقم يُكتب مرة واحدة عند الإنشاء ولا يتغير أبداً (TEMP → الرقم الحقيقي قبل أول حفظ فقط)
+            immutable: true,
         },
         table: {
             type: mongoose.Schema.Types.ObjectId,

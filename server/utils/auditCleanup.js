@@ -98,7 +98,7 @@ export async function cleanupAuditLogs({ maxDeletedPerDb = 10000 } = {}) {
         if (atlasConn && atlasConn.readyState === 1 && atlasConn.db) {
             atlasDeleted = await purgeOneDb(atlasConn.db, "Atlas", maxDeletedPerDb);
         } else {
-            Logger.info("auditCleanup: Atlas unavailable — TTL on Atlas + next hour retry cover it");
+            Logger.warn("auditCleanup: Atlas unavailable — TTL on Atlas + next hour retry cover it");
         }
     } catch (e) {
         Logger.warn(`auditCleanup: Atlas failed: ${e.message}`);

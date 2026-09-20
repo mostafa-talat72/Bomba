@@ -656,7 +656,21 @@
       "canDeleteNotification": "Supprimer notifications",
       "canDeleteNotificationDesc": "Supprimer des notifications",
       "canExportReports": "Exporter rapports",
-      "canExportReportsDesc": "Exporter en PDF et Excel"
+      "canExportReportsDesc": "Exporter en PDF et Excel",
+      "canManageActiveSessions": "Gérer les sessions actives",
+      "canManageActiveSessionsDesc": "Démarrer et terminer les sessions, modifier les manettes, lier les tables et les horaires",
+      "canStartSession": "Démarrer une session",
+      "canStartSessionDesc": "Démarrer des sessions",
+      "canEndSession": "Terminer une session",
+      "canEndSessionDesc": "Terminer les sessions actives",
+      "canEditActiveSessionTime": "Modifier l'heure de session",
+      "canEditActiveSessionTimeDesc": "Modifier l'heure de début",
+      "canEditControllers": "Modifier le nombre de manettes",
+      "canEditControllersDesc": "Modifier le nombre de manettes",
+      "canEditControllersTime": "Modifier l'horaire des manettes",
+      "canEditControllersTimeDesc": "Modifier les périodes des manettes",
+      "canLinkSessionTable": "Lier la table",
+      "canLinkSessionTableDesc": "Lier et dissocier la table"
     },
     "status": "l'état",
     "totalUsers": "Utilisateurs",
@@ -833,7 +847,10 @@
       "payroll": "Paie et employés",
       "kitchen": "Cuisine",
       "extras": "Outils supplémentaires",
-      "other": "Autre"
+      "other": "Autre",
+      "activeSessions": "Sessions actives",
+      "completedSessions": "Sessions terminées",
+      "shifts": "Shifts"
     },
     "permissionsUI": {
       "search": "Rechercher une permission...",
@@ -842,7 +859,8 @@
       "clearAll": "Tout effacer",
       "expandAll": "Tout ouvrir",
       "collapseAll": "Tout fermer",
-      "noResults": "Aucune permission trouvée"
+      "noResults": "Aucune permission trouvée",
+      "unknownPermission": "Valeur inconnue — décochez-la"
     }
   },
   "billing": {
@@ -1900,7 +1918,11 @@
         "printerWaiting": "En attente du test",
         "noPrinters": "Aucune imprimante connectée — vérifiez puis réessayez",
         "sampleOk": "Reçu d'exemple imprimé",
-        "sampleFailed": "Échec d'impression de l'exemple"
+        "sampleFailed": "Échec d'impression de l'exemple",
+        "multiTitle": "Multi-imprimantes et routage",
+        "multiDesc": "Ajoutez les imprimantes puis routez chaque section.",
+        "drawerShortcut": "Raccourci tiroir (F12)",
+        "drawerShortcutDesc": "Activer l'ouverture du tiroir avec F12"
       },
       "saveSettings": "Enregistrer les paramètres",
       "saveAllSettings": "Tous les paramètres ont été enregistrés avec succès",
@@ -1980,7 +2002,18 @@
       "imported": "Paramètres importés — vérifiez puis enregistrez",
       "testDrawer": "Tester le tiroir-caisse",
       "save": "Enregistrer mes paramètres",
-      "saved": "Vos paramètres ont été enregistrés"
+      "saved": "Vos paramètres ont été enregistrés",
+      "printBothDelivery": "Double impression — livraison",
+      "printBothDeliveryDesc": "Les boutons impriment les deux documents",
+      "printBothTakeaway": "Double impression — à emporter",
+      "printBothTakeawayDesc": "Les boutons impriment les deux documents"
+    },
+    "maintenance": {
+      "instanceIdTitle": "Empreinte de cet appareil",
+      "instanceIdDesc": "Affichée dans les numéros. Ne régénérez qu'en cas de suspicion de clonage.",
+      "instanceIdRegen": "Régénérer",
+      "instanceIdConfirm": "Confirmer ?",
+      "instanceIdCancel": "Annuler"
     }
   },
   "gaming": {
@@ -2539,7 +2572,8 @@
       "delete": "supprimer",
       "close": "clôture",
       "system": "Système",
-      "user": "Utilisateur"
+      "user": "Utilisateur",
+      "archived": "Archivé"
     },
     "editMovementModal": {
       "title": "Modifier le mouvement des stocks",

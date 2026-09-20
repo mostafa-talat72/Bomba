@@ -27,7 +27,7 @@ import { useInfiniteList } from '../hooks/useInfiniteList';
 import {
   canAddOrder, canEditOrder, canDeleteOrder,
   canPartialPayment, canPayFullBill, canDeleteBill,
-  canEditSessionTime, canEditPartialPayment
+  canEditSessionTime, canEditPartialPayment, canStartSession, canEndSession
 } from '../utils/permissionHelper';
 import PermissionDenied from '../components/PermissionDenied';
 import ConfirmModal from '../components/ConfirmModal';
@@ -2636,6 +2636,7 @@ const loadInitialData = async () => {
   };
 
   const handleEndSession = async (sessionId: string) => {
+    if (!canEndSession(user)) { showNotification(t('common.permissionDenied'), 'error'); return; }
     // ابحث عن الفاتورة الحاوية للجلسة لتحديد إن كانت مرتبطة بطاولة
     const billForSession = bills.find((b: any) => (b.sessions || []).some((s: any) => String(s._id || s.id) === String(sessionId)));
     const isLinked = !!(billForSession?.table || selectedBill?.table || selectedTable);
@@ -2648,6 +2649,7 @@ const loadInitialData = async () => {
 
   const confirmSessionEnd = async () => {
     if (!sessionToEnd) return;
+    if (!canEndSession(user)) { showNotification(t('common.permissionDenied'), 'error'); return; }
     const endedSessionId = sessionToEnd;
     // حدد الفاتورة الحاوية — قد تكون من sessions tab وليس selectedBill
     const billForSession = bills.find((b: any) => (b.sessions || []).some((s: any) => String(s._id || s.id) === String(endedSessionId)));
@@ -2704,6 +2706,7 @@ const loadInitialData = async () => {
             message: `تم إنهاء جلسة ${s.deviceName || s.deviceNumber}`,
             action: async () => {
               try {
+                if (!canStartSession(user)) { showNotification(t('common.permissionDenied'), 'error'); return; }
                 await api.createSessionWithExistingBill({
                   deviceType: s.deviceType,
                   deviceNumber: Number(s.deviceNumber) || 0,
@@ -2739,6 +2742,7 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
 
   const confirmEndAllSessions = () => {
     if (!endAllTarget) return;
+    if (!canEndSession(user)) { showNotification(t('common.permissionDenied'), 'error'); return; }
     const target = endAllTarget;
     const ended = target.sessions.map(s => ({ ...s }));
     const billId = String(target.sessions[0]?._billObj?._id || target.sessions[0]?._billId || '');
@@ -2760,6 +2764,7 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
     setUndoRequest({
       message: `تم إنهاء ${ended.length} جلسة على ${getTableDisplay(target.table.number, i18n.language)}`,
       action: async () => {
+        if (!canStartSession(user)) { showNotification(t('common.permissionDenied'), 'error'); return; }
         for (const s of ended) {
           try {
             await api.createSessionWithExistingBill({

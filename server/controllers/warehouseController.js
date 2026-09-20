@@ -1,11 +1,13 @@
 import WarehouseItem from "../models/WarehouseItem.js";
 import InventoryItem from "../models/InventoryItem.js";
+import mongoose from "mongoose";
 import Cost from "../models/Cost.js";
 import CostCategory from "../models/CostCategory.js";
 import Logger from "../middleware/logger.js";
 import NotificationService from "../services/notificationService.js";
 import { writeToAtlas } from "../utils/atlasWrite.js";
 import { actorFromReq } from "../utils/actorInfo.js";
+import { getMergedMovements, getSnapshotBalance } from "../utils/movementArchive.js";
 
 export const getWarehouseItems = async (req, res) => {
     try {
@@ -318,27 +320,13 @@ export const getWarehouseStockMovements = async (req, res) => {
             return res.status(404).json({ success: false, message: "المنتج غير موجود" });
         }
 
-        const movements = item.stockMovements
-            .map((movement) => movement.toObject())
-            .sort((a, b) => {
-                const aTime = new Date(a.timestamp || a.date).getTime();
-                const bTime = new Date(b.timestamp || b.date).getTime();
-                return aTime - bTime;
-            });
-
-        let balance = 0;
-        const movementsWithBalance = movements.map((movement) => {
-            if (movement.type === "in" || movement.type === "transfer_in") {
-                balance += movement.quantity;
-            } else if (movement.type === "out" || movement.type === "transfer_out") {
-                balance -= movement.quantity;
-            } else if (movement.type === "adjustment") {
-                balance = movement.quantity;
-            }
-            return { ...movement, balanceAfter: balance };
+        const movements = await getMergedMovements({
+            organization: req.user.organization,
+            itemType: "warehouse",
+            item,
         });
 
-        res.json({ success: true, data: movementsWithBalance.reverse() });
+        res.json({ success: true, data: movements });
     } catch (error) {
         res.status(500).json({ success: false, message: "خطأ في جلب حركات المخزون الرئيسي", error: error.message });
     }
@@ -404,11 +392,15 @@ export const transferToInventory = async (req, res) => {
 
         const transferPrice = price || warehouseItem.price;
 
+        // معرّف نقل مشترك يربط حركتي الطرفين (قابل للتوفيق والمطابقة لاحقاً)
+        const transferId = new mongoose.Types.ObjectId();
+
         // Deduct from warehouse
         await warehouseItem.addStockMovement(
             "transfer_out", quantity, reason || "نقل إلى المخزون الحالي",
             req.user._id, inventoryItemId || null, "InventoryItem",
-            transferPrice, date ? new Date(date) : null
+            transferPrice, date ? new Date(date) : null, null,
+            { transferId, reasonCode: "transfer" }
         );
 
         let inventoryItem = null;
@@ -423,7 +415,8 @@ export const transferToInventory = async (req, res) => {
             await inventoryItem.addStockMovement(
                 "in", quantity, reason || "تحويل من المخزن الرئيسي",
                 req.user._id, warehouseItem._id.toString(), transferPrice,
-                date ? new Date(date) : null
+                date ? new Date(date) : null, null,
+                { transferId, reasonCode: "transfer" }
             );
         } else {
             // Create new inventory item linked to warehouse
@@ -447,7 +440,8 @@ export const transferToInventory = async (req, res) => {
             await inventoryItem.addStockMovement(
                 "in", quantity, reason || "تحويل من المخزن الرئيسي",
                 req.user._id, warehouseItem._id.toString(), transferPrice,
-                date ? new Date(date) : null
+                date ? new Date(date) : null, null,
+                { transferId, reasonCode: "transfer" }
             );
         }
 
@@ -518,18 +512,23 @@ export const returnToWarehouse = async (req, res) => {
 
         const returnPrice = price || inventoryItem.price;
 
+        // معرّف إرجاع مشترك يربط حركتي الطرفين
+        const transferId = new mongoose.Types.ObjectId();
+
         // Deduct from inventory
         await inventoryItem.addStockMovement(
             "out", quantity, reason || "إرجاع إلى المخزن الرئيسي",
             req.user._id, warehouseItem._id.toString(), returnPrice,
-            date ? new Date(date) : null
+            date ? new Date(date) : null, null,
+            { transferId, reasonCode: "transfer" }
         );
 
         // Add back to warehouse
         await warehouseItem.addStockMovement(
             "transfer_in", quantity, reason || "إرجاع من المخزون الحالي",
             req.user._id, inventoryItem._id.toString(), null, returnPrice,
-            date ? new Date(date) : null
+            date ? new Date(date) : null, null,
+            { transferId, reasonCode: "transfer" }
         );
 
         // Fire-and-forget Atlas writes for both items
@@ -590,7 +589,7 @@ export const deleteWarehouseStockMovement = async (req, res) => {
             return aTime - bTime;
         });
 
-        let simulatedStock = 0;
+        let simulatedStock = await getSnapshotBalance(req.user.organization, "warehouse", item._id);
         let canDelete = true;
 
         for (const movement of sortedMovements) {
@@ -615,7 +614,8 @@ export const deleteWarehouseStockMovement = async (req, res) => {
 
         item.stockMovements.splice(movementIndex, 1);
 
-        item.currentStock = 0;
+        // إعادة الحساب من لقطة الأرشيف (لا من الصفر) حتى لا يضيع الرصيد المؤرشف
+        item.currentStock = await getSnapshotBalance(req.user.organization, "warehouse", item._id);
         const recalcSorted = [...item.stockMovements].sort((a, b) => {
             const aTime = new Date(a.timestamp || a.date).getTime();
             const bTime = new Date(b.timestamp || b.date).getTime();
@@ -694,7 +694,7 @@ export const updateWarehouseStockMovement = async (req, res) => {
             return aTime - bTime;
         });
 
-        let simulatedStock = 0;
+        let simulatedStock = await getSnapshotBalance(req.user.organization, "warehouse", item._id);
         let isValid = true;
 
         for (const mov of sortedMovements) {

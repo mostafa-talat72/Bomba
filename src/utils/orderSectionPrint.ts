@@ -1,5 +1,7 @@
 import type { TFunction } from 'i18next';
 import { printOrder } from './printOrder';
+import { resolveUserPrintSettings } from './resolvePrintSettings';
+import { getCurrentUserCache } from './currentUser';
 import api from '../services/api';
 
 export interface SectionPrintCtx {
@@ -80,6 +82,9 @@ export function prepareBillSections(bill: any, ctx: SectionPrintCtx): PreparedBi
 }
 
 async function resolvePrintSettings(user: any): Promise<any> {
+  // إعدادات المستخدم أولاً (مثل printBill) ثم المنشأة — قبل ذلك كانت المنشأة فقط
+  const mine = resolveUserPrintSettings(getCurrentUserCache() || user);
+  if (mine) return mine;
   return (
     (user as any)?.organization?.printSettings ??
     (await api.getOrganization().catch(() => null))?.data?.printSettings
@@ -109,6 +114,7 @@ export async function printOneOrderSections(
   const settings = await resolvePrintSettings(ctx.user);
   const profiles = settings?.printers || [];
   const routes = settings?.sectionPrinterMap || {};
+  const prepCopies = Math.min(5, Math.max(1, Number(settings?.documentCopies?.prep ?? 1) || 1));
   const groups = new Map<string, string[]>();
   mine.forEach((sectionId) => {
     const printerId = routes[sectionId] || '';
@@ -127,7 +133,8 @@ export async function printOneOrderSections(
         undefined,
         sectionIds,
         profile?.printerName,
-        profile?.paperWidthMm
+        profile?.paperWidthMm,
+        prepCopies
       );
     })
   );

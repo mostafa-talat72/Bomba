@@ -456,7 +456,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const hasPermission = (permission: string): boolean => {
     if (!user) return false;
-    return user.permissions?.includes('all') || user.permissions?.includes(permission) || false;
+    return user.role === 'admin' || user.permissions?.includes('all') || user.permissions?.includes(permission) || false;
   };
 
   const canDeleteUsers = (): boolean => {
@@ -478,9 +478,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     if (targetUser.role === 'admin') {
       const currentUserId = (user._id || user.id)?.toString();
       const targetUserId = (targetUser._id || targetUser.id)?.toString();
-      const ownerId = user.organization?.owner?.toString();
+      const org = user.organization as any;
+      const ownerId = (org && typeof org === 'object' ? org.owner : undefined)?.toString();
 
-      const isOwner = !!(ownerId && currentUserId === ownerId);
+      const isOwner = user.role === 'owner' || !!(ownerId && currentUserId === ownerId);
       const isEditingSelf = currentUserId === targetUserId;
       return isOwner || isEditingSelf;
     }
@@ -500,9 +501,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     if (currentUserId === targetUserId) return false;
 
     if (targetUser.role === 'admin') {
-      const ownerId = user.organization?.owner?.toString();
+      const org = user.organization as any;
+      const ownerId = (org && typeof org === 'object' ? org.owner : undefined)?.toString();
 
-      const isOwner = !!(ownerId && currentUserId === ownerId);
+      const isOwner = user.role === 'owner' || !!(ownerId && currentUserId === ownerId);
       return isOwner;
     }
 

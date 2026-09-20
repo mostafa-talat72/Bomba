@@ -2,6 +2,7 @@ import { v4 as uuidv4 } from "uuid";
 import fs from "fs/promises";
 import path from "path";
 import { EJSON } from "bson";
+import { EventEmitter } from "events";
 import Logger from "../../middleware/logger.js";
 import syncConfig from "../../config/syncConfig.js";
 
@@ -9,9 +10,11 @@ import syncConfig from "../../config/syncConfig.js";
  * SyncQueueManager
  * Manages the queue of synchronization operations
  * Handles enqueueing, dequeueing, and persistence of sync operations
+ * Emits 'enqueued' event for real-time worker triggering.
  */
-class SyncQueueManager {
+class SyncQueueManager extends EventEmitter {
     constructor(maxSize = 10000) {
+        super();
         this.queue = [];
         this.maxSize = maxSize;
         this.processing = false;
@@ -260,6 +263,9 @@ class SyncQueueManager {
 
         // Schedule auto-save if not already scheduled
         this.scheduleAutoSave();
+
+        // Notify listeners (syncWorker) for real-time processing
+        this.emit("enqueued", queueOperation);
 
         return true;
     }

@@ -674,7 +674,21 @@
       "canDeleteNotification": "Delete notifications",
       "canDeleteNotificationDesc": "Delete notifications",
       "canExportReports": "Export reports",
-      "canExportReportsDesc": "Export reports as PDF and Excel"
+      "canExportReportsDesc": "Export reports as PDF and Excel",
+      "canManageActiveSessions": "Manage active sessions",
+      "canManageActiveSessionsDesc": "Start and end active sessions, change controllers, link tables and edit their times",
+      "canStartSession": "Start session",
+      "canStartSessionDesc": "Start new sessions on devices",
+      "canEndSession": "End session",
+      "canEndSessionDesc": "End active sessions",
+      "canEditActiveSessionTime": "Edit session time",
+      "canEditActiveSessionTimeDesc": "Edit active session start time",
+      "canEditControllers": "Edit controllers count",
+      "canEditControllersDesc": "Change active session controllers count",
+      "canEditControllersTime": "Edit controllers time",
+      "canEditControllersTimeDesc": "Edit active session controller periods",
+      "canLinkSessionTable": "Link session table",
+      "canLinkSessionTableDesc": "Link, unlink and change active session table"
     },
     "status": "the condition",
     "totalUsers": "Users",
@@ -853,7 +867,10 @@
       "payroll": "Payroll & employees",
       "kitchen": "Kitchen",
       "extras": "Extra tools",
-      "other": "Other"
+      "other": "Other",
+      "activeSessions": "Active sessions",
+      "completedSessions": "Completed sessions",
+      "shifts": "Shifts"
     },
     "permissionsUI": {
       "search": "Search permissions...",
@@ -862,7 +879,8 @@
       "clearAll": "Clear all",
       "expandAll": "Expand all",
       "collapseAll": "Collapse all",
-      "noResults": "No matching permissions"
+      "noResults": "No matching permissions",
+      "unknownPermission": "Unknown legacy value — uncheck it"
     }
   },
   "billing": {
@@ -1984,7 +2002,11 @@
         "printerWaiting": "Waiting for printer test",
         "noPrinters": "No printers connected — check the printer connection and power, then try again",
         "sampleOk": "Sample receipt printed successfully",
-        "sampleFailed": "Failed to print sample receipt"
+        "sampleFailed": "Failed to print sample receipt",
+        "multiTitle": "Multi printers & routing",
+        "multiDesc": "Add detected printers, then route each section or document type to its printer.",
+        "drawerShortcut": "Cash drawer shortcut (F12)",
+        "drawerShortcutDesc": "Enable or disable opening the cash drawer with F12"
       },
       "saveSettings": "Save settings",
       "saveAllSettings": "All settings have been saved successfully",
@@ -2015,7 +2037,11 @@
       "imported": "Organization settings imported — review and press save",
       "testDrawer": "Test cash drawer",
       "save": "Save my printer settings",
-      "saved": "Your printer settings saved successfully"
+      "saved": "Your printer settings saved successfully",
+      "printBothDelivery": "Double print for delivery",
+      "printBothDeliveryDesc": "When on: save, prep, bill and pay buttons print both documents together",
+      "printBothTakeaway": "Double print for takeaway",
+      "printBothTakeawayDesc": "When on: save, prep, bill and pay buttons print both documents together"
     },
     "maintenance": {
       "title": "Database maintenance",
@@ -2024,7 +2050,12 @@
       "running": "Checking...",
       "done": "Check complete ({{collections}} collections): fixed {{docs}} documents ({{fields}} fields)",
       "allOk": "Check complete ({{collections}} collections): all data is OK",
-      "failed": "Check failed"
+      "failed": "Check failed",
+      "instanceIdTitle": "This device fingerprint",
+      "instanceIdDesc": "Shown in bill/order numbers. Regenerate only if device cloning is suspected — old numbers are unaffected.",
+      "instanceIdRegen": "Generate new",
+      "instanceIdConfirm": "Confirm regenerate?",
+      "instanceIdCancel": "Cancel"
     },
     "mobile": {
       "title": "Connect a phone over Wi-Fi",
@@ -2674,7 +2705,8 @@
       "delete": "delete",
       "close": "closing",
       "system": "System",
-      "user": "User"
+      "user": "User",
+      "archived": "Archived"
     },
     "editMovementModal": {
       "title": "Modify inventory movement",

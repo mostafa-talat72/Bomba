@@ -218,6 +218,7 @@ export const getBills = async (req, res) => {
             q,  // Search by bill number or ID - bypasses the default visibility filter
             all, // if all=true fetch all bills (paginated), otherwise unpaid only
             fulfillmentType, // dine_in | takeaway | delivery — server-side filter for paged views
+            deliveryStatus, // preparing | out_for_delivery | delivered — delivery pipeline filter
             mode, // mode=list → صفوف خفيفة للقوائم (بلا أصناف/مدفوعات مفصلة) — التفاصيل عبر getBill
         } = req.query;
 
@@ -251,6 +252,13 @@ export const getBills = async (req, res) => {
 
         if (['dine_in', 'takeaway', 'delivery'].includes(fulfillmentType)) {
             query.fulfillmentType = fulfillmentType;
+        }
+
+        // Delivery pipeline status (also matches legacy docs without the field as preparing)
+        if (['preparing', 'out_for_delivery', 'delivered'].includes(deliveryStatus)) {
+            query['deliveryInfo.status'] = deliveryStatus === 'preparing'
+                ? { $in: ['preparing', null] }
+                : deliveryStatus;
         }
         
         // Default: fetch ONLY unpaid bills for Tables page logic
@@ -294,7 +302,7 @@ export const getBills = async (req, res) => {
         // Version key: any Bill write bumps getVersion("bills"), so the cache
         // never serves stale data after a change (local or from sync).
         const billsOrgId = String(getOrganizationId(req.user));
-        const billsCacheKey = `bills:${billsOrgId}:${getVersion("bills")}:${JSON.stringify({ status, table, tableNumber, customerName, q, all, page, limit, fulfillmentType, mode })}`;
+        const billsCacheKey = `bills:${billsOrgId}:${getVersion("bills")}:${JSON.stringify({ status, table, tableNumber, customerName, q, all, page, limit, fulfillmentType, deliveryStatus, mode })}`;
         const cachedBills = cache.get(billsCacheKey);
         if (cachedBills && !q) {
             return res.json(cachedBills);

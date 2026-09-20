@@ -197,11 +197,17 @@ const Delivery = () => {
   const [autoPrint, setAutoPrint] = useState(() => { try { return localStorage.getItem('deliveryAutoPrint') !== '0'; } catch { return true; } });
   const [density, setDensity] = useState(() => { try { return localStorage.getItem('deliveryDensity') || 'comfortable'; } catch { return 'comfortable'; } });
   const compact = density === 'compact';
+  // لوحة الإحصائيات مطوية افتراضيًا — الطلبات أول الشاشة
+  const [dashOpen, setDashOpen] = useState(() => { try { return localStorage.getItem('deliveryDashOpen') === '1'; } catch { return false; } });
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [billFilter, setBillFilter] = useState<'unpaid' | 'paid' | 'all'>('unpaid');
   const billFilterRef = useRef(billFilter);
   billFilterRef.current = billFilter;
+  // فلتر مرحلة التوصيل: الكل / جديد / في الطريق / تم
+  const [deliveryStatus, setDeliveryStatus] = useState<'all' | 'preparing' | 'out_for_delivery' | 'delivered'>('all');
+  const deliveryStatusRef = useRef(deliveryStatus);
+  deliveryStatusRef.current = deliveryStatus;
   const [showForm, setShowForm] = useState(false);
   const [draft, setDraft] = useState({ customerName: '', phone: '', address: '', deliveryFee: '', zone: '' });
   const [creating, setCreating] = useState(false);
@@ -306,9 +312,12 @@ const Delivery = () => {
       const feedMatches = (b: any) => {
         if (!b || (b.fulfillmentType || 'dine_in') !== 'delivery') return false;
         const f = billFilterRef.current;
-        if (f === 'paid') return b.status === 'paid';
-        if (f === 'all') return true;
-        return !['paid', 'cancelled'].includes(b.status);
+        if (f === 'paid') { if (b.status !== 'paid') return false; }
+        else if (f === 'all') { /* أي حالة دفع */ }
+        else if (['paid', 'cancelled'].includes(b.status)) return false;
+        const ds = deliveryStatusRef.current;
+        if (ds !== 'all' && (b.deliveryInfo?.status || 'preparing') !== ds) return false;
+        return true;
       };
       const onCreated = (b: any) => { try { if (b && feedMatches(b)) feedRef.current?.prepend(b); } catch {} };
       const onUpdated = (b: any) => {
@@ -357,7 +366,19 @@ const Delivery = () => {
   }, []);
   const [loyal, setLoyal] = useState<any | null>(null);
   const [billToEdit, setBillToEdit] = useState<any | null>(null);
-  const [pendingNewId, setPendingNewId] = useState<string | null>(null);
+  // خيار الطباعة المزدوجة (تحضير + فاتورة) الخاص بالدليفري من إعدادات الطباعة
+  const [printBoth, setPrintBoth] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const { loadPrintBothFlag } = await import('../utils/printPrefs');
+        const v = await loadPrintBothFlag('printBothDelivery');
+        if (alive) setPrintBoth(v);
+      } catch {}
+    })();
+    return () => { alive = false; };
+  }, []);  const [pendingNewId, setPendingNewId] = useState<string | null>(null);
   const [payMethods, setPayMethods] = useState<Record<string, string>>({});
 
   // إغلاق نافذة الأصناف: الفاتورة المنشأة حديثاً بلا أصناف ولا مدفوع تُحذف تلقائياً
@@ -409,13 +430,14 @@ const Delivery = () => {
   // ── Infinite scroll من السيرفر (25/صفحة) بدل الجلب الكامل ──
   const feed = useInfiniteList<any>({
     pageSize: 25,
-    depsKey: `${debouncedSearch.trim()}|${billFilter}`,
+    depsKey: `${debouncedSearch.trim()}|${billFilter}|${deliveryStatus}`,
     getId: (b: any) => String(b?._id || b?.id || ''),
     fetchPage: async (pageNum, limitNum) => {
       const res: any = await (api as any).getBills({
         fulfillmentType: 'delivery',
         status: billFilter === 'paid' ? 'paid' : billFilter === 'all' ? undefined : 'draft,partial,overdue',
         all: billFilter === 'all' ? true : undefined,
+        deliveryStatus: deliveryStatus === 'all' ? undefined : deliveryStatus,
         q: debouncedSearch.trim() || undefined,
         page: pageNum,
         limit: limitNum,
@@ -513,8 +535,30 @@ const Delivery = () => {
     setDraft(d => ({ ...d, customerName: d.customerName || knownCustomer.name, address: d.address || knownCustomer.address, deliveryFee: d.deliveryFee || String(knownCustomer.fee || '') }));
   };
 
-  const handleCreate = async () => {
-    if (!draft.phone.trim() || !draft.address.trim()) { palert('الهاتف والعنوان مطلوبان'); return; }
+  // إنشاء سريع: Enter في أي حقل = إنشاء + فتح الأصناف مباشرة
+  const submitOnEnter = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (!creating) void handleCreate();
+    }
+  };
+
+  // رسوم تلقائية: عنوان يطابق منطقة → رسومها (لا تتجاوز تعديلاً يدوياً)
+  const applyAddress = (addr: string) => {
+    setDraft((d) => {
+      const z = zones.find((zz) => zz.name && addr.includes(zz.name));
+      const curFee = d.deliveryFee;
+      const isAuto = !curFee || zones.some((zz) => String(zz.fee) === curFee);
+      return {
+        ...d,
+        address: addr,
+        deliveryFee: z && isAuto ? String(z.fee) : d.deliveryFee,
+        zone: z ? z.name : d.zone,
+      };
+    });
+  };
+
+  const handleCreate = async () => {    if (!draft.phone.trim() || !draft.address.trim()) { palert('الهاتف والعنوان مطلوبان'); return; }
     setCreating(true);
     try {
       const body: any = { fulfillmentType: 'delivery', billType: 'cafe', deliveryInfo: { phone: draft.phone.trim(), address: draft.address.trim(), customerName: draft.customerName.trim() || 'عميل دليفري', deliveryFee: Number(draft.deliveryFee) || 0 } };
@@ -692,6 +736,9 @@ const Delivery = () => {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <button onClick={() => { setDashOpen(v => { const n = !v; try { localStorage.setItem('deliveryDashOpen', n ? '1' : '0'); } catch {} return n; }); }} title="إظهار/إخفاء الإحصائيات" className="px-3 py-2 text-xs font-bold bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl text-gray-600 dark:text-gray-300">
+              📊 {dashOpen ? 'إخفاء' : 'إحصائيات'}
+            </button>
             <button onClick={() => { const v = compact ? 'comfortable' : 'compact'; setDensity(v); try { localStorage.setItem('deliveryDensity', v); } catch {} }} title="تبديل العرض" className="px-3 py-2 text-xs font-bold bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl text-gray-600 dark:text-gray-300">
               {compact ? '⊞ مريح' : '⊟ مضغوط'}
             </button>
@@ -704,6 +751,7 @@ const Delivery = () => {
             </button>
           </div>
         </div>
+        {dashOpen && (<>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4">
           {[
             { label: 'الكل', value: stats.total },
@@ -723,8 +771,10 @@ const Delivery = () => {
           <div className="rounded-xl p-3 text-center border bg-white dark:bg-gray-700 border-gray-200 dark:border-gray-600"><div className="text-xs text-gray-500">في الموعد (≤30د)</div><div className="text-lg font-extrabold">{analytics.onTime !== null ? `${analytics.onTime}%` : '—'}</div></div>
           <div className="rounded-xl p-3 text-center border bg-white dark:bg-gray-700 border-gray-200 dark:border-gray-600"><div className="text-xs text-gray-500">طلبات مُسلّمة</div><div className="text-lg font-extrabold">{analytics.n}</div></div>
         </div>
+      </>)}
       </div>
 
+      {dashOpen && (<>
       <div className="grid grid-cols-3 gap-3">
         <div className="rounded-2xl p-4 text-center border-2 bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800">
           <div className="text-xs font-bold text-amber-700 dark:text-amber-300">🟡 جديد</div>
@@ -739,6 +789,7 @@ const Delivery = () => {
           <div className={`text-2xl font-extrabold ${follow.late > 0 ? 'text-red-700 dark:text-red-300' : ''}`}>{follow.late}</div>
         </div>
       </div>
+      </>)}
 
       <div className="rounded-2xl px-4 py-2.5 bg-blue-600 dark:bg-blue-800 text-white text-sm font-bold flex flex-wrap items-center gap-x-4 gap-y-1 shadow">
         <span>1️⃣ دليفري جديد</span><span>←</span><span>2️⃣ أضف أصناف</span><span>←</span><span>3️⃣ اطبع وحصّل</span>
@@ -751,6 +802,17 @@ const Delivery = () => {
               key={v}
               onClick={() => setBillFilter(v)}
               className={`px-3 py-1.5 text-xs font-bold rounded-xl border transition-colors ${billFilter === v ? 'bg-blue-600 text-white border-blue-600' : 'bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-600'}`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <div className="flex gap-1.5">
+          {([['all', '🚚 الكل'], ['preparing', '🟡 جديد'], ['out_for_delivery', '🛵 في الطريق'], ['delivered', '✅ تم']] as const).map(([v, label]) => (
+            <button
+              key={v}
+              onClick={() => setDeliveryStatus(v)}
+              className={`px-3 py-1.5 text-xs font-bold rounded-xl border transition-colors ${deliveryStatus === v ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-600'}`}
             >
               {label}
             </button>
@@ -838,6 +900,7 @@ const Delivery = () => {
         menuCategories={menuCategories || []}
         onSuccess={(updated: any) => { applyBill(updated?._id || updated?.id || billToEdit?._id || billToEdit?.id, updated); setBillToEdit(null); setPendingNewId(null); }}
         onPrepPrint={handlePrepPrint}
+        printBothTogether={printBoth}
       />
 
       {loyal && (
@@ -871,8 +934,8 @@ const Delivery = () => {
           <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-4 sm:p-6 w-full max-w-md border border-gray-100 dark:border-gray-700" onClick={e => e.stopPropagation()}>
             <h3 className="text-xl font-extrabold mb-4 text-gray-900 dark:text-white flex items-center gap-2">🛵 دليفري جديد</h3>
             <div className="space-y-3">
-              <input type="text" placeholder="اسم العميل" value={draft.customerName} onChange={e => setDraft({ ...draft, customerName: e.target.value })} className="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none" />
-              <input type="text" placeholder="رقم الهاتف *" value={draft.phone} onChange={e => setDraft({ ...draft, phone: e.target.value })} className="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none" />
+              <input type="text" placeholder="اسم العميل" value={draft.customerName} onChange={e => setDraft({ ...draft, customerName: e.target.value })} onKeyDown={submitOnEnter} className="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none" />
+              <input type="text" inputMode="tel" autoFocus placeholder="رقم الهاتف *" value={draft.phone} onChange={e => setDraft({ ...draft, phone: e.target.value })} onKeyDown={submitOnEnter} className="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none" />
               {(() => {
                 const q = draft.phone.replace(/\D/g, '');
                 const qn = draft.customerName.trim();
@@ -920,13 +983,13 @@ const Delivery = () => {
                   ✓ عميل معروف ({knownCustomer.count} طلبات) — اضغط لتعبئة الاسم والعنوان والرسوم
                 </button>
               )}
-              <input type="text" placeholder="العنوان *" value={draft.address} onChange={e => setDraft({ ...draft, address: e.target.value })} className="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none" />
+              <input type="text" placeholder="العنوان *" value={draft.address} onChange={e => applyAddress(e.target.value)} onKeyDown={submitOnEnter} className="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none" />
               <div className="flex gap-2">
-                <select value={draft.zone} onChange={e => { const z = zones.find(zz => zz.name === e.target.value); setDraft({ ...draft, zone: e.target.value, deliveryFee: z ? String(z.fee) : draft.deliveryFee }); }} className="flex-1 px-3 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-sm">
+                <select value={draft.zone} onChange={e => { const z = zones.find(zz => zz.name === e.target.value); setDraft({ ...draft, zone: e.target.value, deliveryFee: z ? String(z.fee) : draft.deliveryFee }); }} onKeyDown={submitOnEnter} className="flex-1 px-3 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-sm">
                   <option value="">منطقة... (اختياري)</option>
                   {zones.map(z => <option key={z.name} value={z.name}>{z.name} — {z.fee} ج.م</option>)}
                 </select>
-                <input type="number" placeholder="رسوم" value={draft.deliveryFee} onChange={e => setDraft({ ...draft, deliveryFee: e.target.value })} className="w-28 px-3 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-700 text-sm" />
+                <input type="number" placeholder="رسوم" value={draft.deliveryFee} onChange={e => setDraft({ ...draft, deliveryFee: e.target.value })} onKeyDown={submitOnEnter} className="w-28 px-3 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-700 text-sm" />
               </div>
               <div className="flex gap-2 items-center">
                 <input type="text" placeholder="منطقة جديدة" value={newZone.name} onChange={e => setNewZone({ ...newZone, name: e.target.value })} className="flex-1 px-3 py-1.5 text-xs border rounded-lg bg-gray-50 dark:bg-gray-700" />
