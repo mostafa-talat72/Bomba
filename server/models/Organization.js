@@ -135,7 +135,14 @@ const OrganizationSchema = new mongoose.Schema({
         openCashDrawerOnPayment: { type: Boolean, default: true }, // فتح درج الكاشير عند الدفع الكامل
         openCashDrawerShortcut: { type: Boolean, default: true }, // فتح درج الكاشير باختصار F12
         autoPrintOnPayment: { type: Boolean, default: true }, // طباعة الفاتورة تلقائياً عند الدفع الكامل
+        autoPrintOnBillCreate: { type: Boolean, default: false }, // طباعة الفاتورة تلقائياً عند الإنشاء
+        autoPrintOnOrderCreate: { type: Boolean, default: false }, // طباعة طلب التحضير تلقائياً عند الإنشاء
+        autoPrintOnOrderUpdate: { type: Boolean, default: false }, // طباعة التحضير تلقائياً عند تعديل الطلب
         printMarksPaid: { type: Boolean, default: false }, // عند الطباعة من نافذة الدفع: ادفع الفاتورة بالكامل أولاً (اختياري لكل طباعة)
+        printFont: { type: String, enum: ['Tajawal', 'Cairo', 'Amiri', 'IBM Plex Sans Arabic'], default: 'Tajawal' },
+        customFooterBill: { type: String, default: '' },
+        customFooterOrder: { type: String, default: '' },
+        customFooterConsumption: { type: String, default: '' },
         promptOrderPrintSections: { type: Boolean, default: false }, // اختيار أقسام الطلب قبل الطباعة
         defaultOrderPrintSections: { type: [String], default: [] }, // الأقسام الافتراضية للطباعة
         autoPrintOrderSections: { type: Boolean, default: false }, // الطباعة المباشرة بالأقسام الافتراضية
@@ -145,13 +152,35 @@ const OrganizationSchema = new mongoose.Schema({
             printerName: { type: String, required: true },
             printerPath: { type: String, default: '' },
             paperWidthMm: { type: Number, default: 80, min: 30, max: 150 },
+            arabicSupport: { type: Boolean, default: true },
         }],
         sectionPrinterMap: { type: Map, of: String, default: {} },
+        sectionPrinterMapTakeaway: { type: Map, of: String, default: {} },
+        sectionPrinterMapDelivery: { type: Map, of: String, default: {} },
         documentPrinterMap: { type: Map, of: String, default: {} },
+        documentCopies: { type: Map, of: Number, default: {} },
+        printLayout: { type: mongoose.Schema.Types.Mixed, default: {} },
+        printBothDelivery: { type: Boolean, default: false },
+        printBothTakeaway: { type: Boolean, default: false },
         charactersPerLine: { type: Number, default: 48 }, // عدد الأحرف في السطر
         printHeader: { type: Boolean, default: true }, // طباعة الرأس
         printFooter: { type: Boolean, default: true }, // طباعة التذييل
         autoCut: { type: Boolean, default: false }, // قص تلقائي للورق
+    },
+
+    // خصم ثابت (%)
+    fixedDiscount: {
+        enabled: { type: Boolean, default: false },
+        // نسبة افتراضية تُطبَّق على جميع الأقسام
+        percentage: { type: Number, default: 0, min: 0, max: 100 },
+        // سقف أقصى لمبلغ الخصم (0 = بدون سقف)
+        maxCap: { type: Number, default: 0, min: 0 },
+        // نسبة مخصصة لكل قسم (0 = يستخدم الافتراضي)
+        sections: {
+            tables: { type: Number, default: 0, min: 0, max: 100 },
+            takeaway: { type: Number, default: 0, min: 0, max: 100 },
+            delivery: { type: Number, default: 0, min: 0, max: 100 },
+        },
     },
 
     // تخزين معرفات الطابعات لكل جهاز/مستخدم (منفصل عن printSettings)

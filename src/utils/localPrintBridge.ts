@@ -168,22 +168,33 @@ const getPrintKey = (html: string, printerName?: string): string => {
 const runPrintJob = async (
   html: string,
   printerName?: string,
-  options: { openDrawer?: boolean; cutPaper?: boolean; paperWidthMm?: number; copies?: number; drawerMode?: 'bill' | 'payment'; organization?: unknown } = {}
+  options: { openDrawer?: boolean; cutPaper?: boolean; paperWidthMm?: number; copies?: number; drawerMode?: 'bill' | 'payment'; organization?: unknown; printKey?: string } = {}
 ): Promise<boolean> => {
-  try {
-    if (await printThroughAgent(html, printerName, options)) return true;
-  } catch (agentError) {
-    console.error('Print Agent rejected the print request; trying the configured fallback:', agentError);
+  const copies = Math.min(5, Math.max(1, Number(options.copies) || 1));
+  // نسخ متعددة: كل نسخة طلب منفصل للوكيل (مهمة منفردة في طابور ويندوز) مع فتح الدرج في الأولى فقط.
+  // مفتاح مميز لكل نسخة حتى لا يعتبرها الوكيل تكراراً (كبت التكرار 10 ثوانٍ).
+  const baseKey = typeof options.printKey === 'string' && options.printKey ? options.printKey : null;
+  for (let i = 0; i < copies; i++) {
+    const opts = i === 0 ? options : { ...options, openDrawer: false, copies: 1 };
+    // تجاوز copies في الحمولة للنسخة المفردة (الوكيل قد يطبع نسخة واحدة لكل طلب)
+    const onceOpts = { ...opts, copies: 1, ...(baseKey ? { printKey: copies > 1 ? `${baseKey}:copy${i + 1}` : baseKey } : {}) };
     try {
-      if (await printThroughDesktopFallback(html, printerName, options)) return true;
-    } catch (desktopError) {
-      console.warn('Silent print agent and desktop print fallback failed:', desktopError);
+      if (await printThroughAgent(html, printerName, onceOpts)) continue;
+    } catch (agentError) {
+      console.error('Print Agent rejected the print request; trying the configured fallback:', agentError);
+      try {
+        if (await printThroughDesktopFallback(html, printerName, onceOpts)) continue;
+      } catch (desktopError) {
+        console.warn('Silent print agent and desktop print fallback failed:', desktopError);
+      }
+      console.warn('Silent print agent unavailable; using browser print:', agentError);
     }
-    console.warn('Silent print agent unavailable; using browser print:', agentError);
+    const isDesktop = typeof window !== 'undefined'
+      && Boolean((window as Window & { bombaDesktop?: { isDesktop?: boolean } }).bombaDesktop?.isDesktop);
+    const ok = isDesktop ? false : printInBrowser(html);
+    if (!ok) return false;
   }
-  const isDesktop = typeof window !== 'undefined'
-    && Boolean((window as Window & { bombaDesktop?: { isDesktop?: boolean } }).bombaDesktop?.isDesktop);
-  return isDesktop ? false : printInBrowser(html);
+  return true;
 };
 
 export const printThroughLocalBridge = (

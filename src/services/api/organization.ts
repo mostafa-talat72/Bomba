@@ -32,6 +32,16 @@ async function updateOrganization(organizationData: {
   };
   workingHours?: any;
   logo?: string;
+  fixedDiscount?: {
+    enabled?: boolean;
+    percentage?: number;
+    maxCap?: number;
+    sections?: {
+      tables?: number;
+      takeaway?: number;
+      delivery?: number;
+    };
+  };
 }): Promise<ApiResponse<any>> {
   return apiClient.request('/organization', {
     method: 'PUT',

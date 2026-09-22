@@ -15,26 +15,41 @@ export async function relayHtmlToLocalAgent({
   openDrawer = false,
   paperWidthMm = 80,
   printKey,
+  copies = 1,
   timeoutMs = 45000,
 } = {}) {
   if (!html || typeof html !== 'string' || html.length === 0) {
     return { ok: false, message: 'No HTML to relay' };
   }
+  const total = Math.min(5, Math.max(1, Number(copies) || 1));
+  let lastPrinter = null;
+  let lastDuplicate = false;
+  // كل نسخة طلب منفصل للوكيل (ورقة مقصوصة منفردة) — الدرج في الأولى فقط.
+  for (let i = 0; i < total; i++) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
     const res = await fetch(LOCAL_AGENT_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ html, printerName, openDrawer, paperWidthMm, printKey }),
+      body: JSON.stringify({
+        html,
+        printerName,
+        openDrawer: i === 0 ? openDrawer : false,
+        paperWidthMm,
+        printKey: total > 1 ? `${printKey || 'relay'}:copy${i + 1}` : printKey,
+        copies: 1,
+      }),
       signal: ctrl.signal,
     });
     const data = await res.json().catch(() => ({}));
     if (res.ok && data && data.success) {
+      if (data.printerName) lastPrinter = data.printerName;
+      if (data.duplicate) lastDuplicate = true;
       Logger.info(
-        `HTML relayed to local print agent (${data.printerName || 'auto'}${data.duplicate ? ', duplicate' : ''}) — desktop-identical design`
+        `HTML relayed to local print agent (${data.printerName || 'auto'}${data.duplicate ? ', duplicate' : ''}) — copy ${i + 1}/${total} desktop-identical design`
       );
-      return { ok: true, printerName: data.printerName, duplicate: !!data.duplicate };
+      continue;
     }
     return { ok: false, message: (data && data.message) || `Local agent responded ${res.status}` };
   } catch (e) {
@@ -43,4 +58,6 @@ export async function relayHtmlToLocalAgent({
   } finally {
     clearTimeout(timer);
   }
+  }
+  return { ok: true, printerName: lastPrinter, duplicate: lastDuplicate, copiesPrinted: total };
 }

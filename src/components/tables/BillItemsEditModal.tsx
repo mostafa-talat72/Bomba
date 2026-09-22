@@ -395,6 +395,11 @@ const BillItemsEditModal: React.FC<Props> = ({ isOpen, onClose, bill, menuItems,
                 <div className="bg-white/15 rounded-xl px-2.5 py-1 sm:px-3 sm:py-1.5 ring-1 ring-white/25 text-center">
                   <p className="text-sm sm:text-base text-orange-100 leading-none">الإجمالي</p>
                   <p className="text-base sm:text-lg font-bold text-white">{fmt(calculateTotal())}</p>
+                  {bill && (() => {
+                    const totalFD = (bill.orders || []).reduce((sum: number, o: any) => sum + (o?.fixedDiscount?.amount || 0), 0);
+                    if (totalFD <= 0) return null;
+                    return <p className="text-[10px] text-purple-200">خصم ثابت: -{fmt(totalFD)}</p>;
+                  })()}
                 </div>
               )}
               <button onClick={onClose} className="w-8 h-8 bg-white/15 hover:bg-white/25 rounded-xl flex items-center justify-center text-white ring-1 ring-white/25 transition-all">

@@ -840,8 +840,13 @@ export const updateUserStatus = async (req, res) => {
 const USER_PRINT_SETTINGS_KEYS = [
     "printerType", "printerDevice", "printerIP", "printerPort", "printerName",
     "openCashDrawer", "openCashDrawerOnPayment", "openCashDrawerShortcut",
-    "autoPrintOnPayment", "promptOrderPrintSections", "defaultOrderPrintSections",
-    "autoPrintOrderSections", "printers", "sectionPrinterMap", "documentPrinterMap",
+    "autoPrintOnPayment", "autoPrintOnBillCreate", "autoPrintOnOrderCreate", "autoPrintOnOrderUpdate",
+    "printMarksPaid", "printFont", "customFooterBill", "customFooterOrder", "customFooterConsumption",
+    "promptOrderPrintSections", "defaultOrderPrintSections",
+    "autoPrintOrderSections", "printers",
+    "sectionPrinterMap", "sectionPrinterMapTakeaway", "sectionPrinterMapDelivery",
+    "documentPrinterMap", "documentCopies", "printLayout",
+    "printBothDelivery", "printBothTakeaway",
     "charactersPerLine", "printHeader", "printFooter", "autoCut", "printQRCode",
 ];
 

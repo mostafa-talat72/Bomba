@@ -40,6 +40,14 @@ const TableButton = React.memo<TableButtonProps>(({ table, isSelected, isOccupie
     .reduce((s, b) => s + (b.remaining || 0), 0);
   const liveRemaining = totalRemaining + (liveExtra || 0);
 
+  // إجمالي الخصم الثابت من فواتير الطاولة
+  const totalFixedDiscount = tableBills
+    .reduce((s, b) => s + (b.orders || []).reduce((os: number, o: any) => os + (o?.fixedDiscount?.amount || 0), 0), 0);
+  // إجمالي الفواتير قبل الخصم (المجموع الفرعي)
+  const totalSubtotal = tableBills
+    .filter(b => ['draft', 'partial', 'overdue'].includes(b.status))
+    .reduce((s, b) => s + (b.total || 0) + (b.discount || 0) - (b.orders || []).reduce((os: number, o: any) => os + (o?.fixedDiscount?.amount || 0), 0), 0);
+
   // ── ثلاث حالات فقط ──────────────────────────────────────────────────────
   // 1. فارغة  → رمادي
   // 2. مشغولة → أحمر موحد (badge الوقت هو المؤشر الوحيد)
@@ -142,6 +150,12 @@ const TableButton = React.memo<TableButtonProps>(({ table, isSelected, isOccupie
               {liveExtra > 0 && <span className="ml-1 text-[10px] animate-pulse">●</span>}
             </span>
           )}
+          {totalFixedDiscount > 0 && (
+            <div className="mt-0.5 text-center">
+              <span className="text-[10px] text-gray-400 dark:text-gray-500 line-through block">{formatCurrencyUtil(liveRemaining + totalFixedDiscount, i18n.language, 'EGP')}</span>
+              <span className="text-[10px] font-bold text-purple-600 dark:text-purple-400 block">خصم: -{formatCurrencyUtil(totalFixedDiscount, i18n.language, 'EGP')}</span>
+            </div>
+          )}
         </div>
 
         {/* hover glow */}
@@ -199,6 +213,11 @@ const TableButton = React.memo<TableButtonProps>(({ table, isSelected, isOccupie
                 {liveRemaining > 0 && (
                   <span className={`text-xs font-bold leading-tight text-center break-normal ${styles.sub}`}>
                     {formatCurrencyUtil(liveRemaining, i18n.language, localStorage.getItem('organizationCurrency') || 'EGP')}
+                  </span>
+                )}
+                {totalFixedDiscount > 0 && (
+                  <span className="text-[10px] font-bold text-purple-600 dark:text-purple-400 leading-tight text-center">
+                    خصم: -{formatCurrencyUtil(totalFixedDiscount, i18n.language, 'EGP')}
                   </span>
                 )}
               </div>

@@ -127,6 +127,19 @@ const BillTableCard = React.memo<BillTableCardProps>(({
               {formatCurrencyUtil(totalRemaining, i18n.language, localStorage.getItem('organizationCurrency') || 'EGP')}
             </span>
           )}
+          {(() => {
+            const totalFD = (bill.orders || []).reduce((sum: number, o: any) => sum + (o?.fixedDiscount?.amount || 0), 0);
+            const billDiscount = Number(bill.discount) || 0;
+            const totalAllDiscounts = totalFD + billDiscount;
+            const subtotalBeforeDiscount = (bill.total || 0) + totalAllDiscounts;
+            if (totalAllDiscounts <= 0) return null;
+            return (
+              <div className="mt-0.5 text-center">
+                <span className="text-[10px] text-gray-400 dark:text-gray-500 line-through block">{subtotalBeforeDiscount.toLocaleString('ar-EG')} ج.م</span>
+                <span className="text-[10px] font-bold text-purple-600 dark:text-purple-400 block">خصم: -{totalAllDiscounts.toLocaleString('ar-EG')} ج.م</span>
+              </div>
+            );
+          })()}
 
           {kind === 'delivery' && (
             <span className="mt-1 flex flex-col items-center gap-0.5 w-full px-1" onClick={e => e.stopPropagation()} onKeyDown={e => e.stopPropagation()}>
@@ -246,6 +259,19 @@ const BillTableCard = React.memo<BillTableCardProps>(({
                     {formatCurrencyUtil(totalRemaining, i18n.language, localStorage.getItem('organizationCurrency') || 'EGP')}
                   </span>
                 )}
+                {(() => {
+                  const hoverFD = (bill.orders || []).reduce((s: number, o: any) => s + (o?.fixedDiscount?.amount || 0), 0);
+                  const hoverBD = Number(bill.discount) || 0;
+                  const hoverTotal = hoverFD + hoverBD;
+                  if (hoverTotal <= 0) return null;
+                  const hoverSub = (bill.total || 0) + hoverTotal;
+                  return (
+                    <div className="text-center">
+                      <span className="text-[10px] text-gray-400 line-through block">{hoverSub.toLocaleString('ar-EG')} ج.م</span>
+                      <span className="text-[10px] font-bold text-purple-600 block">خصم: -{hoverTotal.toLocaleString('ar-EG')} ج.م</span>
+                    </div>
+                  );
+                })()}
                 <select value={method} onChange={e => onMethodChange(e.target.value)} onClick={e => e.stopPropagation()} title="طريقة الدفع"
                   className="mt-1 w-full text-[10px] font-bold border border-gray-200 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 py-0.5">
                   <option value="cash">نقدي</option>

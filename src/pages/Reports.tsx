@@ -240,9 +240,17 @@ const TopProductsBySection = ({ data, t, i18n, formatCurrency }: { data: Product
               </div>
               <div className="text-right">
                 <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">{t('reports.labels.totalRevenue')}</p>
-                <p className="text-xl font-bold text-green-600 dark:text-green-400">
-                  {formatCurrency(section.totalRevenue)}
-                </p>
+                <div className="text-right">
+                  {(section as any).totalDiscount > 0 && (
+                    <p className="text-sm text-purple-500 dark:text-purple-400 line-through">{formatCurrency((section as any).subtotalBeforeDiscount || section.totalRevenue)}</p>
+                  )}
+                  <p className="text-xl font-bold text-green-600 dark:text-green-400">
+                    {formatCurrency(section.totalRevenue)}
+                  </p>
+                  {(section as any).totalDiscount > 0 && (
+                    <p className="text-xs text-purple-600 dark:text-purple-400 font-bold">خصم: -{formatCurrency((section as any).totalDiscount)}</p>
+                  )}
+                </div>
               </div>
             </div>
           </div>
@@ -1225,6 +1233,11 @@ const Reports = () => {
     return { revenue, orders, avgOrderValue, sessions };
   }, [reports.sales, reports.sessions]);
 
+  const reportDiscounts = useMemo(() => {
+    if (!reports.sales) return { fixedDiscount: 0, manualDiscount: 0, totalDiscounts: 0 };
+    return (reports.sales as { discounts?: { fixedDiscount: number; manualDiscount: number; totalDiscounts: number } }).discounts || { fixedDiscount: 0, manualDiscount: 0, totalDiscounts: 0 };
+  }, [reports.sales]);
+
   const revenueBreakdown = useMemo((): RevenueBreakdown => {
     if (!reports.sales) return { playstation: 0, computer: 0, cafe: 0 };
 
@@ -1732,6 +1745,16 @@ const Reports = () => {
             t={t}
           />
         </div>
+        {reportDiscounts.totalDiscounts > 0 && (
+          <div className="mt-4 p-3 bg-purple-50 dark:bg-purple-900/20 rounded-xl border border-purple-200 dark:border-purple-800">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-purple-600 dark:text-purple-400 font-bold text-sm">💰 الخصومات</span>
+            </div>
+            <div className="flex flex-wrap gap-4 text-sm">
+              <span className="text-purple-700 dark:text-purple-300">الخصومات: <span className="font-bold">-{formatCurrency(reportDiscounts.totalDiscounts)}</span></span>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Revenue Breakdown */}

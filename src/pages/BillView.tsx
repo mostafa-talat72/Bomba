@@ -43,6 +43,8 @@ interface Order {
 	status: 'pending' | 'preparing' | 'ready' | 'delivered' | 'cancelled';
 	totalAmount?: number;
 	finalAmount?: number;
+	fixedDiscount?: { percentage: number; amount: number; maxCap: number };
+	discount?: number;
 	notes?: string;
 	createdAt: string;
 	createdBy?: {
@@ -881,12 +883,25 @@ const BillView = () => {
 							<span className="text-gray-600">{t('billView.subtotal')}:</span>
 							<span className="font-medium">{formatCurrency(bill.total)}</span>
 						</div>
-						{bill.discount > 0 && (
-							<div className="flex justify-between">
-								<span className="text-gray-600">{t('billView.discount')}:</span>
-								<span className="font-medium">{formatCurrency(bill.discount)}</span>
-							</div>
-						)}
+						{(() => {
+							const totalFixedDiscount = (bill.orders || []).reduce((sum: number, order: Order) => sum + (order?.fixedDiscount?.amount || 0), 0);
+							const billDiscount = Number(bill.discount) || 0;
+							const totalAllDiscounts = totalFixedDiscount + billDiscount;
+							if (totalAllDiscounts <= 0) return null;
+							const subtotal = (bill.total || 0) + totalAllDiscounts;
+							return (
+								<>
+									<div className="flex justify-between">
+										<span className="text-gray-600">{t('billView.subtotal')}:</span>
+										<span className="font-medium text-gray-400 line-through">{formatCurrency(subtotal)}</span>
+									</div>
+									<div className="flex justify-between">
+										<span className="text-purple-600 dark:text-purple-400">الخصومات:</span>
+										<span className="font-medium text-purple-600 dark:text-purple-400">-{formatCurrency(totalAllDiscounts)}</span>
+									</div>
+								</>
+							);
+						})()}
 						{bill.tax > 0 && (
 							<div className="flex justify-between">
 								<span className="text-gray-600">{t('billView.tax')}:</span>
@@ -948,8 +963,22 @@ const BillView = () => {
 										</ul>
 									</div>
 									{order.notes && <div className="text-xs text-gray-500 mt-2">{t('billView.notes')}: {order.notes}</div>}
-									<div className="mt-2 flex justify-between items-center">
-										<span className="text-xs text-gray-600">{t('billView.total')}: <span className="font-bold text-orange-600 dark:text-orange-400">{formatCurrency(order.finalAmount ?? order.totalAmount ?? 0)}</span></span>
+									<div className="mt-2 space-y-1">
+										{(() => {
+											const fd = Number(order.fixedDiscount?.amount) || 0;
+											const md = Number(order.discount) || 0;
+											const totalD = fd + md;
+											if (totalD <= 0) return null;
+											return (
+												<div className="flex justify-between items-center">
+													<span className="text-xs text-purple-600 dark:text-purple-400">الخصومات</span>
+													<span className="text-xs font-bold text-purple-600 dark:text-purple-400">-{formatCurrency(totalD)}</span>
+												</div>
+											);
+										})()}
+										<div className="flex justify-between items-center">
+											<span className="text-xs text-gray-600">{t('billView.total')}: <span className="font-bold text-orange-600 dark:text-orange-400">{formatCurrency(order.finalAmount ?? order.totalAmount ?? 0)}</span></span>
+										</div>
 									</div>
 								</div>
 							))}

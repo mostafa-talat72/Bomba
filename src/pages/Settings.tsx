@@ -113,7 +113,10 @@ interface OrganizationData {
     autoPrintOrderSections?: boolean;
     printers?: Array<{ id: string; name: string; printerName: string; printerPath?: string; paperWidthMm?: number }>;
     sectionPrinterMap?: Record<string, string>;
+    sectionPrinterMapTakeaway?: Record<string, string>;
+    sectionPrinterMapDelivery?: Record<string, string>;
     documentPrinterMap?: Record<string, string>;
+    documentCopies?: Record<string, number>;
     printerType?: string;
     printerDevice?: string;
     printerIP?: string;
@@ -1632,7 +1635,7 @@ const Settings: FC = () => {
       if (response.success) {
         setPrinterStatus('ready');
         showAlertMessage(
-          t('settings.organization.printSettings.testSuccess'),
+          `${t('settings.organization.printSettings.testSuccess')} — ${printer.name}`,
           'success'
         );
       } else {
@@ -2244,6 +2247,7 @@ const Settings: FC = () => {
                       ['org-sec-basic', t('settings.organization.basicInfo')],
                       ['org-sec-website', t('settings.organization.generatedWebsite.title')],
                       ['org-sec-print', t('settings.organization.printSettings.title')],
+                      ['org-sec-discount', t('settings.organization.fixedDiscount.title') || 'الخصم الثابت'],
                       ['org-sec-social', t('settings.organization.socialLinks.title')],
                       ['org-sec-hours', t('settings.organization.workingHours.title')],
                       ['org-sec-perms', t('settings.organization.permissions.title')],
@@ -2356,6 +2360,43 @@ const Settings: FC = () => {
                           placeholder="{t('settings.organization.descriptionPlaceholder')}"
                         />
                       </div>
+                      <div className="md:col-span-2">
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                          {t('settings.organization.logo')}
+                        </label>
+                        <div className="flex items-center gap-3">
+                          {organization.logo ? (
+                            <img src={organization.logo} alt="logo" className="h-14 w-auto max-w-[140px] object-contain rounded-md border border-gray-200 dark:border-gray-600 bg-white p-1" />
+                          ) : (
+                            <div className="h-14 w-14 rounded-md border border-dashed border-gray-300 dark:border-gray-600 flex items-center justify-center text-gray-400 text-xs">—</div>
+                          )}
+                          <div className="flex flex-col gap-1.5">
+                            <label className="cursor-pointer px-3 py-2 bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 text-sm font-bold text-center">
+                              {t('settings.organization.logoUpload')}
+                              <input
+                                type="file"
+                                accept="image/*"
+                                className="hidden"
+                                onChange={(e) => {
+                                  const f = e.target.files?.[0];
+                                  (e.target as HTMLInputElement).value = '';
+                                  if (!f) return;
+                                  if (f.size > 1024 * 1024) { showAlertMessage(t('settings.organization.logoTooBig'), 'error'); return; }
+                                  const r = new FileReader();
+                                  r.onload = () => { if (typeof r.result === 'string') setOrganization({ ...organization, logo: r.result }); };
+                                  r.readAsDataURL(f);
+                                }}
+                              />
+                            </label>
+                            {organization.logo && (
+                              <button type="button" onClick={() => setOrganization({ ...organization, logo: '' })} className="px-3 py-1 text-xs text-red-600 hover:text-red-700 font-bold">
+                                {t('settings.organization.logoRemove')}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{t('settings.organization.logoHint')}</p>
+                      </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                           {t('settings.general.timezone')}
@@ -2422,11 +2463,59 @@ const Settings: FC = () => {
                     </div>
                   )}
 
-                  {/* Print Settings Section */}
+                    {/* Print Settings Section */}
                   <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg mb-6">
                     <h4 id="org-sec-print" className="text-md font-medium text-gray-900 dark:text-gray-100 mb-4 scroll-mt-24">
                       {t('settings.organization.printSettings.title')}
                     </h4>
+
+                    {/* تنسيق الورقة لكل مستند (شعار/خطوط/إظهار) + استعادة الافتراضي */}
+                    <div className="mb-4 rounded-xl border border-orange-200 dark:border-gray-600 bg-white/60 dark:bg-gray-800/40 p-4">
+                      <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">{t('settings.organization.printSettings.layoutTitle')}</h4>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 mb-3">{t('settings.organization.printSettings.layoutDesc')}</p>
+                      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+                        {([
+                          ['bill', t('settings.organization.printSettings.layoutBill')],
+                          ['order', t('settings.organization.printSettings.layoutOrder')],
+                          ['consumption', t('settings.organization.printSettings.layoutConsumption')],
+                        ] as Array<[string, string]>).map(([doc, docLabel]) => {
+                          const L = ((organization.printSettings as any)?.printLayout?.[doc] || {}) as Record<string, any>;
+                          const setL = (patch: Record<string, any>) => setOrganization((prev: any) => ({ ...prev, printSettings: { ...prev.printSettings, printLayout: { ...(prev.printSettings?.printLayout || {}), [doc]: { ...(prev.printSettings?.printLayout?.[doc] || {}), ...patch } } } }));
+                          const num = (v: any, d: number) => Math.max(8, Math.min(40, Number(v) || d));
+                          return (
+                            <div key={doc} className="rounded-lg bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 p-3 space-y-2">
+                              <div className="flex items-center justify-between">
+                                <span className="text-sm font-bold text-gray-900 dark:text-gray-100">{docLabel}</span>
+                                <button type="button" onClick={() => setL({ logoShow: true, logoPosition: 'above', logoWidth: 110, fontTitle: 19, fontItems: 15, fontTotals: 16, fontFooter: 12, showPhone: true, showAddress: true, showQR: true, showThanks: true })} className="text-[11px] text-orange-600 hover:text-orange-700 dark:text-orange-400 font-bold">{t('settings.organization.printSettings.layoutReset')}</button>
+                              </div>
+                              <label className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-300">الشعار
+                                <select value={L.logoPosition || 'above'} onChange={e => setL({ logoShow: true, logoPosition: e.target.value })} className="flex-1 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 p-1.5">
+                                  <option value="above">{t('settings.organization.printSettings.logoAbove')}</option>
+                                  <option value="beside">{t('settings.organization.printSettings.logoBeside')}</option>
+                                  <option value="hide">{t('settings.organization.printSettings.logoHide')}</option>
+                                </select>
+                                <input type="number" min={40} max={200} step={5} value={L.logoWidth ?? 110} onChange={e => setL({ logoWidth: Math.min(200, Math.max(40, Number(e.target.value) || 110)) })} className="w-16 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 p-1.5" title={t('settings.organization.printSettings.logoWidth')} />
+                              </label>
+                              <div className="grid grid-cols-4 gap-1">
+                                {([['fontTitle', 'عنوان'], ['fontItems', 'أصناف'], ['fontTotals', 'إجمالي'], ['fontFooter', 'تذييل']] as const).map(([k, lbl]) => (
+                                  <label key={k} className="text-[11px] text-gray-600 dark:text-gray-300">{lbl}
+                                    <input type="number" min={8} max={40} value={L[k] ?? ''} placeholder={String({ fontTitle: 19, fontItems: 15, fontTotals: 16, fontFooter: 12 }[k])} onChange={e => setL({ [k]: e.target.value === '' ? undefined : num(e.target.value, 0) })} className="mt-0.5 w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 p-1.5" />
+                                  </label>
+                                ))}
+                              </div>
+                              <div className="flex flex-wrap gap-2">
+                                {((doc === 'bill' ? ['showPhone', 'showAddress', 'showQR', 'showThanks'] : doc === 'order' ? ['showPhone'] : ['showThanks']) as string[]).map((k) => (
+                                  <label key={k} className="flex items-center gap-1 text-[11px] text-gray-600 dark:text-gray-300 cursor-pointer">
+                                    <input type="checkbox" checked={L[k] !== false} onChange={e => setL({ [k]: e.target.checked })} className="h-4 w-4 accent-orange-600" />
+                                    {t(`settings.organization.printSettings.show_${k}` as any)}
+                                  </label>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
                     
                     <PrinterSettingsForm
                       settings={organization.printSettings || {}}
@@ -2439,26 +2528,116 @@ const Settings: FC = () => {
                       onTestPrinter={testPrinter}
                     />
 
-                    {/* طباعة مزدوجة على مستوى المنشأة (تحضير + فاتورة معاً) — تسري على الكل كافتراضي */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
-                      {([
-                        ['printBothDelivery', t('settings.myPrint.printBothDelivery'), t('settings.myPrint.printBothDeliveryDesc')],
-                        ['printBothTakeaway', t('settings.myPrint.printBothTakeaway'), t('settings.myPrint.printBothTakeawayDesc')],
-                      ] as const).map(([key, title, desc]) => (
-                        <label key={key} className="flex items-start gap-3 bg-white dark:bg-gray-800 p-4 rounded-lg cursor-pointer border border-gray-200 dark:border-gray-600">
+                  </div>
+
+                  {/* ── الخصم الثابت ─────────────────────────────────── */}
+                  <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg mb-6">
+                    <h4 id="org-sec-discount" className="text-md font-medium text-gray-900 dark:text-gray-100 mb-4 scroll-mt-24">
+                      {t('settings.organization.fixedDiscount.title') || 'الخصم الثابت (%)'}
+                    </h4>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
+                      {t('settings.organization.fixedDiscount.desc') || 'خصم نسبة يُطبق تلقائياً على كل طلب. لكل قسم نسبة خاصة أو يستخدم الافتراضي.'}
+                    </p>
+
+                    {/* تفعيل */}
+                    <label className="flex items-center gap-3 mb-4 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={(organization as any).fixedDiscount?.enabled || false}
+                        onChange={(e) => setOrganization((prev: any) => ({
+                          ...prev,
+                          fixedDiscount: { ...(prev.fixedDiscount || {}), enabled: e.target.checked },
+                        }))}
+                        className="w-5 h-5 rounded text-orange-500 focus:ring-orange-400"
+                      />
+                      <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                        {t('settings.organization.fixedDiscount.enable') || 'تفعيل الخصم الثابت'}
+                      </span>
+                    </label>
+
+                    {(organization as any).fixedDiscount?.enabled && (
+                      <div className="space-y-4">
+                        {/* السقف الأقصى */}
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                            {t('settings.organization.fixedDiscount.maxCap') || 'سقف أقصى للخصم (جنيه)'}
+                          </label>
                           <input
-                            type="checkbox"
-                            checked={!!organization.printSettings?.[key]}
-                            onChange={(e) => setOrganization((prev: any) => ({ ...prev, printSettings: { ...(prev.printSettings || {}), [key]: e.target.checked } }))}
-                            className="mt-1 h-5 w-5 accent-orange-600 flex-shrink-0"
+                            type="number"
+                            min={0}
+                            step={1}
+                            value={(organization as any).fixedDiscount?.maxCap || 0}
+                            onChange={(e) => setOrganization((prev: any) => ({
+                              ...prev,
+                              fixedDiscount: { ...(prev.fixedDiscount || {}), maxCap: Math.max(0, Number(e.target.value) || 0) },
+                            }))}
+                            placeholder="0 = بدون سقف"
+                            className="w-full sm:w-48 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 dark:bg-gray-800 dark:text-gray-100 text-sm"
                           />
-                          <span>
-                            <span className="block text-sm font-bold text-gray-900 dark:text-gray-100">{title}</span>
-                            <span className="block text-xs text-gray-500 dark:text-gray-400 mt-1">{desc}</span>
-                          </span>
-                        </label>
-                      ))}
-                    </div>
+                        </div>
+
+                        {/* النسبة الافتراضية */}
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                            {t('settings.organization.fixedDiscount.defaultPercentage') || 'النسبة الافتراضية (%)'}
+                          </label>
+                          <input
+                            type="number"
+                            min={0}
+                            max={100}
+                            step={0.5}
+                            value={(organization as any).fixedDiscount?.percentage || 0}
+                            onChange={(e) => setOrganization((prev: any) => ({
+                              ...prev,
+                              fixedDiscount: { ...(prev.fixedDiscount || {}), percentage: Math.min(100, Math.max(0, Number(e.target.value) || 0)) },
+                            }))}
+                            className="w-full sm:w-48 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 dark:bg-gray-800 dark:text-gray-100 text-sm"
+                          />
+                        </div>
+
+                        {/* نسب الأقسام */}
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                            {t('settings.organization.fixedDiscount.sectionOverrides') || 'نسب خاصة بالقسم (0 = يستخدم الافتراضي)'}
+                          </label>
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            {[
+                              { key: 'tables', label: t('tables') || 'الطاولات', icon: '🪑' },
+                              { key: 'takeaway', label: t('takeaway') || 'تيك أوي', icon: '🥤' },
+                              { key: 'delivery', label: t('delivery') || 'الدليفري', icon: '🛵' },
+                            ].map(({ key, label, icon }) => (
+                              <div key={key} className="flex items-center gap-2 bg-white dark:bg-gray-800 rounded-lg p-3 border border-gray-200 dark:border-gray-600">
+                                <span className="text-lg">{icon}</span>
+                                <div className="flex-1">
+                                  <span className="block text-xs font-medium text-gray-600 dark:text-gray-400">{label}</span>
+                                  <div className="flex items-center gap-1">
+                                    <input
+                                      type="number"
+                                      min={0}
+                                      max={100}
+                                      step={0.5}
+                                      value={(organization as any).fixedDiscount?.sections?.[key] || 0}
+                                      onChange={(e) => setOrganization((prev: any) => ({
+                                        ...prev,
+                                        fixedDiscount: {
+                                          ...(prev.fixedDiscount || {}),
+                                          sections: {
+                                            ...(prev.fixedDiscount?.sections || {}),
+                                            [key]: Math.min(100, Math.max(0, Number(e.target.value) || 0)),
+                                          },
+                                        },
+                                      }))}
+                                      className="w-20 border border-gray-300 dark:border-gray-600 rounded px-2 py-1 dark:bg-gray-700 dark:text-gray-100 text-sm"
+                                    />
+                                    <span className="text-xs text-gray-500">%</span>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   {/* Social Links */}

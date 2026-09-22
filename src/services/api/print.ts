@@ -151,4 +151,5 @@ export const printApi = {
   saveDevicePrinter,
   getDevicePrinter,
   openCashDrawerOnly,
+  getPrinterStatus: (): Promise<any> => apiClient.request('/print/status'),
 };

@@ -21,7 +21,7 @@ import { printOrder } from '../utils/printOrder';
 import { resolveMenuItem } from '../utils/orderSectionPrint';
 import { preloadBillReceipt, printBill } from '../utils/printBill';
 import { getCachedDevicePrinter, printThroughLocalBridge } from '../utils/localPrintBridge';
-import { getPrintFlagFresh } from '../utils/freshPrintSettings';
+import { getPrintFlagFresh, getEffectivePrintSettingsFresh } from '../utils/freshPrintSettings';
 import { useBillAggregation } from '../hooks/useBillAggregation';
 import { useInfiniteList } from '../hooks/useInfiniteList';
 import {
@@ -145,8 +145,10 @@ const Tables: React.FC = () => {
   const [paymentAmount, setPaymentAmount] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'card' | 'transfer'>('cash');
   const [discountPercentage, setDiscountPercentage] = useState('');
+  const [orderDiscount, setOrderDiscount] = useState<number>(0);
   const [originalAmount, setOriginalAmount] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [orgFixedDiscount, setOrgFixedDiscount] = useState<{ enabled: boolean; percentage: number; maxCap: number; sections?: Record<string, number> } | null>(null);
   const [playstationStatusFilter, setPlaystationStatusFilter] = useState('unpaid');
   const [dateFilter, setDateFilter] = useState<string>('');
   const [paymentReference, setPaymentReference] = useState('');
@@ -338,6 +340,12 @@ const loadInitialData = async () => {
       fetchAvailableMenuItems(),
       fetchMenuSections(),
       fetchMenuCategories(),
+      // جلب إعدادات الخصم الثابت من المنشأة
+      api.getOrganization().then((res: any) => {
+        if (res?.success && res?.data?.fixedDiscount) {
+          setOrgFixedDiscount(res.data.fixedDiscount);
+        }
+      }).catch(() => {}),
     ]).catch(() => {});
   } catch {
     showNotification(t('cafe.notifications.loadingDataError'), 'error');
@@ -1659,6 +1667,7 @@ const loadInitialData = async () => {
     setShowUnifiedTableModal(true);
     setCurrentOrderItems([]);
     setOrderNotes('');
+    setOrderDiscount(0);
     setExpandedSections({});
     setExpandedCategories({});
     setTimeout(() => setShowOrderModal(true), 50);
@@ -1868,7 +1877,7 @@ const loadInitialData = async () => {
   const handleAddOrder = () => {
     if (!canAddOrder(user)) { showNotification(t('common.permissionDenied'), 'error'); return; }
     if (!selectedTable) { showNotification(t('cafe.selectTable'), 'error'); return; }
-    setCurrentOrderItems([]); setOrderNotes(''); setExpandedSections({}); setExpandedCategories({});
+    setCurrentOrderItems([]); setOrderNotes(''); setOrderDiscount(0); setExpandedSections({}); setExpandedCategories({});
     setShowOrderModal(true);
   };
 
@@ -1881,6 +1890,7 @@ const loadInitialData = async () => {
       name: item.name, price: item.price, variant: (item as any).variant || null, quantity: item.quantity, notes: (item as any).notes || '',
     })));
     setOrderNotes(order.notes || '');
+    setOrderDiscount((order as any).discount || 0);
     setExpandedSections({}); setExpandedCategories({});
     setShowEditOrderModal(true);
   };
@@ -2019,6 +2029,7 @@ const loadInitialData = async () => {
         customerName: selectedTable.number.toString(),
         items: currentOrderItems.map(i => ({ menuItem: i.menuItem, name: i.name, price: i.price, variant: i.variant || null, quantity: i.quantity, notes: i.notes || null })),
         notes: orderNotes || null, status,
+        discount: orderDiscount || 0,
       });
         if (order) {
         setShowOrderModal(false); setCurrentOrderItems([]); setOrderNotes('');
@@ -2059,6 +2070,7 @@ const loadInitialData = async () => {
       const orderData: Record<string, any> = {
         items: currentOrderItems.map(i => ({ menuItem: i.menuItem, name: i.name, price: i.price, variant: i.variant || null, quantity: i.quantity, notes: i.notes || null })),
         notes: orderNotes || null,
+        discount: orderDiscount || 0,
       };
       if (status) orderData.status = status;
       const updated = await updateOrder(selectedOrder.id, orderData);
@@ -2086,11 +2098,14 @@ const loadInitialData = async () => {
   };
 
   const printOrderRouted = async (order: Order, selectedIds: string[], map: Map<string, any>, tableForOrder?: Table | null) => {
-    // ⚡ الإعدادات من الذاكرة أولاً — بدون انتظار شبكة قبل طباعة الطلب.
-    const settings = (user as any)?.organization?.printSettings
+    // الإعدادات الفعالة الطازجة (كاش 10 ثوانٍ): المحفوظ حديثاً يُطبق فوراً.
+    // الطاولات dine_in دائماً → sectionPrinterMap العام + نسخ prep العام.
+    const settings = await getEffectivePrintSettingsFresh(user).catch(() => null)
+      ?? (user as any)?.organization?.printSettings
       ?? (await api.getOrganization().catch(() => null))?.data?.printSettings;
     const profiles = settings?.printers || [];
     const routes = settings?.sectionPrinterMap || {};
+    const prepCopies = Math.min(5, Math.max(1, Number(settings?.documentCopies?.prep ?? 1) || 1));
     const groups = new Map<string, string[]>();
     selectedIds.forEach(sectionId => {
       const printerId = routes[sectionId] || '';
@@ -2098,7 +2113,7 @@ const loadInitialData = async () => {
     });
     await Promise.all(Array.from(groups.entries()).map(async ([printerId, sectionIds]) => {
       const profile = profiles.find((item: any) => item.id === printerId);
-      return printOrder(order, menuSections, map, user?.organizationName || '', i18n.language, t, getTableSectionName(tableForOrder || order.table), sectionIds, profile?.printerName, profile?.paperWidthMm);
+      return printOrder(order, menuSections, map, user?.organizationName || '', i18n.language, t, getTableSectionName(tableForOrder || order.table), sectionIds, profile?.printerName, profile?.paperWidthMm, prepCopies);
     }));
   };
 
@@ -2120,8 +2135,9 @@ const loadInitialData = async () => {
       }
     });
     const sections = Array.from(sectionMap, ([id, name]) => ({ id, name }));
-    // ⚡ الإعدادات من الذاكرة أولاً — بدون انتظار شبكة قبل طباعة الطلب.
-    const printSettings = (user as any)?.organization?.printSettings
+    // الإعدادات الفعالة الطازجة (مثل printOrderRouted).
+    const printSettings = await getEffectivePrintSettingsFresh(user).catch(() => null)
+      ?? (user as any)?.organization?.printSettings
       ?? (await api.getOrganization().catch(() => null))?.data?.printSettings;
     const defaultSections = (printSettings?.defaultOrderPrintSections || [])
       .map((id: string) => String(id))
@@ -3672,7 +3688,15 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
                                       </p>
                                     )}
                                   </div>
-                                  <span className="font-bold text-orange-600 dark:text-orange-400 text-base sm:text-lg flex-shrink-0">{formatCurrency(total)}</span>
+                                  <div className="flex flex-col items-end flex-shrink-0">
+                                    {(order as any).fixedDiscount?.amount > 0 && (
+                                      <span className="text-[10px] text-gray-400 dark:text-gray-500 line-through">{formatCurrency(total + (order as any).fixedDiscount.amount + ((order as any).discount || 0))}</span>
+                                    )}
+                                    <span className="font-bold text-orange-600 dark:text-orange-400 text-base sm:text-lg">{formatCurrency(total)}</span>
+                                    {((order as any).fixedDiscount?.amount > 0 || ((order as any).discount || 0) > 0) && (
+                                      <span className="text-[10px] font-bold text-purple-600 dark:text-purple-400">-{((order as any).fixedDiscount?.amount || 0) + ((order as any).discount || 0)}</span>
+                                    )}
+                                  </div>
                                   <div className="flex items-center gap-1 flex-shrink-0">
                                     <button onClick={(e) => { e.stopPropagation(); handlePrintOrder(order); }} title={t('cafe.tableOrdersModal.print')}
                                       className="w-8 h-8 flex items-center justify-center hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-all text-gray-400">
@@ -4147,6 +4171,32 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
                 ))}
               </div>
               <div className="p-2.5 sm:p-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 flex-shrink-0">
+                {/* المجموع الفرعي قبل الخصم */}
+                {(() => {
+                  const fd = Number((previewOrder as any).fixedDiscount?.amount) || 0;
+                  const md = Number((previewOrder as any).discount) || 0;
+                  const subtotal = Number((previewOrder as any).finalAmount ?? (previewOrder as any).totalAmount ?? 0) + fd + md;
+                  if (fd + md <= 0) return null;
+                  return (
+                    <div className="flex justify-between items-center mb-1 text-sm">
+                      <span className="text-gray-500">المجموع الفرعي</span>
+                      <span className="text-gray-500">{formatCurrency(subtotal)}</span>
+                    </div>
+                  );
+                })()}
+                {/* الخصومات */}
+                {(() => {
+                  const fd = Number((previewOrder as any).fixedDiscount?.amount) || 0;
+                  const md = Number((previewOrder as any).discount) || 0;
+                  const totalD = fd + md;
+                  if (totalD <= 0) return null;
+                  return (
+                    <div className="flex justify-between items-center mb-1 text-sm">
+                      <span className="text-purple-600 dark:text-purple-400">الخصومات</span>
+                      <span className="font-medium text-purple-600 dark:text-purple-400">-{formatCurrency(totalD)}</span>
+                    </div>
+                  );
+                })()}
                 <div className="flex justify-between items-center mb-2 sm:mb-3">
                   <span className="text-base sm:text-lg text-gray-500">الإجمالي</span>
                   <span className="font-bold text-orange-600 dark:text-orange-400 text-xl sm:text-2xl">{formatCurrency((previewOrder as any).finalAmount ?? (previewOrder as any).totalAmount ?? (previewOrder.items as any[])?.reduce((s: number, i: any) => s + (i.price || 0) * (i.quantity || 0), 0) ?? 0)}</span>
@@ -4604,18 +4654,24 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
       )}
 
       {/* ── Order Add/Edit Modals ── */}
-      {showOrderModal && selectedTable && (
-        <OrderModal table={selectedTable} orderItems={currentOrderItems} setOrderItems={setCurrentOrderItems}
-          orderNotes={orderNotes} setOrderNotes={setOrderNotes} menuSections={menuSections} menuCategories={menuCategories}
-          menuItems={menuItems} expandedSections={expandedSections} expandedCategories={expandedCategories}
-          toggleSection={toggleSection} toggleCategory={toggleCategory} getCategoriesForSection={getCategoriesForSection}
-          getItemsForCategory={getItemsForCategory} addItemToOrder={addItemToOrder} updateItemQuantity={updateItemQuantity}
-          updateItemNotes={updateItemNotes} removeItemFromOrder={removeItemFromOrder} calculateTotal={calculateOrderTotal}
+      {showOrderModal && selectedTable && (() => {
+        const orderTotal = calculateOrderTotal();
+        const fdPct = orgFixedDiscount?.enabled ? (orgFixedDiscount?.sections?.tables || orgFixedDiscount?.percentage || 0) : 0;
+        const estDiscount = fdPct > 0 ? Math.min(Math.round((orderTotal * fdPct) / 100), orgFixedDiscount?.maxCap || Infinity) : 0;
+        return (
+          <OrderModal table={selectedTable} orderItems={currentOrderItems} setOrderItems={setCurrentOrderItems}
+            orderNotes={orderNotes} setOrderNotes={setOrderNotes} menuSections={menuSections} menuCategories={menuCategories}
+            menuItems={menuItems} expandedSections={expandedSections} expandedCategories={expandedCategories}
+            toggleSection={toggleSection} toggleCategory={toggleCategory} getCategoriesForSection={getCategoriesForSection}
+            getItemsForCategory={getItemsForCategory} addItemToOrder={addItemToOrder} updateItemQuantity={updateItemQuantity}
+            updateItemNotes={updateItemNotes} removeItemFromOrder={removeItemFromOrder} calculateTotal={calculateOrderTotal}
           onSave={() => handleSaveOrder('pending', false)} onSaveAndSend={() => handleSaveOrder('pending', false)}
           onSaveAndPrint={() => handleSaveOrder('pending', true)}
-          onClose={() => { setShowOrderModal(false); setCurrentOrderItems([]); setOrderNotes(''); }} loading={savingOrder} isEdit={false}
-          canEditPrice={canEditItemPrice(user)} onEditPrice={(idx, item) => { setPriceEditItem({ index: idx, item }); setShowPriceEditModal(true); }} />
-      )}
+          onClose={() => { setShowOrderModal(false); setCurrentOrderItems([]); setOrderNotes(''); setOrderDiscount(0); }} loading={savingOrder} isEdit={false}
+          canEditPrice={canEditItemPrice(user)} onEditPrice={(idx, item) => { setPriceEditItem({ index: idx, item }); setShowPriceEditModal(true); }}
+          estimatedDiscount={estDiscount} manualDiscount={orderDiscount} setManualDiscount={setOrderDiscount} />
+        );
+      })()}
       {showEditOrderModal && selectedOrder && selectedTable && (
         <OrderModal table={selectedTable} orderItems={currentOrderItems} setOrderItems={setCurrentOrderItems}
           orderNotes={orderNotes} setOrderNotes={setOrderNotes} menuSections={menuSections} menuCategories={menuCategories}
@@ -4625,8 +4681,9 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
           updateItemNotes={updateItemNotes} removeItemFromOrder={removeItemFromOrder} calculateTotal={calculateOrderTotal}
           onSave={() => handleUpdateOrder(false, 'pending')} onSaveAndSend={() => handleUpdateOrder(false, 'pending')}
           onSaveAndPrint={() => handleUpdateOrder(true, 'pending')}
-          onClose={() => { setShowEditOrderModal(false); setSelectedOrder(null); setCurrentOrderItems([]); setOrderNotes(''); }} loading={savingOrder} isEdit={true}
-          canEditPrice={canEditItemPrice(user)} onEditPrice={(idx, item) => { setPriceEditItem({ index: idx, item }); setShowPriceEditModal(true); }} />
+          onClose={() => { setShowEditOrderModal(false); setSelectedOrder(null); setCurrentOrderItems([]); setOrderNotes(''); setOrderDiscount(0); }} loading={savingOrder} isEdit={true}
+          canEditPrice={canEditItemPrice(user)} onEditPrice={(idx, item) => { setPriceEditItem({ index: idx, item }); setShowPriceEditModal(true); }}
+          estimatedDiscount={selectedOrder?.fixedDiscount?.amount || 0} manualDiscount={orderDiscount} setManualDiscount={setOrderDiscount} />
       )}
 
       {/* ── Table Management Modal ── */}

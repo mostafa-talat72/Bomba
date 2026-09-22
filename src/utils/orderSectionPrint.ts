@@ -2,7 +2,26 @@ import type { TFunction } from 'i18next';
 import { printOrder } from './printOrder';
 import { resolveUserPrintSettings } from './resolvePrintSettings';
 import { getCurrentUserCache } from './currentUser';
+import { resolveDocLayout, DocPrintLayout } from './printLayout';
 import api from '../services/api';
+
+// كاش قصير لشعار المنشأة (10 ثوانٍ) — يُستدعى لكل طلب في الدفعة
+let cachedOrgLogo: { logo?: string; expiresAt: number } | null = null;
+async function resolveOrgLogo(user: any): Promise<string | undefined> {
+  try {
+    const orgObj = (user as any)?.organization;
+    if (orgObj && typeof orgObj === 'object' && (orgObj as any).logo) {
+      return (orgObj as any).logo;
+    }
+    if (!cachedOrgLogo || cachedOrgLogo.expiresAt < Date.now()) {
+      const r: any = await api.getOrganization().catch(() => null);
+      cachedOrgLogo = { logo: r?.data?.logo, expiresAt: Date.now() + 10000 };
+    }
+    return cachedOrgLogo?.logo;
+  } catch {
+    return undefined;
+  }
+}
 
 export interface SectionPrintCtx {
   menuItems: any[];
@@ -54,6 +73,7 @@ export function prepareBillSections(bill: any, ctx: SectionPrintCtx): PreparedBi
   const normalized = orders.map((order: any, idx: number) => ({
     ...order,
     _id: order._id || order.id || `temp-${idx}`,
+    fulfillmentType: order.fulfillmentType || (bill as any).fulfillmentType || 'dine_in',
     customerName: order.customerName || billCustomerName,
     customerPhone: order.customerPhone || billCustomerPhone,
     createdAt: order.createdAt instanceof Date ? order.createdAt.toISOString() : order.createdAt,
@@ -82,7 +102,13 @@ export function prepareBillSections(bill: any, ctx: SectionPrintCtx): PreparedBi
 }
 
 async function resolvePrintSettings(user: any): Promise<any> {
-  // إعدادات المستخدم أولاً (مثل printBill) ثم المنشأة — قبل ذلك كانت المنشأة فقط
+  // طازجة أولاً (كاش 10 ثوانٍ): المحفوظ حديثاً يُطبق فوراً بلا إعادة دخول.
+  // عند الفشل نرجع للقطة الذاكرة ثم المنشأة — مثل printBill.
+  try {
+    const { getEffectivePrintSettingsFresh } = await import('./freshPrintSettings');
+    const fresh = await getEffectivePrintSettingsFresh(user).catch(() => null);
+    if (fresh && Object.keys(fresh).length) return fresh;
+  } catch {}
   const mine = resolveUserPrintSettings(getCurrentUserCache() || user);
   if (mine) return mine;
   return (
@@ -113,8 +139,17 @@ export async function printOneOrderSections(
   if (mine.length === 0) return false;
   const settings = await resolvePrintSettings(ctx.user);
   const profiles = settings?.printers || [];
-  const routes = settings?.sectionPrinterMap || {};
-  const prepCopies = Math.min(5, Math.max(1, Number(settings?.documentCopies?.prep ?? 1) || 1));
+  // طابعة القسم حسب نوع الطلب (طاولة/تيك أوي/دليفري) — يسقط على الطاولة إن لم يُخصص
+  const fulfillment = (order as any)?.fulfillmentType as string | undefined;
+  const mapKey = fulfillment === 'takeaway' ? 'sectionPrinterMapTakeaway' : fulfillment === 'delivery' ? 'sectionPrinterMapDelivery' : 'sectionPrinterMap';
+  const specificMap = (settings as any)?.[mapKey] || {};
+  const fallbackMap = (settings as any)?.sectionPrinterMap || {};
+  const routes: Record<string, string> = { ...fallbackMap, ...specificMap };
+  const prepKey = fulfillment === 'takeaway' ? 'prep_takeaway' : fulfillment === 'delivery' ? 'prep_delivery' : 'prep';
+  // الفارغ يتبع الطاولات (مثل التوجيه) — المحدد صراحةً له الأولوية دائماً.
+  const prepCopies = Math.min(5, Math.max(1, Number(settings?.documentCopies?.[prepKey] ?? settings?.documentCopies?.prep ?? 1) || 1));
+  const layout: DocPrintLayout = resolveDocLayout(settings, 'order');
+  const logoUrl = await resolveOrgLogo(ctx.user);
   const groups = new Map<string, string[]>();
   mine.forEach((sectionId) => {
     const printerId = routes[sectionId] || '';
@@ -134,7 +169,8 @@ export async function printOneOrderSections(
         sectionIds,
         profile?.printerName,
         profile?.paperWidthMm,
-        prepCopies
+        prepCopies,
+        { logoUrl, layout }
       );
     })
   );

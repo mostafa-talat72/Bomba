@@ -4,6 +4,7 @@ import { formatDecimal, getCurrencySymbol, getDisplayNumber, splitDailySeq } fro
 import type { TFunction } from 'i18next';
 import { getCachedDevicePrinter, printThroughLocalBridge } from './localPrintBridge';
 import { getCurrentUserCache } from './currentUser';
+import { resolveDocLayout, brandHtml, layoutCss, DEFAULT_DOC_LAYOUT, DocPrintLayout } from './printLayout';
 import { isMobileDevice } from './deviceDetect';
 
 interface OrderItem {
@@ -66,7 +67,8 @@ export const buildOrderPrintHTML = async (
   language: string = 'ar',
   t: TFunction = ((key: string) => key) as TFunction,
   tableSectionName?: string,
-  selectedSectionIds?: string[]
+  selectedSectionIds?: string[],
+  extra?: { logoUrl?: string; layout?: DocPrintLayout }
 ): Promise<string> => {
   // Get establishment name from order data or use fallback
   let establishmentName = fallbackOrganizationName || t('orderPrint.defaultEstablishment') || 'Cafe Management System';
@@ -229,7 +231,7 @@ export const buildOrderPrintHTML = async (
   });
 
   // Print all sections on one page using iframe
-  return printAllSectionsInOnePage(order, sectionsArray, establishmentName, language, t, tableSectionName);
+  return printAllSectionsInOnePage(order, sectionsArray, establishmentName, language, t, tableSectionName, extra);
 };
 
 // Function to print all sections on one page using iframe
@@ -239,7 +241,8 @@ const printAllSectionsInOnePage = (
   establishmentName: string,
   language: string,
   t: TFunction,
-  tableSectionName?: string
+  tableSectionName?: string,
+  extra?: { logoUrl?: string; layout?: DocPrintLayout }
 ) => {
   const now = new Date();
   const locale = language === 'ar' ? 'ar-EG' : language === 'fr' ? 'fr-FR' : 'en-US';
@@ -259,6 +262,11 @@ const printAllSectionsInOnePage = (
 
   const dir = language === 'ar' ? 'rtl' : 'ltr';
   const align = language === 'ar' ? 'right' : 'left';
+  const layout = extra?.layout || DEFAULT_DOC_LAYOUT;
+  const logoUrl = extra?.logoUrl;
+  const showLogo = layout.logoShow !== false && layout.logoPosition !== 'hide' && !!logoUrl;
+  const logoW = Math.min(200, Math.max(40, Number(layout.logoWidth) || 110));
+  const logoImg = showLogo ? `<img src="${logoUrl}" style="width:${logoW}px;max-width:${logoW}px;height:auto;" />` : '';
 
   // Create content for each section - each section contains complete information
   const sectionsContent = sections.map(({ sectionName, items }) => {
@@ -281,7 +289,9 @@ const printAllSectionsInOnePage = (
       <div class="section-block">
         <!-- Header for each section -->
         <div class="header">
-          <h1>${establishmentName}</h1>
+          ${showLogo ? (layout.logoPosition === 'beside'
+            ? `<div style="display:flex;align-items:center;justify-content:center;gap:8px;"><div>${logoImg}</div><h1 style="margin:0;">${establishmentName}</h1></div>`
+            : `<div style="text-align:center;margin-bottom:4px;">${logoImg}</div><h1>${establishmentName}</h1>`) : `<h1>${establishmentName}</h1>`}
           ${isUpdatedOrder ? `
           <div class="update-banner">
             <span>🔄 ${t('orderPrint.orderUpdated')}</span>
@@ -303,7 +313,7 @@ const printAllSectionsInOnePage = (
               </div>
             ` : ((order.customerName || order.customerPhone) ? `
               <div style="font-size: 1.15em; font-weight: 900; margin: 2px 0; text-align: center;">
-                ${t('orderPrint.customer')}: <strong style="font-size: 1.2em;">${order.customerName || ''}${order.customerPhone ? ` — ${order.customerPhone}` : ''}</strong>
+                ${t('orderPrint.customer')}: <strong style="font-size: 1.2em;">${order.customerName || ''}${order.customerPhone && layout.showPhone !== false ? ` — ${order.customerPhone}` : ''}</strong>
               </div>
             ` : '')}
           </div>
@@ -371,7 +381,7 @@ const printAllSectionsInOnePage = (
 <meta charset="UTF-8">
 <title>${t('orderPrint.printButton')} #${getDisplayNumber(order.orderNumber)}</title>
 
-<style>
+<style>${layoutCss(layout)}
 html {
   width: 100%;
   max-width: 100%;
@@ -586,7 +596,8 @@ export const printOrder = async (
   selectedSectionIds?: string[],
   printerName?: string,
   paperWidthMm?: number,
-  copies: number = 1
+  copies: number = 1,
+  extra?: { logoUrl?: string; layout?: DocPrintLayout }
 ) => {
   // ⚡ إشعار فوري: الطباعة بدأت لحظة الضغط.
   try {
@@ -629,6 +640,7 @@ export const printOrder = async (
             t,
             tableSectionName,
             sectionId ? [sectionId] : selectedSectionIds,
+            extra,
           );
         } catch (e) {
           console.warn('[printOrder] relay HTML build failed, server will use RAW fallback:', e);
@@ -676,6 +688,7 @@ export const printOrder = async (
       t,
       tableSectionName,
       sectionId ? [sectionId] : selectedSectionIds,
+      extra,
     );
     return printThroughLocalBridge(printContent, selectedPrinterName, { cutPaper: true, paperWidthMm, copies });
   }));

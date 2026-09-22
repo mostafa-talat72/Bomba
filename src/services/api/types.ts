@@ -55,7 +55,10 @@ export interface User {
       autoPrintOrderSections?: boolean;
       printers?: Array<{ id: string; name: string; printerName: string; printerPath?: string; paperWidthMm?: number }>;
       sectionPrinterMap?: Record<string, string>;
+      sectionPrinterMapTakeaway?: Record<string, string>;
+      sectionPrinterMapDelivery?: Record<string, string>;
       documentPrinterMap?: Record<string, string>;
+      documentCopies?: Record<string, number>;
     };
   };
   createdAt: Date;
@@ -115,6 +118,7 @@ export interface Order {
   subtotal?: number;
   discount?: number;
   finalAmount?: number;
+  fixedDiscount?: { percentage: number; amount: number; maxCap: number };
   totalCost?: number;
   notes?: string;
   fulfillmentType?: 'dine_in' | 'takeaway' | 'delivery';
@@ -314,7 +318,10 @@ export interface Bill {
       printQRCode?: boolean;
       printers?: Array<{ id: string; name: string; printerName: string; printerPath?: string; paperWidthMm?: number }>;
       sectionPrinterMap?: Record<string, string>;
+      sectionPrinterMapTakeaway?: Record<string, string>;
+      sectionPrinterMapDelivery?: Record<string, string>;
       documentPrinterMap?: Record<string, string>;
+      documentCopies?: Record<string, number>;
     };
   } | string; // يمكن أن يكون object مع populate أو string فقط
   createdBy: User;

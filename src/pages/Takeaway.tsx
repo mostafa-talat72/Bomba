@@ -25,8 +25,18 @@ const DiscountStrip = memo(({ bill, onDiscount }: { bill: any; onDiscount: (b: a
   const [open, setOpen] = useState(false);
   const [disc, setDisc] = useState('');
   const [discType, setDiscType] = useState<'amount' | 'percent'>('amount');
+  // حساب إجمالي الخصومات من الطلبات
+  const totalFixedDiscount = (bill.orders || []).reduce((sum: number, order: any) => sum + (order?.fixedDiscount?.amount || 0), 0);
+  const billDiscount = Number(bill.discount) || 0;
+  const totalAllDiscounts = totalFixedDiscount + billDiscount;
   return (
-    <div className="mt-1">
+    <div className="mt-1 space-y-1">
+      {totalAllDiscounts > 0 && (
+        <div className="flex items-center justify-between px-2 py-1 text-[11px] bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg">
+          <span className="text-purple-600 dark:text-purple-400 font-bold">الخصومات</span>
+          <span className="text-purple-700 dark:text-purple-300 font-bold">-{totalAllDiscounts.toLocaleString('ar-EG')} ج.م</span>
+        </div>
+      )}
       <button onClick={() => setOpen(v => !v)} className="w-full py-1 text-[11px] font-bold bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-gray-500">💰 خصم</button>
       {open && (
         <div className="mt-1 flex gap-1">

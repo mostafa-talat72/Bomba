@@ -286,6 +286,21 @@ const PaymentManagementModal: React.FC<PaymentManagementModalProps> = ({
                     </div>
                   ))}
                 </div>
+                {/* الخصومات */}
+                {(() => {
+                  const totalFD = (selectedBill?.orders || []).reduce((sum: number, o: any) => sum + (o?.fixedDiscount?.amount || 0), 0);
+                  const totalOrderDiscounts = (selectedBill?.orders || []).reduce((sum: number, o: any) => sum + (Number(o?.discount) || 0), 0);
+                  const billDiscount = Number(selectedBill?.discount) || 0;
+                  const totalAllDiscounts = totalFD + totalOrderDiscounts + billDiscount;
+                  if (totalAllDiscounts <= 0) return null;
+                  const subtotal = (selectedBill?.total || 0) + totalAllDiscounts;
+                  return (
+                    <div className="flex items-center gap-2 text-[11px] flex-wrap">
+                      <span className="text-gray-400 line-through">{formatCurrency(subtotal)}</span>
+                      <span className="text-purple-600 dark:text-purple-400 font-bold">الخصومات: -{formatCurrency(totalAllDiscounts)}</span>
+                    </div>
+                  );
+                })()}
                 {/* مؤشر التقريب التلقائي */}
                 {onToggleRounding && (
                   <button onClick={onToggleRounding}

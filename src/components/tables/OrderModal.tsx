@@ -27,6 +27,11 @@ export interface OrderModalProps {
   loading: boolean; isEdit: boolean;
   canEditPrice?: boolean;
   onEditPrice?: (index: number, item: LocalOrderItem) => void;
+  // الخصم الثابت المقدر من إعدادات المنشأة
+  estimatedDiscount?: number;
+  // الخصم اليدوي لكل طلب
+  manualDiscount?: number;
+  setManualDiscount?: (v: number) => void;
 }
 
 
@@ -35,7 +40,7 @@ const OrderModal: React.FC<OrderModalProps> = ({
   expandedSections, expandedCategories, toggleSection, toggleCategory, getCategoriesForSection,
   getItemsForCategory, addItemToOrder, updateItemQuantity, updateItemNotes, removeItemFromOrder,
   calculateTotal, onSave, onSaveAndPrint, onSaveAndSend, onClose, loading, isEdit,
-  canEditPrice, onEditPrice,
+  canEditPrice, onEditPrice, estimatedDiscount = 0, manualDiscount = 0, setManualDiscount,
 }) => {
   const { t, i18n } = useTranslation();
   const { isRTL } = useLanguage();
@@ -172,6 +177,9 @@ const OrderModal: React.FC<OrderModalProps> = ({
               <div className="bg-white/15 rounded-xl px-2.5 py-1 sm:px-3 sm:py-1.5 ring-1 ring-white/25 text-center">
                 <p className="text-sm sm:text-base text-orange-100 leading-none">الإجمالي</p>
                 <p className="text-base sm:text-lg font-bold text-white">{fmt(calculateTotal())}</p>
+                {(estimatedDiscount > 0 || manualDiscount > 0) && (
+                  <p className="text-[10px] text-purple-200 leading-none mt-0.5">خصم: -{fmt(estimatedDiscount + manualDiscount)} → {fmt(calculateTotal() - estimatedDiscount - manualDiscount)}</p>
+                )}
               </div>
             )}
             <button onClick={onClose} className="w-8 h-8 bg-white/15 hover:bg-white/25 rounded-xl flex items-center justify-center text-white ring-1 ring-white/25 transition-all">
@@ -360,6 +368,11 @@ const OrderModal: React.FC<OrderModalProps> = ({
                 )}
               </div>
               <span className="text-base font-bold text-orange-600 dark:text-orange-400">{fmt(calculateTotal())}</span>
+              {(estimatedDiscount > 0 || manualDiscount > 0) && (
+                <span className="text-[10px] text-purple-600 dark:text-purple-400 font-bold">
+                  خصم: -{fmt(estimatedDiscount + manualDiscount)} → {fmt(calculateTotal() - estimatedDiscount - manualDiscount)}
+                </span>
+              )}
             </div>
 
             <div ref={scrollContainerRef} className="flex-1 overflow-y-auto px-2 py-2 space-y-1.5 min-h-0">
@@ -396,6 +409,34 @@ const OrderModal: React.FC<OrderModalProps> = ({
                 placeholder={t('cafe.orderModal.orderNotesPlaceholder')} rows={2}
                 className="w-full text-base border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1.5 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 placeholder-gray-400 resize-none focus:ring-1 focus:ring-orange-400 outline-none" />
             </div>
+
+            {setManualDiscount && (
+              <div className="px-2 pb-1 flex-shrink-0">
+                <label className="text-sm font-semibold text-gray-500 dark:text-gray-400 block mb-1">
+                  {t('billing.discountPercentageLabel', 'الخصم اليدوي')}
+                </label>
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={manualDiscount || ''}
+                    onChange={e => {
+                      const v = parseFloat(e.target.value) || 0;
+                      setManualDiscount(Math.max(0, v));
+                    }}
+                    placeholder="0"
+                    className="flex-1 text-base border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1.5 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:ring-1 focus:ring-orange-400 outline-none"
+                  />
+                  <span className="text-sm text-gray-500 dark:text-gray-400 font-bold">ج.م</span>
+                </div>
+                {manualDiscount > 0 && (
+                  <div className="mt-1 text-[10px] text-purple-600 dark:text-purple-400 font-bold">
+                   خصم: -{fmt(manualDiscount)} → {fmt(calculateTotal() - manualDiscount - estimatedDiscount)}
+                  </div>
+                )}
+              </div>
+            )}
 
             <div className="px-2 pb-3 flex-shrink-0 space-y-1.5">
               <button onClick={onSaveAndSend} disabled={loading || orderItems.length === 0}

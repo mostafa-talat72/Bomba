@@ -62,9 +62,19 @@ const FinanceStrip = memo(({ bill, method, onPartial, onDiscount, onPayItems }: 
   const [disc, setDisc] = useState('');
   const [discType, setDiscType] = useState<'amount' | 'percent'>('amount');
   const remaining = Number(bill.remaining) || 0;
-  if (remaining <= 0) return null;
+  // حساب إجمالي الخصومات من الطلبات
+  const totalFixedDiscount = (bill.orders || []).reduce((sum: number, order: any) => sum + (order?.fixedDiscount?.amount || 0), 0);
+  const billDiscount = Number(bill.discount) || 0;
+  const totalAllDiscounts = totalFixedDiscount + billDiscount;
+  if (remaining <= 0 && totalAllDiscounts <= 0) return null;
   return (
-    <div className="mt-1">
+    <div className="mt-1 space-y-1">
+      {totalAllDiscounts > 0 && (
+        <div className="flex items-center justify-between px-2 py-1 text-[11px] bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg">
+          <span className="text-purple-600 dark:text-purple-400 font-bold">الخصومات</span>
+          <span className="text-purple-700 dark:text-purple-300 font-bold">-{totalAllDiscounts.toLocaleString('ar-EG')} ج.م</span>
+        </div>
+      )}
       <button onClick={() => setOpen(v => !v)} className="w-full py-1 text-[11px] font-bold bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-gray-500">💰 جزئي / خصم / أصناف</button>
       {open && (
         <div className="mt-1 p-1.5 rounded-lg bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600 space-y-1.5">

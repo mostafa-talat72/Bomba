@@ -100,16 +100,58 @@ export function buildDailyReportData({ organization, raw, startOfReport, endOfRe
     // in-scope item totals (an order may span sections).
     let cafeRevenue = 0;
     let countedOrders = 0;
+    let totalFixedDiscount = 0;
+    let totalManualDiscount = 0;
     const productSales = {};
     const sectionData = {};
+    const sectionDiscounts = {};
     for (const order of orders) {
         if (!order.items || !Array.isArray(order.items)) continue;
         let orderTouched = false;
+        // حساب إجمالي أصناف الطلب لكل قسم (داخل scope)
+        const orderSectionTotals = {};
+        let orderItemTotalInScope = 0;
         for (const item of order.items) {
             if (!item.name) continue;
             const { sectionId, sectionName } = sectionOfItem(item, menuItemMap);
             if (!inScope(sectionId)) continue;
             orderTouched = true;
+            const itemQuantity = Number(item.quantity) || 0;
+            const itemPrice = Number(item.price) || 0;
+            const itemTotal = Number(item.itemTotal) || itemPrice * itemQuantity;
+            if (!orderSectionTotals[sectionId]) orderSectionTotals[sectionId] = 0;
+            orderSectionTotals[sectionId] += itemTotal;
+            orderItemTotalInScope += itemTotal;
+        }
+        if (orderTouched) {
+            countedOrders++;
+            const orderFD = Number(order.fixedDiscount?.amount) || 0;
+            const orderMD = Number(order.discount) || 0;
+            totalFixedDiscount += orderFD;
+            totalManualDiscount += orderMD;
+            // توزيع الخصم على الأقسام
+            const orderTotalDiscount = orderFD + orderMD;
+            const orderItemTotalAll = Number(order.subtotal) || orderItemTotalInScope;
+            Object.entries(orderSectionTotals).forEach(([sectionId, sectionTotal]) => {
+                if (!sectionDiscounts[sectionId]) {
+                    sectionDiscounts[sectionId] = { fixedDiscount: 0, manualDiscount: 0, totalDiscount: 0, subtotalBeforeDiscount: 0 };
+                }
+                sectionDiscounts[sectionId].subtotalBeforeDiscount += sectionTotal;
+                if (orderTotalDiscount > 0 && orderItemTotalAll > 0) {
+                    const ratio = sectionTotal / orderItemTotalAll;
+                    const sfd = Math.round(orderFD * ratio);
+                    const smd = Math.round(orderMD * ratio);
+                    sectionDiscounts[sectionId].fixedDiscount += sfd;
+                    sectionDiscounts[sectionId].manualDiscount += smd;
+                    sectionDiscounts[sectionId].totalDiscount += sfd + smd;
+                }
+            });
+        }
+
+        for (const item of order.items) {
+            if (!item.name) continue;
+            const { sectionId, sectionName } = sectionOfItem(item, menuItemMap);
+            if (!inScope(sectionId)) continue;
 
             const variant = item.variant || "";
             const key = `${item.name}|${variant}`;
@@ -147,7 +189,6 @@ export function buildDailyReportData({ organization, raw, startOfReport, endOfRe
             sectionData[sectionId].totalRevenue += itemTotal;
             sectionData[sectionId].totalQuantity += itemQuantity;
         }
-        if (orderTouched) countedOrders++;
     }
 
     const psSessions = scope.includePlaystation
@@ -166,6 +207,23 @@ export function buildDailyReportData({ organization, raw, startOfReport, endOfRe
     const playstationRevenue = psSessions.reduce((sum, s) => sum + (Number(s.finalCost) || 0), 0);
     const computerRevenue = pcSessions.reduce((sum, s) => sum + (Number(s.finalCost) || 0), 0);
 
+    // تتبع خصومات أقسام الألعاب
+    const gamingSectionKeys = { playstation: '__PLAYSTATION__', computer: '__COMPUTER__' };
+    [...psSessions, ...pcSessions].forEach((s) => {
+        const key = s.deviceType === 'computer' ? gamingSectionKeys.computer : gamingSectionKeys.playstation;
+        if (!sectionDiscounts[key]) {
+            sectionDiscounts[key] = { fixedDiscount: 0, manualDiscount: 0, totalDiscount: 0, subtotalBeforeDiscount: 0 };
+        }
+        const sessionSubtotal = Number(s.totalCost) || Number(s.finalCost) || 0;
+        const sessionFinal = Number(s.finalCost) || 0;
+        const sessionDiscount = sessionSubtotal - sessionFinal;
+        sectionDiscounts[key].subtotalBeforeDiscount += sessionSubtotal;
+        if (sessionDiscount > 0) {
+            sectionDiscounts[key].fixedDiscount += sessionDiscount;
+            sectionDiscounts[key].totalDiscount += sessionDiscount;
+        }
+    });
+
     const totalRevenue = cafeRevenue + playstationRevenue + computerRevenue;
     const totalCosts = scope.includeCosts
         ? costs.reduce((sum, cost) => sum + (Number(cost.paidAmount) || Number(cost.amount) || 0), 0)
@@ -176,15 +234,20 @@ export function buildDailyReportData({ organization, raw, startOfReport, endOfRe
         .sort((a, b) => b.revenue - a.revenue)
         .slice(0, 10);
     const topProductsBySection = Object.values(sectionData)
-        .map((section) => ({
-            sectionId: section.sectionId,
-            sectionName: section.sectionName,
-            totalRevenue: section.totalRevenue,
-            totalQuantity: section.totalQuantity,
-            products: Object.values(section.products)
-                .sort((a, b) => b.revenue - a.revenue)
-                .slice(0, 10),
-        }))
+        .map((section) => {
+            const sd = sectionDiscounts[section.sectionId] || { fixedDiscount: 0, manualDiscount: 0, totalDiscount: 0, subtotalBeforeDiscount: 0 };
+            return {
+                sectionId: section.sectionId,
+                sectionName: section.sectionName,
+                totalRevenue: section.totalRevenue,
+                totalQuantity: section.totalQuantity,
+                subtotalBeforeDiscount: sd.subtotalBeforeDiscount || section.totalRevenue,
+                totalDiscount: sd.totalDiscount || 0,
+                products: Object.values(section.products)
+                    .sort((a, b) => b.revenue - a.revenue)
+                    .slice(0, 10),
+            };
+        })
         .sort((a, b) => b.totalRevenue - a.totalRevenue);
 
     return {
@@ -197,6 +260,12 @@ export function buildDailyReportData({ organization, raw, startOfReport, endOfRe
         totalBills: countedOrders + countedSessions.length,
         totalOrders: countedOrders,
         totalSessions: countedSessions.length,
+        discounts: {
+            fixedDiscount: totalFixedDiscount || 0,
+            manualDiscount: totalManualDiscount || 0,
+            totalDiscounts: (totalFixedDiscount + totalManualDiscount) || 0,
+        },
+        sectionDiscounts,
         topProducts,
         topProductsBySection,
         revenueByType: {

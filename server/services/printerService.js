@@ -111,20 +111,31 @@ class PrinterService {
   /**
    * Print one job: serialized behind other jobs, warm connection reused.
    * Never throws — always resolves { success, ... }.
+   * copies: repeats the document (drawer opens on first copy only).
+   * arabicSupport === false: skips direct CP1256-bytes paths (garbage output);
+   *   Windows-driver path still attempted (OS shapes Arabic correctly).
    */
-  async printJob(printSettings, { content, openDrawer = false, autoCut = false, docName } = {}) {
+  async printJob(printSettings, { content, openDrawer = false, autoCut = false, docName, copies = 1, arabicSupport = true } = {}) {
+    const n = Math.min(5, Math.max(1, Number(copies) || 1));
     const run = async () => {
       try {
         const ok = await this.ensureConnected(printSettings);
         if (!ok) return { success: false, error: 'Failed to connect to printer' };
-        const result = await this.printDocument(content, openDrawer, autoCut, docName);
-        if (!result.success) {
-          // Stale handle (e.g. printer was unplugged): force a fresh
-          // handshake on the next job instead of reusing a dead connection.
-          this._cachedKey = null;
-          this.isConnected = false;
+        let lastResult = null;
+        for (let i = 0; i < n; i++) {
+          // نفس الاسم مع رقم النسخة حتى تظهر كل نسخة سطراً منفصلاً في طابور ويندوز.
+          const copyDoc = n > 1 ? `${docName} (${i + 1}/${n})` : docName;
+          const result = await this.printDocument(content, i === 0 && openDrawer, autoCut, copyDoc, { arabicSupport });
+          lastResult = result;
+          if (!result || !result.success) {
+            // Stale handle (e.g. printer was unplugged): force a fresh
+            // handshake on the next job instead of reusing a dead connection.
+            this._cachedKey = null;
+            this.isConnected = false;
+            break;
+          }
         }
-        return result;
+        return { ...(lastResult || {}), copiesRequested: n };
       } catch (error) {
         this._cachedKey = null;
         this.isConnected = false;
@@ -133,7 +144,7 @@ class PrinterService {
     };
     this._printQueue = this._printQueue.then(run, run);
     return this._printQueue;
-  }
+  };
 
   /**
    * تهيئة الطابعة حسب إعدادات المنشأة
@@ -515,10 +526,16 @@ if (-not $sent) { throw 'Raw print failed' }
   /**
    * طباعة مستند كامل
    */
-  async printDocument(content, openDrawer = false, autoCut = false, docName = 'MTE Receipt') {
+  async printDocument(content, openDrawer = false, autoCut = false, docName = 'MTE Receipt', opts = {}) {
     if (!this.isConnected || !this.printer) {
       console.error('Printer not connected');
       return { success: false, error: 'Printer not connected' };
+    }
+    // طابعة معلَمة "بلا دعم عربي" + مسار بايتات CP1256 المباشر = مخرجات مفككة مؤكدة.
+    // نتخطى ونترك المتصل يسقط على المسار المصوَّر (وكيل HTML) بدل إهدار الورق.
+    // (مسار Windows-driver يشكّل عبر النظام — آمن ويُحاوَل دائماً.)
+    if (opts.arabicSupport === false && !this.winUseRawFallback) {
+      return { success: false, error: 'PRINTER_NO_ARABIC_SUPPORT' };
     }
     try {
       const printLanguage = typeof content === 'string' && /[\u0600-\u06FF]/.test(content) ? 'ar' : 'en';

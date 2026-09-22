@@ -97,7 +97,7 @@ router.get("/sold-items", authorize("soldItems", "all"), async (req, res) => {
             items: { $exists: true, $ne: [], $type: 'array' },
             ...dateQuery
         })
-        .select('items orderNumber bill table createdAt customerName')
+        .select('items orderNumber bill table createdAt customerName fixedDiscount discount')
         .populate({
             path: 'table',
             select: 'number section',

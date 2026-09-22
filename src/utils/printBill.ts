@@ -12,6 +12,7 @@ import { getCurrentUserCache } from './currentUser';
 import { isMobileDevice } from './deviceDetect';
 import { getPrintFlagFresh } from './freshPrintSettings';
 import { canPayFullBill } from './permissionHelper';
+import { resolveDocLayout, brandHtml, layoutCss } from './printLayout';
 
 let cachedOrganizationResponse: { data: any; expiresAt: number } | null = null;
 const qrCodeCache = new Map<string, string>();
@@ -19,16 +20,21 @@ const qrCodeCache = new Map<string, string>();
 // المفتاح يشمل كل ما يظهر في الإيصال + TTL قصير للأمان.
 const receiptHtmlCache = new Map<string, { html: string; expiresAt: number }>();
 
-const buildReceiptCacheKey = (billForPrint: any, language: string, tableSectionName?: string, fallbackOrganizationName?: string): string =>
-  [
+const buildReceiptCacheKey = (billForPrint: any, language: string, tableSectionName?: string, fallbackOrganizationName?: string): string => {
+  const orgObj = (billForPrint as any)?.organization;
+  const orgFp = orgObj && typeof orgObj === 'object'
+    ? JSON.stringify((orgObj as any).printSettings?.printLayout?.bill || {}) + '|' + String((orgObj as any).logo || '').length
+    : '';
+  return [
     String(billForPrint._id || billForPrint.id || billForPrint.billNumber || ''),
     billForPrint.updatedAt || '',
     billForPrint.paid ?? '',
     billForPrint.remaining ?? '',
     billForPrint.status || '',
     billForPrint.total ?? '',
-    language, tableSectionName || '', fallbackOrganizationName || '',
+    language, tableSectionName || '', fallbackOrganizationName || '', orgFp,
   ].join('|');
+};
 
 export const getCachedReceiptHTML = async (
   billForPrint: any,
@@ -237,6 +243,13 @@ export const buildBillPrintHTML = async (
       }
     } catch (_) {}
   }
+  
+  // تنسيق الورقة (شعار/خطوط/إظهار) — افتراضي آمن عند غياب الإعدادات
+  const billLayout = resolveDocLayout((organizationData as any)?.printSettings, 'bill');
+  const billLogo = (organizationData as any)?.logo as string | undefined;
+  const printFont = (organizationData as any)?.printSettings?.printFont || 'Tajawal';
+  const fontImport = printFont === 'Cairo' ? 'Cairo:wght@400;700' : printFont === 'Amiri' ? 'Amiri:wght@400;700' : printFont === 'IBM Plex Sans Arabic' ? 'IBM+Plex+Sans+Arabic:wght@400;700' : 'Tajawal:wght@400;500;700;800;900';
+  const customFooter = (organizationData as any)?.printSettings?.customFooterBill as string | undefined;
   
   // Generate QR Code if organization data is available and printing QR is enabled
   let qrInfo: { link: string; platform: string } | null = null;
@@ -456,11 +469,11 @@ export const buildBillPrintHTML = async (
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
       <title>${getDisplayNumber(bill.billNumber) || ''}</title>
-      <style>
-        @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800;900&display=swap');
+      <style>${layoutCss(billLayout)}
+        @import url('https://fonts.googleapis.com/css2?family=${fontImport}&display=swap');
         html { width: 100%; max-width: 100%; overflow-x: hidden; }
         * { 
-          font-family: 'Tajawal', sans-serif; 
+          font-family: '${printFont}', sans-serif; 
           -webkit-print-color-adjust: exact;
           print-color-adjust: exact;
           box-sizing: border-box;
@@ -769,15 +782,15 @@ export const buildBillPrintHTML = async (
     </head>
     <body>
       <div class="header">
-        ${organizationName ? `<div class="org-name">${organizationName}</div>` : `<div class="org-name">${t('billPrint.defaultEstablishment')}</div>`}
+        ${brandHtml(billLogo, billLayout, organizationName ? organizationName : t('billPrint.defaultEstablishment'))}
         ${typeof organizationData?.phone === 'string' && organizationData.phone.trim()
           ? `<div class="org-phone">${t('billPrint.phone')}: ${organizationData.phone.trim()}</div>`
           : ''}
         <div class="title" style="font-weight: 700; font-size: 19px;">${splitDailySeq(bill.billNumber).head}<span style="font-size: 22px; font-weight: 900; background: #000; color: #fff; padding: 0 8px; border-radius: 6px;">${splitDailySeq(bill.billNumber).seq}</span></div>
         <div class="info" style="font-weight: 900; font-size: 1.15em;">${formatDate(bill.createdAt || new Date())}${(() => { try { const n = (getCurrentUserCache() as any)?.name; return n ? ` — 👤 ${n}` : ''; } catch { return ''; } })()}</div>
         ${bill.table?.number ? `<div class="info" style="font-weight: 900; font-size: 1.25em; color: #000; margin: 8px 0;"><span style="background: #000; color: #fff; padding: 2px 8px; border-radius: 3px;">${t('billPrint.table')}</span> <strong style="font-size: 1.5em;">${bill.table.number}${tableSectionName ? ` — (${tableSectionName})` : ''}</strong></div>` : ((bill.customerName || bill.deliveryInfo?.customerName) ? ((bill.fulfillmentType === 'delivery' || bill.fulfillmentType === 'takeaway') ? `<div class="info" style="font-weight: 900; font-size: 1.35em;">${bill.fulfillmentType === 'delivery' ? '🛵' : '🥡'} ${bill.customerName || bill.deliveryInfo?.customerName}</div>` : `<div class="info" style="font-weight: 900; font-size: 1.15em;">${t('billPrint.customer')}: ${bill.customerName || bill.deliveryInfo?.customerName}</div>`) : ((bill.fulfillmentType === 'delivery' || bill.fulfillmentType === 'takeaway') ? `<div class="info" style="font-weight: 900; font-size: 1.35em;">${bill.fulfillmentType === 'delivery' ? '🛵 دليفري' : '🥡 تيك أوي'}</div>` : ''))}
-        ${(bill.customerPhone || bill.deliveryInfo?.phone) ? `<div class="info" style="font-weight: 900; font-size: 1.15em;">${t('billPrint.phone')}: ${bill.customerPhone || bill.deliveryInfo?.phone}</div>` : ''}
-        ${bill.fulfillmentType === 'delivery' && bill.deliveryInfo?.address ? `<div class="info" style="font-weight: 900; font-size: 1em;">📍 ${bill.deliveryInfo.address}</div>` : ''}
+        ${(bill.customerPhone || bill.deliveryInfo?.phone) && billLayout.showPhone !== false ? `<div class="info" style="font-weight: 900; font-size: 1.15em;">${t('billPrint.phone')}: ${bill.customerPhone || bill.deliveryInfo?.phone}</div>` : ''}
+        ${bill.fulfillmentType === 'delivery' && bill.deliveryInfo?.address && billLayout.showAddress !== false ? `<div class="info" style="font-weight: 900; font-size: 1em;">📍 ${bill.deliveryInfo.address}</div>` : ''}
       </div>
 
       ${bill.orders && bill.orders.length > 0 ? generateOrderItemsTable(bill.orders, bill.itemPayments, bill.status, bill.paid, bill.total) : ''}
@@ -788,9 +801,21 @@ export const buildBillPrintHTML = async (
 
       <table class="totals-table">
         <tbody>
-        ${bill.discount && bill.discount > 0 ? `
-          <tr class="discount"><th>${t('billPrint.discount')}</th><td>${formatNumber(bill.discount)} ${currencySymbol}</td></tr>
-        ` : ''}
+        ${(() => {
+          // حساب إجمالي الخصومات من جميع الطلبات
+          const totalFixedDiscount = (bill.orders || []).reduce((sum: number, order: any) => {
+            return sum + (order?.fixedDiscount?.amount || 0);
+          }, 0);
+          const billDiscount = Number(bill.discount) || 0;
+          const totalAllDiscounts = totalFixedDiscount + billDiscount;
+          // السعر قبل الخصم = الإجمالي + كل الخصومات
+          const subtotalBeforeDiscount = (bill.total || 0) + totalAllDiscounts;
+          if (totalAllDiscounts <= 0) return '';
+          return `
+          <tr class="subtotal"><th>${t('billPrint.subtotal', 'المجموع')}</th><td>${formatNumber(subtotalBeforeDiscount)} ${currencySymbol}</td></tr>
+          <tr class="discount"><th>${t('billPrint.discount', 'الخصومات')}</th><td>-${formatNumber(totalAllDiscounts)} ${currencySymbol}</td></tr>
+          `;
+        })()}
         ${bill.tax && bill.tax > 0 ? `
           <tr class="tax"><th>${t('billPrint.tax')}</th><td>${formatNumber(bill.tax)} ${currencySymbol}</td></tr>
         ` : ''}
@@ -803,9 +828,9 @@ export const buildBillPrintHTML = async (
         </tbody>
       </table>
 
-      <div class="thank-you">${t('billPrint.thankYou')}</div>
+      ${billLayout.showThanks !== false ? `<div class="thank-you">${customFooter || t('billPrint.thankYou')}</div>` : ''}
       
-      ${qrCodeDataURL && qrInfo ? `
+      ${qrCodeDataURL && qrInfo && billLayout.showQR !== false ? `
         <div class="qr-section">
           <img src="${qrCodeDataURL}" alt="${t('billPrint.qrCode')}" class="qr-code" />
           <div class="qr-text">${t('billPrint.contactVia')} ${organizationName}</div>
@@ -932,6 +957,18 @@ export const printBill = async (
         drawerMode: effectiveDrawerMode,
         html: receiptHtmlForRelay,
         printKey: `bill:${billId || (full as any)?.billNumber || ''}:${effectiveDrawerMode}`,
+        copies: (() => {
+          try {
+            const orgPs = (full as any)?.organization && typeof (full as any).organization === 'object'
+              ? (full as any).organization.printSettings
+              : undefined;
+            const mine = resolveUserPrintSettings(getCurrentUserCache());
+            const ps = mine ? { ...orgPs, ...mine } : orgPs;
+            if (!ps) return undefined;
+            const fk = ['takeaway', 'delivery'].includes((full as any)?.fulfillmentType) ? `bill_${(full as any).fulfillmentType}` : 'bill';
+            return Math.min(5, Math.max(1, Number(ps?.documentCopies?.[fk] ?? ps?.documentCopies?.bill ?? 1) || 1));
+          } catch { return undefined; }
+        })(),
       };
       let res: any = await api.printBill(payload);
       if (!res?.success) {
@@ -941,6 +978,9 @@ export const printBill = async (
         } catch {}
       }
       if (res?.success) {
+        if ((res as any)?.rawFallback) {
+          try { toast.warn(language === 'ar' ? '⚠️ وضع طوارئ: كل شيء طُبع على طابعة واحدة (التوجيه متعطل)' : 'Emergency fallback — all on one printer'); } catch {}
+        }
         tSuccess(
           language === 'ar' ? 'تم إرسال الفاتورة للطباعة على الجهاز الرئيسي' : language === 'fr' ? 'Facture envoyée à l’imprimante principale' : 'Bill sent to the main device printer'
         );

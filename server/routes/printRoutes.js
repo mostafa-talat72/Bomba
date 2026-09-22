@@ -21,6 +21,7 @@ router.post('/order/auto-detect', printGate, (req,res)=>printController.autoDete
 router.post('/cash-drawer/auto-detect', printGate, (req,res)=>printController.autoDetectAndOpenCashDrawer(req,res));
 // إعدادات/اكتشاف بدون بوابة (لا تطبع شيئاً)
 router.get('/detect', (req,res)=>printController.detectPrinters(req,res));
+router.get('/status', (req,res)=>printController.getPrinterStatus(req,res));
 router.post('/device', (req,res)=>printController.saveDevicePrinter(req,res));
 router.get('/device', (req,res)=>printController.getDevicePrinter(req,res));
 router.post('/auto-detect', (req,res)=>printController.autoDetectPrinter(req,res));

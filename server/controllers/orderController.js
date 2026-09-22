@@ -1,5 +1,6 @@
 import { getOrganizationId, organizationFilter } from '../utils/organization.js';
 import Order from "../models/Order.js";
+import Organization from "../models/Organization.js";
 import InventoryItem from "../models/InventoryItem.js";
 import MenuItem from "../models/MenuItem.js";
 import Bill from "../models/Bill.js";
@@ -587,7 +588,7 @@ export const getOrders = async (req, res) => {
         // minimal=true (report/consumption callers): skip the 3 populates — they add
         // extra queries per request and the caller only consumes items/totals.
         let ordersQuery = Order.find(query)
-            .select('orderNumber table status total createdAt bill items organization finalAmount fulfillmentType createdBy updatedBy')
+            .select('orderNumber table status total createdAt bill items organization finalAmount fixedDiscount discount fulfillmentType createdBy updatedBy')
             .sort({ createdAt: -1 })
             .lean();
         if (paged) {
@@ -977,12 +978,40 @@ export const createOrder = async (req, res) => {
             }
         }
 
+        // ── الخصم الثابت التلقائي ──────────────────────────────────────
+        let fixedDiscountAmount = 0;
+        let fixedDiscountPercentage = 0;
+        let fixedDiscountMaxCap = 0;
+        try {
+            const orgId = getOrganizationId(req.user);
+            const org = await Organization.findById(orgId).select('fixedDiscount').lean();
+            if (org?.fixedDiscount?.enabled && org.fixedDiscount.percentage > 0) {
+                // تحديد النسبة حسب نوع الطلب
+                const sectionKey = normalizedFulfillment === 'dine_in' ? 'tables'
+                    : normalizedFulfillment === 'takeaway' ? 'takeaway'
+                    : 'delivery';
+                const sectionPct = org.fixedDiscount.sections?.[sectionKey] || 0;
+                fixedDiscountPercentage = sectionPct > 0 ? sectionPct : org.fixedDiscount.percentage;
+                fixedDiscountMaxCap = org.fixedDiscount.maxCap || 0;
+                fixedDiscountAmount = Math.round((subtotal * fixedDiscountPercentage) / 100);
+                if (fixedDiscountMaxCap > 0 && fixedDiscountAmount > fixedDiscountMaxCap) {
+                    fixedDiscountAmount = fixedDiscountMaxCap;
+                }
+            }
+        } catch { /* ignore — discount is optional */ }
+
         // Create order
         const orderData = {
             ...req.body,
-            items: processedItems, // استخدام العناصر المعالجة
-            subtotal: subtotal, // تعيين القيمة المحسوبة
-            finalAmount: subtotal - (req.body.discount || 0), // حساب المبلغ النهائي
+            items: processedItems,
+            subtotal: subtotal,
+            discount: req.body.discount || 0,
+            fixedDiscount: {
+                percentage: fixedDiscountPercentage,
+                amount: fixedDiscountAmount,
+                maxCap: fixedDiscountMaxCap,
+            },
+            finalAmount: subtotal - fixedDiscountAmount - (req.body.discount || 0),
             organization: getOrganizationId(req.user),
             createdBy: req.user._id,
             status: status || 'pending',
@@ -1567,7 +1596,15 @@ export const updateOrder = async (req, res) => {
                 (sum, item) => sum + item.itemTotal,
                 0
             );
-            order.finalAmount = order.subtotal - (order.discount || 0);
+            // إعادة حساب الخصم الثابت (النسبة ثابتة، المبلغ ي depend على المجموع الجديد)
+            const fdPct = order.fixedDiscount?.percentage || 0;
+            const fdCap = order.fixedDiscount?.maxCap || 0;
+            if (fdPct > 0) {
+                let fdAmount = Math.round((order.subtotal * fdPct) / 100);
+                if (fdCap > 0 && fdAmount > fdCap) fdAmount = fdCap;
+                order.fixedDiscount.amount = fdAmount;
+            }
+            order.finalAmount = order.subtotal - (order.fixedDiscount?.amount || 0) - (order.discount || 0);
 
             // حساب التكلفة الإجمالية للطلب
             if (calculatedTotalCost > 0) {

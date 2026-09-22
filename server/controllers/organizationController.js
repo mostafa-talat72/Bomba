@@ -145,7 +145,8 @@ export const updateOrganization = async (req, res) => {
             logo,
             currency,
             timezone,
-            printSettings
+            printSettings,
+            fixedDiscount
         } = req.body;
 
         // تحديث البيانات
@@ -174,10 +175,19 @@ export const updateOrganization = async (req, res) => {
         }
 
         if (printSettings) {
-            organization.printSettings = {
-                ...organization.printSettings,
-                ...printSettings
+            // دمج آمن يحترم خرائط Mongoose (Map) والكائنات المختلطة — spread وحده يفقد خرائط Map
+            for (const [k, v] of Object.entries(printSettings)) {
+                organization.printSettings[k] = v;
+            }
+            organization.markModified('printSettings');
+        }
+
+        if (fixedDiscount) {
+            organization.fixedDiscount = {
+                ...(organization.fixedDiscount || {}),
+                ...fixedDiscount,
             };
+            organization.markModified('fixedDiscount');
         }
 
         await organization.save();

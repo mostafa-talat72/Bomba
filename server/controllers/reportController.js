@@ -671,7 +671,7 @@ export const getConsumptionReport = async (req, res) => {
                 isDeleted: { $in: [false, null] },
                 organization,
                 _id: { $in: ids },
-            }).select("items").lean(),
+            }).select("items fixedDiscount discount").lean(),
             Session.find({
                 endTime: { $gte: startDate, $lte: endDate },
                 status: "completed",
@@ -701,10 +701,82 @@ export const getConsumptionReport = async (req, res) => {
 
         const itemsBySection = {};
         const rowByKey = new Map();
+        let totalFixedDiscount = 0;
+        let totalManualDiscount = 0;
+        // تتبع الخصومات لكل قسم
+        const sectionDiscounts = {};
 
         // ---- Items: same rules as the former client aggregation ----
         orders.forEach((order) => {
             if (!order.items || !Array.isArray(order.items)) return;
+
+            const orderFixedDiscount = Number(order.fixedDiscount?.amount) || 0;
+            const orderManualDiscount = Number(order.discount) || 0;
+            const orderTotalDiscount = orderFixedDiscount + orderManualDiscount;
+            // تتبع الخصومات على مستوى الطلب
+            totalFixedDiscount += orderFixedDiscount;
+            totalManualDiscount += orderManualDiscount;
+
+            // حساب إجمالي أصناف الطلب لكل قسم
+            const orderSectionTotals = {};
+            let orderItemTotal = 0;
+            order.items.forEach((item) => {
+                if (!item?.name) return;
+                const itemQuantity = Number(item.quantity) || 0;
+                const itemPrice = Number(item.price ?? ((Number(item.itemTotal) || 0) / (Number(item.quantity) || 1))) || 0;
+                if (itemQuantity <= 0 || itemPrice < 0) return;
+                const itemTotal = itemPrice * itemQuantity;
+
+                // تحديد القسم
+                const menuId = toIdString(item.menuItem?._id || item.menuItemId || item.menuItem) || null;
+                let sectionName = OTHER_SECTION_KEY;
+                if (menuId) {
+                    const menuItem = menuItemById.get(menuId);
+                    if (menuItem?.category && typeof menuItem.category === "object" && menuItem.category !== null) {
+                        const sectionRef = menuItem.category.section;
+                        let sectionObj = null;
+                        if (typeof sectionRef === "string") {
+                            sectionObj = sectionById.get(sectionRef) || null;
+                        } else if (sectionRef && typeof sectionRef === "object") {
+                            sectionObj = sectionRef.name ? sectionRef : (sectionById.get(toIdString(sectionRef)) || null);
+                        }
+                        if (sectionObj?.name) sectionName = sectionObj.name;
+                    }
+                }
+                if (sectionName === OTHER_SECTION_KEY && item.section) {
+                    const snapId = toIdString(item.section);
+                    const snapSection = (snapId && sectionById.get(snapId)) || (typeof item.section === "object" && item.section !== null ? item.section : null);
+                    if (snapSection?.name) sectionName = snapSection.name;
+                }
+
+                if (!orderSectionTotals[sectionName]) orderSectionTotals[sectionName] = 0;
+                orderSectionTotals[sectionName] += itemTotal;
+                orderItemTotal += itemTotal;
+            });
+
+            // توزيع الخصم على الأقسام بنسبة إجمالي القسم من إجمالي الطلب
+            if (orderTotalDiscount > 0 && orderItemTotal > 0) {
+                Object.entries(orderSectionTotals).forEach(([sectionName, sectionTotal]) => {
+                    if (!sectionDiscounts[sectionName]) {
+                        sectionDiscounts[sectionName] = { fixedDiscount: 0, manualDiscount: 0, totalDiscount: 0, subtotalBeforeDiscount: 0 };
+                    }
+                    const ratio = sectionTotal / orderItemTotal;
+                    const sectionFixedDiscount = Math.round(orderFixedDiscount * ratio);
+                    const sectionManualDiscount = Math.round(orderManualDiscount * ratio);
+                    sectionDiscounts[sectionName].fixedDiscount += sectionFixedDiscount;
+                    sectionDiscounts[sectionName].manualDiscount += sectionManualDiscount;
+                    sectionDiscounts[sectionName].totalDiscount += sectionFixedDiscount + sectionManualDiscount;
+                    sectionDiscounts[sectionName].subtotalBeforeDiscount += sectionTotal;
+                });
+            } else {
+                // بدون خصم — فقط تتبع المجموع قبل الخصم
+                Object.entries(orderSectionTotals).forEach(([sectionName, sectionTotal]) => {
+                    if (!sectionDiscounts[sectionName]) {
+                        sectionDiscounts[sectionName] = { fixedDiscount: 0, manualDiscount: 0, totalDiscount: 0, subtotalBeforeDiscount: 0 };
+                    }
+                    sectionDiscounts[sectionName].subtotalBeforeDiscount += sectionTotal;
+                });
+            }
 
             order.items.forEach((item) => {
                 if (!item?.name) return;
@@ -814,6 +886,18 @@ export const getConsumptionReport = async (req, res) => {
                     key: deviceKey,
                 });
             }
+
+            // تتبع خصم القسم للجلسات
+            if (!sectionDiscounts[sectionName]) {
+                sectionDiscounts[sectionName] = { fixedDiscount: 0, manualDiscount: 0, totalDiscount: 0, subtotalBeforeDiscount: 0 };
+            }
+            const sessionSubtotal = Number(session.totalCost) || sessionCost;
+            const sessionDiscount = sessionSubtotal - sessionCost;
+            sectionDiscounts[sectionName].subtotalBeforeDiscount += sessionSubtotal;
+            if (sessionDiscount > 0) {
+                sectionDiscounts[sectionName].fixedDiscount += sessionDiscount;
+                sectionDiscounts[sectionName].totalDiscount += sessionDiscount;
+            }
         });
 
         // Sort each section by total desc; drop empty sections.
@@ -824,7 +908,16 @@ export const getConsumptionReport = async (req, res) => {
             if (itemsBySection[section].length === 0) delete itemsBySection[section];
         });
 
-        res.json({ success: true, data: itemsBySection });
+        res.json({
+            success: true,
+            data: itemsBySection,
+            discounts: {
+                fixedDiscount: totalFixedDiscount || 0,
+                manualDiscount: totalManualDiscount || 0,
+                totalDiscounts: (totalFixedDiscount + totalManualDiscount) || 0,
+            },
+            sectionDiscounts,
+        });
     } catch (error) {
         res.status(500).json({
             success: false,
@@ -1291,13 +1384,13 @@ const getSalesReportData = async (organization, startDate, endDate, eligibleOrde
     const reportOrderIds = eligibleOrderIds || await getReportEligibleOrderIds(organizationId);
     
     // Get ALL orders using the same logic as ConsumptionReport
-    // Projection: only fields used below (items/finalAmount) — full docs are ~10x bigger.
+    // Projection: only fields used below (items/finalAmount/fixedDiscount/discount) — full docs are ~10x bigger.
     const orders = await Order.find({
         createdAt: { $gte: startDate, $lte: endDate },
         isDeleted: { $in: [false, null] },
         organization: organizationId,
         _id: { $in: reportOrderIds },
-    }).select('items finalAmount').lean();
+    }).select('items finalAmount fixedDiscount discount').lean();
 
     // Get completed sessions using endTime (same as ConsumptionReport and /api/sessions endpoint)
     const sessions = await Session.find({
@@ -1310,6 +1403,10 @@ const getSalesReportData = async (organization, startDate, endDate, eligibleOrde
     // Calculate cafe revenue from orders using finalAmount
     const cafeRevenue = orders.reduce((sum, order) => sum + (Number(order.finalAmount) || 0), 0);
     const totalOrders = orders.length;
+
+    // تتبع الخصومات
+    const totalFixedDiscount = orders.reduce((sum, order) => sum + (Number(order.fixedDiscount?.amount) || 0), 0);
+    const totalManualDiscount = orders.reduce((sum, order) => sum + (Number(order.discount) || 0), 0);
 
     // Calculate gaming revenue from sessions using finalCost (after discount)
     const playstationSessions = sessions.filter(s => s.deviceType === "playstation");
@@ -1371,6 +1468,11 @@ const getSalesReportData = async (organization, startDate, endDate, eligibleOrde
         avgOrderValue,
         revenueBreakdown,
         topProducts,
+        discounts: {
+            fixedDiscount: totalFixedDiscount || 0,
+            manualDiscount: totalManualDiscount || 0,
+            totalDiscounts: (totalFixedDiscount + totalManualDiscount) || 0,
+        },
     };
 };
 

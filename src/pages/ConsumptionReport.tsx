@@ -51,6 +51,7 @@ import { useRTL } from '../hooks/useRTL';
 import api from '../services/api';
 import { formatDecimal, formatCurrency as formatCurrencyUtil, replaceAMPM } from '../utils/formatters';
 import { getCachedDevicePrinter, printThroughLocalBridge } from '../utils/localPrintBridge';
+import { resolveDocLayout, brandHtml, layoutCss } from '../utils/printLayout';
 import { isMobileDevice } from '../utils/deviceDetect';
 
 // Extend dayjs with plugins
@@ -142,6 +143,8 @@ const ConsumptionReport = () => {
   const [dataReady, setDataReady] = useState(false);
   const [logoutPrintLoading, setLogoutPrintLoading] = useState(() => Boolean(location.state?.printOnLogout));
   const [consumptionData, setConsumptionData] = useState<Record<string, ConsumptionItem[]>>({});
+  const [discounts, setDiscounts] = useState<{ fixedDiscount: number; manualDiscount: number; totalDiscounts: number }>({ fixedDiscount: 0, manualDiscount: 0, totalDiscounts: 0 });
+  const [sectionDiscounts, setSectionDiscounts] = useState<Record<string, { fixedDiscount: number; manualDiscount: number; totalDiscount: number; subtotalBeforeDiscount: number }>>({});
   const [error, setError] = useState<string | null>(null);
   const [showTotalSales, setShowTotalSales] = useState(false);
   const [showSectionTotals, setShowSectionTotals] = useState<Record<string, boolean>>({});
@@ -275,6 +278,12 @@ const ConsumptionReport = () => {
 
       if (response.success && response.data) {
         setConsumptionData(response.data);
+        if (response.discounts) {
+          setDiscounts(response.discounts);
+        }
+        if (response.sectionDiscounts) {
+          setSectionDiscounts(response.sectionDiscounts);
+        }
         setDataReady(true);
         // ⚡ سخّن كاش الطابعة في الخلفية: زر الطباعة يجد كل شيء جاهزاً.
         try { void getCachedDevicePrinter(); } catch {}
@@ -333,6 +342,18 @@ const ConsumptionReport = () => {
       // Get organization name from user or use default
       const organizationName = user?.organizationName || t('consumptionReport.print.organization');
 
+      // ⚡ الإعدادات والشعار والنسخ مبكراً — قالب HTML أدناه يحتاجها (خطوط/شعار/نسخ)
+      const [savedPrinter, organizationResponse] = await Promise.all([
+        getCachedDevicePrinter(),
+        (user as any)?.organization?.printSettings
+          ? Promise.resolve({ success: true, data: (user as any).organization })
+          : api.getOrganization().catch(() => null),
+      ]);
+      const settings = organizationResponse?.success === true ? organizationResponse.data?.printSettings : undefined;
+      const consLayout = resolveDocLayout(settings, 'consumption');
+      const consLogo = (organizationResponse as any)?.data?.logo as string | undefined;
+      const reportCopies = Math.min(5, Math.max(1, Number(settings?.documentCopies?.consumptionReport ?? 1) || 1));
+
       // Create separate pages for each category — تُقتصر على القسم المختار عند تحديده
       const categories = Object.entries(consumptionData).filter(([key, items]) =>
         items.length > 0 && (!sectionKey || sectionKey === 'all' || key === sectionKey)
@@ -359,7 +380,7 @@ const ConsumptionReport = () => {
             <div class="page">
               <div class="page-content">
                 <div class="header">
-                  <div class="org-name">${organizationName}</div>
+                  ${brandHtml(consLogo, consLayout, organizationName)}
                   <div class="title">${t('consumptionReport.print.title')}</div>
                   <div class="category-name">${displayCategory}</div>
                   <div class="date-info"><strong>${t('consumptionReport.print.from')}:</strong> ${formatDate(dateRange[0])}</div>
@@ -406,7 +427,7 @@ const ConsumptionReport = () => {
                   <strong>${t('consumptionReport.print.categoryTotal', { category: displayCategory })}:</strong> ${formatCurrency(categoryTotal)}
                 </div>
 
-                <div class="thank-you">${t('consumptionReport.print.thankYou')}</div>
+                ${consLayout.showThanks !== false ? `<div class="thank-you">${t('consumptionReport.print.thankYou')}</div>` : ''}
               </div>
               
               <div class="footer">
@@ -423,7 +444,7 @@ const ConsumptionReport = () => {
           <meta charset="UTF-8">
           <meta name="viewport" content="width=device-width, initial-scale=1.0">
           <title>${t('consumptionReport.print.title')}</title>
-          <style>
+          <style>${layoutCss(consLayout)}
             @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800;900&display=swap');
             * { 
               font-family: 'Tajawal', sans-serif; 
@@ -643,16 +664,7 @@ const ConsumptionReport = () => {
         </html>
       `;
 
-      // ⚡ إعدادات متزامنة من الذاكرة + طابعة مخزنة — بدون انتظار متسلسل.
-      const [savedPrinter, organizationResponse] = await Promise.all([
-        getCachedDevicePrinter(),
-        (user as any)?.organization?.printSettings
-          ? Promise.resolve({ success: true, data: (user as any).organization })
-          : api.getOrganization().catch(() => null),
-      ]);
-      const settings = organizationResponse?.success === true ? organizationResponse.data?.printSettings : undefined;
-      const reportCopies = Math.min(5, Math.max(1, Number(settings?.documentCopies?.consumptionReport ?? 1) || 1));
-
+      // (الإعدادات والشعار محلولة أعلاه قبل بناء القالب)
       // الهاتف/التابلت: لا يوجد agent محلي (127.0.0.1 هو الهاتف نفسه)، فنرسل
       // نفس HTML المصمم للديسكتوب إلى الجهاز الرئيسي الذي يرحّله لوكيله
       // المحلي (نفس الشكل 100%). الفشل يسقط على الجسر/طابعات الهاتف أدناه.
@@ -960,6 +972,21 @@ const ConsumptionReport = () => {
               )
             }}
             summary={() => allItems.length > 0 && (
+              <>
+                {discounts.totalDiscounts > 0 && (
+                  <Table.Summary.Row className="bg-purple-50 dark:bg-purple-900/20">
+                    <Table.Summary.Cell index={0} colSpan={3} align={rtl.isRTL ? 'right' : 'left'} className="text-purple-700 dark:text-purple-300 py-2">
+                      <span className="flex items-center gap-2">
+                        💰 الخصومات
+                      </span>
+                    </Table.Summary.Cell>
+                    <Table.Summary.Cell index={1} align="center" className="py-2">
+                      <div className="text-purple-700 dark:text-purple-300 font-medium">
+                        <span>الخصومات: -{formatCurrency(discounts.totalDiscounts)}</span>
+                      </div>
+                    </Table.Summary.Cell>
+                  </Table.Summary.Row>
+                )}
               <Table.Summary.Row className="bg-gradient-to-r from-blue-600 to-blue-500 dark:from-blue-700 dark:to-blue-600 hover:from-blue-700 hover:to-blue-600 dark:hover:from-blue-800 dark:hover:to-blue-700 border-t-2 border-blue-700 dark:border-blue-500">
                 <Table.Summary.Cell
                   index={0}
@@ -978,6 +1005,12 @@ const ConsumptionReport = () => {
                   className="font-bold text-lg text-white py-4"
                 >
                   <div className="flex items-center justify-center gap-3">
+                    {discounts.totalDiscounts > 0 && (
+                      <div className="text-center">
+                        <span className="text-sm text-blue-200 line-through block">{showTotalSales ? formatCurrency(totalSales + discounts.totalDiscounts) : '••••••'}</span>
+                        <span className="text-sm text-purple-200 block">خصم: -{showTotalSales ? formatCurrency(discounts.totalDiscounts) : '••••••'}</span>
+                      </div>
+                    )}
                     <span className="text-xl">{showTotalSales ? formatCurrency(totalSales) : '••••••'}</span>
                     <button
                       onClick={() => setShowTotalSales(!showTotalSales)}
@@ -996,6 +1029,7 @@ const ConsumptionReport = () => {
                   </div>
                 </Table.Summary.Cell>
               </Table.Summary.Row>
+              </>
             )}
           />
         </div>
@@ -1087,42 +1121,54 @@ const ConsumptionReport = () => {
                 )
               }}
               summary={() => hasItems && (
-                <Table.Summary.Row className="bg-gradient-to-r from-blue-600 to-blue-500 dark:from-blue-700 dark:to-blue-600 hover:from-blue-700 hover:to-blue-600 dark:hover:from-blue-800 dark:hover:to-blue-700 border-t-2 border-blue-700 dark:border-blue-500">
-                  <Table.Summary.Cell
-                    index={0}
-                    colSpan={3}
-                    align={rtl.isRTL ? 'right' : 'left'}
-                    className="font-bold text-lg text-white py-4"
-                  >
-                    <span className="flex items-center gap-2">
-                      {getCategoryIcon(displayName)}
-                      {t('consumptionReport.table.categoryTotal', { category: displayName })}
-                    </span>
-                  </Table.Summary.Cell>
-                  <Table.Summary.Cell
-                    index={1}
-                    align="center"
-                    className="font-bold text-lg text-white py-4"
-                  >
-                    <div className="flex items-center justify-center gap-3">
-                      <span className="text-xl">{showSectionTotals[sectionName] ? formatCurrency(sectionTotal) : '••••••'}</span>
-                      <button
-                        onClick={() => setShowSectionTotals(prev => ({ ...prev, [sectionName]: !prev[sectionName] }))}
-                        title={showSectionTotals[sectionName] ? t('consumptionReport.stats.hideAmount') : t('consumptionReport.stats.showAmount')}
-                        className="p-2 hover:bg-blue-700 dark:hover:bg-blue-800 rounded-lg transition-colors text-white"
-                      >
-                        {showSectionTotals[sectionName] ? <EyeInvisibleOutlined className="text-lg" /> : <EyeOutlined className="text-lg" />}
-                      </button>
-                      <button
-                        onClick={() => void printReport(sectionName)}
-                        title="طباعة هذا القسم"
-                        className="p-2 hover:bg-blue-700 dark:hover:bg-blue-800 rounded-lg transition-colors text-white"
-                      >
-                        <PrinterOutlined className="text-lg" />
-                      </button>
-                    </div>
-                  </Table.Summary.Cell>
-                </Table.Summary.Row>
+                  <Table.Summary.Row className="bg-gradient-to-r from-blue-600 to-blue-500 dark:from-blue-700 dark:to-blue-600 hover:from-blue-700 hover:to-blue-600 dark:hover:from-blue-800 dark:hover:to-blue-700 border-t-2 border-blue-700 dark:border-blue-500">
+                    <Table.Summary.Cell
+                      index={0}
+                      colSpan={3}
+                      align={rtl.isRTL ? 'right' : 'left'}
+                      className="font-bold text-lg text-white py-4"
+                    >
+                      <span className="flex items-center gap-2">
+                        {getCategoryIcon(displayName)}
+                        {t('consumptionReport.table.categoryTotal', { category: displayName })}
+                      </span>
+                    </Table.Summary.Cell>
+                    <Table.Summary.Cell
+                      index={1}
+                      align="center"
+                      className="font-bold text-lg text-white py-4"
+                    >
+                      <div className="flex items-center justify-center gap-3">
+                        {(() => {
+                          const sd = sectionDiscounts[sectionName];
+                          if (sd && sd.totalDiscount > 0) {
+                            return (
+                              <div className="text-center">
+                                <span className="text-sm text-blue-200 line-through block">{showSectionTotals[sectionName] ? formatCurrency(sd.subtotalBeforeDiscount) : '••••••'}</span>
+                                <span className="text-sm text-purple-200 block">خصم: -{showSectionTotals[sectionName] ? formatCurrency(sd.totalDiscount) : '••••••'}</span>
+                              </div>
+                            );
+                          }
+                          return null;
+                        })()}
+                        <span className="text-xl">{showSectionTotals[sectionName] ? formatCurrency(sectionTotal) : '••••••'}</span>
+                        <button
+                          onClick={() => setShowSectionTotals(prev => ({ ...prev, [sectionName]: !prev[sectionName] }))}
+                          title={showSectionTotals[sectionName] ? t('consumptionReport.stats.hideAmount') : t('consumptionReport.stats.showAmount')}
+                          className="p-2 hover:bg-blue-700 dark:hover:bg-blue-800 rounded-lg transition-colors text-white"
+                        >
+                          {showSectionTotals[sectionName] ? <EyeInvisibleOutlined className="text-lg" /> : <EyeOutlined className="text-lg" />}
+                        </button>
+                        <button
+                          onClick={() => void printReport(sectionName)}
+                          title="طباعة هذا القسم"
+                          className="p-2 hover:bg-blue-700 dark:hover:bg-blue-800 rounded-lg transition-colors text-white"
+                        >
+                          <PrinterOutlined className="text-lg" />
+                        </button>
+                      </div>
+                    </Table.Summary.Cell>
+                  </Table.Summary.Row>
               )}
             />
           </div>

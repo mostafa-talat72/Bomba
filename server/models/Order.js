@@ -132,6 +132,12 @@ const orderSchema = new mongoose.Schema(
             default: 0,
             min: 0,
         },
+        // الخصم الثابت التلقائي (من إعدادات المنشأة)
+        fixedDiscount: {
+            percentage: { type: Number, default: 0, min: 0, max: 100 },
+            amount: { type: Number, default: 0, min: 0 },
+            maxCap: { type: Number, default: 0, min: 0 }, // السقف الأقصى عند تطبيقه
+        },
         finalAmount: {
             type: Number,
             required: true,
@@ -241,8 +247,9 @@ orderSchema.pre("save", async function (next) {
             }, 0);
         }
 
-        // Calculate final amount
-        this.finalAmount = this.subtotal - (this.discount || 0);
+        // Calculate final amount: subtotal - fixed discount - manual discount
+        const fixedDisc = (this.fixedDiscount && this.fixedDiscount.amount) || 0;
+        this.finalAmount = this.subtotal - fixedDisc - (this.discount || 0);
 
         // Update status timestamps
         if (this.isModified("status")) {

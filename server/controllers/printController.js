@@ -37,6 +37,22 @@ function orderPrintersStably(detected) {
   return sorted;
 }
 
+// دعم العربية لطابعة مستهدفة: من ملفها في printers (الافتراضي: مدعومة — السلوك الحالي).
+// القيمة false تعني: مسار بايتات CP1256 المباشر سيخرج حروفاً مفككة، فيُتخطى
+// لصالح المسار المصوَّر (وكيل HTML)، ومسار Windows-driver يبقى آمناً دائماً.
+function resolvePrinterArabicSupport(printSettings, printerName) {
+  try {
+    const list = printSettings?.printers;
+    if (!Array.isArray(list) || !list.length) return true;
+    const target = String(printerName || printSettings?.printerName || '');
+    const p = list.find((x) => x && (x.printerName === target || x.name === target || x.id === target));
+    if (!p) return true;
+    return p.arabicSupport !== false;
+  } catch {
+    return true;
+  }
+}
+
 async function loadPrintSettings(organization, user) {
   if (organization && typeof organization === 'object' && organization.printSettings) {
     return resolvePrintSettingsForUser(user, organization);
@@ -114,7 +130,7 @@ class PrintController {
   async printBill(req, res) {
     try {
       const { bill, organization, language = 'ar', tableSectionName, drawerMode = 'bill',
-        html: relayHtml, printerName: relayPrinterName, paperWidthMm: relayPaperWidth, printKey: relayPrintKey } = req.body;
+        html: relayHtml, printerName: relayPrinterName, paperWidthMm: relayPaperWidth, printKey: relayPrintKey, copies: relayCopies } = req.body;
 
       if (!bill) {
         return res.status(400).json({ success: false, message: 'Bill data is required' });
@@ -144,10 +160,16 @@ class PrintController {
       // القص مفعّل افتراضياً (مثل الدرج) ما لم يُعطّل صراحة من الإعدادات.
       const autoCut = printSettings.autoCut !== false;
 
+      let relayOk = false;
       // الهاتف يرسل نفس HTML المصمم للديسكتوب: رحّله للوكيل المحلي أولاً
       // (Chromium على الجهاز الرئيسي = نفس الشكل 100%). عند غياب الوكيل
       // نسقط على مسار RAW النصي أدناه.
       let relayError = null;
+      // نسخ الفاتورة حسب نوع الطلب (طاولات/تيك أوي/دليفري) — relayCopies أولاً ثم إعدادات السيرفر.
+      const billFulfillKey = ['takeaway', 'delivery'].includes(bill?.fulfillmentType) ? `bill_${bill.fulfillmentType}` : 'bill';
+      const billCopiesResolved = Math.min(5, Math.max(1, Number(relayCopies
+        ?? printSettings?.documentCopies?.[billFulfillKey]
+        ?? printSettings?.documentCopies?.bill ?? 1)) || 1);
       if (typeof relayHtml === 'string' && relayHtml.length > 0) {
         const relay = await relayHtmlToLocalAgent({
           html: relayHtml,
@@ -156,6 +178,7 @@ class PrintController {
           openDrawer,
           paperWidthMm: relayPaperWidth,
           printKey: relayPrintKey,
+          copies: billCopiesResolved,
         });
         if (relay.ok) {
           if (relay.printerName) lastSuccessfulPrinterName = relay.printerName;
@@ -166,13 +189,16 @@ class PrintController {
             cashDrawerOpened: openDrawer,
             relayed: true,
             printerUsed: relay.printerName,
+            copiesPrinted: relay.copiesPrinted || billCopiesResolved,
           });
         }
         relayError = relay.message;
         console.warn('Local agent relay failed, RAW fallback:', relay.message);
       }
 
-      const result = await printerService.printJob(printSettings, { content, openDrawer, autoCut, docName: `طباعة #${formatDisplayNumber(bill.billNumber)}` });
+      const copies = billCopiesResolved;
+      const arabicSupport = resolvePrinterArabicSupport(printSettings, relayPrinterName);
+      const result = await printerService.printJob(printSettings, { content, openDrawer, autoCut, docName: `طباعة #${formatDisplayNumber(bill.billNumber)}`, copies, arabicSupport });
 
       if (result.success) {
         if (printSettings.printerName) lastSuccessfulPrinterName = printSettings.printerName;
@@ -180,9 +206,14 @@ class PrintController {
           success: true,
           message: 'Bill printed successfully',
           cashDrawerOpened: openDrawer,
-          relayError
+          relayError,
+          rawFallback: true,
+          copiesPrinted: result.copiesRequested || copies
         });
       } else {
+        if (result.error === 'PRINTER_NO_ARABIC_SUPPORT') {
+          return res.status(500).json({ success: false, message: 'PRINTER_NO_ARABIC_SUPPORT', error: result.error });
+        }
         return res.status(500).json({
           success: false,
           message: 'Failed to print bill',
@@ -205,7 +236,7 @@ class PrintController {
   async printOrder(req, res) {
     try {
       const { order, organization, language = 'ar',
-        html: relayHtml, printerName: relayPrinterName, paperWidthMm: relayPaperWidth, printKey: relayPrintKey } = req.body;
+        html: relayHtml, printerName: relayPrinterName, paperWidthMm: relayPaperWidth, printKey: relayPrintKey, copies: relayCopies } = req.body;
 
       if (!order) {
         return res.status(400).json({ success: false, message: 'Order data is required' });
@@ -226,6 +257,12 @@ class PrintController {
 
       const content = await this.generateOrderContent(order, organization, language, printSettings, req?.user?.name || '');
 
+      // نسخ التحضير حسب نوع الطلب — relayCopies أولاً ثم إعدادات السيرفر.
+      const orderFulfillment = order?.fulfillmentType;
+      const orderPrepKey = orderFulfillment === 'takeaway' ? 'prep_takeaway' : orderFulfillment === 'delivery' ? 'prep_delivery' : 'prep';
+      const orderCopiesResolved = Math.min(5, Math.max(1, Number(relayCopies
+        ?? printSettings?.documentCopies?.[orderPrepKey]
+        ?? printSettings?.documentCopies?.prep ?? 1)) || 1);
       // نفس HTML المصمم للديسكتوب: ترحيل للوكيل المحلي أولاً (نفس الشكل 100%).
       if (typeof relayHtml === 'string' && relayHtml.length > 0) {
         const relay = await relayHtmlToLocalAgent({
@@ -235,22 +272,28 @@ class PrintController {
           openDrawer: false,
           paperWidthMm: relayPaperWidth,
           printKey: relayPrintKey,
+          copies: orderCopiesResolved,
         });
         if (relay.ok) {
           if (relay.printerName) lastSuccessfulPrinterName = relay.printerName;
           else if (printSettings.printerName) lastSuccessfulPrinterName = printSettings.printerName;
-          return res.json({ success: true, message: 'Order printed successfully', relayed: true, printerUsed: relay.printerName });
+          return res.json({ success: true, message: 'Order printed successfully', relayed: true, printerUsed: relay.printerName, copiesPrinted: relay.copiesPrinted || orderCopiesResolved });
         }
         console.warn('Local agent relay failed, RAW fallback:', relay.message);
       }
 
       // طباعة الطلب بدون فتح درج الكاشير (اتصال دافئ + تسلسل)
-      const result = await printerService.printJob(printSettings, { content, openDrawer: false, autoCut: printSettings.autoCut !== false, docName: `طباعة #${formatDisplayNumber(order.orderNumber)}` });
+      const copies = orderCopiesResolved;
+      const arabicSupport = resolvePrinterArabicSupport(printSettings, relayPrinterName);
+      const result = await printerService.printJob(printSettings, { content, openDrawer: false, autoCut: printSettings.autoCut !== false, docName: `طباعة #${formatDisplayNumber(order.orderNumber)}`, copies, arabicSupport });
 
       if (result.success) {
         if (printSettings.printerName) lastSuccessfulPrinterName = printSettings.printerName;
-        return res.json({ success: true, message: 'Order printed successfully' });
+        return res.json({ success: true, message: 'Order printed successfully', rawFallback: true, copiesPrinted: result.copiesRequested || copies });
       } else {
+        if (result.error === 'PRINTER_NO_ARABIC_SUPPORT') {
+          return res.status(500).json({ success: false, message: 'PRINTER_NO_ARABIC_SUPPORT', error: result.error });
+        }
         return res.status(500).json({
           success: false,
           message: 'Failed to print order',
@@ -273,7 +316,7 @@ class PrintController {
   async printConsumptionReport(req, res) {
     try {
       const { reportData, organization, language = 'ar',
-        html: relayHtml, printerName: relayPrinterName, paperWidthMm: relayPaperWidth, printKey: relayPrintKey } = req.body;
+        html: relayHtml, printerName: relayPrinterName, paperWidthMm: relayPaperWidth, printKey: relayPrintKey, copies: relayCopies } = req.body;
 
       if (!reportData) {
         return res.status(400).json({ success: false, message: 'Report data is required' });
@@ -312,12 +355,17 @@ class PrintController {
       }
 
       // طباعة التقرير بدون فتح درج الكاشير (اتصال دافئ + تسلسل)
-      const result = await printerService.printJob(printSettings, { content, openDrawer: false, autoCut: printSettings.autoCut !== false, docName: 'تقرير الاستهلاك' });
+      const copies = Math.min(5, Math.max(1, Number(relayCopies) || 1));
+      const arabicSupport = resolvePrinterArabicSupport(printSettings, relayPrinterName);
+      const result = await printerService.printJob(printSettings, { content, openDrawer: false, autoCut: printSettings.autoCut !== false, docName: 'تقرير الاستهلاك', copies, arabicSupport });
 
       if (result.success) {
         if (printSettings.printerName) lastSuccessfulPrinterName = printSettings.printerName;
-        return res.json({ success: true, message: 'Report printed successfully' });
+        return res.json({ success: true, message: 'Report printed successfully', rawFallback: true, copiesPrinted: result.copiesRequested || copies });
       } else {
+        if (result.error === 'PRINTER_NO_ARABIC_SUPPORT') {
+          return res.status(500).json({ success: false, message: 'PRINTER_NO_ARABIC_SUPPORT', error: result.error });
+        }
         return res.status(500).json({
           success: false,
           message: 'Failed to print report',
@@ -417,8 +465,16 @@ class PrintController {
     content += 'TOTALS\n';
     content += '-'.repeat(charsPerLine) + '\n';
     
-    if (bill.discount && bill.discount > 0) {
-      content += `Discount: ${bill.discount}\n`;
+    // الخصومات
+    const totalFixedDiscount = (bill.orders || []).reduce((sum, order) => {
+      return sum + (order?.fixedDiscount?.amount || 0);
+    }, 0);
+    const billDiscount = Number(bill.discount) || 0;
+    const totalAllDiscounts = totalFixedDiscount + billDiscount;
+    const subtotalBeforeDiscount = (bill.total || 0) + totalAllDiscounts;
+    if (totalAllDiscounts > 0) {
+      content += `Subtotal: ${subtotalBeforeDiscount}\n`;
+      content += `Discount: -${totalAllDiscounts}\n`;
     }
     if (bill.tax && bill.tax > 0) {
       content += `Tax: ${bill.tax}\n`;
@@ -751,7 +807,7 @@ class PrintController {
   async autoDetectAndPrintBill(req, res) {
     try {
       const { bill, organization, language = 'ar', tableSectionName, drawerMode = 'bill',
-        html: relayHtml, printerName: relayPrinterName, paperWidthMm: relayPaperWidth, printKey: relayPrintKey } = req.body;
+        html: relayHtml, printerName: relayPrinterName, paperWidthMm: relayPaperWidth, printKey: relayPrintKey, copies: relayCopies } = req.body;
 
       if (!bill) {
         return res.status(400).json({ success: false, message: 'Bill data is required' });
@@ -819,7 +875,8 @@ class PrintController {
       }
 
       // 6. طباعة الفاتورة مع فتح درج الكاشير (اتصال دافئ + تسلسل)
-      const result = await printerService.printJob(autoDetectedSettings, { content, openDrawer, autoCut: true, docName: `طباعة #${formatDisplayNumber(bill.billNumber)}` });
+      const copies = Math.min(5, Math.max(1, Number(relayCopies) || 1));
+      const result = await printerService.printJob(autoDetectedSettings, { content, openDrawer, autoCut: true, docName: `طباعة #${formatDisplayNumber(bill.billNumber)}`, copies });
 
       if (result.success) {
         lastSuccessfulPrinterName = autoDetectedSettings.printerName;
@@ -827,7 +884,9 @@ class PrintController {
           success: true,
           message: 'Bill printed successfully',
           cashDrawerOpened: openDrawer,
-          printerUsed: selectedPrinter.name
+          printerUsed: selectedPrinter.name,
+          rawFallback: true,
+          copiesPrinted: result.copiesRequested || copies
         });
       } else {
         return res.status(500).json({ 
@@ -853,7 +912,7 @@ class PrintController {
   async autoDetectAndPrintOrder(req, res) {
     try {
       const { order, organization, language = 'ar',
-        html: relayHtml, printerName: relayPrinterName, paperWidthMm: relayPaperWidth, printKey: relayPrintKey } = req.body;
+        html: relayHtml, printerName: relayPrinterName, paperWidthMm: relayPaperWidth, printKey: relayPrintKey, copies: relayCopies } = req.body;
 
       if (!order) {
         return res.status(400).json({ success: false, message: 'Order data is required' });
@@ -915,14 +974,17 @@ class PrintController {
       }
 
       // 6. طباعة الطلب بدون فتح درج الكاشير (اتصال دافئ + تسلسل)
-      const result = await printerService.printJob(autoDetectedSettings, { content, openDrawer: false, autoCut: true, docName: `طباعة #${formatDisplayNumber(order.orderNumber)}` });
+      const copies = Math.min(5, Math.max(1, Number(relayCopies) || 1));
+      const result = await printerService.printJob(autoDetectedSettings, { content, openDrawer: false, autoCut: true, docName: `طباعة #${formatDisplayNumber(order.orderNumber)}`, copies });
 
       if (result.success) {
         lastSuccessfulPrinterName = autoDetectedSettings.printerName;
         return res.json({
           success: true,
           message: 'Order printed successfully',
-          printerUsed: selectedPrinter.name
+          printerUsed: selectedPrinter.name,
+          rawFallback: true,
+          copiesPrinted: result.copiesRequested || copies
         });
       } else {
         return res.status(500).json({ 
@@ -1002,6 +1064,22 @@ class PrintController {
         await printerService.disconnect();
         return res.status(500).json({ success: false, message: 'Internal server error cutting paper', error: error.message });
       }
+  }
+
+  async getPrinterStatus(req, res) {
+    try {
+      const connected = printerService.isConnected === true;
+      const queue = printerService._printQueue ? 1 : 0;
+      // محاولة سريعة لمعرفة هل هناك طابعة مهيأة
+      let hasPrinter = false;
+      try {
+        const s = await loadPrintSettings(null, req.user);
+        hasPrinter = !!(s && (s.printerName || s.printerDevice || s.printerIP));
+      } catch {}
+      return res.json({ success: true, data: { connected, queue, hasPrinter } });
+    } catch (error) {
+      return res.json({ success: true, data: { connected: false, queue: 0, hasPrinter: false } });
+    }
   }
 }
 

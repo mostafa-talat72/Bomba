@@ -342,11 +342,11 @@ export const getBills = async (req, res) => {
                 ? {
                     // الأصناف خاماً للعدّ والعرض — بلا تعبئة menuItem (الأثقل).
                     path: "orders",
-                    select: "_id orderNumber status totalAmount finalAmount fulfillmentType createdAt items",
+                    select: "_id orderNumber status totalAmount finalAmount fixedDiscount discount fulfillmentType createdAt items",
                 }
                 : {
                     path: "orders",
-                    select: "items totalAmount finalAmount status createdAt",
+                    select: "items totalAmount finalAmount fixedDiscount discount status createdAt",
                     populate: {
                         path: "items.menuItem",
                         select: "name arabicName preparationTime price",
@@ -1492,12 +1492,34 @@ export const updateBill = async (req, res) => {
 
         bill.updatedBy = req.user._id;
 
-        // توحيد نوع التنفيذ لطلبات الفاتورة مع نوعها (يغطي التحويل الصريح بدون نقل)
+        // توحيد نوع التنفيذ لطلبات الفاتورة مع نوعها + إعادة حساب الخصم الثابت
         if (!movedFromTableId && req.body.fulfillmentType !== undefined && bill.fulfillmentType) {
-            await Order.updateMany(
-                { bill: bill._id },
-                { $set: { fulfillmentType: bill.fulfillmentType } }
-            );
+            // جلب إعدادات الخصم الثابت
+            let orgFD = null;
+            try {
+                const orgId = getOrganizationId(req.user);
+                const org = await Organization.findById(orgId).select('fixedDiscount').lean();
+                if (org?.fixedDiscount?.enabled && org.fixedDiscount.percentage > 0) orgFD = org.fixedDiscount;
+            } catch {}
+
+            const sectionKey = bill.fulfillmentType === 'dine_in' ? 'tables'
+                : bill.fulfillmentType === 'takeaway' ? 'takeaway' : 'delivery';
+
+            // جلب الطلبات للحساب
+            const billOrders = await Order.find({ bill: bill._id }).lean();
+            for (const order of billOrders) {
+                const updateData = { fulfillmentType: bill.fulfillmentType };
+                if (orgFD) {
+                    const sectionPct = orgFD.sections?.[sectionKey] || 0;
+                    const effectivePct = sectionPct > 0 ? sectionPct : orgFD.percentage;
+                    const cap = orgFD.maxCap || 0;
+                    let fdAmount = Math.round(((order.subtotal || 0) * effectivePct) / 100);
+                    if (cap > 0 && fdAmount > cap) fdAmount = cap;
+                    updateData.fixedDiscount = { percentage: effectivePct, amount: fdAmount, maxCap: cap };
+                    updateData.finalAmount = (order.subtotal || 0) - fdAmount - (order.discount || 0);
+                }
+                await Order.updateOne({ _id: order._id }, { $set: updateData });
+            }
         }
 
         // Recalculate totals
@@ -4366,6 +4388,31 @@ export const updateBillAggregatedItems = async (req, res) => {
         const totalCost = await calculateOrderTotalCost(processedItems);
         const existingOrders = bill.orders || [];
 
+        // جلب إعدادات الخصم الثابت من المنشأة
+        let orgFixedDiscount = null;
+        try {
+            const orgId = getOrganizationId(req.user);
+            const org = await Organization.findById(orgId).select('fixedDiscount').lean();
+            if (org?.fixedDiscount?.enabled && org.fixedDiscount.percentage > 0) {
+                orgFixedDiscount = org.fixedDiscount;
+            }
+        } catch { /* ignore */ }
+
+        // حساب الخصم الثابت للطلب
+        const orderFulfillmentType = bill.fulfillmentType || 'dine_in';
+        let orderFixedDiscount = { percentage: 0, amount: 0, maxCap: 0 };
+        if (orgFixedDiscount) {
+            const sectionKey = orderFulfillmentType === 'dine_in' ? 'tables'
+                : orderFulfillmentType === 'takeaway' ? 'takeaway'
+                : 'delivery';
+            const sectionPct = orgFixedDiscount.sections?.[sectionKey] || 0;
+            const effectivePct = sectionPct > 0 ? sectionPct : orgFixedDiscount.percentage;
+            const cap = orgFixedDiscount.maxCap || 0;
+            let fdAmount = Math.round((subtotal * effectivePct) / 100);
+            if (cap > 0 && fdAmount > cap) fdAmount = cap;
+            orderFixedDiscount = { percentage: effectivePct, amount: fdAmount, maxCap: cap };
+        }
+
         if (processedItems.length === 0) {
             // Clear all orders (tombstones FIRST, then delete)
             for (const ord of existingOrders) {
@@ -4382,13 +4429,15 @@ export const updateBillAggregatedItems = async (req, res) => {
                 table: tableId,
                 items: processedItems,
                 subtotal,
-                finalAmount: subtotal,
+                fixedDiscount: orderFixedDiscount,
+                finalAmount: subtotal - orderFixedDiscount.amount,
                 totalCost,
                 organization: getOrganizationId(req.user),
                 createdBy: req.user._id,
                 status: "pending",
                 instanceId,
                 bill: bill._id,
+                fulfillmentType: orderFulfillmentType,
             });
             await newOrder.save();
             bill.orders = [newOrder._id];
@@ -4401,8 +4450,10 @@ export const updateBillAggregatedItems = async (req, res) => {
             }
             primary.items = processedItems;
             primary.subtotal = subtotal;
-            primary.finalAmount = subtotal;
+            primary.fixedDiscount = orderFixedDiscount;
+            primary.finalAmount = subtotal - orderFixedDiscount.amount;
             primary.totalCost = totalCost;
+            primary.fulfillmentType = orderFulfillmentType;
             // Keep table/bill linkage
             primary.bill = bill._id;
             await primary.save();
