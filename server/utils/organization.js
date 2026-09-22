@@ -185,6 +185,10 @@ function transformMixedIdentifierFilter(filter) {
 
         if (value && typeof value === "object" && !Array.isArray(value)) {
             const operatorClauses = [];
+            // المشغلات غير الخاصة بالهويات تُجمّع معاً في جملة واحدة — فصلها كان
+            // يكسر الاستعلام (مثلاً {$regex} منفصل عن {$options} يرمي
+            // "$options needs a $regex" ويعطل أي بحث نصي في التطبيق كله).
+            const passthroughOperators = {};
             for (const [operator, operand] of Object.entries(value)) {
                 if ((operator === "$eq" || operator === "$ne") &&
                     isObjectIdValue(operand)) {
@@ -211,8 +215,11 @@ function transformMixedIdentifierFilter(filter) {
                         );
                     }
                 } else {
-                    operatorClauses.push({ [key]: { [operator]: operand } });
+                    passthroughOperators[operator] = operand;
                 }
+            }
+            if (Object.keys(passthroughOperators).length) {
+                operatorClauses.push({ [key]: passthroughOperators });
             }
             clauses.push(...operatorClauses);
             continue;

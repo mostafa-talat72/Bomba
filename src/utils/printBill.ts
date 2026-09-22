@@ -315,7 +315,7 @@ export const buildBillPrintHTML = async (
   };
 
   // Generate order items table
-  const generateOrderItemsTable = (orders: Order[], itemPayments?: ItemPayment[], billStatus?: string, billPaid?: number, billTotal?: number) => {
+  const generateOrderItemsTable = (orders: Order[], itemPayments?: ItemPayment[], billStatus?: string, billPaid?: number, billTotal?: number, showPaidCol: boolean = true, showPriceCol: boolean = false, showTitle: boolean = true) => {
     const aggregatedItems = aggregateItemsWithPayments(
       orders,
       itemPayments,
@@ -331,8 +331,9 @@ export const buildBillPrintHTML = async (
     const itemsRows = aggregatedItems.map((item: AggregatedItem) => {
       const v = (item as any).variant;
       // Match order printing: show the selected size in parentheses.
-      const variantText = v && v !== 'عادي' ? ` (${v})` : '';
-      const addonsText = item.addons && item.addons.length > 0
+      const showDetails = billLayout.showItemDetails !== false;
+      const variantText = showDetails && v && v !== 'عادي' ? ` (${v})` : '';
+      const addonsText = showDetails && item.addons && item.addons.length > 0
         ? ` (${item.addons.map(a => a.name).join(', ')})`
         : '';
       
@@ -343,20 +344,22 @@ export const buildBillPrintHTML = async (
         <tr>
           <td class="item-name">${statusIcon} ${item.name}${variantText}${addonsText}</td>
           <td class="item-quantity">${formatQuantity(item.totalQuantity)}</td>
-          <td class="item-paid-qty">${formatQuantity(item.paidQuantity)}</td>
+          ${showPaidCol ? `<td class="item-paid-qty">${formatQuantity(item.paidQuantity)}</td>` : ''}
+          ${showPriceCol ? `<td class="item-price">${formatNumber(item.price)}</td>` : ''}
           <td class="item-total">${formatNumber(item.price * item.totalQuantity)}</td>
         </tr>
       `;
     }).join('');
     
     return `
-      <div class="section-title">${t('billPrint.orders')}</div>
+      ${showTitle ? `<div class="section-title">${t('billPrint.orders')}</div>` : ''}
       <table class="items-table">
         <thead>
           <tr>
             <th class="col-name" style="width: 50%;">${t('billPrint.item')}</th>
             <th class="col-quantity" style="width: 16.67%;">${t('billPrint.quantity')}</th>
-            <th class="col-paid-qty" style="width: 16.67%;">${t('billPrint.paid')}</th>
+            ${showPaidCol ? `<th class="col-paid-qty" style="width: 16.67%;">${t('billPrint.paid')}</th>` : ''}
+            ${showPriceCol ? `<th class="col-price">${t('billPrint.price')}</th>` : ''}
             <th class="col-total" style="width: 16.66%;">${t('billPrint.total')}</th>
           </tr>
         </thead>
@@ -368,7 +371,7 @@ export const buildBillPrintHTML = async (
   };
 
   // Generate sessions table
-  const generateSessionsTable = (sessions: Session[], sessionPayments?: SessionPayment[]) => {
+  const generateSessionsTable = (sessions: Session[], sessionPayments?: SessionPayment[], showTitle: boolean = true) => {
     if (!sessions || sessions.length === 0) return '';
 
     const sessionsRows = sessions.map(session => {
@@ -438,7 +441,7 @@ export const buildBillPrintHTML = async (
     }).join('');
     
     return `
-      <div class="section-title">${t('billPrint.sessions')}</div>
+      ${showTitle ? `<div class="section-title">${t('billPrint.sessions')}</div>` : ''}
       <table class="items-table sessions-table">
         <thead>
           <tr>
@@ -469,7 +472,7 @@ export const buildBillPrintHTML = async (
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
       <title>${getDisplayNumber(bill.billNumber) || ''}</title>
-      <style>${layoutCss(billLayout)}
+      <style>${layoutCss(billLayout, 'bill')}
         @import url('https://fonts.googleapis.com/css2?family=${fontImport}&display=swap');
         html { width: 100%; max-width: 100%; overflow-x: hidden; }
         * { 
@@ -783,21 +786,31 @@ export const buildBillPrintHTML = async (
     <body>
       <div class="header">
         ${brandHtml(billLogo, billLayout, organizationName ? organizationName : t('billPrint.defaultEstablishment'))}
-        ${typeof organizationData?.phone === 'string' && organizationData.phone.trim()
-          ? `<div class="org-phone">${t('billPrint.phone')}: ${organizationData.phone.trim()}</div>`
-          : ''}
-        <div class="title" style="font-weight: 700; font-size: 19px;">${splitDailySeq(bill.billNumber).head}<span style="font-size: 22px; font-weight: 900; background: #000; color: #fff; padding: 0 8px; border-radius: 6px;">${splitDailySeq(bill.billNumber).seq}</span></div>
-        <div class="info" style="font-weight: 900; font-size: 1.15em;">${formatDate(bill.createdAt || new Date())}${(() => { try { const n = (getCurrentUserCache() as any)?.name; return n ? ` — 👤 ${n}` : ''; } catch { return ''; } })()}</div>
-        ${bill.table?.number ? `<div class="info" style="font-weight: 900; font-size: 1.25em; color: #000; margin: 8px 0;"><span style="background: #000; color: #fff; padding: 2px 8px; border-radius: 3px;">${t('billPrint.table')}</span> <strong style="font-size: 1.5em;">${bill.table.number}${tableSectionName ? ` — (${tableSectionName})` : ''}</strong></div>` : ((bill.customerName || bill.deliveryInfo?.customerName) ? ((bill.fulfillmentType === 'delivery' || bill.fulfillmentType === 'takeaway') ? `<div class="info" style="font-weight: 900; font-size: 1.35em;">${bill.fulfillmentType === 'delivery' ? '🛵' : '🥡'} ${bill.customerName || bill.deliveryInfo?.customerName}</div>` : `<div class="info" style="font-weight: 900; font-size: 1.15em;">${t('billPrint.customer')}: ${bill.customerName || bill.deliveryInfo?.customerName}</div>`) : ((bill.fulfillmentType === 'delivery' || bill.fulfillmentType === 'takeaway') ? `<div class="info" style="font-weight: 900; font-size: 1.35em;">${bill.fulfillmentType === 'delivery' ? '🛵 دليفري' : '🥡 تيك أوي'}</div>` : ''))}
-        ${(bill.customerPhone || bill.deliveryInfo?.phone) && billLayout.showPhone !== false ? `<div class="info" style="font-weight: 900; font-size: 1.15em;">${t('billPrint.phone')}: ${bill.customerPhone || bill.deliveryInfo?.phone}</div>` : ''}
-        ${bill.fulfillmentType === 'delivery' && bill.deliveryInfo?.address && billLayout.showAddress !== false ? `<div class="info" style="font-weight: 900; font-size: 1em;">📍 ${bill.deliveryInfo.address}</div>` : ''}
+        ${billLayout.showBillNumber !== false ? `<div class="title" style="font-weight: 700; font-size: 19px;">${splitDailySeq(bill.billNumber).head}<span style="font-size: 22px; font-weight: 900; background: #000; color: #fff; padding: 0 8px; border-radius: 6px;">${splitDailySeq(bill.billNumber).seq}</span></div>` : ''}
+        ${(() => { let nm = ''; try { nm = (getCurrentUserCache() as any)?.name || ''; } catch {} const sd = billLayout.showDate !== false; const su = billLayout.showUser !== false && !!nm; if (!sd && !su) return ''; return `<div class="info" style="font-weight: 900; font-size: 1.15em;">${sd ? `<span class="bill-date">${formatDate(bill.createdAt || new Date())}</span>` : ''}${su ? `<span class="bill-user"> — 👤 ${nm}</span>` : ''}</div>`; })()}
+        ${bill.table?.number && billLayout.showTable !== false ? `<div class="info" style="font-weight: 900; font-size: 1.25em; color: #000; margin: 8px 0;"><span style="background: #000; color: #fff; padding: 2px 8px; border-radius: 3px;">${t('billPrint.table')}</span> <strong style="font-size: 1.5em;">${bill.table.number}${tableSectionName ? ` — (${tableSectionName})` : ''}</strong></div>` : (() => {
+          const isFD = bill.fulfillmentType === 'delivery' || bill.fulfillmentType === 'takeaway';
+          const nm = bill.customerName || bill.deliveryInfo?.customerName || '';
+          const ph = bill.customerPhone || bill.deliveryInfo?.phone || '';
+          if (!(nm || ph) || billLayout.showCustomer === false) {
+            return (isFD && billLayout.showCustomer !== false) ? `<div class="info" style="font-weight: 900; font-size: 1.35em;">${bill.fulfillmentType === 'delivery' ? '🛵 دليفري' : '🥡 تيك أوي'}</div>` : '';
+          }
+          const showN = !!nm && billLayout.showCustName !== false;
+          const showP = !!ph && billLayout.showPhone !== false;
+          if (!isFD) return `<div class="info" style="font-weight: 900; font-size: 1.15em;">${t('billPrint.customer')}: ${showN ? `<span class="cust-name">${nm}</span>` : ''}</div>`;
+          if (!showN && !showP) return `<div class="info" style="font-weight: 900; font-size: 1.35em;">${bill.fulfillmentType === 'delivery' ? '🛵 دليفري' : '🥡 تيك أوي'}</div>`;
+          return `<div class="info" style="font-weight: 900; font-size: 1.35em;">${bill.fulfillmentType === 'delivery' ? '🛵 دليفري' : '🥡 تيك أوي'}: ${showN ? `<span class="cust-name">${nm}</span>` : ''}${showP ? `<span class="cust-phone">${showN ? ' — ' : ''}${ph}</span>` : ''}</div>`;
+        })()}
+        ${(bill.customerPhone || bill.deliveryInfo?.phone) && billLayout.showPhone !== false && billLayout.showCustomer !== false && bill.fulfillmentType !== 'delivery' && bill.fulfillmentType !== 'takeaway' ? `<div class="info" style="font-weight: 900; font-size: 1.15em;">${t('billPrint.phone')}: <span class="cust-phone">${bill.customerPhone || bill.deliveryInfo?.phone}</span></div>` : ''}
+        ${bill.fulfillmentType === 'delivery' && bill.deliveryInfo?.address && billLayout.showAddress !== false ? `<div class="info delivery-address" style="font-weight: 900; font-size: 1em;">📍 ${bill.deliveryInfo.address}</div>` : ''}
       </div>
 
-      ${bill.orders && bill.orders.length > 0 ? generateOrderItemsTable(bill.orders, bill.itemPayments, bill.status, bill.paid, bill.total) : ''}
+      ${bill.orders && bill.orders.length > 0 ? generateOrderItemsTable(bill.orders, bill.itemPayments, bill.status, bill.paid, bill.total, billLayout.showPaidCol !== false, billLayout.showPriceCol === true, billLayout.showSectionTitle !== false) : ''}
 
-      ${bill.sessions && bill.sessions.length > 0 ? generateSessionsTable(bill.sessions, bill.sessionPayments) : ''}
+      ${bill.sessions && bill.sessions.length > 0 && billLayout.showSessions !== false ? generateSessionsTable(bill.sessions, bill.sessionPayments, billLayout.showSectionTitle !== false) : ''}
 
-      <div class="divider"></div>
+      ${billLayout.showTotalsTable !== false ? `
+      ${billLayout.showDividers !== false ? `<div class="divider"></div>` : ''}
 
       <table class="totals-table">
         <tbody>
@@ -810,16 +823,16 @@ export const buildBillPrintHTML = async (
           const totalAllDiscounts = totalFixedDiscount + billDiscount;
           // السعر قبل الخصم = الإجمالي + كل الخصومات
           const subtotalBeforeDiscount = (bill.total || 0) + totalAllDiscounts;
-          if (totalAllDiscounts <= 0) return '';
+          if (totalAllDiscounts <= 0 && billLayout.showZeroRows !== true) return '';
           return `
           <tr class="subtotal"><th>${t('billPrint.subtotal', 'المجموع')}</th><td>${formatNumber(subtotalBeforeDiscount)} ${currencySymbol}</td></tr>
           <tr class="discount"><th>${t('billPrint.discount', 'الخصومات')}</th><td>-${formatNumber(totalAllDiscounts)} ${currencySymbol}</td></tr>
           `;
         })()}
-        ${bill.tax && bill.tax > 0 ? `
+        ${(bill.tax > 0 || billLayout.showZeroRows === true) ? `
           <tr class="tax"><th>${t('billPrint.tax')}</th><td>${formatNumber(bill.tax)} ${currencySymbol}</td></tr>
         ` : ''}
-        ${bill.fulfillmentType !== 'takeaway' && Number(bill.deliveryInfo?.deliveryFee) > 0 ? `
+        ${bill.fulfillmentType !== 'takeaway' && (Number(bill.deliveryInfo?.deliveryFee) > 0 || billLayout.showZeroRows === true) ? `
         <tr class="delivery-fee"><th>${t('billPrint.deliveryFee', 'رسوم التوصيل')}</th><td>${formatNumber(bill.deliveryInfo.deliveryFee)} ${currencySymbol}</td></tr>
         ` : ''}
         <tr class="grand-total"><th>${t('billPrint.total')}</th><td>${formatNumber(bill.total || 0)} ${currencySymbol}</td></tr>
@@ -827,8 +840,13 @@ export const buildBillPrintHTML = async (
         <tr class="remaining"><th>${t('billPrint.remaining')}</th><td>${formatNumber(bill.remaining || 0)} ${currencySymbol}</td></tr>
         </tbody>
       </table>
+      ` : ''}
 
       ${billLayout.showThanks !== false ? `<div class="thank-you">${customFooter || t('billPrint.thankYou')}</div>` : ''}
+
+      ${typeof organizationData?.phone === 'string' && organizationData.phone.trim() && billLayout.showOrgPhone !== false
+        ? `<div class="org-phone" style="font-weight: 900; font-size: 1.15em; margin: 2px 0;">${organizationData.phone.trim()}</div>`
+        : ''}
       
       ${qrCodeDataURL && qrInfo && billLayout.showQR !== false ? `
         <div class="qr-section">
@@ -838,7 +856,7 @@ export const buildBillPrintHTML = async (
         </div>
       ` : ''}
       
-      <div class="footer">
+      <div class="dev-sign" style="margin-top:2px;text-align:center;font-size:1.2em;color:#000;border-top:2px dashed #000;padding-top:2px;padding-bottom:2px;font-weight:900;">
         <strong>${t('billPrint.footer')}</strong>
       </div>
 

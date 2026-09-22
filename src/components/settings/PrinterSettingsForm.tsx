@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Search } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import PrintDesigner from './PrintDesigner';
 
 export interface DetectedPrinter {
   name: string;
@@ -23,6 +24,8 @@ export interface PrinterSettingsFormProps {
   onDetect: () => void;
   onSelectDetected: (printer: DetectedPrinter) => void;
   onTestPrinter: (printer: { path?: string; name?: string }) => void;
+  logoUrl?: string;
+  orgName?: string;
 }
 
 const PrinterSettingsForm: React.FC<PrinterSettingsFormProps> = ({
@@ -34,6 +37,8 @@ const PrinterSettingsForm: React.FC<PrinterSettingsFormProps> = ({
   onDetect,
   onSelectDetected,
   onTestPrinter,
+  logoUrl,
+  orgName,
 }) => {
   const { t } = useTranslation();
   const organization = { printSettings: settings };
@@ -78,7 +83,7 @@ const PrinterSettingsForm: React.FC<PrinterSettingsFormProps> = ({
         <TabBtn id="printers" label={t('settings.organization.printSettings.tabPrinters')} />
         <TabBtn id="routing" label={t('settings.organization.printSettings.tabRouting')} />
         <TabBtn id="automation" label={t('settings.organization.printSettings.tabAutomation')} />
-        <TabBtn id="appearance" label={t('settings.organization.printSettings.tabAppearance')} />
+        <TabBtn id="designer" label={t('settings.organization.printSettings.designerTab')} />
       </div>
 
       {subTab === 'printers' && (
@@ -420,58 +425,8 @@ const PrinterSettingsForm: React.FC<PrinterSettingsFormProps> = ({
         </div>
       )}
 
-      {subTab === 'appearance' && (
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{t('settings.organization.printSettings.charactersPerLine')}</label>
-            <input type="number" value={organization.printSettings?.charactersPerLine || 48} onChange={(e) => patch({ charactersPerLine: parseInt(e.target.value) || 48 })} min="32" max="64" className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-orange-500 dark:bg-gray-800 dark:text-gray-100" />
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{t('settings.organization.printSettings.charactersPerLineDesc')}</p>
-          </div>
-
-          <div className="flex items-center justify-between">
-            <div>
-              <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100">{t('settings.organization.printSettings.printHeader')}</h4>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{t('settings.organization.printSettings.printHeaderDesc')}</p>
-            </div>
-            <label className="relative inline-flex items-center cursor-pointer">
-              <input type="checkbox" checked={organization.printSettings?.printHeader ?? true} onChange={(e) => patch({ printHeader: e.target.checked })} className="sr-only peer" />
-              <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-orange-300 dark:peer-focus:ring-orange-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-orange-600"></div>
-            </label>
-          </div>
-
-          <div className="flex items-center justify-between">
-            <div>
-              <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100">{t('settings.organization.printSettings.printFooter')}</h4>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{t('settings.organization.printSettings.printFooterDesc')}</p>
-            </div>
-            <label className="relative inline-flex items-center cursor-pointer">
-              <input type="checkbox" checked={organization.printSettings?.printFooter ?? true} onChange={(e) => patch({ printFooter: e.target.checked })} className="sr-only peer" />
-              <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-orange-300 dark:peer-focus:ring-orange-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-orange-600"></div>
-            </label>
-          </div>
-
-          <div className="flex items-center justify-between">
-            <div>
-              <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100">{t('settings.organization.printSettings.autoCut')}</h4>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{t('settings.organization.printSettings.autoCutDesc')}</p>
-            </div>
-            <label className="relative inline-flex items-center cursor-pointer">
-              <input type="checkbox" checked={organization.printSettings?.autoCut ?? false} onChange={(e) => patch({ autoCut: e.target.checked })} className="sr-only peer" />
-              <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-orange-300 dark:peer-focus:ring-orange-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-orange-600"></div>
-            </label>
-          </div>
-
-          <div className="flex items-center justify-between">
-            <div>
-              <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100">{t('settings.organization.printSettings.printQRCode')}</h4>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{t('settings.organization.printSettings.printQRCodeDesc')}</p>
-            </div>
-            <label className="relative inline-flex items-center cursor-pointer">
-              <input type="checkbox" checked={organization.printSettings?.printQRCode ?? true} onChange={(e) => patch({ printQRCode: e.target.checked })} className="sr-only peer" />
-              <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-orange-300 dark:peer-focus:ring-orange-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-orange-600"></div>
-            </label>
-          </div>
-        </div>
+      {subTab === 'designer' && (
+        <PrintDesigner settings={settings} onPatch={onPatch} logoUrl={logoUrl} orgName={orgName} />
       )}
     </div>
   );

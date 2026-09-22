@@ -272,16 +272,63 @@ export const getBills = async (req, res) => {
             : [];
         if (q && q.trim()) {
             const qt = q.trim();
+            // توحيد الأرقام العربية/الفارسية (٠١٢٣) إلى ASCII — للبحث المرن بالهاتف
+            const normDigits = (s) => String(s || '')
+                .replace(/[٠-٩]/g, (d) => '٠١٢٣٤٥٦٧٨٩'.indexOf(d))
+                .replace(/[۰-۹]/g, (d) => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d));
+            // هروب رموز الـ regex (مثل + ( ) [ ]) حتى لا يكسر البحث بأرقام الهواتف — يكراش 500 بدونها
+            const escQt = qt.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
             const qOr = [
-                { billNumber: { $regex: qt, $options: "i" } },
-                { customerName: { $regex: qt, $options: "i" } },
-                { customerPhone: { $regex: qt, $options: "i" } },
-                { 'deliveryInfo.customerName': { $regex: qt, $options: "i" } },
-                { 'deliveryInfo.phone': { $regex: qt, $options: "i" } },
-                { 'deliveryInfo.address': { $regex: qt, $options: "i" } },
+                { billNumber: { $regex: escQt, $options: "i" } },
+                { customerName: { $regex: escQt, $options: "i" } },
+                { customerPhone: { $regex: escQt, $options: "i" } },
+                { notes: { $regex: escQt, $options: "i" } },
+                { 'deliveryInfo.customerName': { $regex: escQt, $options: "i" } },
+                { 'deliveryInfo.phone': { $regex: escQt, $options: "i" } },
+                { 'deliveryInfo.address': { $regex: escQt, $options: "i" } },
             ];
             if (mongoose.Types.ObjectId.isValid(qt)) {
                 qOr.push({ _id: qt });
+            }
+            // لو النص فيه أرقام عربية، ابحث أيضاً بالنسخة المحولة لـ ASCII في حقول الهاتف
+            const normQt = normDigits(qt);
+            if (normQt !== qt) {
+                const escNorm = normQt.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                qOr.push({ customerPhone: { $regex: escNorm, $options: "i" } });
+                qOr.push({ 'deliveryInfo.phone': { $regex: escNorm, $options: "i" } });
+            }
+            // بحث مرن برقم الهاتف: تجاهل الفواصل (مسافة/شرطة/أقواس) وتوحيد كود الدولة
+            // مثال: "0111 234 5678" تطابق "+2011112345678" والعكس — لأن التخزين والكتابة بصيغ مختلفة
+            // جزء من الرقم يكفي (2+ أرقام) — مش شرط الرقم كامل
+            const qDigits = normDigits(qt).replace(/\D/g, '');
+            if (qDigits.length >= 2) {
+                const variants = new Set([qDigits]);
+                if (/^01\d{9}$/.test(qDigits)) variants.add('20' + qDigits.slice(1));   // 01xxxxxxxxx → 201xxxxxxxxx
+                if (/^20\d{10}$/.test(qDigits)) variants.add('0' + qDigits.slice(2));   // 201xxxxxxxxx → 01xxxxxxxxx
+                if (/^0020\d{10}$/.test(qDigits)) variants.add('0' + qDigits.slice(4)); // 00201xxxxxxxxx → 01xxxxxxxxx
+                for (const v of variants) {
+                    // [^0-9]* بين الأرقام = أي فواصل في الرقم المخزن (الأرقام نفسها آمنة للـ regex)
+                    const flexRx = v.split('').join('[^0-9]*');
+                    qOr.push({ customerPhone: { $regex: flexRx } });
+                    qOr.push({ 'deliveryInfo.phone': { $regex: flexRx } });
+                }
+            }
+            // بحث برقم الطلب أو اسم الصنف داخل الطلبات — رقم الطلب يظهر الكارت الخاص به
+            // مهم للتيك أوي والدليفري (جزء من الرقم يكفي)
+            if (escQt.length >= 2) {
+                try {
+                    const matchingOrders = await Order.find({
+                        organization: getOrganizationId(req.user),
+                        isDeleted: { $in: [false, null] },
+                        $or: [
+                            { orderNumber: { $regex: escQt, $options: "i" } },
+                            { 'items.name': { $regex: escQt, $options: "i" } },
+                        ],
+                    }).select('_id').limit(200).lean();
+                    if (matchingOrders.length > 0) {
+                        qOr.push({ orders: { $in: matchingOrders.map((o) => o._id) } });
+                    }
+                } catch { /* البحث بالطلبات اختياري — تجاهل عند الفشل */ }
             }
             query.$or = qOr;
             if (statusList.length === 1) query.status = statusList[0];

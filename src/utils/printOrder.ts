@@ -290,7 +290,7 @@ const printAllSectionsInOnePage = (
         <!-- Header for each section -->
         <div class="header">
           ${showLogo ? (layout.logoPosition === 'beside'
-            ? `<div style="display:flex;align-items:center;justify-content:center;gap:8px;"><div>${logoImg}</div><h1 style="margin:0;">${establishmentName}</h1></div>`
+            ? `<div style="display:flex;align-items:center;justify-content:center;gap:8px;"><h1 style="margin:0;">${establishmentName}</h1><div>${logoImg}</div></div>`
             : `<div style="text-align:center;margin-bottom:4px;">${logoImg}</div><h1>${establishmentName}</h1>`) : `<h1>${establishmentName}</h1>`}
           ${isUpdatedOrder ? `
           <div class="update-banner">
@@ -302,27 +302,39 @@ const printAllSectionsInOnePage = (
         <!-- Order info for each section -->
         <div class="order-info">
           <div style="margin-bottom: 2px;">
-            <div style="font-size: 19px; font-weight: 700; margin: 2px 0;">${splitDailySeq(order.orderNumber).head}<strong style="font-size: 22px; font-weight: 900; background: #000; color: #fff; padding: 0 8px; border-radius: 6px;">${splitDailySeq(order.orderNumber).seq}</strong></div>
-            ${order.fulfillmentType === 'delivery' ? `
-            <div style="font-size: 1.4em; font-weight: 900; margin: 2px 0; text-align: center;"><span style="background: #000; color: #fff; padding: 2px 12px; border-radius: 4px;">🛵 دليفري</span></div>` : order.fulfillmentType === 'takeaway' ? `
-            <div style="font-size: 1.4em; font-weight: 900; margin: 2px 0; text-align: center;"><span style="background: #000; color: #fff; padding: 2px 12px; border-radius: 4px;">🥡 تيك أوي</span></div>` : ''}
-            <div style="font-size: 1.15em; font-weight: 900; color: #333; margin: 2px 0;">${dateTimeString}${(() => { try { const n = (getCurrentUserCache() as any)?.name; return n ? ` — 👤 ${n}` : ''; } catch { return ''; } })()}</div>
-            ${order.table?.number ? `
+            ${layout.showOrderNumber !== false ? `<div style="font-size: 19px; font-weight: 700; margin: 2px 0;">${splitDailySeq(order.orderNumber).head}<strong style="font-size: 22px; font-weight: 900; background: #000; color: #fff; padding: 0 8px; border-radius: 6px;">${splitDailySeq(order.orderNumber).seq}</strong></div>` : ''}
+            ${layout.showFulfillmentBadge !== false && !((order.fulfillmentType === 'delivery' || order.fulfillmentType === 'takeaway') && order.customerName && layout.showCustomer !== false) ? (order.fulfillmentType === 'delivery' ? `
+            <div style="font-size: 1.4em; font-weight: 900; margin: 8px 0 6px; text-align: center; line-height: 2;"><span style="background: #000; color: #fff; padding: 4px 14px; border-radius: 4px; display: inline-block; line-height: 1.4;">🛵 دليفري</span></div>` : order.fulfillmentType === 'takeaway' ? `
+            <div style="font-size: 1.4em; font-weight: 900; margin: 8px 0 6px; text-align: center; line-height: 2;"><span style="background: #000; color: #fff; padding: 4px 14px; border-radius: 4px; display: inline-block; line-height: 1.4;">🥡 تيك أوي</span></div>` : '') : ''}
+            ${(() => { let nm = ''; try { nm = (getCurrentUserCache() as any)?.name || ''; } catch {} const sd = layout.showDate !== false; const su = layout.showUser !== false && !!nm; if (!sd && !su) return ''; return `<div style="font-size: 1.15em; font-weight: 900; color: #333; margin: 2px 0;">${sd ? `<span class="order-date">${dateTimeString}</span>` : ''}${su ? `<span class="order-user"> — 👤 ${nm}</span>` : ''}</div>`; })()}
+            ${order.table?.number && layout.showTable !== false ? `
               <div style="font-size: 1.15em; font-weight: 900; margin: 2px 0; text-align: center;">
                 ${t('orderPrint.table')}: <strong style="font-size: 1.3em;">${order.table.number}</strong>${tableSectionName ? `—(${tableSectionName})` : ''}
               </div>
-            ` : ((order.customerName || order.customerPhone) ? `
-              <div style="font-size: 1.15em; font-weight: 900; margin: 2px 0; text-align: center;">
-                ${t('orderPrint.customer')}: <strong style="font-size: 1.2em;">${order.customerName || ''}${order.customerPhone && layout.showPhone !== false ? ` — ${order.customerPhone}` : ''}</strong>
-              </div>
-            ` : '')}
+            ` : ((() => {
+              const isFD = order.fulfillmentType === 'delivery' || order.fulfillmentType === 'takeaway';
+              const nm = order.customerName || '';
+              const ph = order.customerPhone || '';
+              if (!(nm || ph) || layout.showCustomer === false) return '';
+              const showN = !!nm && layout.showCustName !== false;
+              const showP = !!ph && layout.showPhone !== false;
+              if (!isFD) {
+                return `<div style="font-size: 1.15em; font-weight: 900; margin: 2px 0; text-align: center;">
+                ${t('orderPrint.customer')}: ${showN ? `<span class="cust-name">${nm}</span>` : ''}${showP ? `<span class="cust-phone">${showN ? ' — ' : ''}${ph}</span>` : ''}</div>`;
+              }
+              if (!showN && !showP) return '';
+              const word = order.fulfillmentType === 'delivery' ? '🛵 دليفري' : '🥡 تيك أوي';
+              return `<div style="font-size: 1.35em; font-weight: 900; margin: 2px 0; text-align: center;">
+                ${word}: ${showN ? `<span class="cust-name">${nm}</span>` : ''}${showP ? `<span class="cust-phone">${showN ? ' — ' : ''}${ph}</span>` : ''}</div>`;
+            })())}
           </div>
         </div>
 
         <!-- Section name -->
+        ${layout.showSectionTitle !== false ? `
         <div class="section-name" style="font-size: 1.15em; font-weight: 800;">
           ${t('orderPrint.section')}: ${sectionName}
-        </div>
+        </div>` : ''}
 
         <!-- Items table -->
         <table class="items">
@@ -338,7 +350,7 @@ const printAllSectionsInOnePage = (
               const variantText = v && v !== 'عادي' ? ` (${v})` : '';
               return `
               <tr>
-                <td class="item-name">${item.name}${variantText}${item.notes ? `<br><small>(${item.notes})</small>` : ''}</td>
+                <td class="item-name">${item.name}${variantText}${item.notes && layout.showItemNotes !== false ? `<br><small>(${item.notes})</small>` : ''}</td>
                 <td class="item-qty"><strong>${formatDecimal(item.quantity, language)}</strong></td>
               </tr>
               ${item.addons && item.addons.length > 0 ?
@@ -355,19 +367,20 @@ const printAllSectionsInOnePage = (
         </table>
 
         <!-- Section total -->
+        ${layout.showSectionTotal !== false ? `
         <div class="total">
           ${t('orderPrint.sectionTotal')}: <strong>${formattedTotal}</strong> ${currencySymbol}
-        </div>
+        </div>` : ''}
 
         <!-- Order notes if exist -->
-        ${order.notes ? `
+        ${order.notes && layout.showOrderNotes !== false ? `
           <div class="notes">
             <strong>${t('orderPrint.notes')}:</strong> ${order.notes}
           </div>
         ` : ''}
 
-        <!-- Footer for each section -->
-        <div class="footer">
+        <!-- توقيع المطور — ثابت دائماً وغير قابل للإخفاء -->
+        <div class="dev-sign" style="margin-top:3px;padding-top:3px;font-size:1.15em;line-height:1.1;text-align:center;font-weight:bold;border-top:1px dashed #000;">
           <strong>${t('orderPrint.footer')}</strong>
         </div>
       </div>
@@ -381,7 +394,7 @@ const printAllSectionsInOnePage = (
 <meta charset="UTF-8">
 <title>${t('orderPrint.printButton')} #${getDisplayNumber(order.orderNumber)}</title>
 
-<style>${layoutCss(layout)}
+<style>${layoutCss(layout, 'order')}
 html {
   width: 100%;
   max-width: 100%;

@@ -131,6 +131,42 @@ const saveDeviceCustomer = (name: string, phone: string, address: string): void 
   } catch {}
 };
 
+// مطابقة فاتورة لنص البحث محلياً (للسوكت) — نفس حقول بحث السيرفر: رقم/اسم/هاتف/عنوان/ملاحظات/صنف
+const phoneVariants = (d: string): string[] => {
+  const out = [d];
+  if (/^01\d{9}$/.test(d)) out.push('20' + d.slice(1));
+  if (/^20\d{10}$/.test(d)) out.push('0' + d.slice(2));
+  if (/^0020\d{10}$/.test(d)) out.push('0' + d.slice(4));
+  return out;
+};
+const normalizeDigits = (s: any): string => String(s || '')
+  .replace(/[٠-٩]/g, (d) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))
+  .replace(/[۰-۹]/g, (d) => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d)));
+const phoneMatches = (stored: any, query: string): boolean => {
+  const qd = normalizeDigits(query).replace(/\D/g, '');
+  if (qd.length < 2) return false;
+  const sd = normalizeDigits(stored).replace(/\D/g, '');
+  if (!sd) return false;
+  return phoneVariants(qd).some((v) => sd.includes(v));
+};
+const billMatchesQuery = (b: any, query: string): boolean => {
+  const needle = String(query || '').trim().toLowerCase();
+  if (!needle) return true;
+  const fields = [
+    b?.billNumber, b?.customerName, b?.notes,
+    b?.deliveryInfo?.customerName, b?.deliveryInfo?.address,
+  ];
+  if (fields.some((f) => String(f || '').toLowerCase().includes(needle))) return true;
+  // الهاتف: مقارنة مرنة بالأرقام فقط (فواصل + كود دولة)
+  if (phoneMatches(b?.customerPhone, needle) || phoneMatches(b?.deliveryInfo?.phone, needle)) return true;
+  const orders = Array.isArray(b?.orders) ? b.orders : [];
+  // رقم الطلب أو اسم الصنف داخل الطلبات
+  return orders.some((o: any) => {
+    if (String(o?.orderNumber || '').toLowerCase().includes(needle)) return true;
+    return Array.isArray(o?.items) && o.items.some((it: any) => String(it?.name || '').toLowerCase().includes(needle));
+  });
+};
+
 const Delivery = () => {
   const { bills, fetchBills, setBills, refreshSingleBill, user, tables, menuItems, menuSections, menuCategories, fetchMenuItems, fetchMenuSections, fetchMenuCategories } = useApp() as any;
   const [moveBill, setMoveBill] = useState<any | null>(null);
@@ -214,6 +250,8 @@ const Delivery = () => {
   const [billFilter, setBillFilter] = useState<'unpaid' | 'paid' | 'all'>('unpaid');
   const billFilterRef = useRef(billFilter);
   billFilterRef.current = billFilter;
+  const searchRef = useRef('');
+  searchRef.current = debouncedSearch;
   // فلتر مرحلة التوصيل: الكل / جديد / في الطريق / تم
   const [deliveryStatus, setDeliveryStatus] = useState<'all' | 'preparing' | 'out_for_delivery' | 'delivered'>('all');
   const deliveryStatusRef = useRef(deliveryStatus);
@@ -321,9 +359,11 @@ const Delivery = () => {
       // ── دمج فواتير الدليفري لحظياً (إنشاء/تحديث/حذف) دون إعادة الصفحات ──
       const feedMatches = (b: any) => {
         if (!b || (b.fulfillmentType || 'dine_in') !== 'delivery') return false;
+        if (!billMatchesQuery(b, searchRef.current)) return false;
         const f = billFilterRef.current;
+        const searching = searchRef.current.trim().length > 0;
         if (f === 'paid') { if (b.status !== 'paid') return false; }
-        else if (f === 'all') { /* أي حالة دفع */ }
+        else if (f === 'all' || searching) { /* أي حالة دفع أثناء البحث */ }
         else if (['paid', 'cancelled'].includes(b.status)) return false;
         const ds = deliveryStatusRef.current;
         if (ds !== 'all' && (b.deliveryInfo?.status || 'preparing') !== ds) return false;
@@ -435,7 +475,7 @@ const Delivery = () => {
       } catch {}
     })();
   }, []);
-  useEffect(() => { const t = setTimeout(() => setDebouncedSearch(search), 300); return () => clearTimeout(t); }, [search]);
+  useEffect(() => { const t = setTimeout(() => setDebouncedSearch(search), 150); return () => clearTimeout(t); }, [search]);
 
   // ── Infinite scroll من السيرفر (25/صفحة) بدل الجلب الكامل ──
   const feed = useInfiniteList<any>({
@@ -443,16 +483,19 @@ const Delivery = () => {
     depsKey: `${debouncedSearch.trim()}|${billFilter}|${deliveryStatus}`,
     getId: (b: any) => String(b?._id || b?.id || ''),
     fetchPage: async (pageNum, limitNum) => {
+      const searching = debouncedSearch.trim().length > 0;
       const res: any = await (api as any).getBills({
         fulfillmentType: 'delivery',
-        status: billFilter === 'paid' ? 'paid' : billFilter === 'all' ? undefined : 'draft,partial,overdue',
-        all: billFilter === 'all' ? true : undefined,
+        // أثناء البحث: ابحث في كل الحالات (المدفوع أيضاً) — الفلتر الصريح 'مدفوعة' يبقى كما هو
+        status: billFilter === 'paid' ? 'paid' : (billFilter === 'all' || searching) ? undefined : 'draft,partial,overdue',
+        all: (billFilter === 'all' || searching) ? true : undefined,
         deliveryStatus: deliveryStatus === 'all' ? undefined : deliveryStatus,
         q: debouncedSearch.trim() || undefined,
         page: pageNum,
         limit: limitNum,
         mode: 'list',
       });
+      if (res && res.success === false) throw new Error(res.message || 'فشل البحث — تحقق من الاتصال بالسيرفر');
       return { items: res?.data || [], total: res?.total ?? 0, hasMore: res?.hasMore ?? false };
     },
   });
@@ -829,8 +872,13 @@ const Delivery = () => {
           ))}
         </div>
         <div className="ml-auto relative w-full sm:w-64">
-          <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="بحث هاتف/اسم/عنوان/رقم..." className="w-full pr-9 pl-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 dark:text-gray-100" />
+          <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="بحث برقم (فاتورة/طلب)، هاتف، اسم، صنف..." className="w-full pr-9 pl-9 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 dark:text-gray-100" />
+          {feed.refreshing && debouncedSearch.trim() ? (
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+          ) : search ? (
+            <button onClick={() => setSearch('')} className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-lg leading-none" title="مسح البحث">×</button>
+          ) : null}
         </div>
       </div>
 
@@ -847,7 +895,7 @@ const Delivery = () => {
                 </BillTableCard>
               </div>
             ))}
-        {feed.items.length===0 && !feed.refreshing && !feed.loading && <div className="col-span-full text-center py-12 bg-white dark:bg-gray-800 rounded-2xl border border-dashed border-gray-200 dark:border-gray-700 text-gray-400">لا توجد طلبات — اضغط "دليفري جديد"</div>}
+        {feed.items.length===0 && !feed.refreshing && !feed.loading && <div className="col-span-full text-center py-12 bg-white dark:bg-gray-800 rounded-2xl border border-dashed border-gray-200 dark:border-gray-700 text-gray-400">{debouncedSearch.trim() ? `لا توجد نتائج مطابقة لـ "${debouncedSearch.trim()}"` : 'لا توجد طلبات — اضغط "دليفري جديد"'}</div>}
       </div>
       <div ref={feed.sentinelRef} className="h-2" />
       {feed.loading && (

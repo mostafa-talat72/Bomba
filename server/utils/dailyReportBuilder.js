@@ -224,7 +224,9 @@ export function buildDailyReportData({ organization, raw, startOfReport, endOfRe
         }
     });
 
-    const totalRevenue = cafeRevenue + playstationRevenue + computerRevenue;
+    const totalRevenueBeforeDiscount = cafeRevenue + playstationRevenue + computerRevenue;
+    const totalDiscounts = (totalFixedDiscount + totalManualDiscount) || 0;
+    const totalRevenue = totalRevenueBeforeDiscount - totalDiscounts;
     const totalCosts = scope.includeCosts
         ? costs.reduce((sum, cost) => sum + (Number(cost.paidAmount) || Number(cost.amount) || 0), 0)
         : 0;
@@ -272,6 +274,7 @@ export function buildDailyReportData({ organization, raw, startOfReport, endOfRe
             playstation: playstationRevenue || 0,
             computer: computerRevenue || 0,
             cafe: cafeRevenue || 0,
+            totalBeforeDiscount: totalRevenueBeforeDiscount || 0,
         },
         soldItemsBySection: Object.values(sectionData).map((section) => ({
             sectionId: section.sectionId,

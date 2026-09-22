@@ -22,10 +22,6 @@ interface PaymentManagementModalProps {
   // حالة نموذج الدفع
   paymentAmount: string;
   setPaymentAmount: (v: string) => void;
-  originalAmount: string;
-  setOriginalAmount: (v: string) => void;
-  discountPercentage: string;
-  setDiscountPercentage: (v: string) => void;
   paymentMethod: 'cash' | 'card' | 'transfer';
   setPaymentMethod: (m: 'cash' | 'card' | 'transfer') => void;
   paymentReference: string;
@@ -65,10 +61,6 @@ const PaymentManagementModal: React.FC<PaymentManagementModalProps> = ({
   user,
   paymentAmount,
   setPaymentAmount,
-  originalAmount,
-  setOriginalAmount,
-  discountPercentage,
-  setDiscountPercentage,
   paymentMethod,
   setPaymentMethod,
   paymentReference,
@@ -365,8 +357,7 @@ const PaymentManagementModal: React.FC<PaymentManagementModalProps> = ({
                               if (!canPayFullBill(user)) { showNotification(t('common.permissionDenied'), 'error'); return; }
                               if (selectedBill?.remaining) {
                                 setPaymentAmount(selectedBill.remaining.toString());
-                                setOriginalAmount(selectedBill.remaining.toString());
-                                setDiscountPercentage(''); setPaymentMethod('cash'); setPaymentReference('');
+                                setPaymentMethod('cash'); setPaymentReference('');
                               }
                             },
                           },
@@ -394,43 +385,10 @@ const PaymentManagementModal: React.FC<PaymentManagementModalProps> = ({
                       {/* حقول الدفع */}
                       {paymentAmount && (
                         <div className="bg-gray-50 dark:bg-gray-800/60 rounded-xl p-3 border border-gray-200 dark:border-gray-700 space-y-2.5 mt-1">
-                          <div className="grid grid-cols-2 gap-2">
-                            <div>
-                              <label className="text-sm font-semibold text-gray-500 dark:text-gray-400 block mb-1">{t('billing.paymentAmount')}</label>
-                              <input type="text" value={formatCurrency(parseFloat(paymentAmount))}
-                                className="w-full border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-1.5 text-base bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 font-bold" disabled />
-                            </div>
-                            <div>
-                              <label className="text-sm font-semibold text-gray-500 dark:text-gray-400 block mb-1">{t('billing.discountPercentageLabel')}</label>
-                              <input type="number" value={discountPercentage} min="0" max="100" step="0.01" placeholder="0%"
-                                onChange={e => {
-                                  const v = e.target.value;
-                                  if (v === '' || (parseFloat(v) >= 0 && parseFloat(v) <= 100)) {
-                                    setDiscountPercentage(v);
-                                    if (v && !isNaN(parseFloat(v)) && selectedBill?.remaining)
-                                      setPaymentAmount((selectedBill.remaining * (1 - parseFloat(v) / 100)).toFixed(2));
-                                    else if (selectedBill?.remaining)
-                                      setPaymentAmount(selectedBill.remaining.toString());
-                                  }
-                                }}
-                                className="w-full border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-1.5 text-base bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-1 focus:ring-blue-500 outline-none" />
-                              {/* خصم سريع بأزرار جاهزة */}
-                              <div className="grid grid-cols-3 gap-1 mt-1.5">
-                                {[5, 10, 15].map(pct => (
-                                  <button key={pct}
-                                    onClick={() => {
-                                      const v = String(pct);
-                                      setDiscountPercentage(v);
-                                      if (selectedBill?.remaining)
-                                        setPaymentAmount((selectedBill.remaining * (1 - pct / 100)).toFixed(2));
-                                    }}
-                                    disabled={!!(selectedBill as any)?.sessionPayments?.some((sp: any) => (sp.paidAmount || 0) > 0)}
-                                    className="py-1 rounded-md border border-gray-200 dark:border-gray-600 text-[10px] font-bold text-gray-600 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-blue-900/30 hover:border-blue-300 transition-all disabled:opacity-40">
-                                    {pct}%
-                                  </button>
-                                ))}
-                              </div>
-                            </div>
+                          <div>
+                            <label className="text-sm font-semibold text-gray-500 dark:text-gray-400 block mb-1">{t('billing.paymentAmount')}</label>
+                            <input type="text" value={formatCurrency(parseFloat(paymentAmount))}
+                              className="w-full border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-1.5 text-base bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 font-bold" disabled />
                           </div>
                           <div className="grid grid-cols-3 gap-2">
                             {(['cash', 'card', 'transfer'] as const).map(m => (
@@ -479,7 +437,7 @@ const PaymentManagementModal: React.FC<PaymentManagementModalProps> = ({
                             </div>
                           )}
                           {(() => {
-                            const effTotal = roundFn((selectedBill.total || 0) - ((selectedBill.subtotal || selectedBill.total || 0) * (parseFloat(discountPercentage || '0') / 100)));
+                            const effTotal = selectedBill.total || 0;
                             const newPaid  = (selectedBill.paid || 0) + parseFloat(paymentAmount);
                             const willPaid = newPaid >= effTotal;
                             return (

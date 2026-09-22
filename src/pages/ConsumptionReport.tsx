@@ -321,7 +321,9 @@ const ConsumptionReport = () => {
         consumptionData,
         dateRange,
         totalSales: Object.values(consumptionData).flat().reduce((sum, item) => sum + item.total, 0),
-        totalConsumption: Object.values(consumptionData).flat().reduce((sum, item) => sum + item.total, 0)
+        totalConsumption: Object.values(consumptionData).flat().reduce((sum, item) => sum + item.total, 0),
+        discounts,
+        sectionDiscounts,
       };
 
     } catch (error: any) {
@@ -382,13 +384,14 @@ const ConsumptionReport = () => {
                 <div class="header">
                   ${brandHtml(consLogo, consLayout, organizationName)}
                   <div class="title">${t('consumptionReport.print.title')}</div>
-                  <div class="category-name">${displayCategory}</div>
+                  ${consLayout.showSectionTitle !== false ? `<div class="category-name">${displayCategory}</div>` : ''}
+                  ${consLayout.showDate !== false ? `
                   <div class="date-info"><strong>${t('consumptionReport.print.from')}:</strong> ${formatDate(dateRange[0])}</div>
                   <div class="date-info"><strong>${t('consumptionReport.print.to')}:</strong> ${formatDate(dateRange[1])}</div>
-                  <div class="date-info"><strong>${t('consumptionReport.print.date')}:</strong> ${formatDate(dayjs())}</div>
+                  <div class="date-info"><strong>${t('consumptionReport.print.date')}:</strong> ${formatDate(dayjs())}</div>` : ''}
                 </div>
 
-                <div class="divider"></div>
+                ${consLayout.showDividers !== false ? `<div class="divider"></div>` : ''}
                 
                 <table class="items-table">
                   <thead>
@@ -421,7 +424,7 @@ const ConsumptionReport = () => {
                   </tbody>
                 </table>
 
-                <div class="divider"></div>
+                ${consLayout.showDividers !== false ? `<div class="divider"></div>` : ''}
 
                 <div class="category-total">
                   <strong>${t('consumptionReport.print.categoryTotal', { category: displayCategory })}:</strong> ${formatCurrency(categoryTotal)}
@@ -430,7 +433,7 @@ const ConsumptionReport = () => {
                 ${consLayout.showThanks !== false ? `<div class="thank-you">${t('consumptionReport.print.thankYou')}</div>` : ''}
               </div>
               
-              <div class="footer">
+              <div class="dev-sign" style="margin-top:auto;text-align:center;font-size:1em;color:#333;border-top:2px dashed #000;padding-top:10px;padding-bottom:10px;font-weight:900;">
                 <div><strong>${t('consumptionReport.print.footer')}</strong></div>
               </div>
             </div>
@@ -444,7 +447,7 @@ const ConsumptionReport = () => {
           <meta charset="UTF-8">
           <meta name="viewport" content="width=device-width, initial-scale=1.0">
           <title>${t('consumptionReport.print.title')}</title>
-          <style>${layoutCss(consLayout)}
+          <style>${layoutCss(consLayout, 'consumption')}
             @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800;900&display=swap');
             * { 
               font-family: 'Tajawal', sans-serif; 
@@ -738,7 +741,12 @@ const ConsumptionReport = () => {
 
       // Add total sales
       doc.setFontSize(14);
-      doc.text(`إجمالي المبيعات: ${totalSales.toFixed(2)} ج.م`, 20, 45);
+      const finalTotal = totalSales - discounts.totalDiscounts;
+      doc.text(`إجمالي المبيعات: ${finalTotal.toFixed(2)} ج.م`, 20, 45);
+      if (discounts.totalDiscounts > 0) {
+        doc.setFontSize(10);
+        doc.text(`(المجموع: ${totalSales.toFixed(2)} | الخصومات: -${discounts.totalDiscounts.toFixed(2)})`, 20, 52);
+      }
       doc.text(`عدد الأصناف: ${allItems.length}`, pageWidth - 20, 45, { align: 'right' });
 
       // Add a line separator
@@ -1007,11 +1015,11 @@ const ConsumptionReport = () => {
                   <div className="flex items-center justify-center gap-3">
                     {discounts.totalDiscounts > 0 && (
                       <div className="text-center">
-                        <span className="text-sm text-blue-200 line-through block">{showTotalSales ? formatCurrency(totalSales + discounts.totalDiscounts) : '••••••'}</span>
+                        <span className="text-sm text-blue-200 line-through block">{showTotalSales ? formatCurrency(totalSales) : '••••••'}</span>
                         <span className="text-sm text-purple-200 block">خصم: -{showTotalSales ? formatCurrency(discounts.totalDiscounts) : '••••••'}</span>
                       </div>
                     )}
-                    <span className="text-xl">{showTotalSales ? formatCurrency(totalSales) : '••••••'}</span>
+                    <span className="text-xl">{showTotalSales ? formatCurrency(totalSales - discounts.totalDiscounts) : '••••••'}</span>
                     <button
                       onClick={() => setShowTotalSales(!showTotalSales)}
                       title={showTotalSales ? t('consumptionReport.stats.hideAmount') : t('consumptionReport.stats.showAmount')}
@@ -1151,7 +1159,7 @@ const ConsumptionReport = () => {
                           }
                           return null;
                         })()}
-                        <span className="text-xl">{showSectionTotals[sectionName] ? formatCurrency(sectionTotal) : '••••••'}</span>
+                        <span className="text-xl">{showSectionTotals[sectionName] ? formatCurrency(sectionTotal - (sectionDiscounts[sectionName]?.totalDiscount || 0)) : '••••••'}</span>
                         <button
                           onClick={() => setShowSectionTotals(prev => ({ ...prev, [sectionName]: !prev[sectionName] }))}
                           title={showSectionTotals[sectionName] ? t('consumptionReport.stats.hideAmount') : t('consumptionReport.stats.showAmount')}
@@ -1462,7 +1470,7 @@ const ConsumptionReport = () => {
               </button>
             </div>
             <div className="text-3xl font-bold mb-2">
-              {showTotalSales ? formatCurrency(totalSales) : '••••••'}
+              {showTotalSales ? formatCurrency(totalSales - discounts.totalDiscounts) : '••••••'}
             </div>
             <div className="text-blue-100 text-sm font-medium">{t('consumptionReport.stats.totalSales')}</div>
           </div>

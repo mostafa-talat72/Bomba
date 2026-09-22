@@ -1891,7 +1891,7 @@ const Settings: FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-4 sm:py-8" dir={isRTL ? 'rtl' : 'ltr'}>
-      <div className="max-w-4xl mx-auto px-3 sm:px-6 lg:px-8">
+      <div className="w-full px-3 sm:px-6 lg:px-8">
         {/* Header */}
           <div className="flex items-center justify-between flex-wrap gap-2">
             <div className="flex items-center flex-wrap gap-x-2 min-w-0">
@@ -1934,7 +1934,7 @@ const Settings: FC = () => {
                 <div className="space-y-6">
                 <div>
                   <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">{t('settings.profile.title')}</h3>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                         {t('settings.profile.fullName')}
@@ -2283,7 +2283,7 @@ const Settings: FC = () => {
                       <Building2 className="h-5 w-5 ml-2" />
                       {t('settings.organization.basicInfo')}
                     </h4>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
                       <div>
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                           {t('settings.organization.name')}
@@ -2469,54 +2469,7 @@ const Settings: FC = () => {
                       {t('settings.organization.printSettings.title')}
                     </h4>
 
-                    {/* تنسيق الورقة لكل مستند (شعار/خطوط/إظهار) + استعادة الافتراضي */}
-                    <div className="mb-4 rounded-xl border border-orange-200 dark:border-gray-600 bg-white/60 dark:bg-gray-800/40 p-4">
-                      <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">{t('settings.organization.printSettings.layoutTitle')}</h4>
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 mb-3">{t('settings.organization.printSettings.layoutDesc')}</p>
-                      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
-                        {([
-                          ['bill', t('settings.organization.printSettings.layoutBill')],
-                          ['order', t('settings.organization.printSettings.layoutOrder')],
-                          ['consumption', t('settings.organization.printSettings.layoutConsumption')],
-                        ] as Array<[string, string]>).map(([doc, docLabel]) => {
-                          const L = ((organization.printSettings as any)?.printLayout?.[doc] || {}) as Record<string, any>;
-                          const setL = (patch: Record<string, any>) => setOrganization((prev: any) => ({ ...prev, printSettings: { ...prev.printSettings, printLayout: { ...(prev.printSettings?.printLayout || {}), [doc]: { ...(prev.printSettings?.printLayout?.[doc] || {}), ...patch } } } }));
-                          const num = (v: any, d: number) => Math.max(8, Math.min(40, Number(v) || d));
-                          return (
-                            <div key={doc} className="rounded-lg bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 p-3 space-y-2">
-                              <div className="flex items-center justify-between">
-                                <span className="text-sm font-bold text-gray-900 dark:text-gray-100">{docLabel}</span>
-                                <button type="button" onClick={() => setL({ logoShow: true, logoPosition: 'above', logoWidth: 110, fontTitle: 19, fontItems: 15, fontTotals: 16, fontFooter: 12, showPhone: true, showAddress: true, showQR: true, showThanks: true })} className="text-[11px] text-orange-600 hover:text-orange-700 dark:text-orange-400 font-bold">{t('settings.organization.printSettings.layoutReset')}</button>
-                              </div>
-                              <label className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-300">الشعار
-                                <select value={L.logoPosition || 'above'} onChange={e => setL({ logoShow: true, logoPosition: e.target.value })} className="flex-1 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 p-1.5">
-                                  <option value="above">{t('settings.organization.printSettings.logoAbove')}</option>
-                                  <option value="beside">{t('settings.organization.printSettings.logoBeside')}</option>
-                                  <option value="hide">{t('settings.organization.printSettings.logoHide')}</option>
-                                </select>
-                                <input type="number" min={40} max={200} step={5} value={L.logoWidth ?? 110} onChange={e => setL({ logoWidth: Math.min(200, Math.max(40, Number(e.target.value) || 110)) })} className="w-16 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 p-1.5" title={t('settings.organization.printSettings.logoWidth')} />
-                              </label>
-                              <div className="grid grid-cols-4 gap-1">
-                                {([['fontTitle', 'عنوان'], ['fontItems', 'أصناف'], ['fontTotals', 'إجمالي'], ['fontFooter', 'تذييل']] as const).map(([k, lbl]) => (
-                                  <label key={k} className="text-[11px] text-gray-600 dark:text-gray-300">{lbl}
-                                    <input type="number" min={8} max={40} value={L[k] ?? ''} placeholder={String({ fontTitle: 19, fontItems: 15, fontTotals: 16, fontFooter: 12 }[k])} onChange={e => setL({ [k]: e.target.value === '' ? undefined : num(e.target.value, 0) })} className="mt-0.5 w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 p-1.5" />
-                                  </label>
-                                ))}
-                              </div>
-                              <div className="flex flex-wrap gap-2">
-                                {((doc === 'bill' ? ['showPhone', 'showAddress', 'showQR', 'showThanks'] : doc === 'order' ? ['showPhone'] : ['showThanks']) as string[]).map((k) => (
-                                  <label key={k} className="flex items-center gap-1 text-[11px] text-gray-600 dark:text-gray-300 cursor-pointer">
-                                    <input type="checkbox" checked={L[k] !== false} onChange={e => setL({ [k]: e.target.checked })} className="h-4 w-4 accent-orange-600" />
-                                    {t(`settings.organization.printSettings.show_${k}` as any)}
-                                  </label>
-                                ))}
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                    
+                    {/* تنسيق الورقة لكل مستند أصبح داخل تبويب "مصمم الورقة" أدناه (معاينة حية + تحكم كامل) */}
                     <PrinterSettingsForm
                       settings={organization.printSettings || {}}
                       onPatch={(patch) => setOrganization((prev: any) => ({ ...prev, printSettings: { ...prev.printSettings, ...patch } }))}
@@ -2526,6 +2479,8 @@ const Settings: FC = () => {
                       onDetect={detectPrinters}
                       onSelectDetected={selectPrinter}
                       onTestPrinter={testPrinter}
+                      logoUrl={(organization as any)?.logo}
+                      orgName={organization?.name}
                     />
 
                   </div>
@@ -2645,7 +2600,7 @@ const Settings: FC = () => {
                     <h4 id="org-sec-social" className="text-md font-medium text-gray-900 dark:text-gray-100 mb-4 scroll-mt-24">
                       {t('settings.organization.socialLinks.title')}
                     </h4>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
                       <div>
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                           <Facebook className="h-4 w-4 inline ml-1 text-blue-600" />

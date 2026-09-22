@@ -45,6 +45,8 @@ export function useInfiniteList<T>(options: UseInfiniteListOptions<T>) {
   localRef.current = localItems;
   const getIdRef = useRef(getId);
   getIdRef.current = getId;
+  // عداد جديد كل ما depsKey يتغير — يلغي أي تحميل سابق
+  const resetIdRef = useRef(0);
 
   const mergeItems = useCallback((base: T[], incoming: T[], reset: boolean): T[] => {
     const start = reset ? [] : base;
@@ -60,8 +62,11 @@ export function useInfiniteList<T>(options: UseInfiniteListOptions<T>) {
     return merged;
   }, []);
 
-  const loadPage = useCallback(async (target: number, reset: boolean): Promise<boolean> => {
-    if (loadingRef.current || !enabled) return false;
+  const loadPage = useCallback(async (target: number, reset: boolean, loadResetId?: number): Promise<boolean> => {
+    if (!enabled) return false;
+    // لو loadPage جاري وده مش reset (يعني scroll عادي)، استنى
+    if (loadingRef.current && !reset) return false;
+    // لو reset يبقى بحث جديد — لغي أي تحميل سابق
     loadingRef.current = true;
     if (reset) setRefreshing(true);
     else setLoading(true);
@@ -71,6 +76,8 @@ export function useInfiniteList<T>(options: UseInfiniteListOptions<T>) {
       const local = localRef.current;
       if (fn) {
         const res = await fn(target, pageSize);
+        // لو resetId اتغير أثناء الانتظار، النتيجة دي قديمة — تجاهلها
+        if (loadResetId !== undefined && loadResetId !== resetIdRef.current) return false;
         const incoming = Array.isArray(res?.items) ? res.items : [];
         setTotal(typeof res?.total === 'number' ? res.total : incoming.length);
         const more = res?.hasMore === true;
@@ -110,12 +117,14 @@ export function useInfiniteList<T>(options: UseInfiniteListOptions<T>) {
     stateRef.current.key = depsKey;
     stateRef.current.page = 0;
     stateRef.current.hasMore = true;
+    // لغي أي تحميل سابق
+    resetIdRef.current += 1;
     setItems([]);
     setTotal(0);
     setHasMore(true);
     setPage(0);
     setError(null);
-    void loadPage(1, true);
+    void loadPage(1, true, resetIdRef.current);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [depsKey, enabled]);
 
@@ -206,11 +215,12 @@ export function useInfiniteList<T>(options: UseInfiniteListOptions<T>) {
   const reset = useCallback(() => {
     stateRef.current.page = 0;
     stateRef.current.hasMore = true;
+    resetIdRef.current += 1;
     setItems([]);
     setTotal(0);
     setHasMore(true);
     setPage(0);
-    void loadPage(1, true);
+    void loadPage(1, true, resetIdRef.current);
   }, [loadPage]);
 
   return {

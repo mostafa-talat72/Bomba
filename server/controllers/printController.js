@@ -554,8 +554,13 @@ class PrintController {
     }
 
     content += '-'.repeat(charsPerLine) + '\n';
-    content += `Total Sales: ${reportData.totalSales || 0}\n`;
-    content += `Total Consumption: ${reportData.totalConsumption || 0}\n`;
+    const totalDiscounts = reportData.discounts?.totalDiscounts || 0;
+    const finalTotal = (reportData.totalSales || 0) - totalDiscounts;
+    content += `Total Sales: ${finalTotal}\n`;
+    if (totalDiscounts > 0) {
+      content += `Discounts: -${totalDiscounts}\n`;
+    }
+    content += `Total Consumption: ${(reportData.totalConsumption || 0) - totalDiscounts}\n`;
 
     return content;
   }

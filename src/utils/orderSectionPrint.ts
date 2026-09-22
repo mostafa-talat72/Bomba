@@ -70,12 +70,14 @@ export function prepareBillSections(bill: any, ctx: SectionPrintCtx): PreparedBi
   }
   const billCustomerName = (bill as any)?.deliveryInfo?.customerName || (bill as any)?.customerName || '';
   const billCustomerPhone = (bill as any)?.deliveryInfo?.phone || (bill as any)?.customerPhone || '';
+  const billDeliveryAddress = (bill as any)?.deliveryInfo?.address || '';
   const normalized = orders.map((order: any, idx: number) => ({
     ...order,
     _id: order._id || order.id || `temp-${idx}`,
     fulfillmentType: order.fulfillmentType || (bill as any).fulfillmentType || 'dine_in',
     customerName: order.customerName || billCustomerName,
     customerPhone: order.customerPhone || billCustomerPhone,
+    deliveryAddress: (order as any).deliveryAddress || billDeliveryAddress,
     createdAt: order.createdAt instanceof Date ? order.createdAt.toISOString() : order.createdAt,
   }));
   const map = new Map<string, any>();

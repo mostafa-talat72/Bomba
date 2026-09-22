@@ -238,20 +238,20 @@ const TopProductsBySection = ({ data, t, i18n, formatCurrency }: { data: Product
                   {formatDecimal(section.totalQuantity, i18n.language)} {t('reports.labels.pieces')}
                 </p>
               </div>
-              <div className="text-right">
-                <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">{t('reports.labels.totalRevenue')}</p>
                 <div className="text-right">
-                  {(section as any).totalDiscount > 0 && (
-                    <p className="text-sm text-purple-500 dark:text-purple-400 line-through">{formatCurrency((section as any).subtotalBeforeDiscount || section.totalRevenue)}</p>
-                  )}
-                  <p className="text-xl font-bold text-green-600 dark:text-green-400">
-                    {formatCurrency(section.totalRevenue)}
-                  </p>
-                  {(section as any).totalDiscount > 0 && (
-                    <p className="text-xs text-purple-600 dark:text-purple-400 font-bold">خصم: -{formatCurrency((section as any).totalDiscount)}</p>
-                  )}
+                  <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">{t('reports.labels.totalRevenue')}</p>
+                  <div className="text-right">
+                    {(section as any).totalDiscount > 0 && (
+                      <p className="text-sm text-purple-500 dark:text-purple-400 line-through">{formatCurrency(section.totalRevenue)}</p>
+                    )}
+                    <p className="text-xl font-bold text-green-600 dark:text-green-400">
+                      {formatCurrency(section.totalRevenue - ((section as any).totalDiscount || 0))}
+                    </p>
+                    {(section as any).totalDiscount > 0 && (
+                      <p className="text-xs text-purple-600 dark:text-purple-400 font-bold">خصم: -{formatCurrency((section as any).totalDiscount)}</p>
+                    )}
+                  </div>
                 </div>
-              </div>
             </div>
           </div>
           

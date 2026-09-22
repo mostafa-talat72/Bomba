@@ -144,9 +144,7 @@ const Tables: React.FC = () => {
   const [isChangingTable, setIsChangingTable] = useState(false);
   const [paymentAmount, setPaymentAmount] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'card' | 'transfer'>('cash');
-  const [discountPercentage, setDiscountPercentage] = useState('');
   const [orderDiscount, setOrderDiscount] = useState<number>(0);
-  const [originalAmount, setOriginalAmount] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [orgFixedDiscount, setOrgFixedDiscount] = useState<{ enabled: boolean; percentage: number; maxCap: number; sections?: Record<string, number> } | null>(null);
   const [playstationStatusFilter, setPlaystationStatusFilter] = useState('unpaid');
@@ -563,7 +561,6 @@ const loadInitialData = async () => {
   useEffect(() => {
     if (selectedBill && showPaymentModal && selectedBill.remaining !== undefined) {
       setPaymentAmount(selectedBill.remaining.toString());
-      setOriginalAmount(selectedBill.remaining.toString());
     }
   }, [selectedBill?.remaining, selectedBill?.paid, selectedBill?.total, showPaymentModal]);
 
@@ -772,7 +769,6 @@ const loadInitialData = async () => {
           setSelectedBill({ ...data.bill });
           if (data.bill.remaining !== undefined) {
             setPaymentAmount(data.bill.remaining.toString());
-            setOriginalAmount(data.bill.remaining.toString());
           }
         }
         // tableStatuses useMemo يتحدث تلقائياً عبر DataContext بلا fetch مزدوج
@@ -786,7 +782,6 @@ const loadInitialData = async () => {
         setSelectedBill({ ...data.bill });
         if (data.bill.remaining !== undefined) {
           setPaymentAmount(data.bill.remaining.toString());
-          setOriginalAmount(data.bill.remaining.toString());
         }
       }
     });
@@ -895,7 +890,6 @@ const loadInitialData = async () => {
         setSelectedBill(bill);
         if (bill.remaining !== undefined) {
           setPaymentAmount(bill.remaining.toString());
-          setOriginalAmount(bill.remaining.toString());
         }
       }
     };
@@ -2204,9 +2198,8 @@ const loadInitialData = async () => {
     void repairBill(bill, String((bill.table as any)?._id || (bill.table as any)?.id || bill.table || ''));
     // افتح المودال فوراً بالبيانات الموجودة
     setSelectedBill(bill);
-    setOriginalAmount(bill.remaining?.toString() || '0');
     setPaymentAmount(bill.remaining?.toString() || '0');
-    setDiscountPercentage(''); setPaymentMethod('cash'); setPaymentReference('');
+    setPaymentMethod('cash'); setPaymentReference('');
     setShowPaymentModal(true);
     // ⚡ سخّن الإيصال في الخلفية: عند الضغط على دفع/طباعة يكون جاهزاً.
     try { preloadBillReceipt(bill, user?.organizationName, i18n.language, t, getTableSectionName(bill.table)); } catch {}
@@ -2215,7 +2208,6 @@ const loadInitialData = async () => {
       const r = await api.getBill(bill.id || bill._id);
       if (r?.data) {
         setSelectedBill(r.data);
-        setOriginalAmount(r.data.remaining?.toString() || '0');
         setPaymentAmount(r.data.remaining?.toString() || '0');
       }
     } catch { /* نبقى على البيانات الموجودة */ }
@@ -2223,8 +2215,8 @@ const loadInitialData = async () => {
 
   const handleClosePaymentModal = () => {
     setShowPaymentModal(false); setSelectedBill(null);
-    setPaymentAmount(''); setOriginalAmount(''); setPaymentMethod('cash');
-    setPaymentReference(''); setDiscountPercentage('');
+    setPaymentAmount(''); setPaymentMethod('cash');
+    setPaymentReference('');
     setShowPayFullBillConfirmModal(false); setBillToPayFull(null);
   };
 
@@ -2292,17 +2284,9 @@ const loadInitialData = async () => {
 
   const processPayment = async () => {
     if (!selectedBill) return;
-    if (discountPercentage && (isNaN(parseFloat(discountPercentage)) || parseFloat(discountPercentage) < 0 || parseFloat(discountPercentage) > 100)) {
-      showNotification(t('billing.notifications.invalidDiscountPercentage'), 'error'); return;
-    }
     try {
       setIsProcessingPayment(true);
       let effectiveTotal = selectedBill.total || 0;
-      let discountAmount = 0;
-      if (discountPercentage && parseFloat(discountPercentage) > 0) {
-        discountAmount = (selectedBill.subtotal || selectedBill.total || 0) * (parseFloat(discountPercentage) / 100);
-        effectiveTotal = (selectedBill.total || 0) - discountAmount;
-      }
       effectiveTotal = applyRounding(effectiveTotal);
 
       // ⚡ دفع مقسوم؟ جزءان متتاليان بطريقتين مختلفتين
@@ -2314,8 +2298,8 @@ const loadInitialData = async () => {
           showNotification(t('billing.notifications.invalidAmount'), 'error'); setIsProcessingPayment(false); return;
         }
         if (paymentMethod === 'cash' || method2 === 'cash') fireInstantDrawer(selectedBill, 'payment');
-        const updatedAfterFirst = await paySinglePart(selectedBill, a1, paymentMethod, effectiveTotal, discountAmount, discountPercentage);
-        await paySinglePart(updatedAfterFirst || { ...selectedBill, paid: (selectedBill.paid || 0) + a1 }, a2, method2, effectiveTotal, discountAmount, discountPercentage);
+        const updatedAfterFirst = await paySinglePart(selectedBill, a1, paymentMethod, effectiveTotal, 0, '');
+        await paySinglePart(updatedAfterFirst || { ...selectedBill, paid: (selectedBill.paid || 0) + a1 }, a2, method2, effectiveTotal, 0, '');
         handleClosePaymentModal();
         showNotification(t('billing.notifications.paymentSuccess'), 'success');
         scheduleBackgroundRefetch(true);
@@ -2330,7 +2314,7 @@ const loadInitialData = async () => {
       }
 
       if (paymentMethod === 'cash') fireInstantDrawer(selectedBill, 'payment');
-      await paySinglePart(selectedBill, payVal, paymentMethod, effectiveTotal, discountAmount, discountPercentage);
+      await paySinglePart(selectedBill, payVal, paymentMethod, effectiveTotal, 0, '');
       handleClosePaymentModal();
       showNotification(t('billing.notifications.paymentSuccess'), 'success');
       scheduleBackgroundRefetch(true);
@@ -3015,7 +2999,7 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
         scheduleBackgroundRefetch();
         if (selectedBill) {
           api.getBill(selectedBill.id || (selectedBill as any)._id).then(r => {
-            if (r?.data) { setSelectedBill(r.data); setPaymentAmount(r.data.remaining?.toString() || '0'); setOriginalAmount(r.data.remaining?.toString() || '0'); }
+            if (r?.data) { setSelectedBill(r.data); setPaymentAmount(r.data.remaining?.toString() || '0'); }
           }).catch(() => {});
         }
       } else { showNotification(t('billing.notifications.sessionTimeUpdateFailed'), 'error'); }
@@ -3046,7 +3030,7 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
         scheduleBackgroundRefetch();
         if (selectedBill) {
           api.getBill(selectedBill.id || (selectedBill as any)._id).then(r => {
-            if (r?.data) { setSelectedBill(r.data); setPaymentAmount(r.data.remaining?.toString() || '0'); setOriginalAmount(r.data.remaining?.toString() || '0'); }
+            if (r?.data) { setSelectedBill(r.data); setPaymentAmount(r.data.remaining?.toString() || '0'); }
           }).catch(() => {});
         }
       } else { showNotification(t('billing.notifications.periodTimeUpdateFailed'), 'error'); }
@@ -4224,8 +4208,6 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
         selectedBill={liveSelectedBill || selectedBill}
         user={user}
         paymentAmount={paymentAmount} setPaymentAmount={setPaymentAmount}
-        originalAmount={originalAmount} setOriginalAmount={setOriginalAmount}
-        discountPercentage={discountPercentage} setDiscountPercentage={setDiscountPercentage}
         paymentMethod={paymentMethod} setPaymentMethod={setPaymentMethod}
         paymentReference={paymentReference} setPaymentReference={setPaymentReference}
         isProcessingPayment={isProcessingPayment}

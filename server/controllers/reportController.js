@@ -1714,13 +1714,13 @@ const getTopProductsBySection = async (organization, startDate, endDate, eligibl
         const reportOrderIds = eligibleOrderIds || await getReportEligibleOrderIds(organizationId);
         
         // Get ALL orders in the date range (not just delivered)
-        // Projection: only items are consumed below.
+        // Projection: items, fixedDiscount, discount for discount distribution.
         const orders = await Order.find({
             createdAt: { $gte: startDate, $lte: endDate },
             isDeleted: { $in: [false, null] },
             organization: organizationId,
             _id: { $in: reportOrderIds }
-        }).select('items').lean();
+        }).select('items fixedDiscount discount').lean();
 
 
         // Get all menu items with their categories and sections
@@ -1747,6 +1747,20 @@ const getTopProductsBySection = async (organization, startDate, endDate, eligibl
         // Process each order
         orders.forEach(order => {
             if (!order.items || !Array.isArray(order.items)) return;
+
+            // Calculate order-level item total for discount distribution
+            const orderFixedDiscount = Number(order.fixedDiscount?.amount) || 0;
+            const orderManualDiscount = Number(order.discount) || 0;
+            const orderTotalDiscount = orderFixedDiscount + orderManualDiscount;
+            let orderItemTotal = 0;
+            const orderSectionTotals = {};
+            order.items.forEach(item => {
+                if (!item.name) return;
+                const itemQuantity = Number(item.quantity) || 0;
+                const itemPrice = Number(item.price) || 0;
+                const itemTotal = Number(item.itemTotal) || (itemPrice * itemQuantity);
+                if (itemQuantity > 0) orderItemTotal += itemTotal;
+            });
 
             order.items.forEach(item => {
                 if (!item.name) return;
@@ -1776,7 +1790,8 @@ const getTopProductsBySection = async (organization, startDate, endDate, eligibl
                         sectionName,
                         products: {},
                         totalRevenue: 0,
-                        totalQuantity: 0
+                        totalQuantity: 0,
+                        totalDiscount: 0,
                     };
                 }
 
@@ -1803,6 +1818,12 @@ const getTopProductsBySection = async (organization, startDate, endDate, eligibl
                 sectionData[sectionId].products[key].revenue += itemTotal;
                 sectionData[sectionId].totalRevenue += itemTotal;
                 sectionData[sectionId].totalQuantity += itemQuantity;
+
+                // Distribute order discount proportionally
+                if (orderTotalDiscount > 0 && orderItemTotal > 0) {
+                    const itemDiscount = Math.round((itemTotal / orderItemTotal) * orderTotalDiscount);
+                    sectionData[sectionId].totalDiscount += itemDiscount;
+                }
             });
         });
 
@@ -1812,6 +1833,7 @@ const getTopProductsBySection = async (organization, startDate, endDate, eligibl
             sectionName: section.sectionName,
             totalRevenue: section.totalRevenue,
             totalQuantity: section.totalQuantity,
+            totalDiscount: section.totalDiscount || 0,
             products: Object.values(section.products)
                 .sort((a, b) => b.revenue - a.revenue)
                 .slice(0, 10)  // Top 10 products per section

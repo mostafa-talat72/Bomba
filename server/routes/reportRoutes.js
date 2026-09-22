@@ -147,11 +147,27 @@ router.get("/sold-items", authorize("soldItems", "all"), async (req, res) => {
         
         // Build hierarchical structure: sections -> categories -> items -> details
         const sectionsMap = new Map();
+        let totalOrderRevenue = 0;
+        let totalOrderDiscounts = 0;
         
         orders.forEach(order => {
             if (!order.items || !Array.isArray(order.items) || order.items.length === 0) {
                 return;
             }
+            
+            // Calculate order-level totals for discount distribution
+            const orderFixedDiscount = Number(order.fixedDiscount?.amount) || 0;
+            const orderManualDiscount = Number(order.discount) || 0;
+            const orderTotalDiscount = orderFixedDiscount + orderManualDiscount;
+            let orderItemTotal = 0;
+            order.items.forEach(item => {
+                if (!item || !item.name) return;
+                const qty = Number(item.quantity) || 0;
+                const prc = Number(item.price) || 0;
+                if (qty > 0 && prc >= 0) orderItemTotal += prc * qty;
+            });
+            if (orderItemTotal > 0) totalOrderRevenue += orderItemTotal;
+            if (orderTotalDiscount > 0) totalOrderDiscounts += orderTotalDiscount;
             
             order.items.forEach(item => {
                 if (!item || !item.name) return;
@@ -184,13 +200,21 @@ router.get("/sold-items", authorize("soldItems", "all"), async (req, res) => {
                         sectionSortOrder,
                         totalQuantity: 0,
                         totalRevenue: 0,
+                        totalDiscount: 0,
                         categories: new Map()
                     });
                 }
                 
                 const section = sectionsMap.get(sectionId);
                 section.totalQuantity += quantity;
-                section.totalRevenue += price * quantity;
+                const itemRevenue = price * quantity;
+                section.totalRevenue += itemRevenue;
+                
+                // Distribute order discount proportionally to this item
+                const itemDiscount = orderItemTotal > 0 && orderTotalDiscount > 0
+                    ? Math.round((itemRevenue / orderItemTotal) * orderTotalDiscount)
+                    : 0;
+                section.totalDiscount += itemDiscount;
                 
                 // Get or create category
                 if (!section.categories.has(categoryId)) {
@@ -200,13 +224,15 @@ router.get("/sold-items", authorize("soldItems", "all"), async (req, res) => {
                         categorySortOrder,
                         totalQuantity: 0,
                         totalRevenue: 0,
+                        totalDiscount: 0,
                         items: new Map()
                     });
                 }
                 
                 const category = section.categories.get(categoryId);
                 category.totalQuantity += quantity;
-                category.totalRevenue += price * quantity;
+                category.totalRevenue += itemRevenue;
+                category.totalDiscount += itemDiscount;
                 
                 // Get or create item - variant-aware: different sizes of same menu item are separate rows
                 if (!category.items.has(itemKey)) {
@@ -215,6 +241,7 @@ router.get("/sold-items", authorize("soldItems", "all"), async (req, res) => {
                         variant,
                         totalQuantity: 0,
                         totalRevenue: 0,
+                        totalDiscount: 0,
                         orderCount: 0,
                         details: []
                     });
@@ -222,7 +249,8 @@ router.get("/sold-items", authorize("soldItems", "all"), async (req, res) => {
                 
                 const soldItem = category.items.get(itemKey);
                 soldItem.totalQuantity += quantity;
-                soldItem.totalRevenue += price * quantity;
+                soldItem.totalRevenue += itemRevenue;
+                soldItem.totalDiscount += itemDiscount;
                 soldItem.orderCount += 1;
                 
                 // Add detail
@@ -235,7 +263,8 @@ router.get("/sold-items", authorize("soldItems", "all"), async (req, res) => {
                     tableSection: order.table?.section?.name || '',
                     quantity: quantity,
                     price: price,
-                    total: price * quantity,
+                    total: itemRevenue,
+                    discount: itemDiscount,
                     orderDate: order.createdAt,
                     customerName: order.customerName || ''
                 });
@@ -255,6 +284,11 @@ router.get("/sold-items", authorize("soldItems", "all"), async (req, res) => {
         res.json({
             success: true,
             data: sections,
+            discounts: {
+                subtotalBeforeDiscount: totalOrderRevenue,
+                totalDiscounts: totalOrderDiscounts,
+                finalTotal: totalOrderRevenue - totalOrderDiscounts,
+            },
             count: sections.length
         });
         

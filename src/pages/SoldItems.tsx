@@ -34,6 +34,7 @@ interface SoldItem {
   variant?: string | null;
   totalQuantity: number;
   totalRevenue: number;
+  totalDiscount: number;
   orderCount: number;
   details: SoldItemDetail[];
 }
@@ -54,6 +55,7 @@ interface Category {
   categorySortOrder: number;
   totalQuantity: number;
   totalRevenue: number;
+  totalDiscount: number;
   items: SoldItem[];
 }
 
@@ -63,6 +65,7 @@ interface Section {
   sectionSortOrder: number;
   totalQuantity: number;
   totalRevenue: number;
+  totalDiscount: number;
   categories: Category[];
 }
 
@@ -570,9 +573,20 @@ const SoldItems: React.FC = () => {
             <div className="flex items-center justify-between" style={{ direction: dir }}>
               <div style={{ textAlign: textAlign }}>
                 <p className="text-purple-100 text-sm font-medium mb-1">{t('soldItems.summary.totalRevenue')}</p>
-                <p className="text-2xl sm:text-3xl font-bold truncate">
-                  {showMoney ? formatCurrency(sections.reduce((sum, section) => sum + section.totalRevenue, 0)) : '••••••'}
-                </p>
+                {(() => {
+                  const totalRev = sections.reduce((sum, section) => sum + section.totalRevenue, 0);
+                  const totalDisc = sections.reduce((sum, section) => sum + (section.totalDiscount || 0), 0);
+                  return (
+                    <>
+                      <p className="text-2xl sm:text-3xl font-bold truncate">
+                        {showMoney ? formatCurrency(totalRev - totalDisc) : '••••••'}
+                      </p>
+                      {showMoney && totalDisc > 0 && (
+                        <p className="text-xs text-purple-200 line-through">{formatCurrency(totalRev)} <span className="font-bold">خصم: -{formatCurrency(totalDisc)}</span></p>
+                      )}
+                    </>
+                  );
+                })()}
               </div>
               <div className="bg-white bg-opacity-20 p-3 rounded-lg">
                 <Package className="w-8 h-8" />
@@ -626,7 +640,10 @@ const SoldItems: React.FC = () => {
                           <span>{formatDecimal(section.categories.length, i18n.language === 'ar' ? 'ar' : i18n.language === 'fr' ? 'fr' : 'en')} {t('soldItems.categories')}</span>
                         </span>
                         <span className="font-bold text-green-600 dark:text-green-400 text-lg bg-green-50 dark:bg-green-900 px-3 py-1 rounded-full">
-                          {showMoney ? formatCurrency(section.totalRevenue) : '••••••'}
+                          {showMoney ? formatCurrency(section.totalRevenue - (section.totalDiscount || 0)) : '••••••'}
+                          {showMoney && (section.totalDiscount || 0) > 0 && (
+                            <span className="text-xs text-purple-500 dark:text-purple-400 font-bold block line-through">{formatCurrency(section.totalRevenue)} خصم: -{formatCurrency(section.totalDiscount)}</span>
+                          )}
                         </span>
                       </div>
                     </div>
@@ -671,7 +688,10 @@ const SoldItems: React.FC = () => {
                                   <span>{formatDecimal(category.items.length, i18n.language === 'ar' ? 'ar' : i18n.language === 'fr' ? 'fr' : 'en')} {t('soldItems.items')}</span>
                                 </span>
                                 <span className="font-bold text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900 px-2.5 py-1 rounded-full">
-                                  {showMoney ? formatCurrency(category.totalRevenue) : '••••••'}
+                                  {showMoney ? formatCurrency(category.totalRevenue - (category.totalDiscount || 0)) : '••••••'}
+                                  {showMoney && (category.totalDiscount || 0) > 0 && (
+                                    <span className="text-xs text-purple-500 dark:text-purple-400 font-bold block line-through">{formatCurrency(category.totalRevenue)} خصم: -{formatCurrency(category.totalDiscount)}</span>
+                                  )}
                                 </span>
                               </div>
                             </div>
@@ -718,7 +738,10 @@ const SoldItems: React.FC = () => {
                                           {t('soldItems.orders')}: {formatDecimal(item.orderCount, i18n.language === 'ar' ? 'ar' : i18n.language === 'fr' ? 'fr' : 'en')}
                                         </span>
                                         <span className="font-bold text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900 px-2 py-0.5 rounded-full">
-                                          {showMoney ? formatCurrency(item.totalRevenue) : '••••••'}
+                                          {showMoney ? formatCurrency(item.totalRevenue - (item.totalDiscount || 0)) : '••••••'}
+                                          {showMoney && (item.totalDiscount || 0) > 0 && (
+                                            <span className="text-xs text-purple-500 dark:text-purple-400 font-bold block line-through">{formatCurrency(item.totalRevenue)} خصم: -{formatCurrency(item.totalDiscount)}</span>
+                                          )}
                                         </span>
                                       </div>
                                     </div>

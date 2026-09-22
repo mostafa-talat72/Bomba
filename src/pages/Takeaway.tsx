@@ -50,6 +50,38 @@ const DiscountStrip = memo(({ bill, onDiscount }: { bill: any; onDiscount: (b: a
 });
 DiscountStrip.displayName = 'DiscountStrip';
 
+// مطابقة فاتورة لنص البحث محلياً (للسوكت) — نفس حقول بحث السيرفر: رقم/اسم/هاتف/ملاحظات/صنف
+const phoneVariants = (d: string): string[] => {
+  const out = [d];
+  if (/^01\d{9}$/.test(d)) out.push('20' + d.slice(1));
+  if (/^20\d{10}$/.test(d)) out.push('0' + d.slice(2));
+  if (/^0020\d{10}$/.test(d)) out.push('0' + d.slice(4));
+  return out;
+};
+const normalizeDigits = (s: any): string => String(s || '')
+  .replace(/[٠-٩]/g, (d) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))
+  .replace(/[۰-۹]/g, (d) => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d)));
+const phoneMatches = (stored: any, query: string): boolean => {
+  const qd = normalizeDigits(query).replace(/\D/g, '');
+  if (qd.length < 2) return false;
+  const sd = normalizeDigits(stored).replace(/\D/g, '');
+  if (!sd) return false;
+  return phoneVariants(qd).some((v) => sd.includes(v));
+};
+const billMatchesQuery = (b: any, query: string): boolean => {
+  const needle = String(query || '').trim().toLowerCase();
+  if (!needle) return true;
+  const fields = [b?.billNumber, b?.customerName, b?.notes];
+  if (fields.some((f) => String(f || '').toLowerCase().includes(needle))) return true;
+  if (phoneMatches(b?.customerPhone, needle)) return true;
+  const orders = Array.isArray(b?.orders) ? b.orders : [];
+  // رقم الطلب أو اسم الصنف داخل الطلبات
+  return orders.some((o: any) => {
+    if (String(o?.orderNumber || '').toLowerCase().includes(needle)) return true;
+    return Array.isArray(o?.items) && o.items.some((it: any) => String(it?.name || '').toLowerCase().includes(needle));
+  });
+};
+
 
 const Takeaway = () => {
   const { bills, fetchBills, setBills, refreshSingleBill, user, tables, menuItems, menuSections, menuCategories, fetchMenuItems, fetchMenuSections, fetchMenuCategories, showNotification } = useApp() as any;
@@ -208,10 +240,12 @@ const Takeaway = () => {
   const [billFilter, setBillFilter] = useState<'unpaid' | 'paid' | 'all'>('unpaid');
   const billFilterRef = useRef(billFilter);
   billFilterRef.current = billFilter;
+  const searchRef = useRef('');
+  searchRef.current = debouncedSearch;
   const [density, setDensity] = useState(() => { try { return localStorage.getItem('takeawayDensity') || 'comfortable'; } catch { return 'comfortable'; } });
   const compact = density === 'compact';
   const [creating, setCreating] = useState(false);
-  useEffect(() => { const t = setTimeout(() => setDebouncedSearch(search), 300); return () => clearTimeout(t); }, [search]);
+  useEffect(() => { const t = setTimeout(() => setDebouncedSearch(search), 150); return () => clearTimeout(t); }, [search]);
 
   useEffect(() => { fetchBills(); }, [fetchBills]);
 
@@ -221,15 +255,18 @@ const Takeaway = () => {
     depsKey: `${debouncedSearch.trim()}|${billFilter}`,
     getId: (b: any) => String(b?._id || b?.id || ''),
     fetchPage: async (pageNum, limitNum) => {
+      const searching = debouncedSearch.trim().length > 0;
       const res: any = await (api as any).getBills({
         fulfillmentType: 'takeaway',
-        status: billFilter === 'paid' ? 'paid' : billFilter === 'all' ? undefined : 'draft,partial,overdue',
-        all: billFilter === 'all' ? true : undefined,
+        // أثناء البحث: ابحث في كل الحالات (المدفوع أيضاً) — الفلتر الصريح 'مدفوعة' يبقى كما هو
+        status: billFilter === 'paid' ? 'paid' : (billFilter === 'all' || searching) ? undefined : 'draft,partial,overdue',
+        all: (billFilter === 'all' || searching) ? true : undefined,
         q: debouncedSearch.trim() || undefined,
         page: pageNum,
         limit: limitNum,
         mode: 'list',
       });
+      if (res && res.success === false) throw new Error(res.message || 'فشل البحث — تحقق من الاتصال بالسيرفر');
       return { items: res?.data || [], total: res?.total ?? 0, hasMore: res?.hasMore ?? false };
     },
   });
@@ -249,9 +286,11 @@ const Takeaway = () => {
       });
       const matches = (b: any) => {
         if (!b || (b.fulfillmentType || 'dine_in') !== 'takeaway') return false;
+        if (!billMatchesQuery(b, searchRef.current)) return false;
         const f = billFilterRef.current;
+        const searching = searchRef.current.trim().length > 0;
         if (f === 'paid') return b.status === 'paid';
-        if (f === 'all') return true;
+        if (f === 'all' || searching) return true;
         return !['paid', 'cancelled'].includes(b.status);
       };
       socket.on('bill:created', (b: any) => { try { if (matches(b)) feedRef.current?.prepend(b); } catch {} });
@@ -289,7 +328,6 @@ const Takeaway = () => {
   const handleCreate = async () => {
     setCreating(true);
     try {
-      // فشل الإنشاء يجب أن يظهر رسالته — لا بديل صامت يبتلع الخطأ.
       const res: any = await (api as any).createBill({ fulfillmentType: 'takeaway', billType: 'cafe' });
       if (!res?.success) {
         showNotification(res?.message || 'فشل الإنشاء', 'error');
@@ -302,7 +340,6 @@ const Takeaway = () => {
         if (created) feedRef.current?.prepend(created._id ? created : { ...created, _id: newId });
         void feedRef.current?.refreshFirstPage();
       }
-      // فتح المنيو فوراً — لا بحث عن الكارت (وتُحذف تلقائياً لو أُغلقت فارغة)
       if (newId) { setPendingNewId(String(newId)); setBillToEdit(created._id ? created : { ...created, _id: created.id }); }
     } catch (e: any) { showNotification(e?.message || 'فشل الإنشاء', 'error'); }
     finally { setCreating(false); }
@@ -385,8 +422,13 @@ const Takeaway = () => {
           ))}
         </div>
         <div className="ml-auto relative w-full sm:w-64">
-          <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="بحث برقم/اسم/هاتف..." className="w-full pr-9 pl-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl text-sm focus:ring-2 focus:ring-orange-500 outline-none text-gray-900 dark:text-gray-100" />
+          <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="بحث برقم الفاتورة/الطلب أو صنف..." className="w-full pr-9 pl-9 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl text-sm focus:ring-2 focus:ring-orange-500 outline-none text-gray-900 dark:text-gray-100" />
+          {feed.refreshing && debouncedSearch.trim() ? (
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 border-2 border-green-600 border-t-transparent rounded-full animate-spin" />
+          ) : search ? (
+            <button onClick={() => setSearch('')} className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-lg leading-none" title="مسح البحث">×</button>
+          ) : null}
         </div>
       </div>
 
@@ -403,7 +445,7 @@ const Takeaway = () => {
             </BillTableCard>
           </div>
         ))}
-        {feed.items.length===0 && !feed.refreshing && !feed.loading && <div className="col-span-full text-center py-12 bg-white dark:bg-gray-800 rounded-2xl border border-dashed border-gray-200 dark:border-gray-700 text-gray-400">لا توجد طلبات — اضغط "تيك أوي جديد"</div>}
+        {feed.items.length===0 && !feed.refreshing && !feed.loading && <div className="col-span-full text-center py-12 bg-white dark:bg-gray-800 rounded-2xl border border-dashed border-gray-200 dark:border-gray-700 text-gray-400">{debouncedSearch.trim() ? `لا توجد نتائج مطابقة لـ "${debouncedSearch.trim()}"` : 'لا توجد طلبات — اضغط "تيك أوي جديد"'}</div>}
       </div>
       <div ref={feed.sentinelRef} className="h-2" />
       {feed.loading && (

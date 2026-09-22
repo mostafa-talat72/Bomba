@@ -1,0 +1,161 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-09-22T22:48:20.639Z",
+  "queueSize": 3,
+  "operations": [
+    {
+      "id": "ea91df98-48ce-4bab-ac27-8b846fb3b4de",
+      "type": "delete",
+      "collection": "devices",
+      "data": null,
+      "filter": {
+        "$or": [
+          {
+            "name": {
+              "$exists": false
+            }
+          },
+          {
+            "name": null
+          },
+          {
+            "name": ""
+          },
+          {
+            "organization": {
+              "$exists": false
+            }
+          },
+          {
+            "organization": null
+          }
+        ]
+      },
+      "timestamp": {
+        "$date": "2026-09-22T22:47:50.557Z"
+      },
+      "retryCount": 0,
+      "maxRetries": 10
+    },
+    {
+      "id": "0133ca7e-7709-4b50-97fb-fdf0df856608",
+      "type": "update",
+      "collection": "devices",
+      "data": {
+        "hourlyRate": 15,
+        "updatedAt": {
+          "$date": "2026-09-22T22:47:50.580Z"
+        }
+      },
+      "filter": {
+        "$and": [
+          {
+            "$or": [
+              {
+                "hourlyRate": {
+                  "$exists": false
+                }
+              },
+              {
+                "hourlyRate": null
+              },
+              {
+                "hourlyRate": {
+                  "$lte": 0
+                }
+              }
+            ]
+          },
+          {
+            "type": "computer"
+          },
+          {
+            "name": {
+              "$exists": true
+            }
+          },
+          {
+            "name": {
+              "$ne": ""
+            }
+          },
+          {
+            "organization": {
+              "$exists": true
+            }
+          },
+          {
+            "organization": {
+              "$ne": null
+            }
+          }
+        ]
+      },
+      "timestamp": {
+        "$date": "2026-09-22T22:47:50.605Z"
+      },
+      "retryCount": 0,
+      "maxRetries": 10
+    },
+    {
+      "id": "0fdea17e-a9ec-4770-9340-df008b30c356",
+      "type": "update",
+      "collection": "devices",
+      "data": {
+        "playstationRates": {
+          "1": 20,
+          "2": 20,
+          "3": 25,
+          "4": 30
+        },
+        "updatedAt": {
+          "$date": "2026-09-22T22:47:50.606Z"
+        }
+      },
+      "filter": {
+        "$and": [
+          {
+            "$or": [
+              {
+                "playstationRates": {
+                  "$exists": false
+                }
+              },
+              {
+                "playstationRates": null
+              }
+            ]
+          },
+          {
+            "type": "playstation"
+          },
+          {
+            "name": {
+              "$exists": true
+            }
+          },
+          {
+            "name": {
+              "$ne": ""
+            }
+          },
+          {
+            "organization": {
+              "$exists": true
+            }
+          },
+          {
+            "organization": {
+              "$ne": null
+            }
+          }
+        ]
+      },
+      "timestamp": {
+        "$date": "2026-09-22T22:47:50.627Z"
+      },
+      "retryCount": 0,
+      "maxRetries": 10
+    }
+  ]
+}
