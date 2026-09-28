@@ -3,6 +3,8 @@ import { useTranslation } from 'react-i18next';
 import { Table as TableIcon, ShoppingCart, DollarSign, Plus, Clock, Printer, ArrowLeftRight, Edit } from 'lucide-react';
 import { Table, Bill } from '../../services/api';
 import { formatCurrency as formatCurrencyUtil } from '../../utils/formatters';
+import { paymentMethodLabel, paymentMethodIcon, type PaymentMethod } from '../../utils/paymentMethod';
+import { drawerLabel, drawerIcon, type CashDrawer } from '../../utils/paymentDrawer';
 import { getTableDisplay, getAgeLabel, getTableAgeColor } from './tableHelpers';
 
 export interface TableButtonProps {
@@ -25,11 +27,18 @@ export interface TableButtonProps {
   onQuickChangeTable?: (table: Table, e: React.MouseEvent) => void;
   onQuickEditBill?: (table: Table, e: React.MouseEvent) => void;
   onHoverChange?: (table: Table | null) => void;
+  /** طريقة الدفع الحالية (تظهر على الكارت وتُستخدم عند الدفع) */
+  method: PaymentMethod;
+  onMethodChange: (m: PaymentMethod) => void;
+  drawer: CashDrawer;
+  onDrawerChange: (d: CashDrawer) => void;
   /** تكلفة إضافية حية للجلسات النشطة (delta كل 10 ثوانٍ) */
   liveExtra?: number;
+  /** عدد طلبات العملاء المعلقة للمراجعة (شارة بنفسجية) */
+  pendingRequestsCount?: number;
 }
 
-const TableButton = React.memo<TableButtonProps>(({ table, isSelected, isOccupied, tableBills, tableOrdersCount, activeSessionType, activeSessionCount = 0, sessionUrgency = 'none', onClick, onOpen, onQuickOrder, onQuickBilling, onEndAllSessions, onQuickPrint, onQuickChangeTable, onQuickEditBill, onHoverChange, liveExtra = 0 }) => {
+const TableButton = React.memo<TableButtonProps>(({ table, isSelected, isOccupied, tableBills, tableOrdersCount, activeSessionType, activeSessionCount = 0, sessionUrgency = 'none', onClick, onOpen, onQuickOrder, onQuickBilling, onEndAllSessions, onQuickPrint, onQuickChangeTable, onQuickEditBill,            onHoverChange, liveExtra = 0, pendingRequestsCount = 0, method, onMethodChange, drawer, onDrawerChange }) => {
   const { t, i18n } = useTranslation();
   const [showTooltip, setShowTooltip] = useState(false);
 
@@ -40,9 +49,12 @@ const TableButton = React.memo<TableButtonProps>(({ table, isSelected, isOccupie
     .reduce((s, b) => s + (b.remaining || 0), 0);
   const liveRemaining = totalRemaining + (liveExtra || 0);
 
-  // إجمالي الخصم الثابت من فواتير الطاولة
-  const totalFixedDiscount = tableBills
-    .reduce((s, b) => s + (b.orders || []).reduce((os: number, o: any) => os + (o?.fixedDiscount?.amount || 0), 0), 0);
+  // إجمالي الخصم من فواتير الطاولة (ثابت + يدوي) — غير المدفوعة فقط،
+  // حتى لا يعلق الخصم على الكارت بعد دفع الفاتورة بالكامل
+  const hasUnpaidBills = tableBills.some(b => ['draft', 'partial', 'overdue'].includes(b.status));
+  const totalFixedDiscount = hasUnpaidBills ? tableBills
+    .filter(b => ['draft', 'partial', 'overdue'].includes(b.status))
+    .reduce((s, b) => s + (b.orders || []).reduce((os: number, o: any) => os + (o?.fixedDiscount?.amount || 0) + (Number(o?.discount) || 0), 0), 0) : 0;
   // إجمالي الفواتير قبل الخصم (المجموع الفرعي)
   const totalSubtotal = tableBills
     .filter(b => ['draft', 'partial', 'overdue'].includes(b.status))
@@ -124,37 +136,55 @@ const TableButton = React.memo<TableButtonProps>(({ table, isSelected, isOccupie
           </div>
         )}
 
+        {/* ── pending customer requests badge ── */}
+        {pendingRequestsCount > 0 && (
+          <div className="absolute -bottom-2 -right-2 z-10 min-w-5 h-5 px-1 bg-violet-600 text-white text-xs font-bold rounded-full flex items-center justify-center shadow border border-white dark:border-gray-800 animate-pulse">
+            🔔{pendingRequestsCount}
+          </div>
+        )}
+
         {/* ── جسم الكارت (عرض فقط على الموبايل — الأزرار داخل نافذة الطاولة) ── */}
-        <div className="flex flex-col items-center justify-center px-1.5 sm:px-2 pt-2 sm:pt-4 pb-2">
+        <div className="flex flex-col items-center justify-center px-2 sm:px-3 pt-3 sm:pt-5 pb-3">
           {/* أيقونة الطاولة / الجلسة النشطة */}
-          <div className={`w-7 h-7 sm:w-9 sm:h-9 rounded-lg flex items-center justify-center mb-1 sm:mb-1.5 transition-all duration-300 group-hover:scale-110 group-hover:rotate-6 shadow-sm ${styles.icon}`}>
+          <div className={`w-9 h-9 sm:w-11 sm:h-11 rounded-xl flex items-center justify-center mb-1.5 sm:mb-2 transition-all duration-300 group-hover:scale-110 group-hover:rotate-6 shadow-sm ${styles.icon}`}>
             {isOccupied && activeSessionType ? (
-              <span className="text-xl sm:text-3xl leading-none select-none animate-pulse">
+              <span className="text-2xl sm:text-4xl leading-none select-none animate-pulse">
                 {activeSessionType === 'playstation' ? '🎮' :
                  activeSessionType === 'computer'    ? '💻' : '🎮💻'}
               </span>
             ) : (
-              <TableIcon className="h-3.5 w-3.5 sm:h-5 sm:w-5 text-white" />
+              <TableIcon className="h-4 w-4 sm:h-6 sm:w-6 text-white" />
             )}
           </div>
 
           {/* رقم الطاولة — سطران كحد أقصى، القص عند المسافات فقط */}
-          <span className={`text-base sm:text-xl font-extrabold leading-tight text-center line-clamp-2 break-normal ${styles.text}`}>
+          <span className={`text-lg sm:text-2xl font-extrabold leading-tight text-center line-clamp-2 break-normal ${styles.text}`}>
             {getTableDisplay(table.number, i18n.language)}
           </span>
 
           {/* المبلغ المتبقي — يشمل delta الجلسات الحية كل 10 ثوانٍ */}
           {isOccupied && liveRemaining > 0 && (
-            <span className={`text-xs sm:text-sm font-semibold mt-0.5 ${styles.sub}`}>
+            <span className={`text-lg sm:text-xl font-bold mt-1 ${styles.sub}`}>
               {formatCurrencyUtil(liveRemaining, i18n.language, localStorage.getItem('organizationCurrency') || 'EGP')}
               {liveExtra > 0 && <span className="ml-1 text-[10px] animate-pulse">●</span>}
             </span>
           )}
-          {totalFixedDiscount > 0 && (
-            <div className="mt-0.5 text-center">
-              <span className="text-[10px] text-gray-400 dark:text-gray-500 line-through block">{formatCurrencyUtil(liveRemaining + totalFixedDiscount, i18n.language, 'EGP')}</span>
-              <span className="text-[10px] font-bold text-purple-600 dark:text-purple-400 block">خصم: -{formatCurrencyUtil(totalFixedDiscount, i18n.language, 'EGP')}</span>
+          {hasUnpaidBills && totalFixedDiscount > 0 && (
+            <div className="mt-1 text-center">
+              <span className="text-base text-gray-400 dark:text-gray-500 line-through block">{formatCurrencyUtil(liveRemaining + totalFixedDiscount, i18n.language, 'EGP')}</span>
+              <span className="text-lg sm:text-xl font-bold text-purple-600 dark:text-purple-400 block">{t('tableBtn.discount', { amount: formatCurrencyUtil(totalFixedDiscount, i18n.language, 'EGP') })}</span>
             </div>
+          )}
+          {/* طريقة الدفع والدرج — ظاهران دائمًا على الكارت */}
+          {isOccupied && (
+            <span className="mt-1 flex items-center justify-center gap-1 flex-wrap">
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 text-[11px] sm:text-xs font-bold">
+                {paymentMethodIcon(method)} {paymentMethodLabel(method, t)}
+              </span>
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 text-[11px] sm:text-xs font-bold">
+                {drawerIcon(drawer)} {drawerLabel(drawer, t)}
+              </span>
+            </span>
           )}
         </div>
 
@@ -166,8 +196,8 @@ const TableButton = React.memo<TableButtonProps>(({ table, isSelected, isOccupie
             Mobile: cards are display-only (tap opens the table window
             where all actions live consistently). ── */}
         {isOccupied && !isSelected && (
-            <div className="hidden sm:block absolute inset-x-1 bottom-1 z-20 opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-opacity duration-200">
-              <div className="rounded-lg p-1 shadow-xl border bg-white/95 dark:bg-gray-900/95 border-gray-200 dark:border-gray-700">
+            <div className="hidden sm:block absolute inset-1 z-20 opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-opacity duration-200 overflow-hidden">
+              <div className="rounded-lg p-1 shadow-xl border bg-white/95 dark:bg-gray-900/95 border-gray-200 dark:border-gray-700 max-h-full overflow-y-auto">
               <div className="flex items-stretch justify-between gap-1 min-w-0">
               <div className="flex-1 min-w-0 flex flex-col gap-1">
               {/* NOTE: لا زر "فتح" هنا — الضغط على الكارت نفسه يفتحه */}
@@ -176,22 +206,22 @@ const TableButton = React.memo<TableButtonProps>(({ table, isSelected, isOccupie
                 className="min-h-8 bg-white hover:bg-gray-50 dark:bg-gray-900 dark:hover:bg-gray-800 text-red-600 dark:text-red-400 text-xs font-bold rounded-md flex items-center justify-center gap-1 shadow border border-red-200 dark:border-red-800 transition-all"
                 title={t('cafe.tableOrdersModal.newOrder')}>
                 <ShoppingCart className="h-3.5 w-3.5" />
-                <span>طلب</span>
+                <span>{t('tableBtn.order')}</span>
               </button>
               <button
                 onClick={(e) => onQuickBilling(table, e)}
                 className="min-h-8 bg-white hover:bg-gray-50 dark:bg-gray-900 dark:hover:bg-gray-800 text-blue-600 dark:text-blue-400 text-xs font-bold rounded-md flex items-center justify-center gap-1 shadow border border-blue-200 dark:border-blue-800 transition-all"
                 title={t('billing.paymentManagement')}>
                 <DollarSign className="h-3.5 w-3.5" />
-                <span>دفع</span>
+                <span>{t('tableBtn.pay')}</span>
               </button>
               {(onQuickEditBill && tableBills.some(b => ['draft','partial','overdue','paid'].includes(b.status))) && (
                 <button
                   onClick={(e) => onQuickEditBill(table, e)}
                   className="min-h-8 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-md flex items-center justify-center gap-1 shadow border border-blue-700 transition-all"
-                  title="تعديل الأصناف">
+                  title={t('tableBtn.editTitle')}>
                   <Edit className="h-3.5 w-3.5" />
-                  <span>تعديل</span>
+                  <span>{t('tableBtn.edit')}</span>
                 </button>
               )}
               </div>
@@ -215,9 +245,9 @@ const TableButton = React.memo<TableButtonProps>(({ table, isSelected, isOccupie
                     {formatCurrencyUtil(liveRemaining, i18n.language, localStorage.getItem('organizationCurrency') || 'EGP')}
                   </span>
                 )}
-                {totalFixedDiscount > 0 && (
+                {hasUnpaidBills && totalFixedDiscount > 0 && (
                   <span className="text-[10px] font-bold text-purple-600 dark:text-purple-400 leading-tight text-center">
-                    خصم: -{formatCurrencyUtil(totalFixedDiscount, i18n.language, 'EGP')}
+                    {t('tableBtn.discount', { amount: formatCurrencyUtil(totalFixedDiscount, i18n.language, 'EGP') })}
                   </span>
                 )}
               </div>
@@ -228,16 +258,16 @@ const TableButton = React.memo<TableButtonProps>(({ table, isSelected, isOccupie
                   className="min-h-8 bg-white hover:bg-gray-50 dark:bg-gray-900 dark:hover:bg-gray-800 text-purple-600 dark:text-purple-400 text-xs font-bold rounded-md flex items-center justify-center gap-1 shadow border border-purple-200 dark:border-purple-800 transition-all"
                   title={t('billing.changeTableTitle', 'تغيير الطاولة')}>
                   <ArrowLeftRight className="h-3.5 w-3.5" />
-                  <span>نقل</span>
+                  <span>{t('tableBtn.move')}</span>
                 </button>
               )}
-              {(onQuickPrint && totalRemaining > 0) && (
+              {(onQuickPrint && tableBills.some(b => ['draft','partial','overdue'].includes(b.status))) && (
                 <button
                   onClick={(e) => onQuickPrint(table, e)}
                   className="min-h-8 bg-white hover:bg-gray-50 dark:bg-gray-900 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-300 text-xs font-bold rounded-md flex items-center justify-center gap-1 shadow border border-gray-200 dark:border-gray-600 transition-all"
-                  title="طباعة الفاتورة">
+                  title={t('tableBtn.printTitle')}>
                   <Printer className="h-3.5 w-3.5" />
-                  <span>طباعة</span>
+                  <span>{t('tableBtn.print')}</span>
                 </button>
               )}
               {(activeSessionCount > 0 && onEndAllSessions) && (
@@ -246,12 +276,31 @@ const TableButton = React.memo<TableButtonProps>(({ table, isSelected, isOccupie
                   className={`min-h-8 bg-white hover:bg-gray-50 dark:bg-gray-900 dark:hover:bg-gray-800 text-xs font-bold rounded-md flex items-center justify-center gap-1 shadow border transition-all ${
                     sessionUrgency === 'danger' ? 'border-red-400 text-red-600 dark:text-red-400 animate-pulse' : 'border-red-200 dark:border-red-800 text-red-600 dark:text-red-400'
                   }`}
-                  title={`إيقاف جميع جلسات البلايستيشن (${activeSessionCount})`}>
-                  <span className="text-sm leading-none">⏹</span><span>إيقاف</span>
+                  title={t('tableBtn.stopTitle', { count: activeSessionCount })}>
+                  <span className="text-sm leading-none">⏹</span><span>{t('tableBtn.stop')}</span>
                 </button>
               )}
               </div>
               </div>
+              {/* تغيير طريقة الدفع من الكارت مباشرة */}
+              <select value={method} onChange={e => onMethodChange(e.target.value as PaymentMethod)}
+                onClick={e => e.stopPropagation()} title={t('billCard.paymentMethodTitle')}
+                className="mt-1 w-full text-[10px] font-bold border border-gray-200 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 py-0.5">
+                <option value="cash">{paymentMethodIcon('cash')} {paymentMethodLabel('cash', t)}</option>
+                <option value="card">{paymentMethodIcon('card')} {paymentMethodLabel('card', t)}</option>
+                <option value="transfer">{paymentMethodIcon('transfer')} {paymentMethodLabel('transfer', t)}</option>
+                <option value="e_wallet">{paymentMethodIcon('e_wallet')} {paymentMethodLabel('e_wallet', t)}</option>
+              </select>
+              {/* تغيير الدرج من الكارت مباشرة */}
+              <select value={drawer} onChange={e => onDrawerChange(e.target.value as CashDrawer)}
+                onClick={e => e.stopPropagation()} title={t('billCard.paymentMethodTitle')}
+                className="mt-1 w-full text-[10px] font-bold border border-gray-200 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 py-0.5">
+                <option value="cashier">{drawerIcon('cashier')} {drawerLabel('cashier', t)}</option>
+                <option value="hall">{drawerIcon('hall')} {drawerLabel('hall', t)}</option>
+                <option value="takeaway">{drawerIcon('takeaway')} {drawerLabel('takeaway', t)}</option>
+                <option value="delivery">{drawerIcon('delivery')} {drawerLabel('delivery', t)}</option>
+                <option value="safe">{drawerIcon('safe')} {drawerLabel('safe', t)}</option>
+              </select>
               </div>
             </div>
         )}
@@ -262,7 +311,7 @@ const TableButton = React.memo<TableButtonProps>(({ table, isSelected, isOccupie
               className="w-full py-1 bg-green-500 hover:bg-green-600 dark:bg-green-600 dark:hover:bg-green-500 text-white text-xs font-bold rounded-lg flex items-center justify-center gap-1 shadow-md shadow-green-200 dark:shadow-green-900/40 border border-green-600 dark:border-green-500 transition-all"
               title={t('cafe.tableOrdersModal.newOrder')}>
               <Plus className="h-3.5 w-3.5" />
-              <span>طلب جديد</span>
+              <span>{t('tableBtn.newOrder')}</span>
             </button>
           </div>
         )}
@@ -286,7 +335,7 @@ const TableButton = React.memo<TableButtonProps>(({ table, isSelected, isOccupie
           {tableOrdersCount > 0 && (
             <div className="mt-2 text-blue-300 flex items-center gap-1.5">
               <ShoppingCart className="h-3 w-3" />
-              <span>{tableOrdersCount} {t('nav.orders', 'طلبات')}</span>
+              <span>{tableOrdersCount} {t('nav.orders')}</span>
             </div>
           )}
           {ageLabel && (

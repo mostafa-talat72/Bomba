@@ -162,6 +162,24 @@ async function moveOrderToTable(orderId: string, targetTableId: string): Promise
 }
 
 
+async function acceptCustomerOrder(orderId: string): Promise<ApiResponse<Order>> {
+  const response = await apiClient.request<Order>(`/orders/${orderId}/accept`, {
+    method: 'POST',
+  });
+  if (response.success && response.data) {
+    response.data = apiClient.normalizeData(response.data);
+  }
+  return response;
+}
+
+
+async function rejectCustomerOrder(orderId: string): Promise<ApiResponse<null>> {
+  return apiClient.request<null>(`/orders/${orderId}/reject`, {
+    method: 'POST',
+  });
+}
+
+
 export const ordersApi = {
   getOrders,
   getOrder,
@@ -177,4 +195,6 @@ export const ordersApi = {
   getPendingOrders,
   cancelOrder,
   moveOrderToTable,
+  acceptCustomerOrder,
+  rejectCustomerOrder,
 };

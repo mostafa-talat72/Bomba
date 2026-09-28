@@ -235,6 +235,27 @@ class PollingService {
                         stats.docsInserted += liveDocs.length;
                         Logger.info(`📥 Poll: inserted ${liveDocs.length} docs into ${collectionName}`);
                         for (const doc of liveDocs) this.notifyLocalClients(collectionName, "created", doc);
+                        // Ensure bill ↔ order link is consistent immediately: if a synced order
+                        // references a bill, make sure that bill's orders array contains it.
+                        // Without this, table view (via order.table) shows the order but bill view
+                        // (via bill.orders) appears empty until the bill document itself is polled
+                        // (up to 10s gap, or longer if bills polled after orders).
+                        if (collectionName === "orders" && liveDocs.length > 0) {
+                            const billsColl = localDb.collection("bills");
+                            for (const ord of liveDocs) {
+                                if (!ord.bill) continue;
+                                try {
+                                    const amt = Number(ord.finalAmount ?? ord.total ?? ord.totalAmount ?? 0) || 0;
+                                    // $addToSet ensures no duplicate even if bills already polled.
+                                    // $inc gives instant bill total correction until the bill doc itself is polled (≤10s).
+                                    const update = { $addToSet: { orders: ord._id }, $set: { updatedAt: new Date() } };
+                                    if (amt !== 0) {
+                                        update.$inc = { subtotal: amt, total: amt, remaining: amt };
+                                    }
+                                    await billsColl.updateOne({ _id: ord.bill }, update);
+                                } catch {}
+                            }
+                        }
                     }
                 }
 
@@ -254,9 +275,28 @@ class PollingService {
             for (const atlasDoc of updatedSincePoll) {
                 try {
                     const { _id, ...rest } = atlasDoc;
-                    await localColl.updateOne({ _id }, { $set: rest }, { upsert: true });
+                    // For bills: never overwrite orders with stale Atlas snapshot.
+                    // Merge orders via $addToSet to avoid losing orders that were just linked
+                    // via the orders sync (order.bill → bill.orders patch above).
+                    if (collectionName === "bills") {
+                        const { orders, ...restWithoutOrders } = rest;
+                        await localColl.updateOne({ _id }, { $set: restWithoutOrders }, { upsert: true });
+                        if (Array.isArray(orders) && orders.length > 0) {
+                            await localColl.updateOne({ _id }, { $addToSet: { orders: { $each: orders } } });
+                        }
+                    } else {
+                        await localColl.updateOne({ _id }, { $set: rest }, { upsert: true });
+                    }
                     stats.docsUpdated++;
                     this.notifyLocalClients(collectionName, "updated", atlasDoc);
+                    if (collectionName === "orders" && atlasDoc.bill) {
+                        try {
+                            await localDb.collection("bills").updateOne(
+                                { _id: atlasDoc.bill },
+                                { $addToSet: { orders: atlasDoc._id } }
+                            );
+                        } catch {}
+                    }
                 } catch {}
             }
         }
@@ -293,7 +333,15 @@ class PollingService {
                             continue;
                         }
                         try {
-                            await atlasColl.updateOne({ _id: fullDoc._id }, { $set: fullDoc }, { upsert: true });
+                            if (collectionName === "bills") {
+                                const { _id: _bid, orders, ...restWithoutOrders } = fullDoc;
+                                await atlasColl.updateOne({ _id: _bid }, { $set: restWithoutOrders }, { upsert: true });
+                                if (Array.isArray(orders) && orders.length > 0) {
+                                    await atlasColl.updateOne({ _id: _bid }, { $addToSet: { orders: { $each: orders } } });
+                                }
+                            } else {
+                                await atlasColl.updateOne({ _id: fullDoc._id }, { $set: fullDoc }, { upsert: true });
+                            }
                             stats.docsUpdated++;
                         } catch {}
                     }

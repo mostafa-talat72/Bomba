@@ -39,6 +39,33 @@ export const createDeliveryZone = async (req, res) => {
     }
 };
 
+// @desc    Update delivery zone
+// @route   PUT /api/delivery-zones/:id
+export const updateDeliveryZone = async (req, res) => {
+    try {
+        const zone = await DeliveryZone.findOne({ _id: req.params.id, organization: getOrganizationId(req.user) });
+        if (!zone) return res.status(404).json({ success: false, message: "المنطقة غير موجودة" });
+        const { name, fee } = req.body;
+        if (name !== undefined) {
+            if (!String(name).trim()) {
+                return res.status(400).json({ success: false, message: "اسم المنطقة مطلوب" });
+            }
+            zone.name = String(name).trim();
+        }
+        if (fee !== undefined) zone.fee = Math.max(0, Number(fee) || 0);
+        await zone.save();
+        try { writeToAtlas('deliveryzones', 'upsert', zone.toObject(), { _id: zone._id }); } catch {}
+        if (req.io) req.io.notifyBillUpdate("delivery-zones-changed", zone, getOrganizationId(req.user));
+        try { req.io?.emit?.("delivery-zones-changed", { _id: zone._id, name: zone.name, fee: zone.fee }); } catch {}
+        res.json({ success: true, data: zone });
+    } catch (error) {
+        if (error.code === 11000) {
+            return res.status(400).json({ success: false, message: "المنطقة موجودة بالفعل" });
+        }
+        res.status(500).json({ success: false, message: "فشل تعديل المنطقة", error: error.message });
+    }
+};
+
 // @desc    Delete delivery zone
 // @route   DELETE /api/delivery-zones/:id
 export const deleteDeliveryZone = async (req, res) => {

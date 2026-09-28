@@ -13,7 +13,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import mongoose from "mongoose";
 import lanMeshDiscovery from "../utils/lanDiscovery.js";
-import { applyReceivedDoc } from "../utils/lanPeerSync.js";
+import { applyReceivedDoc, applyTombstoneDelete } from "../utils/lanPeerSync.js";
 import Logger from "../middleware/logger.js";
 
 const router = express.Router();
@@ -174,6 +174,18 @@ router.post("/receive", async (req, res) => {
         const result = await applyReceivedDoc(collection, doc, operation);
         Logger.info(`[LanMesh] received ${operation}:${collection}:${doc._id}`);
 
+        // تقارب المقابر لحظياً: مقبرة مستلمة = احذف المستند المشار إليه فوراً
+        // (وإلا بقيت نسخته على هذا الجهاز بينما حُذف عند الجار).
+        let converged = null;
+        if (collection === "tombstones" && (operation === "insert" || operation === "update")) {
+            try {
+                converged = await applyTombstoneDelete(doc);
+                if (converged) Logger.info(`[LanMesh] tombstone converged: deleted ${converged.collection}:${converged._id}`);
+            } catch (convErr) {
+                Logger.warn(`[LanMesh] tombstone converge failed: ${convErr.message}`);
+            }
+        }
+
         // Instant UI: re-emit the specific event this device's screens already
         // handle (same handlers as local writes — zero refetch), plus a generic
         // event carrying the doc for collections without specific handlers.
@@ -182,6 +194,16 @@ router.post("/receive", async (req, res) => {
             const specific = LAN_SPECIFIC_EVENTS[collection]?.[operation]
                 || ((operation === "insert" || operation === "update") ? LAN_SPECIFIC_EVENTS[collection]?.update : undefined);
             if (specific && req.io) req.io.emit(specific, appliedDoc);
+            if (converged && req.io) {
+                const delEvent = LAN_SPECIFIC_EVENTS[converged.collection]?.delete;
+                if (delEvent) req.io.emit(delEvent, { _id: converged._id });
+                req.io.emit("lan:remote-change", {
+                    collection: converged.collection,
+                    operation: "delete",
+                    _id: String(converged._id),
+                    doc: { _id: converged._id },
+                });
+            }
             req.io?.emit("lan:remote-change", {
                 collection,
                 operation,
@@ -210,15 +232,22 @@ router.post("/sync-missing", async (req, res) => {
         const sinceDate = since ? new Date(since) : new Date(0);
         const safeLimit = Math.min(Math.max(parseInt(limit, 10) || 500, 1), 1000);
 
+        // المقابر لا تحمل updatedAt/createdAt — تُرشح وتُرتّب عبر deletedAt،
+        // وإلا لم تُسحب أبداً وبقيت نسخ قديمة على الأجهزة العائدة.
+        const isTombstones = collection === "tombstones";
         const docs = await db
             .collection(collection)
-            .find({
-                $or: [
-                    { updatedAt: { $gte: sinceDate } },
-                    { createdAt: { $gte: sinceDate } },
-                ],
-            })
-            .sort({ updatedAt: 1 })
+            .find(
+                isTombstones
+                    ? { deletedAt: { $gte: sinceDate } }
+                    : {
+                          $or: [
+                              { updatedAt: { $gte: sinceDate } },
+                              { createdAt: { $gte: sinceDate } },
+                          ],
+                      }
+            )
+            .sort(isTombstones ? { deletedAt: 1 } : { updatedAt: 1 })
             .limit(safeLimit)
             .toArray();
 

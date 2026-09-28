@@ -11,6 +11,7 @@ import {
     updateMenuItemsOrder,
     incrementOrderCount,
     mergeMenuItems,
+    getPublicMenu,
 } from "../controllers/menuController.js";
 import {
     getAllMenuSections,
@@ -99,6 +100,7 @@ const menuItemValidation = [
 ];
 
 // Public routes (for customers) - NO AUTHENTICATION REQUIRED
+router.get("/public/full", getPublicMenu);
 router.get("/items", protect, getAllMenuItems);
 router.get("/items/popular", getPopularMenuItems);
 router.get("/categories", getMenuCategories);

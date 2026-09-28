@@ -108,6 +108,14 @@ export const updateDeduction = async (req, res) => {
     if (date !== undefined) {
       deduction.date = new Date(date);
       deduction.markModified('date');
+      // مزامنة حقل الشهر مع التاريخ (الاستعلامات تفلتر بالشهر)
+      try {
+        const d = new Date(date);
+        if (!isNaN(d)) {
+          deduction.month = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+          deduction.markModified('month');
+        }
+      } catch {}
     }
     
     await deduction.save();

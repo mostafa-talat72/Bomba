@@ -4,6 +4,10 @@ import {
     getPendingOrders,
     getOrder,
     createOrder,
+    createPublicOrder,
+    acceptCustomerOrder,
+    rejectCustomerOrder,
+    getPublicOrderStatus,
     updateOrderStatus,
     updateOrderItemStatus,
     cancelOrder,
@@ -19,6 +23,7 @@ import {
     moveOrderToTable,
 } from "../controllers/orderController.js";
 import { authenticateToken, authorize } from "../middleware/auth.js";
+import { publicOrderLimiter, publicStatusLimiter } from "../middleware/rateLimiter.js";
 import {
     validateOrder,
     validateOrderUpdate,
@@ -27,7 +32,11 @@ import {
 
 const router = express.Router();
 
-// All routes require authentication
+// Public customer ordering from QR menu — NO AUTH (strict validation + rate limit inside)
+router.post("/public", publicOrderLimiter, createPublicOrder);
+router.get("/public/:id", publicStatusLimiter, getPublicOrderStatus);
+
+// All routes below require authentication
 router.use(authenticateToken);
 
 // Get orders (cafe, menu, staff permissions)
@@ -74,52 +83,55 @@ router.post(
     createOrder
 );
 
-// Update order (cafe and menu permissions)
+// Update order status — requires the kitchen permission (same as client-side canUpdateOrderStatus gate)
 router.patch(
     "/:id/status",
-    authorize("cafe", "tables", "menu", "all"),
+    authorize("canUpdateOrderStatus", "all"),
     updateOrderStatus
 );
-router.put("/:id/status", authorize("cafe", "tables", "menu", "staff", "all"), updateOrderStatus);
+router.put("/:id/status", authorize("canUpdateOrderStatus", "all"), updateOrderStatus);
+// Customer request review (accept/reject pending QR orders)
+router.post("/:id/accept", authenticateToken, authorize("canReviewCustomerOrders", "all"), acceptCustomerOrder);
+router.post("/:id/reject", authenticateToken, authorize("canReviewCustomerOrders", "all"), rejectCustomerOrder);
 router.patch(
     "/:id/items/:itemIndex/status",
-    authorize("cafe", "tables", "menu", "all"),
+    authorize("canUpdateOrderStatus", "all"),
     updateOrderItemStatus
 );
-router.patch("/:id/cancel", authorize("cafe", "tables", "menu", "all"), cancelOrder);
+router.patch("/:id/cancel", authorize("canUpdateOrderStatus", "all"), cancelOrder);
 
-// Update preparedCount for an item in an order (cafe and menu permissions)
+// Update preparedCount for an item in an order — kitchen permission required
 router.put(
     "/:orderId/items/:itemIndex/prepared",
-    authorize("cafe", "tables", "menu", "all"),
+    authorize("canUpdateOrderStatus", "all"),
     updateOrderItemPrepared
 );
 
-// Deduct all inventory for order preparation (cafe and menu permissions)
+// Deduct all inventory for order preparation — kitchen permission required
 router.post(
     "/:orderId/deduct-inventory",
-    authorize("cafe", "tables", "menu", "all"),
+    authorize("canUpdateOrderStatus", "all"),
     deductOrderInventory
 );
 
-// Deliver specific item in order (cafe and menu permissions)
+// Deliver specific item in order — kitchen permission required
 router.put(
     "/:id/deliver-item/:itemIndex",
-    authorize("cafe", "tables", "menu", "all"),
+    authorize("canUpdateOrderStatus", "all"),
     deliverItem
 );
 
-// Deliver all items of a section within an order (cafe and menu permissions)
+// Deliver all items of a section within an order — kitchen permission required
 router.put(
     "/:orderId/deliver-section",
-    authorize("cafe", "tables", "menu", "all"),
+    authorize("canUpdateOrderStatus", "all"),
     deliverOrderSection
 );
 
 // Move single order to another table (smart bill handling)
 router.post(
     "/:id/move-table",
-    authorize("cafe", "tables", "menu", "all"),
+    authorize("canMoveOrderTableToTable", "all"),
     moveOrderToTable
 );
 

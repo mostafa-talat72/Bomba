@@ -1,5 +1,6 @@
 import React from 'react';
 import { Plus, Save, Trash2, DollarSign } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { MenuItem } from '../../services/api';
 import { LocalOrderItem } from './tableHelpers';
 
@@ -11,6 +12,7 @@ export const ItemCard = React.memo(({ item, qty, qtyByVariant, onAdd, fmt }: {
   onAdd: (item: MenuItem, variant?: string | null) => void;
   fmt: (n: number) => string;
 }) => {
+  const { t } = useTranslation();
   const hasVariants = item.variants && item.variants.length > 1;
   const inOrder = qty > 0;
   const variantSummary = hasVariants
@@ -39,7 +41,7 @@ export const ItemCard = React.memo(({ item, qty, qtyByVariant, onAdd, fmt }: {
           </div>
         </div>
         <div className={`w-full flex items-center justify-center gap-0.5 py-1 border-t text-base font-medium ${inOrder ? 'border-orange-200 dark:border-orange-700 bg-orange-500 text-white' : 'border-gray-100 dark:border-gray-700 text-gray-400 group-hover:text-orange-500 group-hover:bg-orange-50 dark:group-hover:bg-orange-900/20'}`}>
-          <span className="text-xs font-semibold">{inOrder ? variantSummary : 'اختر الحجم'}</span>
+          <span className="text-xs font-semibold">{inOrder ? variantSummary : t('orderItems.chooseSize')}</span>
         </div>
       </div>
     );
@@ -59,7 +61,7 @@ export const ItemCard = React.memo(({ item, qty, qtyByVariant, onAdd, fmt }: {
         {item.variants && item.variants.length === 1 && <span className="text-[10px] text-gray-400">{item.variants[0].size}</span>}
       </div>
       <div className={`w-full flex items-center justify-center gap-0.5 py-1 border-t text-base font-medium transition-colors duration-100 ${inOrder ? 'border-orange-200 dark:border-orange-700 bg-orange-500 text-white' : 'border-gray-100 dark:border-gray-700 text-gray-400 group-hover:text-orange-500 group-hover:bg-orange-50 dark:group-hover:bg-orange-900/20'}`}>
-        <Plus className="h-2.5 w-2.5" /><span>{inOrder ? 'إضافة' : 'أضف'}</span>
+        <Plus className="h-2.5 w-2.5" /><span>{inOrder ? t('orderItems.addMore') : t('orderItems.add')}</span>
       </div>
     </button>
   );
@@ -67,7 +69,7 @@ export const ItemCard = React.memo(({ item, qty, qtyByVariant, onAdd, fmt }: {
 ItemCard.displayName = 'ItemCard';
 
 // صف الصنف في قائمة الطلب — memoized
-export const OrderItemRow = React.memo(({ item, isFlash, isExpanded, onMinus, onPlus, onRemove, onToggleNote, onNoteChange, notePlaceholder, fmt, onEditPrice, canEditPrice, showVariantBadge }: {
+export const OrderItemRow = React.memo(({ item, isFlash, isExpanded, onMinus, onPlus, onRemove, onToggleNote, onNoteChange, notePlaceholder, fmt, onEditPrice, canEditPrice, showVariantBadge, onQuantityChange }: {
   item: LocalOrderItem;
   isFlash: boolean;
   isExpanded: boolean;
@@ -81,41 +83,67 @@ export const OrderItemRow = React.memo(({ item, isFlash, isExpanded, onMinus, on
   onEditPrice?: () => void;
   canEditPrice?: boolean;
   showVariantBadge?: boolean;
-}) => (
+  onQuantityChange?: (qty: number) => void;
+}) => {
+  const { t: tRow } = useTranslation();
+  // نص الكمية المحلي — يسمح بالكتابة المباشرة دون أن يعيد العرض الكتابة فوقها
+  const [qtyText, setQtyText] = React.useState<string | null>(null);
+  React.useEffect(() => { setQtyText(null); }, [item.quantity]);
+  return (
   <div className={`rounded-lg border overflow-hidden transition-colors duration-150 ${isFlash ? 'border-orange-400 bg-orange-50 dark:bg-orange-900/30 ring-1 ring-orange-300' : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900'}`}>
-     <div className="flex items-center gap-2 px-2 py-2">
-       <div className="flex items-center bg-gray-100 dark:bg-gray-800 rounded-lg overflow-hidden flex-shrink-0">
-         <button onClick={onMinus} title="تقليل الكمية"
-           className="w-7 h-7 flex items-center justify-center text-red-500 hover:bg-red-500 hover:text-white transition-colors font-bold text-xl">−</button>
-         <span className="w-7 text-center font-bold text-lg text-gray-900 dark:text-gray-100 select-none border-x border-gray-200 dark:border-gray-700">{item.quantity}</span>
-         <button onClick={onPlus} title="زيادة الكمية"
-           className="w-7 h-7 flex items-center justify-center text-green-500 hover:bg-green-500 hover:text-white transition-colors font-bold text-xl">+</button>
-       </div>
-       <div className="flex-1 min-w-0">
-         <div className="flex items-center gap-1.5 flex-wrap">
-           <p className="font-semibold text-gray-900 dark:text-gray-100 text-base leading-snug">
-             {item.name}
-           </p>
-           {(showVariantBadge !== false && item.variant) && (
-             <span className="text-xs bg-gradient-to-r from-purple-100 to-pink-100 dark:from-purple-900/40 dark:to-pink-900/40 text-purple-700 dark:text-purple-300 px-2 py-0.5 rounded-full font-medium whitespace-nowrap border border-purple-200 dark:border-purple-700/50">
-               📏 {item.variant}
-             </span>
-           )}
-         </div>
-         <p className="text-base text-orange-600 dark:text-orange-400 font-semibold">{fmt(item.price * item.quantity)} <span className="text-xs text-gray-400">({fmt(item.price)} × {item.quantity})</span></p>
-       </div>
+      <div className="flex items-center gap-2 px-2 py-2">
+        <div className="flex items-center bg-gray-100 dark:bg-gray-800 rounded-lg overflow-hidden flex-shrink-0">
+          <button onClick={onMinus} title={tRow('orderItems.decQty')}
+            className="w-7 h-7 flex items-center justify-center text-red-500 hover:bg-red-500 hover:text-white transition-colors font-bold text-xl">−</button>
+          {onQuantityChange ? (
+            <input
+              value={qtyText ?? String(item.quantity)}
+              inputMode="numeric"
+              dir="ltr"
+              title={tRow('orderItems.qtyType')}
+              onChange={e => {
+                const clean = e.target.value.replace(/[^0-9]/g, '').slice(0, 4);
+                setQtyText(clean);
+                const n = parseInt(clean, 10);
+                if (Number.isFinite(n) && n >= 1) onQuantityChange(n);
+              }}
+              onBlur={() => setQtyText(null)}
+              className="w-10 text-center font-bold text-lg text-gray-900 dark:text-gray-100 bg-transparent border-x border-gray-200 dark:border-gray-700 outline-none focus:bg-white dark:focus:bg-gray-900"
+            />
+          ) : (
+            <span className="w-7 text-center font-bold text-lg text-gray-900 dark:text-gray-100 select-none border-x border-gray-200 dark:border-gray-700">{item.quantity}</span>
+          )}
+          <button onClick={onPlus} title={tRow('orderItems.incQty')}
+            className="w-7 h-7 flex items-center justify-center text-green-500 hover:bg-green-500 hover:text-white transition-colors font-bold text-xl">+</button>
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="font-semibold text-gray-900 dark:text-gray-100 text-base leading-snug break-words w-full">
+            {item.name}
+          </p>
+          <div className="flex items-center justify-between gap-2 mt-0.5">
+            <span className="text-base text-orange-600 dark:text-orange-400 font-bold whitespace-nowrap">{fmt(item.price * item.quantity)}</span>
+            <span className="flex items-center gap-1.5 min-w-0">
+              {(showVariantBadge !== false && item.variant) && (
+                <span className="text-xs bg-gradient-to-r from-purple-100 to-pink-100 dark:from-purple-900/40 dark:to-pink-900/40 text-purple-700 dark:text-purple-300 px-2 py-0.5 rounded-full font-medium whitespace-nowrap border border-purple-200 dark:border-purple-700/50">
+                  📏 {item.variant}
+                </span>
+              )}
+              <span className="text-sm text-gray-500 dark:text-gray-400 font-semibold whitespace-nowrap">{fmt(item.price)}</span>
+            </span>
+          </div>
+        </div>
        <div className="flex items-center gap-1 flex-shrink-0">
          {canEditPrice && onEditPrice && (
-           <button onClick={onEditPrice} title="تعديل السعر"
+            <button onClick={onEditPrice} title={tRow('orderItems.editPrice')}
              className="w-7 h-7 rounded-lg flex items-center justify-center bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 hover:bg-amber-200 dark:hover:bg-amber-800 transition-colors">
              <DollarSign className="h-3.5 w-3.5" />
            </button>
          )}
-         <button onClick={onToggleNote} title={item.notes ? 'عرض/تعديل الملاحظة' : 'إضافة ملاحظة'}
+          <button onClick={onToggleNote} title={item.notes ? tRow('orderItems.noteEdit') : tRow('orderItems.noteAdd')}
            className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors ${item.notes || isExpanded ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-600' : 'bg-gray-100 dark:bg-gray-700 text-gray-400 hover:bg-blue-50 hover:text-blue-500'}`}>
            <Save className="h-3.5 w-3.5" />
          </button>
-         <button onClick={onRemove} title="حذف الصنف"
+          <button onClick={onRemove} title={tRow('orderItems.remove')}
            className="w-7 h-7 rounded-lg flex items-center justify-center bg-gray-100 dark:bg-gray-700 text-gray-400 hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-900/30 transition-colors">
           <Trash2 className="h-3.5 w-3.5" />
         </button>
@@ -129,5 +157,6 @@ export const OrderItemRow = React.memo(({ item, isFlash, isExpanded, onMinus, on
       </div>
     )}
   </div>
-));
+  );
+});
 OrderItemRow.displayName = 'OrderItemRow';

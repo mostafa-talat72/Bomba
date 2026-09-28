@@ -39,6 +39,31 @@ export const createAccountLimiter = rateLimit({
     },
 });
 
+// Strict limiter for PUBLIC customer ordering (no auth) — per-IP cap that
+// tolerates many phones behind one NAT (cafe hotspot) while stopping loops.
+export const publicOrderLimiter = rateLimit({
+    windowMs: 60 * 60 * 1000, // 1 hour
+    max: 200,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: {
+        success: false,
+        message: "طلبات كثيرة جدًا من هذا الجهاز، حاول بعد ساعة",
+    },
+});
+
+// Loose limiter for public order-status polling (customer screen, every ~10s)
+export const publicStatusLimiter = rateLimit({
+    windowMs: 60 * 60 * 1000, // 1 hour
+    max: 1000,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: {
+        success: false,
+        message: "طلبات كثيرة جدًا من هذا الجهاز، حاول بعد ساعة",
+    },
+});
+
 // Password reset limiter
 export const passwordResetLimiter = rateLimit({
     windowMs: 60 * 60 * 1000, // 1 hour

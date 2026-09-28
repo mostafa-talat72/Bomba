@@ -300,7 +300,7 @@ const Dashboard = () => {
           </div>
         </div>
 
-        <div className="hidden lg:flex items-center space-x-4 space-x-reverse">
+        <div className="hidden md:flex items-center space-x-4 space-x-reverse flex-wrap gap-2">
           <div className="flex items-center space-x-4 space-x-reverse">
             <div className="flex items-center bg-white bg-opacity-20 rounded-lg px-4 py-2">
               <Calendar className={`h-5 w-5 ${isRTL ? 'ml-2' : 'mr-2'}`} />

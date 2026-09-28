@@ -2,7 +2,7 @@ import { apiClient } from './client';
 import { getCachedBill, setCachedBill } from './client';
 import type { ApiResponse, Bill, PayForItemsRequest, Payment } from './types';
 
-async function getBills(params?: { status?: string; table?: string; page?: number; limit?: number; customerName?: string; q?: string; all?: boolean; fresh?: boolean; fulfillmentType?: 'dine_in' | 'takeaway' | 'delivery'; mode?: 'list' }): Promise<ApiResponse<Bill[]>> {
+async function getBills(params?: { status?: string; table?: string; page?: number; limit?: number; customerName?: string; q?: string; all?: boolean; fresh?: boolean; fulfillmentType?: 'dine_in' | 'takeaway' | 'delivery'; mode?: 'list'; startDate?: string; endDate?: string; sort?: 'newest' | 'oldest' }): Promise<ApiResponse<Bill[]>> {
   const searchParams = new URLSearchParams();
   if (params) {
     Object.entries(params).forEach(([key, value]) => {
@@ -103,6 +103,7 @@ async function addPayment(id: string, paymentData: {
   amount: number;
   method: 'cash' | 'card' | 'transfer' | 'e_wallet';
   reference?: string;
+  drawer?: 'cashier' | 'hall' | 'takeaway' | 'delivery' | 'safe';
 }): Promise<ApiResponse<Bill>> {
   const response = await apiClient.request<Bill>(`/billing/${id}/payment`, {
     method: 'POST',
@@ -120,8 +121,9 @@ async function updatePayment(id: string, paymentData: {
   remaining: number;
   status: 'draft' | 'partial' | 'paid' | 'cancelled' | 'overdue';
   paymentAmount: number;
-  method?: 'cash' | 'card' | 'transfer';
+  method?: 'cash' | 'card' | 'transfer' | 'e_wallet';
   reference?: string;
+  drawer?: 'cashier' | 'hall' | 'takeaway' | 'delivery' | 'safe';
 }): Promise<ApiResponse<Bill>> {
   const response = await apiClient.request<Bill>(`/billing/${id}/payment`, {
     method: 'PUT',
@@ -204,7 +206,8 @@ async function addPartialPayment(id: string, paymentData: {
     itemId: string;
     quantity: number;
   }>;
-  paymentMethod: 'cash' | 'card' | 'transfer';
+  paymentMethod: 'cash' | 'card' | 'transfer' | 'e_wallet';
+  drawer?: 'cashier' | 'hall' | 'takeaway' | 'delivery' | 'safe';
 }): Promise<ApiResponse<Bill>> {
   const response = await apiClient.request<Bill>(`/billing/${id}/partial-payment`, {
     method: 'POST',
@@ -260,7 +263,8 @@ async function addPartialPaymentAggregated(id: string, paymentData: {
     itemId: string;
     quantity: number;
   }>;
-  paymentMethod: 'cash' | 'card' | 'transfer';
+  paymentMethod: 'cash' | 'card' | 'transfer' | 'e_wallet';
+  drawer?: 'cashier' | 'hall' | 'takeaway' | 'delivery' | 'safe';
 }): Promise<ApiResponse<Bill>> {
   const response = await apiClient.request<Bill>(`/billing/${id}/partial-payment-aggregated`, {
     method: 'POST',
@@ -285,6 +289,11 @@ async function updateBillAggregatedItems(id: string, data: {
     notes?: string | null;
     variant?: string | null;
   }>;
+  discount?: number;
+  customerName?: string;
+  customerPhone?: string;
+  address?: string;
+  deliveryFee?: number;
 }): Promise<ApiResponse<Bill>> {
   const response = await apiClient.request<Bill>(`/billing/${id}/items-aggregated`, {
     method: 'PUT',
@@ -328,7 +337,8 @@ async function payForItems(id: string, paymentData: PayForItemsRequest): Promise
 async function paySessionPartial(id: string, paymentData: {
   sessionId: string;
   amount: number;
-  paymentMethod: 'cash' | 'card' | 'transfer';
+  paymentMethod: 'cash' | 'card' | 'transfer' | 'e_wallet';
+  drawer?: 'cashier' | 'hall' | 'takeaway' | 'delivery' | 'safe';
 }): Promise<ApiResponse<Bill>> {
   const response = await apiClient.request<Bill>(`/billing/${id}/pay-session-partial`, {
     method: 'POST',
@@ -347,8 +357,9 @@ async function updateSessionPayment(
   paymentIndex: number,
   paymentData: {
     amount: number;
-    method: 'cash' | 'card' | 'transfer';
+    method: 'cash' | 'card' | 'transfer' | 'e_wallet';
     reference?: string;
+    drawer?: 'cashier' | 'hall' | 'takeaway' | 'delivery' | 'safe';
   }
 ): Promise<ApiResponse<Bill>> {
   const response = await apiClient.request<Bill>(
@@ -371,8 +382,9 @@ async function updateItemPayment(
   paymentIndex: number,
   paymentData: {
     quantity: number;
-    method: 'cash' | 'card' | 'transfer';
+    method: 'cash' | 'card' | 'transfer' | 'e_wallet';
     reference?: string;
+    drawer?: 'cashier' | 'hall' | 'takeaway' | 'delivery' | 'safe';
   }
 ): Promise<ApiResponse<Bill>> {
   const response = await apiClient.request<Bill>(

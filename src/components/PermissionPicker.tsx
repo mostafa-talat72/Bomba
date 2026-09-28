@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import {
   Crown, LayoutGrid, ShoppingCart, Receipt, Timer, History, Clock, UtensilsCrossed, Gamepad2,
-  Package, Warehouse, Wallet, Banknote, ChefHat, Wrench, Folder, Search,
+  Package, Warehouse, Wallet, Banknote, ChefHat, Wrench, Folder, Search, Users,
   ChevronDown, Check, X,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -38,6 +38,7 @@ export const GROUP_ICONS: Record<string, React.ComponentType<{ className?: strin
   payroll: Banknote,
   chef: ChefHat,
   tools: Wrench,
+  users: Users,
   other: Folder,
 };
 

@@ -170,7 +170,7 @@ const PayrollHistory: React.FC = () => {
                 <Card className="dark:bg-gray-800 dark:border-gray-700">
                   <Statistic
                     title={<span className="dark:text-gray-300">{t('payroll.payrollHistory.stats.totalGross')}</span>}
-                    value={toArabicNumbers(stats.totalGross.toFixed(2))}
+                    value={toArabicNumbers((Number(stats.totalGross) || 0).toFixed(2))}
                     suffix={t('common.currency')}
                     prefix={<TrendingUp size={20} />}
                     valueStyle={{ color: '#52c41a' }}
@@ -181,7 +181,7 @@ const PayrollHistory: React.FC = () => {
                 <Card className="dark:bg-gray-800 dark:border-gray-700">
                   <Statistic
                     title={<span className="dark:text-gray-300">{t('payroll.payrollHistory.stats.totalDeductions')}</span>}
-                    value={toArabicNumbers(stats.totalDeductions.toFixed(2))}
+                    value={toArabicNumbers((Number(stats.totalDeductions) || 0).toFixed(2))}
                     suffix={t('common.currency')}
                     prefix={<TrendingDown size={20} />}
                     valueStyle={{ color: '#ff4d4f' }}
@@ -192,7 +192,7 @@ const PayrollHistory: React.FC = () => {
                 <Card className="dark:bg-gray-800 dark:border-gray-700">
                   <Statistic
                     title={<span className="dark:text-gray-300">{t('payroll.payrollHistory.stats.totalNet')}</span>}
-                    value={toArabicNumbers(stats.totalNet.toFixed(2))}
+                    value={toArabicNumbers((Number(stats.totalNet) || 0).toFixed(2))}
                     suffix={t('common.currency')}
                     prefix={<DollarSign size={20} />}
                     valueStyle={{ color: '#faad14' }}
@@ -238,14 +238,14 @@ const PayrollHistory: React.FC = () => {
                         <div className="flex justify-between items-center">
                           <span className="text-gray-600 dark:text-gray-300">{t('payroll.payrollHistory.grossSalary')}</span>
                           <span className="font-bold text-green-600 dark:text-green-400">
-                            {toArabicNumbers(payroll.summary.grossSalary.toFixed(2))} {t('common.currency')}
+                            {toArabicNumbers((Number(payroll.summary.grossSalary) || 0).toFixed(2))} {t('common.currency')}
                           </span>
                         </div>
                         
                         <div className="flex justify-between items-center">
                           <span className="text-gray-600 dark:text-gray-300">{t('payroll.payrollHistory.deductions')}</span>
                           <span className="font-bold text-red-600 dark:text-red-400">
-                            -{toArabicNumbers(payroll.summary.totalDeductions.toFixed(2))} {t('common.currency')}
+                            -{toArabicNumbers((Number(payroll.summary.totalDeductions) || 0).toFixed(2))} {t('common.currency')}
                           </span>
                         </div>
                         
@@ -254,7 +254,7 @@ const PayrollHistory: React.FC = () => {
                         <div className="flex justify-between items-center">
                           <span className="text-gray-700 dark:text-gray-200 font-medium">{t('payroll.payrollHistory.netSalary')}</span>
                           <span className="font-bold text-blue-600 dark:text-blue-400 text-lg">
-                            {toArabicNumbers(payroll.summary.netSalary.toFixed(2))} {t('common.currency')}
+                            {toArabicNumbers((Number(payroll.summary.netSalary) || 0).toFixed(2))} {t('common.currency')}
                           </span>
                         </div>
                         
@@ -311,10 +311,10 @@ const PayrollHistory: React.FC = () => {
                                             </Tag>
                                           </td>
                                           <td className="px-2 py-1">
-                                            {record.hours ? toArabicNumbers(record.hours.toFixed(1)) : '-'}
+                                            {record.hours ? toArabicNumbers((Number(record.hours) || 0).toFixed(1)) : '-'}
                                             {record.overtime > 0 && (
                                               <span className="text-blue-600 dark:text-blue-400 mr-1">
-                                                (+{toArabicNumbers(record.overtime.toFixed(1))})
+                                                (+{toArabicNumbers((Number(record.overtime) || 0).toFixed(1))})
                                               </span>
                                             )}
                                           </td>

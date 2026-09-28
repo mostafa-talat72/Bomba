@@ -29,6 +29,7 @@ export interface User {
   position?: string;
   hireDate?: Date;
   salary?: number;
+  maxDateRangeDays?: number | null;
   notes?: string;
   isActive?: boolean;
   profileImage?: string;
@@ -53,12 +54,27 @@ export interface User {
       promptOrderPrintSections?: boolean;
       defaultOrderPrintSections?: string[];
       autoPrintOrderSections?: boolean;
+      openCashDrawerTakeaway?: boolean;
+      openCashDrawerDelivery?: boolean;
+      openCashDrawerOnPaymentTakeaway?: boolean;
+      openCashDrawerOnPaymentDelivery?: boolean;
+      autoPrintOnPaymentTakeaway?: boolean;
+      autoPrintOnPaymentDelivery?: boolean;
+      printMarksPaidTakeaway?: boolean;
+      printMarksPaidDelivery?: boolean;
+      promptOrderPrintSectionsTakeaway?: boolean;
+      promptOrderPrintSectionsDelivery?: boolean;
+      defaultOrderPrintSectionsTakeaway?: string[];
+      defaultOrderPrintSectionsDelivery?: string[];
+      autoPrintOrderSectionsTakeaway?: boolean;
+      autoPrintOrderSectionsDelivery?: boolean;
       printers?: Array<{ id: string; name: string; printerName: string; printerPath?: string; paperWidthMm?: number }>;
       sectionPrinterMap?: Record<string, string>;
       sectionPrinterMapTakeaway?: Record<string, string>;
       sectionPrinterMapDelivery?: Record<string, string>;
       documentPrinterMap?: Record<string, string>;
       documentCopies?: Record<string, number>;
+      documentCopyPrinters?: Record<string, string[]>;
     };
   };
   createdAt: Date;
@@ -233,7 +249,7 @@ export interface ItemPayment {
     amount: number;
     paidAt: Date;
     paidBy: string;
-    method: 'cash' | 'card' | 'transfer';
+    method: 'cash' | 'card' | 'transfer' | 'e_wallet';
   }>;
 }
 
@@ -247,7 +263,7 @@ export interface SessionPayment {
     amount: number;
     paidAt: Date;
     paidBy: string;
-    method: 'cash' | 'card' | 'transfer';
+    method: 'cash' | 'card' | 'transfer' | 'e_wallet';
   }>;
 }
 
@@ -295,7 +311,7 @@ export interface Bill {
       quantity: number;
       paidAt: string;
       paidBy: string;
-      paymentMethod: 'cash' | 'card' | 'transfer';
+      paymentMethod: 'cash' | 'card' | 'transfer' | 'e_wallet';
     }>;
     totalPaid: number;
   }>;
@@ -322,6 +338,7 @@ export interface Bill {
       sectionPrinterMapDelivery?: Record<string, string>;
       documentPrinterMap?: Record<string, string>;
       documentCopies?: Record<string, number>;
+      documentCopyPrinters?: Record<string, string[]>;
     };
   } | string; // يمكن أن يكون object مع populate أو string فقط
   createdBy: User;
@@ -484,12 +501,15 @@ export interface BillItem {
   addonName?: string;
 }
 
+export type CashDrawer = 'cashier' | 'hall' | 'takeaway' | 'delivery' | 'safe';
+
 export interface PayForItemsRequest {
   items: Array<{
     itemId: string;
     quantity: number;
   }>;
-  paymentMethod: 'cash' | 'card' | 'transfer';
+  paymentMethod: 'cash' | 'card' | 'transfer' | 'e_wallet';
+  drawer?: CashDrawer;
 }
 
 export interface PayForItemsResponse extends Bill {

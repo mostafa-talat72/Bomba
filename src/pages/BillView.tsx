@@ -81,7 +81,7 @@ interface Session {
 
 interface Payment {
 	amount: number;
-	method: 'cash' | 'card' | 'transfer';
+	method: 'cash' | 'card' | 'transfer' | 'e_wallet';
 	reference?: string;
 	timestamp: string;
 	user: {
@@ -112,7 +112,7 @@ interface SessionPayment {
 		amount: number;
 		paidAt: string;
 		paidBy: string;
-		method: 'cash' | 'card' | 'transfer';
+		method: 'cash' | 'card' | 'transfer' | 'e_wallet';
 	}[];
 }
 
@@ -153,7 +153,7 @@ interface BillDetails {
 			price: number;
 		}[];
 		paidAt: string;
-		paymentMethod: 'cash' | 'card' | 'transfer';
+		paymentMethod: 'cash' | 'card' | 'transfer' | 'e_wallet';
 	}[];
 	// New system
 	itemPayments?: ItemPayment[];

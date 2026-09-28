@@ -614,3 +614,17 @@
 .dark .ant-input-number input::placeholder {
   color: #6b7280 !important;
 }
+
+/* تقييد عرض لوحة اختيار الأيام — توقف عن امتلاء عرض الحقل */
+.attendance-days-picker-dropdown {
+  min-width: 320px !important;
+  max-width: 360px !important;
+  width: 320px !important;
+}
+.attendance-days-picker-dropdown .ant-picker-panel-container,
+.attendance-days-picker-dropdown .ant-picker-panel {
+  width: 100% !important;
+}
+.attendance-days-picker-dropdown .ant-picker-content {
+  width: 100% !important;
+}

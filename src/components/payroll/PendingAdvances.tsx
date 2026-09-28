@@ -172,7 +172,7 @@ const { user } = useApp();
         <div className="flex items-center gap-2">
           <DollarSign size={16} className="text-green-600" />
           <span className="font-bold text-green-600 dark:text-green-400">
-            {amount.toFixed(2)} {getCurrencySymbol()}
+            {(Number(amount) || 0).toFixed(2)} {getCurrencySymbol()}
           </span>
         </div>
       )
@@ -327,7 +327,7 @@ const { user } = useApp();
                 <div>
                   <span className="text-gray-600 dark:text-gray-400">{t('payroll.pendingAdvances.approveModal.amount')}</span>
                   <div className="font-bold text-green-600">
-                    {selectedAdvance.amount.toFixed(2)} {getCurrencySymbol()}
+                    {(Number(selectedAdvance.amount) || 0).toFixed(2)} {getCurrencySymbol()}
                   </div>
                 </div>
                 <div className="col-span-2">

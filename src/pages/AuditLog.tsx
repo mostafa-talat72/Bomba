@@ -207,9 +207,9 @@ const AuditLogPage = () => {
 
   return (
     <div className="p-4 md:p-6 min-h-screen bg-gray-50 dark:bg-gray-900" dir={rtl ? 'rtl' : 'ltr'}>
-      <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">{t('nav.auditLog')}</h1>
+      <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white mb-3 sm:mb-4">{t('nav.auditLog')}</h1>
 
-      <div className="flex flex-col md:flex-row gap-2 mb-4">
+      <div className="flex flex-col sm:flex-row gap-2 mb-4">
         <select value={action} onChange={(e) => setAction(e.target.value)} className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-sm shadow-sm focus:ring-2 focus:ring-orange-400 focus:outline-none">
           <option value="">{t('auditLogPage.allEvents')}</option>
           {actions.map((a) => <option key={a} value={a}>{actionLabel(a)}</option>)}

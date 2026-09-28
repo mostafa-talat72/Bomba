@@ -17,8 +17,9 @@ import { exportReportToPDF, generatePDFFilename } from '../utils/pdfExport';
 import { useTranslation } from 'react-i18next';
 import { formatDecimal, formatCurrency as formatCurrencyUtil, replaceAMPM } from '../utils/formatters';
 import { useCurrency } from '../hooks/useCurrency';
-import { canExportReports } from '../utils/permissionHelper';
+import { canExportReports, canEditDateFilters, getMaxDateRangeDays, isDateRangeAllowed } from '../utils/permissionHelper';
 import { useOrganization } from '../context/OrganizationContext';
+import { PaymentsByMethodCards, DrawerBreakdownCards, DeliveryFeesCards } from '../components/reports/PaymentsByMethodCards';
 
 // Configure dayjs
 dayjs.extend(customParseFormat);
@@ -935,17 +936,27 @@ const Reports = () => {
     dayjs.locale(i18n.language);
   }, [i18n.language]);
 
-  // تعديل الفلاتر للمدير/المالك فقط — نفس منطق تقرير الاستهلاك
+  // تعديل الفلاتر لمن يملك صلاحية تعديل التواريخ (المدير/المالك ضمناً)
   const { user } = useAuth();
-  const canEditFilters = (() => {
-    const u: any = user;
-    if (!u) return false;
-    if (u.role === 'admin' || u.role === 'owner') return true;
-    const owner = (u as any).organization?.owner;
-    const ownerId = typeof owner === 'object' && owner !== null ? String((owner as any)._id || (owner as any).id || owner) : String(owner || '');
-    const uid = String((u as any)._id || (u as any).id || '');
-    return !!ownerId && !!uid && ownerId === uid;
-  })();
+  const canEditFilters = canEditDateFilters(user as any);
+
+  // حد أقصى لطول الفترة المختارة حسب المستخدم (مثال: يومان)
+  const guardDays = (spanDays: number): boolean => {
+    const max = getMaxDateRangeDays(user as any);
+    if (max != null && spanDays > max) {
+      showNotification(t('common.dateRangeTooLong', 'أقصى مدى مسموح لك: {{days}} يوم', { days: max }), 'warning');
+      return false;
+    }
+    return true;
+  };
+  const guardRangePair = (s: Dayjs, e: Dayjs): boolean => {
+    if (!isDateRangeAllowed(s.toDate(), e.toDate(), user as any)) {
+      const max = getMaxDateRangeDays(user as any) ?? 0;
+      showNotification(t('common.dateRangeTooLong', 'أقصى مدى مسموح لك: {{days}} يوم', { days: max }), 'warning');
+      return false;
+    }
+    return true;
+  };
 
   // لغير المصرح: فلتر مخصص فقط بتاريخ/وقت 07:00 مثل تقرير الاستهلاك
   const defaultCustomRange: [Dayjs, Dayjs] = (() => {
@@ -993,15 +1004,25 @@ const Reports = () => {
         .set('hour', timeRange[0].hour())
         .set('minute', timeRange[0].minute())
         .set('second', 0);
+      if (!guardRangePair(startDate, dateRange[1])) return;
       setDateRange([startDate, dateRange[1]]);
     } else {
       const endDate = date
         .set('hour', timeRange[1].hour())
         .set('minute', timeRange[1].minute())
         .set('second', 59);
+      if (!guardRangePair(dateRange[0], endDate)) return;
       setDateRange([dateRange[0], endDate]);
     }
   }, [dateRange, timeRange]);
+
+  // تغيير وقت الفلتر (من/إلى) — يطبق على كل أنواع الفلاتر عبر buildFilter
+  const handleFilterTimeChange = (time: Dayjs | null, type: 'start' | 'end') => {
+    if (!canEditFilters) return;
+    if (!time) return;
+    if (type === 'start') setTimeRange([time, timeRange[1]]);
+    else setTimeRange([timeRange[0], time]);
+  };
 
   // Handle time change while preserving date — محمي لغير المصرح
   const handleTimeChange = useCallback((time: Dayjs | null, type: 'start' | 'end') => {
@@ -1014,6 +1035,7 @@ const Reports = () => {
         .set('hour', newStartTime.hour())
         .set('minute', newStartTime.minute())
         .set('second', 0);
+      if (!guardRangePair(newStartDate, dateRange[1])) return;
       setTimeRange([newStartTime, timeRange[1]]);
       setDateRange([newStartDate, dateRange[1]]);
     } else {
@@ -1022,6 +1044,7 @@ const Reports = () => {
         .set('hour', newEndTime.hour())
         .set('minute', newEndTime.minute())
         .set('second', 59);
+      if (!guardRangePair(dateRange[0], newEndDate)) return;
       setTimeRange([timeRange[0], newEndTime]);
       setDateRange([dateRange[0], newEndDate]);
     }
@@ -1101,11 +1124,23 @@ const Reports = () => {
       }
     }
 
+    // التوقيت من/إلى يطبق على كل الأنواع (المخصص خرج مبكرًا بوقته المدمج) — والمعكوس يعني اليوم الكامل
+    {
+      const s = new Date(startDate);
+      s.setHours(timeRange[0].hour(), timeRange[0].minute(), 0, 0);
+      const e = new Date(endDate);
+      e.setHours(timeRange[1].hour(), timeRange[1].minute(), 59, 0);
+      if (e.getTime() > s.getTime()) {
+        startDate = s;
+        endDate = e;
+      }
+    }
+
     return {
       startDate: startDate.toISOString(),
       endDate: endDate.toISOString()
     };
-  }, [filterType, selectedPeriod, customDay, customMonth, customYear, getEgyptTime, dateRange]);
+  }, [filterType, selectedPeriod, customDay, customMonth, customYear, getEgyptTime, dateRange, timeRange]);
 
   const getDateRangeLabel = useCallback(() => {
     const formatDate = (date: Date) => format(date, 'dd/MM/yyyy', { locale: getDateFnsLocale() });
@@ -1288,6 +1323,40 @@ const Reports = () => {
     return value;
   }, [reports.financial]);
 
+  const paymentsByMethod = useMemo(() => {
+    if (!reports.financial) return null;
+    const financial = reports.financial as {
+      paymentsByMethod?: {
+        methods?: Record<string, { total?: number; count?: number }>;
+        total?: number;
+        count?: number;
+      };
+    };
+    return financial?.paymentsByMethod || null;
+  }, [reports.financial]);
+
+  const paymentsByDrawer = useMemo(() => {
+    if (!reports.financial) return null;
+    const financial = reports.financial as {
+      paymentsByMethod?: {
+        drawers?: Record<string, { total?: number; count?: number }>;
+        total?: number;
+        count?: number;
+      };
+    };
+    const pbm = financial?.paymentsByMethod;
+    if (!pbm) return null;
+    return { drawers: pbm.drawers, total: pbm.total, count: pbm.count };
+  }, [reports.financial]);
+
+  const deliveryFees = useMemo(() => {
+    if (!reports.financial) return null;
+    const financial = reports.financial as {
+      deliveryFees?: { total?: number; count?: number };
+    };
+    return (financial as any)?.deliveryFees || null;
+  }, [reports.financial]);
+
   // تنسيق الأرقام
   const formatNumber = (num: number) => formatDecimal(num, i18n.language);
 
@@ -1362,9 +1431,9 @@ const Reports = () => {
 
   const renderFilterControls = () => {
     return (
-      <div className="space-y-4">
+      <div className="space-y-3">
         {/* شريط التبويب لنوع الفلتر — لغير المصرح: مخصص فقط ومقفل */}
-        <div className="flex flex-wrap gap-2 border-b border-gray-200 dark:border-gray-700 pb-2">
+        <div className="flex flex-wrap gap-2">
           {(canEditFilters
             ? [
                 { value: 'period', label: t('reports.filterTypes.period') },
@@ -1377,12 +1446,12 @@ const Reports = () => {
           ).map((tab) => (
             <button
               key={tab.value}
-              onClick={() => { if (!canEditFilters) return; setFilterType(tab.value as 'period' | 'custom' | 'daily' | 'monthly' | 'yearly'); }}
+              onClick={() => { if (!canEditFilters) return; const span = tab.value === 'daily' ? 1 : tab.value === 'monthly' ? 31 : tab.value === 'yearly' ? 366 : 0; if (span > 0 && !guardDays(span)) return; setFilterType(tab.value as 'period' | 'custom' | 'daily' | 'monthly' | 'yearly'); }}
               disabled={!canEditFilters && tab.value !== 'custom'}
-              className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${
+              className={`px-3 py-1.5 text-xs font-bold rounded-xl border transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
                 filterType === tab.value
-                  ? 'bg-orange-600 text-white'
-                  : 'text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700'
+                  ? 'bg-orange-600 text-white border-orange-600 shadow'
+                  : 'bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-600 hover:border-orange-300'
               }`}
             >
               {tab.label}
@@ -1395,21 +1464,21 @@ const Reports = () => {
           {filterType === 'period' && (
             <div className="flex flex-wrap gap-2">
               {[
-                { value: 'today', label: t('reports.periods.today') },
-                { value: 'yesterday', label: t('reports.periods.yesterday') },
-                { value: 'thisWeek', label: t('reports.periods.thisWeek') },
-                { value: 'thisMonth', label: t('reports.periods.thisMonth') },
-                { value: 'lastMonth', label: t('reports.periods.lastMonth') },
-                { value: 'thisYear', label: t('reports.periods.thisYear') }
+                { value: 'today', label: t('reports.periods.today'), span: 1 },
+                { value: 'yesterday', label: t('reports.periods.yesterday'), span: 1 },
+                { value: 'thisWeek', label: t('reports.periods.thisWeek'), span: 7 },
+                { value: 'thisMonth', label: t('reports.periods.thisMonth'), span: 31 },
+                { value: 'lastMonth', label: t('reports.periods.lastMonth'), span: 31 },
+                { value: 'thisYear', label: t('reports.periods.thisYear'), span: 366 }
               ].map((period) => (
                 <button
                   key={period.value}
-                  onClick={() => { if (!canEditFilters) return; setSelectedPeriod(period.value); }}
+                  onClick={() => { if (!canEditFilters) return; if (!guardDays(period.span)) return; setSelectedPeriod(period.value); }}
                   disabled={!canEditFilters}
-                  className={`px-3 py-1.5 text-sm rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                  className={`px-3 py-1.5 text-xs font-bold rounded-xl border transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
                     selectedPeriod === period.value
-                      ? 'bg-orange-600 text-white'
-                      : 'bg-white text-gray-700 hover:bg-gray-100 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600'
+                      ? 'bg-orange-600 text-white border-orange-600 shadow'
+                      : 'bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-600 hover:border-orange-300'
                   }`}
                 >
                   {period.label}
@@ -1419,62 +1488,58 @@ const Reports = () => {
           )}
 
           {filterType === 'custom' && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-6">
+            <div className="grid gap-2 sm:grid-cols-2">
               {/* Start Date/Time */}
-              <div className="space-y-3">
-                <div className="flex items-center text-sm font-medium text-gray-700 dark:text-gray-300">
-                  <div className="w-2 h-2 bg-blue-500 rounded-full ml-2"></div>
-                  <span>{t('reports.startTime')}</span>
-                </div>
-                <div className="space-y-3">
-                  <DatePicker
-                    value={dateRange[0]}
-                    onChange={(date) => handleDateChange(date, 'start')}
-                    className="w-full"
-                    format="YYYY/MM/DD"
-                    allowClear={false}
-                    placeholder={t('reports.placeholders.startDate')}
-                    size="large"
-                    disabled={!canEditFilters}
-                  />
-                  <LocalizedTimePicker
-                    value={timeRange[0]}
-                    onChange={(time) => handleTimeChange(time, 'start')}
-                    className="w-full"
-                    minuteStep={15}
-                    placeholder={t('reports.placeholders.startTime')}
-                    size="large"
-                    disabled={!canEditFilters}
-                  />
+              <div className="flex items-center gap-2 bg-white dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600 rounded-xl px-3 py-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-blue-500 flex-shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <div className="text-[11px] font-bold text-gray-500 dark:text-gray-400">{t('reports.startTime')}</div>
+                  <div className="flex gap-1.5 items-center">
+                    <DatePicker
+                      value={dateRange[0]}
+                      onChange={(date) => handleDateChange(date, 'start')}
+                      className="flex-1 min-w-0"
+                      format="YYYY/MM/DD"
+                      allowClear={false}
+                      placeholder={t('reports.placeholders.startDate')}
+                      disabled={!canEditFilters}
+                    />
+                    <LocalizedTimePicker
+                      value={timeRange[0]}
+                      onChange={(time) => handleTimeChange(time, 'start')}
+                      className="w-24"
+                      minuteStep={15}
+                      placeholder={t('reports.placeholders.startTime')}
+                      disabled={!canEditFilters}
+                    />
+                  </div>
                 </div>
               </div>
 
               {/* End Date/Time */}
-              <div className="space-y-3">
-                <div className="flex items-center text-sm font-medium text-gray-700 dark:text-gray-300">
-                  <div className="w-2 h-2 bg-red-500 rounded-full ml-2"></div>
-                  <span>{t('reports.endTime')}</span>
-                </div>
-                <div className="space-y-3">
-                  <DatePicker
-                    value={dateRange[1]}
-                    onChange={(date) => handleDateChange(date, 'end')}
-                    className="w-full"
-                    format="YYYY/MM/DD"
-                    allowClear={false}
-                    placeholder={t('reports.placeholders.endDate')}
-                    size="large"
-                    disabled={!canEditFilters}
-                  />
-                  <LocalizedTimePicker
-                    value={timeRange[1]}
-                    onChange={(time) => handleTimeChange(time, 'end')}
-                    className="w-full"
-                    minuteStep={15}
-                    placeholder={t('reports.placeholders.endTime')}
-                    size="large"
-                    disabled={!canEditFilters}
-                  />
+              <div className="flex items-center gap-2 bg-white dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600 rounded-xl px-3 py-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 flex-shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <div className="text-[11px] font-bold text-gray-500 dark:text-gray-400">{t('reports.endTime')}</div>
+                  <div className="flex gap-1.5 items-center">
+                    <DatePicker
+                      value={dateRange[1]}
+                      onChange={(date) => handleDateChange(date, 'end')}
+                      className="flex-1 min-w-0"
+                      format="YYYY/MM/DD"
+                      allowClear={false}
+                      placeholder={t('reports.placeholders.endDate')}
+                      disabled={!canEditFilters}
+                    />
+                    <LocalizedTimePicker
+                      value={timeRange[1]}
+                      onChange={(time) => handleTimeChange(time, 'end')}
+                      className="w-24"
+                      minuteStep={15}
+                      placeholder={t('reports.placeholders.endTime')}
+                      disabled={!canEditFilters}
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -1499,73 +1564,90 @@ const Reports = () => {
           )}
 
           {filterType === 'daily' && (
-            <div className="space-y-2">
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                {t('reports.selectDate')}
-              </label>
-              <DatePicker
-                value={dayjs(customDay)}
-                onChange={(date) => {
-                  if (!canEditFilters) return;
-                  if (date) {
-                    setCustomDay(date.format('YYYY-MM-DD'));
-                  }
-                }}
-                className="w-full"
-                format="YYYY/MM/DD"
-                allowClear={false}
-                placeholder={t('reports.selectDate')}
-                size="large"
-                disabled={!canEditFilters}
-              />
+            <div className="flex items-center gap-2 bg-white dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600 rounded-xl px-3 py-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-blue-500 flex-shrink-0" />
+              <div className="flex-1 min-w-0">
+                <div className="text-[11px] font-bold text-gray-500 dark:text-gray-400">{t('reports.selectDate')}</div>
+                <DatePicker
+                  value={dayjs(customDay)}
+                  onChange={(date) => {
+                    if (!canEditFilters) return;
+                    if (date) {
+                      if (!guardDays(1)) return;
+                      setCustomDay(date.format('YYYY-MM-DD'));
+                    }
+                  }}
+                  className="w-full"
+                  format="YYYY/MM/DD"
+                  allowClear={false}
+                  placeholder={t('reports.selectDate')}
+                  disabled={!canEditFilters}
+                />
+              </div>
             </div>
           )}
 
           {filterType === 'monthly' && (
-            <div className="space-y-2">
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                {t('reports.selectMonth')}
-              </label>
-              <DatePicker
-                value={dayjs(customMonth + '-01')}
-                onChange={(date) => {
-                  if (!canEditFilters) return;
-                  if (date) {
-                    setCustomMonth(date.format('YYYY-MM'));
-                  }
-                }}
-                picker="month"
-                className="w-full"
-                format="MMMM YYYY"
-                allowClear={false}
-                placeholder={t('reports.selectMonth')}
-                size="large"
-                disabled={!canEditFilters}
-              />
+            <div className="flex items-center gap-2 bg-white dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600 rounded-xl px-3 py-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-purple-500 flex-shrink-0" />
+              <div className="flex-1 min-w-0">
+                <div className="text-[11px] font-bold text-gray-500 dark:text-gray-400">{t('reports.selectMonth')}</div>
+                <DatePicker
+                  value={dayjs(customMonth + '-01')}
+                  onChange={(date) => {
+                    if (!canEditFilters) return;
+                    if (date) {
+                      if (!guardDays(31)) return;
+                      setCustomMonth(date.format('YYYY-MM'));
+                    }
+                  }}
+                  picker="month"
+                  className="w-full"
+                  format="MMMM YYYY"
+                  allowClear={false}
+                  placeholder={t('reports.selectMonth')}
+                  disabled={!canEditFilters}
+                />
+              </div>
             </div>
           )}
 
           {filterType === 'yearly' && (
-            <div className="space-y-2">
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                {t('reports.selectYear')}
-              </label>
-              <DatePicker
-                value={dayjs(customYear + '-01-01')}
-                onChange={(date) => {
-                  if (!canEditFilters) return;
-                  if (date) {
-                    setCustomYear(date.format('YYYY'));
-                  }
-                }}
-                picker="year"
-                className="w-full"
-                format="YYYY"
-                allowClear={false}
-                placeholder={t('reports.selectYear')}
-                size="large"
-                disabled={!canEditFilters}
-              />
+            <div className="flex items-center gap-2 bg-white dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600 rounded-xl px-3 py-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-orange-500 flex-shrink-0" />
+              <div className="flex-1 min-w-0">
+                <div className="text-[11px] font-bold text-gray-500 dark:text-gray-400">{t('reports.selectYear')}</div>
+                <DatePicker
+                  value={dayjs(customYear + '-01-01')}
+                  onChange={(date) => {
+                    if (!canEditFilters) return;
+                    if (date) {
+                      if (!guardDays(366)) return;
+                      setCustomYear(date.format('YYYY'));
+                    }
+                  }}
+                  picker="year"
+                  className="w-full"
+                  format="YYYY"
+                  allowClear={false}
+                  placeholder={t('reports.selectYear')}
+                  disabled={!canEditFilters}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* التوقيت من/إلى — يطبق على كل الأنواع عدا المخصص (وقته مدمج) */}
+          {filterType !== 'custom' && (
+            <div className="flex items-center gap-2 bg-white dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600 rounded-xl px-3 py-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-amber-500 flex-shrink-0" />
+              <div className="flex-1 min-w-0">
+                <div className="text-[11px] font-bold text-gray-500 dark:text-gray-400">{t('reports.timeRangeTitle', 'التوقيت من / إلى')}</div>
+                <div className="flex gap-1.5 items-center">
+                  <LocalizedTimePicker value={timeRange[0]} onChange={(tm) => handleFilterTimeChange(tm, 'start')} className="flex-1 min-w-0" minuteStep={15} placeholder={t('reports.placeholders.startTime')} disabled={!canEditFilters} />
+                  <LocalizedTimePicker value={timeRange[1]} onChange={(tm) => handleFilterTimeChange(tm, 'end')} className="flex-1 min-w-0" minuteStep={15} placeholder={t('reports.placeholders.endTime')} disabled={!canEditFilters} />
+                </div>
+              </div>
             </div>
           )}
 
@@ -1656,47 +1738,38 @@ const Reports = () => {
         </div>
 
         {/* Quick Stats Cards */}
-        <div className="space-y-4">
+        <div className="space-y-2">
           {/* Total Revenue Card */}
-          <div className="bg-gradient-to-br from-green-500 to-green-600 dark:from-green-600 dark:to-green-700 rounded-2xl shadow-lg p-4 sm:p-6 text-white transition-all duration-300 hover:shadow-xl">
-            <div className="flex items-center justify-between mb-4">
-              <div className="w-14 h-14 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center">
-                <DollarSign className="w-7 h-7" />
-              </div>
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 px-3 py-2.5 text-center">
+            <div className="text-[11px] font-bold text-gray-500 dark:text-gray-400 flex items-center justify-center gap-1">
+              {t('reports.stats.totalRevenue')}
               <button
                 onClick={() => setShowRevenue(!showRevenue)}
                 title={showRevenue ? t('reports.hideAmount') : t('reports.showAmount')}
-                className="text-white hover:bg-white/20 p-2 rounded-lg transition-colors duration-200"
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors"
               >
-                {showRevenue ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                {showRevenue ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
               </button>
             </div>
-            <div className="text-3xl font-bold mb-2">
+            <div className="text-base sm:text-lg font-extrabold text-green-600 dark:text-green-400">
               {showRevenue ? formatCurrency(basicStats.revenue) : '••••••'}
             </div>
-            <div className="text-green-100 text-sm font-medium">{t('reports.stats.totalRevenue')}</div>
           </div>
 
           {/* Total Orders Card */}
-          <div className="bg-gradient-to-br from-blue-500 to-blue-600 dark:from-blue-600 dark:to-blue-700 rounded-2xl shadow-lg p-4 sm:p-6 text-white transition-all duration-300 hover:shadow-xl">
-            <div className="w-14 h-14 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center mb-4">
-              <ShoppingCart className="w-7 h-7" />
-            </div>
-            <div className="text-3xl font-bold mb-2">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 px-3 py-2.5 text-center">
+            <div className="text-[11px] font-bold text-gray-500 dark:text-gray-400">{t('reports.stats.totalOrders')}</div>
+            <div className="text-base sm:text-lg font-extrabold text-blue-600 dark:text-blue-400">
               {formatNumber(basicStats.orders)}
             </div>
-            <div className="text-blue-100 text-sm font-medium">{t('reports.stats.totalOrders')}</div>
           </div>
 
           {/* Total Sessions Card */}
-          <div className="bg-gradient-to-br from-purple-500 to-purple-600 dark:from-purple-600 dark:to-purple-700 rounded-2xl shadow-lg p-4 sm:p-6 text-white transition-all duration-300 hover:shadow-xl">
-            <div className="w-14 h-14 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center mb-4">
-              <Gamepad2 className="w-7 h-7" />
-            </div>
-            <div className="text-3xl font-bold mb-2">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 px-3 py-2.5 text-center">
+            <div className="text-[11px] font-bold text-gray-500 dark:text-gray-400">{t('reports.stats.totalSessions')}</div>
+            <div className="text-base sm:text-lg font-extrabold text-purple-600 dark:text-purple-400">
               {formatNumber(basicStats.sessions)}
             </div>
-            <div className="text-purple-100 text-sm font-medium">{t('reports.stats.totalSessions')}</div>
           </div>
         </div>
       </div>
@@ -1763,7 +1836,7 @@ const Reports = () => {
           <DollarSign className="w-6 h-6 text-green-500" />
           <span>{t('reports.sections.revenueDistribution')}</span>
         </h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-6">
+        <div className="grid grid-cols-3 gap-2">
           <RevenueCard
             icon={Gamepad2}
             title={t('reports.playstation')}
@@ -1920,110 +1993,68 @@ const Reports = () => {
           </div>
         </div>
         {reports.financial ? (
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
+          <>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
             {/* Net Profit Card */}
-            <div className={`rounded-xl p-6 border-2 transition-all duration-200 ${
-              netProfit >= 0 
-                ? 'bg-gradient-to-br from-green-50 to-green-100 dark:from-green-900/20 dark:to-green-800/20 border-green-200 dark:border-green-700' 
-                : 'bg-gradient-to-br from-red-50 to-red-100 dark:from-red-900/20 dark:to-red-800/20 border-red-200 dark:border-red-700'
-            }`}>
-              <div className="flex items-center justify-between mb-3">
-                <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
-                  netProfit >= 0 
-                    ? 'bg-green-500 dark:bg-green-600' 
-                    : 'bg-red-500 dark:bg-red-600'
-                }`}>
-                  <DollarSign className="w-6 h-6 text-white" />
-                </div>
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 px-3 py-2.5 text-center">
+              <div className="text-[11px] font-bold text-gray-500 dark:text-gray-400 flex items-center justify-center gap-1">
+                {t('reports.stats.netProfit')}
                 <button
                   onClick={() => setShowProfit(!showProfit)}
                   title={showProfit ? t('reports.hideAmount') : t('reports.showAmount')}
-                  className={`p-2 rounded-lg transition-colors ${
-                    netProfit >= 0
-                      ? 'hover:bg-green-200 dark:hover:bg-green-800/30 text-green-700 dark:text-green-400'
-                      : 'hover:bg-red-200 dark:hover:bg-red-800/30 text-red-700 dark:text-red-400'
-                  }`}
+                  className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors"
                 >
-                  {showProfit ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                  {showProfit ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                 </button>
               </div>
-              <div className={`text-3xl font-bold mb-2 ${
-                netProfit >= 0 
-                  ? 'text-green-700 dark:text-green-400' 
-                  : 'text-red-700 dark:text-red-400'
-              }`}>
+              <div className={`text-base sm:text-lg font-extrabold ${netProfit >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
                 {showProfit ? formatCurrency(netProfit) : '••••••'}
               </div>
-              <div className="text-sm font-medium text-gray-600 dark:text-gray-400">{t('reports.stats.netProfit')}</div>
               {netProfit < 0 && (
-                <div className="mt-2 flex items-center gap-1 text-xs text-red-600 dark:text-red-400">
-                  <TrendingDown className="w-4 h-4" />
+                <div className="mt-0.5 flex items-center justify-center gap-1 text-[10px] text-red-600 dark:text-red-400">
+                  <TrendingDown className="w-3 h-3" />
                   <span>{t('reports.labels.loss')}</span>
                 </div>
               )}
             </div>
 
             {/* Total Costs Card */}
-            <div className="bg-gradient-to-br from-red-50 to-red-100 dark:from-gray-700 dark:to-gray-600 rounded-xl p-6 border-2 border-red-200 dark:border-gray-600">
-              <div className="flex items-center justify-between mb-3">
-                <div className="w-12 h-12 bg-red-500 dark:bg-red-600 rounded-xl flex items-center justify-center">
-                  <TrendingDown className="w-6 h-6 text-white" />
-                </div>
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 px-3 py-2.5 text-center">
+              <div className="text-[11px] font-bold text-gray-500 dark:text-gray-400 flex items-center justify-center gap-1">
+                {t('reports.stats.totalCosts')}
                 <button
                   onClick={() => setShowCosts(!showCosts)}
                   title={showCosts ? t('reports.hideAmount') : t('reports.showAmount')}
-                  className="hover:bg-red-200 dark:hover:bg-red-800/30 p-2 rounded-lg transition-colors text-red-700 dark:text-red-400"
+                  className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors"
                 >
-                  {showCosts ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                  {showCosts ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                 </button>
               </div>
-              <div className="text-3xl font-bold text-red-700 dark:text-red-400 mb-2">
+              <div className="text-base sm:text-lg font-extrabold text-red-600 dark:text-red-400">
                 {showCosts ? formatCurrency(totalCosts) : '••••••'}
               </div>
-              <div className="text-sm font-medium text-gray-600 dark:text-gray-400">{t('reports.stats.totalCosts')}</div>
             </div>
 
             {/* Profit Margin Card */}
-            <div className={`rounded-xl p-6 border-2 transition-all duration-200 ${
-              profitMargin >= 0 
-                ? 'bg-gradient-to-br from-purple-50 to-purple-100 dark:from-gray-700 dark:to-gray-600 border-purple-200 dark:border-gray-600' 
-                : 'bg-gradient-to-br from-red-50 to-red-100 dark:from-red-900/20 dark:to-red-800/20 border-red-200 dark:border-red-700'
-            }`}>
-              <div className="flex items-center justify-between mb-3">
-                <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
-                  profitMargin >= 0 
-                    ? 'bg-purple-500 dark:bg-purple-600' 
-                    : 'bg-red-500 dark:bg-red-600'
-                }`}>
-                  <Target className="w-6 h-6 text-white" />
-                </div>
-                {profitMargin < 0 && (
-                  <div className="flex items-center gap-1 text-xs text-red-600 dark:text-red-400">
-                    <TrendingDown className="w-4 h-4" />
-                  </div>
-                )}
-              </div>
-              <div className={`text-3xl font-bold mb-2 ${
-                profitMargin >= 0 
-                  ? 'text-purple-700 dark:text-purple-400' 
-                  : 'text-red-700 dark:text-red-400'
-              }`}>
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 px-3 py-2.5 text-center">
+              <div className="text-[11px] font-bold text-gray-500 dark:text-gray-400">{t('reports.stats.profitMargin')}</div>
+              <div className={`text-base sm:text-lg font-extrabold ${profitMargin >= 0 ? 'text-purple-600 dark:text-purple-400' : 'text-red-600 dark:text-red-400'}`}>
                 {formatNumber(profitMargin)}%
               </div>
-              <div className="text-sm font-medium text-gray-600 dark:text-gray-400">{t('reports.stats.profitMargin')}</div>
             </div>
 
             {/* Total Transactions Card */}
-            <div className="bg-gradient-to-br from-orange-50 to-orange-100 dark:from-gray-700 dark:to-gray-600 rounded-xl p-6 border-2 border-orange-200 dark:border-gray-600">
-              <div className="w-12 h-12 bg-orange-500 dark:bg-orange-600 rounded-xl flex items-center justify-center mb-3">
-                <ShoppingCart className="w-6 h-6 text-white" />
-              </div>
-              <div className="text-3xl font-bold text-orange-700 dark:text-orange-400 mb-2">
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 px-3 py-2.5 text-center">
+              <div className="text-[11px] font-bold text-gray-500 dark:text-gray-400">{t('reports.stats.totalTransactions')}</div>
+              <div className="text-base sm:text-lg font-extrabold text-orange-600 dark:text-orange-400">
                 {formatNumber(totalTransactions)}
               </div>
-              <div className="text-sm font-medium text-gray-600 dark:text-gray-400">{t('reports.stats.totalTransactions')}</div>
             </div>
           </div>
+          <PaymentsByMethodCards data={paymentsByMethod} formatCurrency={formatCurrency} />
+          <DrawerBreakdownCards data={paymentsByDrawer} formatCurrency={formatCurrency} />
+          <DeliveryFeesCards data={deliveryFees} formatCurrency={formatCurrency} />
+          </>
         ) : (
           <p className="text-gray-500 dark:text-gray-400 text-center py-8">{t('reports.noFinancialData')}</p>
         )}
@@ -2070,27 +2101,26 @@ const RevenueCard = ({ icon: Icon, title, value, total, color, i18n, t }: Revenu
     return formatCurrencyUtil(amount, i18n.language, currency);
   }, [i18n.language, currency]);
   
+  const valueColor = color === 'blue'
+    ? 'text-blue-600 dark:text-blue-400'
+    : color === 'green'
+      ? 'text-green-600 dark:text-green-400'
+      : 'text-orange-600 dark:text-orange-400';
+
   return (
-  <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border-2 border-gray-200 dark:border-gray-700 p-6 hover:shadow-lg transition-all duration-200">
-    <div className="flex items-center justify-between mb-4">
-      <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-        <div className={`w-10 h-10 rounded-xl flex items-center justify-center bg-${color}-100 dark:bg-${color}-900/30`}>
-          <Icon className={`h-6 w-6 text-${color}-600 dark:text-${color}-400`} />
-        </div>
-        {title}
-      </h3>
-      <span className={`text-sm font-bold px-3 py-1.5 rounded-full bg-${color}-100 text-${color}-800 dark:bg-${color}-900/30 dark:text-${color}-300`}>
+  <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 px-3 py-2.5 text-center">
+    <div className="text-[11px] font-bold text-gray-500 dark:text-gray-400 flex items-center justify-center gap-1">
+      <Icon className="h-3.5 w-3.5" />
+      {title}
+      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
         {formatDecimal((value / total) * 100 || 0, i18n.language)}%
       </span>
     </div>
-    <p className="text-3xl font-bold text-gray-900 dark:text-gray-100 text-center mt-4">
+    <div className={`text-base sm:text-lg font-extrabold ${valueColor}`}>
       {formatCurrency(value)}
-    </p>
-    <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
-      <div className="flex justify-between text-sm text-gray-600 dark:text-gray-400">
-        <span>{t('reports.revenueByType')}</span>
-        <span className="font-semibold">{formatCurrency(total)}</span>
-      </div>
+    </div>
+    <div className="text-[10px] text-gray-400 dark:text-gray-500">
+      {t('reports.revenueByType')}: {formatCurrency(total)}
     </div>
   </div>
   );

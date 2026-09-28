@@ -8,6 +8,7 @@ import Bonus from '../models/Bonus.js';
 import mongoose from 'mongoose';
 import { createTombstone } from '../utils/tombstoneHelper.js';
 import { startOfMonth, endOfMonth, format, getDaysInMonth } from 'date-fns';
+import { dailyRateOf, countWorkedDays, overtimeRateOf, advanceInstallment, isAdvanceDisbursed, validatePayAmount } from '../utils/payrollMath.js';
 
 // Helper: Calculate payroll
 const calculatePayroll = async (employee, month, year, organizationId) => {
@@ -40,10 +41,12 @@ const calculatePayroll = async (employee, month, year, organizationId) => {
     overtimeHours: attendance.reduce((sum, a) => sum + (a.details?.overtimeHours || 0), 0)
   };
   
-  // حساب الراتب الأساسي
+  // حساب الراتب الأساسي — القاعدة المعتمدة: يومي/نصف يوم يُحتسب، والشهري كامل
+  // مع خصم الغياب لاحقاً بسعر (الشهري ÷ 30)
   let basicAmount = 0;
   let basicCalculation = '';
-  let daysWorked = attendanceSummary.present;
+  let daysWorked = countWorkedDays({ present: attendanceSummary.present, late: 0, halfDay: attendanceSummary.halfDays });
+  // ملاحظة: attendanceSummary.present يشمل المتأخر أصلاً (present+late)
   
   if (employee.employment.type === 'monthly') {
     basicAmount = employee.compensation.monthly || 0;
@@ -103,13 +106,8 @@ const calculatePayroll = async (employee, month, year, organizationId) => {
   const overtimeDetails = [];
   
   if (attendanceSummary.overtimeHours > 0) {
-    if (employee.employment.type === 'hourly') {
-      overtimeRate = (employee.compensation.hourly || 0) * (employee.compensation.overtimeRate || 1.5);
-    } else if (employee.employment.type === 'daily') {
-      overtimeRate = ((employee.compensation.daily || 0) / 8) * (employee.compensation.overtimeRate || 1.5);
-    } else {
-      overtimeRate = ((employee.compensation.monthly || 0) / 26 / 8) * (employee.compensation.overtimeRate || 1.5);
-    }
+    // القاعدة المعتمدة: السعر الثابت أولاً ثم المشتق
+    overtimeRate = overtimeRateOf(employee.compensation, employee.employment.type);
     
     overtimeAmount = overtimeRate * attendanceSummary.overtimeHours;
     
@@ -170,10 +168,11 @@ const calculatePayroll = async (employee, month, year, organizationId) => {
   
   attendance.forEach(a => {
     if (a.status === 'absent' && !a.excused) {
-      const dailyRate = employee.employment.type === 'daily' 
-        ? employee.compensation.daily 
-        : (employee.compensation.monthly || 0) / 26;
-      
+      // القاعدة المعتمدة: الأجر اليومي = الشهري ÷ 30
+      const dailyRate = employee.employment.type === 'daily'
+        ? employee.compensation.daily
+        : dailyRateOf(employee.compensation, employee.employment.type);
+
       absenceDeductions.push({
         date: a.date,
         day: a.day,
@@ -183,6 +182,20 @@ const calculatePayroll = async (employee, month, year, organizationId) => {
       });
       absenceTotal += dailyRate;
     }
+    if (a.status === 'half_day' && !a.excused) {
+      const dailyRate = employee.employment.type === 'daily'
+        ? employee.compensation.daily
+        : dailyRateOf(employee.compensation, employee.employment.type);
+      const halfAmount = dailyRate / 2;
+      absenceDeductions.push({
+        date: a.date,
+        day: a.day,
+        amount: halfAmount,
+        reason: a.reason || 'نصف يوم غياب',
+        excused: false
+      });
+      absenceTotal += halfAmount;
+    }
   });
   
   // خصم التأخير
@@ -191,9 +204,9 @@ const calculatePayroll = async (employee, month, year, organizationId) => {
   
   attendance.forEach(a => {
     if (a.status === 'late' && !a.excused && a.details?.lateMinutes > 0) {
-      const dailyRate = employee.employment.type === 'daily' 
-        ? employee.compensation.daily 
-        : (employee.compensation.monthly || 0) / 26;
+      const dailyRate = employee.employment.type === 'daily'
+        ? employee.compensation.daily
+        : dailyRateOf(employee.compensation, employee.employment.type);
       
       // خصم حسب الدقائق (كل 60 دقيقة = يوم)
       const deductionAmount = (dailyRate / 480) * a.details.lateMinutes; // 480 دقيقة = 8 ساعات
@@ -209,11 +222,11 @@ const calculatePayroll = async (employee, month, year, organizationId) => {
     }
   });
   
-  // السلف - مع منطق الترحيل
+  // السلف - مع منطق الترحيل — القاعدة المعتمدة: أقساط المصروفة فعلاً فقط
   const activeAdvances = await Advance.find({
     employeeId: employee._id,
     organizationId,
-    status: { $in: ['approved', 'paid'] },
+    status: 'paid',
     'repayment.remainingAmount': { $gt: 0 }
   });
   
@@ -249,10 +262,7 @@ const calculatePayroll = async (employee, month, year, organizationId) => {
   let advancesTotal = 0;
   
   activeAdvances.forEach(adv => {
-    const deductionAmount = Math.min(
-      adv.repayment.amountPerMonth,
-      adv.repayment.remainingAmount
-    );
+    const deductionAmount = advanceInstallment(adv);
     
     advanceDeductions.push({
       advanceId: adv._id,
@@ -755,18 +765,23 @@ function recalculatePayrollTotals(payroll) {
   payroll.earnings.allowancesTotal = payroll.earnings.allowances.reduce(
     (sum, a) => sum + a.amount, 0
   );
-  
+
   payroll.earnings.bonusesTotal = payroll.earnings.bonuses.reduce(
     (sum, b) => sum + b.amount, 0
   );
-  
-  payroll.earnings.total = 
+
+  payroll.earnings.total =
     payroll.earnings.basic.amount +
     payroll.earnings.allowancesTotal +
     payroll.earnings.overtime.amount +
     payroll.earnings.commission.amount +
     payroll.earnings.bonusesTotal +
     payroll.earnings.tips.amount;
+
+  // إعادة اشتقاق التأمين (11% من الأساسي) والضريبة (2.5% من الإجمالي)
+  // حتى لا تبقى قيم قديمة بعد تعديل الأساسي
+  payroll.deductions.insurance.amount = (payroll.earnings.basic.amount * 11) / 100;
+  payroll.deductions.tax.amount = (payroll.earnings.total * 2.5) / 100;
   
   // إعادة حساب إجمالي الخصومات
   payroll.deductions.absenceTotal = payroll.deductions.absence.reduce(
@@ -940,38 +955,43 @@ export const getPayrollSummaryData = async (organizationId, month, year) => {
           date: { $gte: startDate, $lte: employeeEndDate }
         });
         
-        // Calculate salary based on employment type
+        // Calculate salary — القاعدة المعتمدة الموحدة:
+        // شهري = الأساسي كامل − غياب (يومي ÷ 30) | يومي = يومي × أيام العمل | بالساعة = أساسي + إضافي
+        // السلف = أقساط المصروفة فقط | نصف اليوم = 0.5
         let grossSalary = 0;
         let salaryCalculationNote = '';
-        
+        const presentCount = attendance.filter(a => a.status === 'present' || a.status === 'late').length;
+        const halfCount = attendance.filter(a => a.status === 'half_day').length;
+        const absentCount = attendance.filter(a => a.status === 'absent' && !a.excused).length;
+
         if (employee.employment.type === 'monthly') {
-          // For monthly employees: calculate based on attendance days
-          // Gross = (Monthly Salary ÷ Days in Month) × Days Present
-          const daysPresent = attendance.filter(a => a.status === 'present' || a.status === 'late').length;
-          const dailyRate = (employee.compensation.monthly || 0) / daysInMonth;
-          grossSalary = dailyRate * daysPresent;
-          salaryCalculationNote = `(${employee.compensation.monthly} ÷ ${daysInMonth}) × ${daysPresent} = ${dailyRate.toFixed(2)} × ${daysPresent} = ${grossSalary.toFixed(2)} جنيه`;
+          const dailyRate = dailyRateOf(employee.compensation, 'monthly');
+          const worked = countWorkedDays({ present: presentCount, halfDay: halfCount });
+          grossSalary = (employee.compensation.monthly || 0) - dailyRate * (absentCount + halfCount * 0.5);
+          salaryCalculationNote = `${employee.compensation.monthly} − خصم ${absentCount + halfCount * 0.5} يوم غياب × ${dailyRate.toFixed(2)} = ${grossSalary.toFixed(2)} جنيه (حضور ${worked})`;
         } else if (employee.employment.type === 'daily') {
           // For daily employees: salary based on days worked
-          const daysWorked = attendance.filter(a => a.status === 'present' || a.status === 'late').length;
+          const daysWorked = countWorkedDays({ present: presentCount, halfDay: halfCount });
           grossSalary = (employee.compensation.daily || 0) * daysWorked;
           salaryCalculationNote = `${daysWorked} يوم × ${employee.compensation.daily} = ${grossSalary} جنيه`;
         } else if (employee.employment.type === 'hourly') {
-          // For hourly employees: salary based on hours worked
-          const totalHours = attendance.reduce((sum, a) => sum + (a.details?.totalHours || 0), 0);
-          grossSalary = (employee.compensation.hourly || 0) * totalHours;
-          salaryCalculationNote = `${totalHours} ساعة × ${employee.compensation.hourly} = ${grossSalary} جنيه`;
+          // For hourly employees: regular hours + overtime premium
+          const regularHours = attendance.reduce((sum, a) => sum + (a.details?.regularHours || 0), 0);
+          const otHours = attendance.reduce((sum, a) => sum + (a.details?.overtimeHours || 0), 0);
+          const otRate = overtimeRateOf(employee.compensation, 'hourly');
+          grossSalary = (employee.compensation.hourly || 0) * regularHours + otRate * otHours;
+          salaryCalculationNote = `${regularHours} ساعة × ${employee.compensation.hourly} + ${otHours} إضافي × ${otRate.toFixed(2)} = ${grossSalary.toFixed(2)} جنيه`;
         }
- 
-        // Get advances for this month based on requestDate
+
+        // Advances: installments of disbursed advances only (unified rule)
         const monthAdvances = await Advance.find({
           employeeId: employee._id,
           organizationId: organizationId,
-          status: { $in: ['approved', 'paid'] },
-          requestDate: { $gte: startDate, $lte: endDate }
+          status: 'paid',
+          'repayment.remainingAmount': { $gt: 0 },
         });
 
-        const advancesTotal = monthAdvances.reduce((sum, adv) => sum + adv.amount, 0);
+        const advancesTotal = monthAdvances.reduce((sum, adv) => sum + advanceInstallment(adv), 0);
                       
         // Get manual deductions for the month (using date field)
         const manualDeductions = await Deduction.find({
@@ -989,9 +1009,8 @@ export const getPayrollSummaryData = async (organizationId, month, year) => {
         });
         const bonusesTotal = bonuses.reduce((sum, bonus) => sum + (bonus.amount || 0), 0);
         
-        // NO automatic absence deduction
-        // Deductions are ONLY from manual entries in Deduction table
-        // Absence does NOT automatically create a deduction
+        // Manual deductions for the month (using date field) — plus automatic
+        // absence deductions already reflected in gross above
 
         const otherDeductionsTotal = manualDeductionsTotal;
         const totalDeductionsEmp = advancesTotal + otherDeductionsTotal;
@@ -1253,7 +1272,25 @@ export const editPayroll = async (req, res) => {
     
     // حفظ النسخة الأصلية للمقارنة
     const originalData = payroll.toObject();
-    
+
+    // القاعدة المعتمدة: التعديل اليدوي مسموح فقط على البنود القابلة للضبط
+    // (مكافآت/بقشيش/عمولة/جزاءات/أخرى + ملاحظات) — أي حقل آخر مرفوض
+    const EDITABLE_PREFIXES = [
+      'earnings.bonuses', 'earnings.tips', 'earnings.commission',
+      'deductions.penalties', 'deductions.other', 'notes',
+    ];
+    const isEditableField = (field) =>
+      typeof field === 'string' &&
+      !field.includes('__proto__') && !field.includes('constructor') && !field.includes('prototype') &&
+      EDITABLE_PREFIXES.some((p) => field === p || field.startsWith(p + '.') || field.startsWith(p + '['));
+    const rejected = (changes || []).filter((c) => !isEditableField(c?.field));
+    if (rejected.length > 0) {
+      return res.status(403).json({
+        success: false,
+        error: `حقول غير قابلة للتعديل اليدوي: ${rejected.map((c) => c?.field).join(', ')}`,
+      });
+    }
+
     // إنشاء سجل المراجعة
     const revision = {
       revisionNumber: payroll.revisions.length + 1,
@@ -1353,9 +1390,15 @@ export const payPayroll = async (req, res) => {
     if (payroll.status !== 'approved') {
       return res.status(400).json({ success: false, error: 'يجب اعتماد الكشف أولاً' });
     }
-    
+
+    // القاعدة المعتمدة: مبلغ موجب لا يتجاوز المتبقي (لا دفع زائد)
+    const payCheck = validatePayAmount(amount, payroll.summary.unpaidBalance ?? payroll.summary.netSalary);
+    if (!payCheck.ok) {
+      return res.status(400).json({ success: false, error: payCheck.error });
+    }
+
     // تحديث معلومات الدفع
-    payroll.summary.paidAmount += amount;
+    payroll.summary.paidAmount += payCheck.amount;
     payroll.summary.unpaidBalance = payroll.summary.netSalary - payroll.summary.paidAmount;
     
     if (payroll.summary.unpaidBalance <= 0) {
@@ -1370,9 +1413,13 @@ export const payPayroll = async (req, res) => {
     
     await payroll.save();
     
-    // تسجيل خصم السلف
+    // تسجيل خصم السلف — مع منع التكرار (نفس الكشف لا يخصم نفس القسط مرتين)
     if (payroll.deductions.advances.length > 0) {
       for (const advDeduction of payroll.deductions.advances) {
+        const advDoc = await Advance.findById(advDeduction.advanceId).select('repayment').lean();
+        const alreadyApplied = Array.isArray(advDoc?.repayment?.deductions) &&
+          advDoc.repayment.deductions.some((d) => String(d?.payrollId) === String(payroll._id));
+        if (alreadyApplied) continue;
         await Advance.findByIdAndUpdate(advDeduction.advanceId, {
           $push: {
             'repayment.deductions': {

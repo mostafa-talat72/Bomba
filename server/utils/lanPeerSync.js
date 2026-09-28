@@ -315,6 +315,22 @@ export async function applyReceivedDoc(collectionName, doc, operation) {
 }
 
 /**
+ * تقارب الحذف عبر المقابر: مستند tombstone يعني حذف المستند المشار إليه
+ * (collectionName + documentId) من الداتابيز المحلية. يُستخدم عند استلام
+ * مقبرة live عبر /receive وعند سحب المقابر في catch-up — حتى لا تبقى نسخة
+ * قديمة على جهاز كان مغلقاً أثناء الحذف. آمن تكراره (deleteOne خامل).
+ */
+export async function applyTombstoneDelete(tombDoc) {
+    const targetColl = tombDoc?.collectionName;
+    const targetId = tombDoc?.documentId;
+    if (!targetColl || targetColl === "tombstones") return null;
+    if (!isSafeCollection(targetColl)) return null;
+    if (targetId === undefined || targetId === null) return null;
+    const res = await applyReceivedDoc(targetColl, { _id: targetId }, "delete");
+    return { collection: targetColl, _id: targetId, applied: res?.applied };
+}
+
+/**
  * Normalize a sync-middleware operation into a full-doc push payload.
  * Update hooks often carry partial `$set` data; when peers exist we read the
  * full local doc so a peer missing the doc still converges (upsert).
@@ -404,6 +420,7 @@ let catchUpRunning = false;
 
 async function pullCollectionFromPeer(peer, collection, since) {
     let pulled = 0;
+    let converged = 0;
     let cursor = since;
     for (;;) {
         const res = await postJson(
@@ -419,14 +436,25 @@ async function pullCollectionFromPeer(peer, collection, since) {
             } catch (err) {
                 Logger.warn(`[LanMesh] catch-up apply ${collection}:${doc?._id} failed: ${err.message}`);
             }
-            const ts = doc?.updatedAt || doc?.createdAt;
+            // المقابر لا تحمل updatedAt/createdAt — المؤشر يتقدم عبر deletedAt
+            // وإلا علقنا في أول صفحة إلى الأبد.
+            const ts = doc?.updatedAt || doc?.createdAt || doc?.deletedAt;
             if (ts && new Date(ts).getTime() > new Date(cursor || 0).getTime()) {
                 cursor = new Date(ts).toISOString();
+            }
+            // تقارب الحذف: مقبرة مسحوبة = احذف المستند المشار إليه محلياً.
+            if (collection === "tombstones") {
+                try {
+                    const c = await applyTombstoneDelete(doc);
+                    if (c) converged++;
+                } catch (err) {
+                    Logger.warn(`[LanMesh] catch-up tombstone converge failed: ${err.message}`);
+                }
             }
         }
         if (docs.length < CATCH_UP_PAGE_SIZE) break;
     }
-    return { pulled, cursor };
+    return { pulled, cursor, converged };
 }
 
 /**
@@ -440,9 +468,9 @@ export async function catchUpWithPeer(peer) {
         const key = `${peer.deviceId}:${collection}`;
         const since = catchUpMarks.get(key) || new Date(0).toISOString();
         try {
-            const { pulled, cursor } = await pullCollectionFromPeer(peer, collection, since);
+            const { pulled, cursor, converged } = await pullCollectionFromPeer(peer, collection, since);
             if (cursor) catchUpMarks.set(key, cursor);
-            if (pulled > 0) Logger.info(`[LanMesh] catch-up ${collection}: +${pulled} from ${peer.name} (${peer.ip})`);
+            if (pulled > 0 || converged > 0) Logger.info(`[LanMesh] catch-up ${collection}: +${pulled} (~${converged} deletes) from ${peer.name} (${peer.ip})`);
         } catch (err) {
             Logger.warn(`[LanMesh] catch-up ${collection} from ${peer.ip} failed: ${err.message}`);
         }
@@ -477,6 +505,7 @@ export default {
     meshSyncEnabled,
     pushLanOp,
     applyReceivedDoc,
+    applyTombstoneDelete,
     normalizeIncomingDoc,
     catchUpWithPeer,
     wirePeerCatchUp,

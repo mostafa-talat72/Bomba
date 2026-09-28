@@ -166,6 +166,11 @@ const billSchema = new mongoose.Schema(
                             enum: ["cash", "card", "transfer", "e_wallet", "adjustment"],
                             required: true,
                         },
+                        drawer: {
+                            type: String,
+                            enum: ["cashier", "hall", "takeaway", "delivery", "safe"],
+                            default: "safe",
+                        },
                 reference: {
                     type: String,
                     default: null,
@@ -262,8 +267,13 @@ const billSchema = new mongoose.Schema(
                         },
                         method: {
                             type: String,
-                            enum: ["cash", "card", "transfer"],
+                            enum: ["cash", "card", "transfer", "e_wallet"],
                             required: true,
+                        },
+                        drawer: {
+                            type: String,
+                            enum: ["cashier", "hall", "takeaway", "delivery", "safe"],
+                            default: "safe",
                         },
                     },
                 ],
@@ -314,8 +324,13 @@ const billSchema = new mongoose.Schema(
                         },
                         method: {
                             type: String,
-                            enum: ["cash", "card", "transfer"],
+                            enum: ["cash", "card", "transfer", "e_wallet"],
                             required: true,
+                        },
+                        drawer: {
+                            type: String,
+                            enum: ["cashier", "hall", "takeaway", "delivery", "safe"],
+                            default: "safe",
                         },
                     },
                 ],
@@ -335,8 +350,13 @@ const billSchema = new mongoose.Schema(
                 },
                 method: {
                     type: String,
-                    enum: ["cash", "card", "transfer", "mixed"],
+                    enum: ["cash", "card", "transfer", "e_wallet", "mixed"],
                     required: true,
+                },
+                drawer: {
+                    type: String,
+                    enum: ["cashier", "hall", "takeaway", "delivery", "safe"],
+                    default: "safe",
                 },
                 paidBy: {
                     type: mongoose.Schema.Types.ObjectId,
@@ -391,7 +411,8 @@ const billSchema = new mongoose.Schema(
         createdBy: {
             type: mongoose.Schema.Types.ObjectId,
             ref: "User",
-            required: true,
+            required: false,
+            default: null,
         },
         updatedBy: {
             type: mongoose.Schema.Types.ObjectId,
@@ -1043,7 +1064,8 @@ billSchema.methods.addPayment = function (
     user,
     reference = null,
     isPartial = false,
-    discountPercentage = undefined
+    discountPercentage = undefined,
+    drawer = "safe"
 ) {
     // Update discount percentage if provided
     if (discountPercentage !== undefined) {
@@ -1065,6 +1087,7 @@ billSchema.methods.addPayment = function (
             user,
             timestamp: new Date(),
             type: 'full', // تحديد نوع الدفع كامل
+            drawer: drawer || 'safe',
         });
 
         // Don't update this.paid here - let calculateRemainingAmount handle it
@@ -1495,7 +1518,7 @@ billSchema.methods.calculateRemainingAmount = function () {
 };
 
 // Pay for specific items with quantities
-billSchema.methods.payForItems = function (items, paymentMethod, userId) {
+billSchema.methods.payForItems = function (items, paymentMethod, userId, drawer = "safe") {
     // Validate input: items should be array of {itemId, quantity}
     if (!items || !Array.isArray(items) || items.length === 0) {
         throw new Error("يجب تحديد الأصناف والكميات المراد دفعها");
@@ -1578,6 +1601,7 @@ billSchema.methods.payForItems = function (items, paymentMethod, userId) {
             paidAt: new Date(),
             paidBy: userId,
             method: paymentMethod,
+            drawer: drawer || "safe",
         });
 
         // Add to paid items list for response
@@ -1597,6 +1621,7 @@ billSchema.methods.payForItems = function (items, paymentMethod, userId) {
         method: paymentMethod,
         paidBy: userId,
         type: "partial-items",
+        drawer: drawer || "safe",
         details: { paidItems, paidSessions: [] },
     });
 
@@ -1611,7 +1636,8 @@ billSchema.methods.paySessionPartial = function (
     sessionId,
     amount,
     paymentMethod,
-    userId
+    userId,
+    drawer = "safe"
 ) {
     if (!sessionId) {
         throw new Error("يجب تحديد الجلسة");
@@ -1641,6 +1667,7 @@ billSchema.methods.paySessionPartial = function (
         paidBy: userId,
         method: paymentMethod,
         paidAt: new Date(),
+        drawer: drawer || "safe",
     });
 
     sessionPayment.paidAmount += amount;
@@ -1652,6 +1679,7 @@ billSchema.methods.paySessionPartial = function (
         method: paymentMethod,
         paidBy: userId,
         type: "partial-session",
+        drawer: drawer || "safe",
         details: {
             paidItems: [],
             paidSessions: [

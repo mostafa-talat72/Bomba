@@ -8,13 +8,13 @@ import { printBill } from '../utils/printBill';
 import { Search, Plus } from 'lucide-react';
 import BillItemsEditModal from '../components/tables/BillItemsEditModal';
 import ItemPartialPayModal from '../components/tables/ItemPartialPayModal';
-import { canDeleteBill, canViewCustomerContacts } from '../utils/permissionHelper';
+import { canDeleteBill, canViewCustomerContacts, canApplyManualDiscount, canMoveBillTakeawayToTable, canCreateTakeaway, canEditTakeaway, canPayFullTakeaway, canPayPartialTakeaway } from '../utils/permissionHelper';
 import { useInfiniteList } from '../hooks/useInfiniteList';
 import { io, Socket } from 'socket.io-client';
 import { API_BASE_URL } from '../utils/apiBase';
 
 import BillTableCard from '../components/tables/BillTableCard';
-import { getShortBillNumber } from '../utils/formatters';
+import { getShortBillNumber, localeTag } from '../utils/formatters';
 import ChangeTableModal from '../components/tables/ChangeTableModal';
 
 import OrderPrintSectionsModal from '../components/tables/OrderPrintSectionsModal';
@@ -22,9 +22,10 @@ import { startBillPrep, confirmBillPrep } from '../utils/orderSectionPrint';
 
 // شريط الخصم أسفل الكارت
 const DiscountStrip = memo(({ bill, onDiscount }: { bill: any; onDiscount: (b: any, d: number, t: 'amount' | 'percent') => void }) => {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [disc, setDisc] = useState('');
-  const [discType, setDiscType] = useState<'amount' | 'percent'>('amount');
+  const [discType, setDiscType] = useState<'amount' | 'percent'>('percent');
   // حساب إجمالي الخصومات من الطلبات
   const totalFixedDiscount = (bill.orders || []).reduce((sum: number, order: any) => sum + (order?.fixedDiscount?.amount || 0), 0);
   const billDiscount = Number(bill.discount) || 0;
@@ -33,16 +34,16 @@ const DiscountStrip = memo(({ bill, onDiscount }: { bill: any; onDiscount: (b: a
     <div className="mt-1 space-y-1">
       {totalAllDiscounts > 0 && (
         <div className="flex items-center justify-between px-2 py-1 text-[11px] bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg">
-          <span className="text-purple-600 dark:text-purple-400 font-bold">الخصومات</span>
-          <span className="text-purple-700 dark:text-purple-300 font-bold">-{totalAllDiscounts.toLocaleString('ar-EG')} ج.م</span>
+          <span className="text-purple-600 dark:text-purple-400 font-bold">{t('takeaway.discount.title')}</span>
+          <span className="text-purple-700 dark:text-purple-300 font-bold">-{totalAllDiscounts.toLocaleString(localeTag())} {t('takeaway.currency')}</span>
         </div>
       )}
-      <button onClick={() => setOpen(v => !v)} className="w-full py-1 text-[11px] font-bold bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-gray-500">💰 خصم</button>
+      <button onClick={() => setOpen(v => !v)} className="w-full py-1 text-[11px] font-bold bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-gray-500">{t('takeaway.discount.toggle')}</button>
       {open && (
         <div className="mt-1 flex gap-1">
-          <input type="number" min="0" placeholder={discType === 'percent' ? `% (الحالي ${bill.discountPercentage || 0}%)` : `خصم (الحالي ${bill.discount || 0})`} value={disc} onChange={e => setDisc(e.target.value)} className="flex-1 px-2 py-1.5 text-xs border rounded-lg bg-white dark:bg-gray-700" />
-          <button onClick={() => setDiscType(t => t === 'amount' ? 'percent' : 'amount')} title="تبديل مبلغ/نسبة" className="px-2.5 py-1.5 text-xs font-bold bg-white dark:bg-gray-700 border rounded-lg text-gray-600">{discType === 'amount' ? 'ج.م' : '%'}</button>
-          <button onClick={() => { const d = Number(disc); if (disc === '' || d < 0 || (discType === 'percent' && d > 100)) return; onDiscount(bill, d, discType); setDisc(''); }} className="px-3 py-1.5 text-xs font-bold bg-gray-600 hover:bg-gray-700 text-white rounded-lg">خصم</button>
+          <input type="number" min="0" placeholder={discType === 'percent' ? t('takeaway.discount.placeholderPercent', { value: bill.discountPercentage || 0 }) : t('takeaway.discount.placeholderAmount', { value: bill.discount || 0 })} value={disc} onChange={e => setDisc(e.target.value)} className="flex-1 px-2 py-1.5 text-xs border rounded-lg bg-white dark:bg-gray-700" />
+          <button onClick={() => setDiscType(prev => prev === 'amount' ? 'percent' : 'amount')} title={t('takeaway.discount.switchTitle')} className="px-2.5 py-1.5 text-xs font-bold bg-white dark:bg-gray-700 border rounded-lg text-gray-600">{discType === 'amount' ? t('takeaway.currency') : '%'}</button>
+          <button onClick={() => { const d = Number(disc); if (disc === '' || d < 0 || (discType === 'percent' && d > 100)) return; onDiscount(bill, d, discType); setDisc(''); }} className="px-3 py-1.5 text-xs font-bold bg-gray-600 hover:bg-gray-700 text-white rounded-lg">{t('takeaway.discount.apply')}</button>
         </div>
       )}
     </div>
@@ -88,6 +89,7 @@ const Takeaway = () => {
   const { t, i18n } = useTranslation();
   const [moveBill, setMoveBill] = useState<any | null>(null);
   const [payMethods, setPayMethods] = useState<Record<string, string>>({});
+  const [payDrawers, setPayDrawers] = useState<Record<string, string>>({});
   // خيار الطباعة المزدوجة (تحضير + فاتورة) الخاص بالتيك أوي من إعدادات الطباعة
   const [printBoth, setPrintBoth] = useState(false);
   useEffect(() => {
@@ -120,7 +122,7 @@ const Takeaway = () => {
         setPrepSelected(r.sections.map((s) => s.id));
         setPrepSelection({ bill, orders: r.orders, sections: r.sections, menuItemsMap: r.menuItemsMap });
       }
-    } catch { showNotification('فشل طباعة التحضير', 'error'); }
+    } catch { showNotification(t('takeaway.notifications.prepPrintFailed'), 'error'); }
   };
   const confirmPrepPrint = async () => {
     if (!prepSelection || prepSelected.length === 0) return;
@@ -128,14 +130,14 @@ const Takeaway = () => {
     setPrepSelection(null);
     try {
       const r = await confirmBillPrep(sel.orders, prepSelected, sel.menuItemsMap, prepCtx());
-      if (r.printed === 0) showNotification('لا توجد أقسام مطابقة للطباعة', 'error');
-      else showNotification(`تم إرسال ${r.printed} للطباعة`, 'success');
-    } catch { showNotification('فشل طباعة التحضير', 'error'); }
+      if (r.printed === 0) showNotification(t('takeaway.notifications.noMatchingSections'), 'error');
+      else showNotification(t('takeaway.notifications.sentToPrint', { count: r.printed }), 'success');
+    } catch { showNotification(t('takeaway.notifications.prepPrintFailed'), 'error'); }
   };
 
   const handlePrint = async (bill: any) => {
-    try { await printBill(bill, (user as any)?.organizationName, i18n.language, t); showNotification('تم إرسال الطباعة', 'success'); }
-    catch (e: any) { showNotification(e?.message || 'فشل الطباعة', 'error'); }
+    try { await printBill(bill, (user as any)?.organizationName, i18n.language, t); showNotification(t('takeaway.notifications.printSent'), 'success'); }
+    catch (e: any) { showNotification(e?.message || t('takeaway.notifications.printFailed'), 'error'); }
   };
 
   const handleMoveToTable = async (tableId: string) => {
@@ -146,9 +148,9 @@ const Takeaway = () => {
       setMoveBill(null);
       setBills((prev: any[]) => prev.filter((b: any) => String(b._id || b.id) !== String(id)));
       feedRef.current?.remove(String(id));
-      showNotification(res?.message || 'تم نقل الفاتورة إلى الطاولة', 'success');
+      showNotification(res?.message || t('takeaway.notifications.movedToTable'), 'success');
       void fetchBills();
-    } catch (e: any) { showNotification(e?.message || 'فشل النقل', 'error'); }
+    } catch (e: any) { showNotification(e?.message || t('takeaway.notifications.moveFailed'), 'error'); }
   };
 
   const applyBill = (id: any, updated: any) => {
@@ -160,53 +162,40 @@ const Takeaway = () => {
     } else if (refreshSingleBill) refreshSingleBill({ _id: id });
   };
   const [billToEdit, setBillToEdit] = useState<any | null>(null);
-  const [pendingNewId, setPendingNewId] = useState<string | null>(null);
   const [payItemsBill, setPayItemsBill] = useState<any | null>(null);
 
-  const handleDiscount = async (bill: any, discount: number, type: 'amount' | 'percent' = 'amount') => {
+  const handleDiscount = async (bill: any, discount: number, type: 'amount' | 'percent' = 'percent') => {
+    if (!canApplyManualDiscount(user)) { showNotification(t('common.permissionDenied'), 'error'); return; }
     const id = bill._id || bill.id;
     try {
       const payload = type === 'percent' ? { discountPercentage: discount, discount: 0 } : { discount, discountPercentage: 0 };
       const res: any = await (api as any).updateBill(id, payload);
       applyBill(id, res?.success ? res.data : null);
-      if (res?.success) showNotification('تم تطبيق الخصم', 'success');
-    } catch (e: any) { showNotification(e?.message || 'فشل الخصم', 'error'); refreshSingleBill?.({ _id: id }); }
+      if (res?.success) showNotification(t('takeaway.notifications.discountApplied'), 'success');
+    } catch (e: any) { showNotification(e?.message || t('takeaway.notifications.discountFailed'), 'error'); refreshSingleBill?.({ _id: id }); }
   };
 
-  // إغلاق نافذة الأصناف: لو الفاتورة المنشأة حديثاً بلا أصناف ولا مدفوع → تُحذف تلقائياً (مثل الطاولات: لا فاتورة فارغة)
-  const closeItemsModal = async () => {
-    const id = pendingNewId;
+  // No server bill exists until first save — closing without saving discards the draft locally.
+  const closeItemsModal = () => {
     setBillToEdit(null);
-    setPendingNewId(null);
-    if (!id) return;
-    try {
-      const res: any = await (api as any).getBill(id);
-      const b = res?.data;
-      const itemsCount = Array.isArray(b?.orders) ? b.orders.reduce((s: number, o: any) => s + (Array.isArray(o?.items) ? o.items.length : 0), 0) : 0;
-      if (b && itemsCount === 0 && Number(b.paid || 0) === 0) {
-        await (api as any).deleteBill(id).catch(() => {});
-        setBills((prev: any[]) => prev.filter((x: any) => String(x._id || x.id) !== String(id)));
-        feedRef.current?.remove(String(id));
-      }
-    } catch {}
   };
 
   // نفس معاملة حذف فواتير الطاولات: فحص صلاحية أولاً ثم حذف متفائل + مزامنة خلفية
   const handleDelete = async (bill: any) => {
-    if (!canDeleteBill(user)) { showNotification('غير مصرح — تحتاج صلاحية حذف الفواتير', 'error'); return; }
+    if (!canDeleteBill(user)) { showNotification(t('takeaway.notifications.unauthorizedDelete'), 'error'); return; }
     const id = bill._id || bill.id;
     setBills((prev: any[]) => prev.filter((b: any) => String(b._id || b.id) !== String(id)));
     feedRef.current?.remove(String(id));
     try {
       const res: any = await (api as any).deleteBill(id);
       if (res?.success) {
-        showNotification('تم حذف الفاتورة بنجاح', 'success');
+        showNotification(t('takeaway.notifications.deleted'), 'success');
         void fetchBills();
       } else {
-        showNotification('فشل حذف الفاتورة', 'error');
+        showNotification(t('takeaway.notifications.deleteFailed'), 'error');
         refreshSingleBill?.({ _id: id });
       }
-    } catch (e: any) { showNotification(e?.message || 'فشل الحذف', 'error'); refreshSingleBill?.({ _id: id }); }
+    } catch (e: any) { showNotification(e?.message || t('takeaway.notifications.deleteError'), 'error'); refreshSingleBill?.({ _id: id }); }
   };
   // فتح إدارة الدفع من إشعار "عرض الطلب" — تُجلب الفاتورة (مدفوعة غالبًا) ثم تُفتح
   const location = useLocation();
@@ -220,8 +209,8 @@ const Takeaway = () => {
         try {
           const r: any = await api.getBill(bid);
           if (r?.success && r.data) setPayItemsBill(r.data);
-          else showNotification('تعذر فتح فاتورة الطلب', 'error');
-        } catch { showNotification('تعذر فتح فاتورة الطلب', 'error'); }
+          else showNotification(t('takeaway.notifications.openBillFailed'), 'error');
+        } catch { showNotification(t('takeaway.notifications.openBillFailed'), 'error'); }
       })();
     }
   }, [location.state]);
@@ -244,7 +233,7 @@ const Takeaway = () => {
   searchRef.current = debouncedSearch;
   const [density, setDensity] = useState(() => { try { return localStorage.getItem('takeawayDensity') || 'comfortable'; } catch { return 'comfortable'; } });
   const compact = density === 'compact';
-  const [creating, setCreating] = useState(false);
+
   useEffect(() => { const t = setTimeout(() => setDebouncedSearch(search), 150); return () => clearTimeout(t); }, [search]);
 
   useEffect(() => { fetchBills(); }, [fetchBills]);
@@ -266,7 +255,7 @@ const Takeaway = () => {
         limit: limitNum,
         mode: 'list',
       });
-      if (res && res.success === false) throw new Error(res.message || 'فشل البحث — تحقق من الاتصال بالسيرفر');
+      if (res && res.success === false) throw new Error(res.message || t('takeaway.notifications.searchFailed'));
       return { items: res?.data || [], total: res?.total ?? 0, hasMore: res?.hasMore ?? false };
     },
   });
@@ -325,28 +314,40 @@ const Takeaway = () => {
     revenue: list.reduce((s: number, b: any) => s + (Number(b.total) || 0), 0),
   }), [list]);
 
-  const handleCreate = async () => {
-    setCreating(true);
-    try {
-      const res: any = await (api as any).createBill({ fulfillmentType: 'takeaway', billType: 'cafe' });
-      if (!res?.success) {
-        showNotification(res?.message || 'فشل الإنشاء', 'error');
-        return;
-      }
-      const created = res?.data || res;
-      const newId = created?._id || created?.id;
-      if (newId) {
-        if (refreshSingleBill) refreshSingleBill({ _id: newId });
-        if (created) feedRef.current?.prepend(created._id ? created : { ...created, _id: newId });
-        void feedRef.current?.refreshFirstPage();
-      }
-      if (newId) { setPendingNewId(String(newId)); setBillToEdit(created._id ? created : { ...created, _id: created.id }); }
-    } catch (e: any) { showNotification(e?.message || 'فشل الإنشاء', 'error'); }
-    finally { setCreating(false); }
+  // بوابة التعديل: أي دخول لنافذة الأصناف/النقل يتطلب صلاحية تعديل التيك أوي
+  const guardTakeawayEdit = (fn: (b: any) => void) => (b: any) => {
+    if (!canEditTakeaway(user)) { showNotification(t('common.permissionDenied'), 'error'); return; }
+    fn(b);
+  };
+  // بوابة الدفع الجزئي (دفع أصناف) للتيك أوي
+  const guardTakeawayPartial = (fn: (b: any) => void) => (b: any) => {
+    if (!canPayPartialTakeaway(user)) { showNotification(t('common.permissionDenied'), 'error'); return; }
+    fn(b);
+  };
+
+  const handleCreate = () => {
+    if (!canCreateTakeaway(user)) { showNotification(t('common.permissionDenied'), 'error'); return; }
+    // Local draft only — the server bill is created at first save inside the items window.
+    const draftId = `draft-${Date.now()}`;
+    setBillToEdit({
+      __isDraft: true,
+      _id: draftId,
+      id: draftId,
+      fulfillmentType: 'takeaway',
+      billType: 'cafe',
+      orders: [],
+      subtotal: 0,
+      total: 0,
+      discount: 0,
+      paid: 0,
+      remaining: 0,
+      status: 'draft',
+    } as any);
   };
 
   // تحصيل مباشر مع تأكيد داخل الكارت (بلا نافذة دفع).
-  const handleCollect = async (bill: any, method: string) => {
+  const handleCollect = async (bill: any, method: string, drawer: string = 'takeaway') => {
+    if (!canPayFullTakeaway(user)) { showNotification(t('common.permissionDenied'), 'error'); return; }
     const amount = Number(bill.remaining) || 0;
     if (amount <= 0) return;
     const id = bill._id || bill.id;
@@ -357,16 +358,16 @@ const Takeaway = () => {
       return { ...b, paid, remaining, status: remaining <= 0 ? 'paid' : paid > 0 ? 'partial' : b.status };
     }));
     try {
-      const res: any = await (api as any).addPayment(id, { amount, method, reference: method === 'e_wallet' ? 'محفظة إلكترونية' : undefined });
+      const res: any = await (api as any).addPayment(id, { amount, method, drawer, reference: method === 'e_wallet' ? t('takeaway.payment.eWalletReference') : undefined });
       applyBill(id, res?.success ? res.data : null);
-      if (res?.success) showNotification('تم التحصيل بنجاح', 'success');
-    } catch (e: any) { showNotification(e?.message || 'فشل التحصيل', 'error'); refreshSingleBill?.({ _id: id }); }
+      if (res?.success) showNotification(t('takeaway.notifications.collected'), 'success');
+    } catch (e: any) { showNotification(e?.message || t('takeaway.notifications.collectFailed'), 'error'); refreshSingleBill?.({ _id: id }); }
   };
 
   const handleWhatsApp = (bill: any) => {
     const phone = String(bill.customerPhone || '').replace(/[^0-9]/g, '');
-    if (!phone) { showNotification('لا يوجد رقم هاتف', 'warning'); return; }
-    const lines = [`فاتورة #${String(bill.billNumber || bill._id).slice(-6)}`, `الإجمالي: ${(bill.total || 0).toFixed(2)} ج.م`, `المدفوع: ${(bill.paid || 0).toFixed(2)} — المتبقي: ${(bill.remaining || 0).toFixed(2)}`, 'شكراً لتعاملكم معنا'];
+    if (!phone) { showNotification(t('takeaway.notifications.noPhone'), 'warning'); return; }
+    const lines = [t('takeaway.whatsapp.billLine', { shortId: String(bill.billNumber || bill._id).slice(-6) }), t('takeaway.whatsapp.totalLine', { total: (bill.total || 0).toFixed(2) }), t('takeaway.whatsapp.paidLine', { paid: (bill.paid || 0).toFixed(2), remaining: (bill.remaining || 0).toFixed(2) }), t('takeaway.whatsapp.thanks')];
     window.open(`https://wa.me/${phone}?text=${encodeURIComponent(lines.join('\n'))}`, '_blank');
   };
 
@@ -377,25 +378,27 @@ const Takeaway = () => {
           <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
             <div className="w-10 h-10 sm:w-12 sm:h-12 bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl flex items-center justify-center shadow text-white text-xl sm:text-2xl flex-shrink-0">🥡</div>
             <div className="min-w-0">
-              <h1 className="text-xl sm:text-2xl font-extrabold text-gray-900 dark:text-white">تيك أوي</h1>
-              <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">{stats.total} طلب — {stats.revenue.toFixed(2)} ج.م إجمالي</p>
+              <h1 className="text-xl sm:text-2xl font-extrabold text-gray-900 dark:text-white">{t('takeaway.title')}</h1>
+              <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">{t('takeaway.summary', { total: stats.total, revenue: stats.revenue.toFixed(2) })}</p>
             </div>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
-            <button onClick={() => { const v = compact ? 'comfortable' : 'compact'; setDensity(v); try { localStorage.setItem('takeawayDensity', v); } catch {} }} title="تبديل العرض" className="px-3 py-2 text-xs font-bold bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl text-gray-600 dark:text-gray-300">
-              {compact ? '⊞ مريح' : '⊟ مضغوط'}
+            <button onClick={() => { const v = compact ? 'comfortable' : 'compact'; setDensity(v); try { localStorage.setItem('takeawayDensity', v); } catch {} }} title={t('takeaway.toggleView')} className="px-3 py-2 text-xs font-bold bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl text-gray-600 dark:text-gray-300">
+              {compact ? t('takeaway.view.comfortable') : t('takeaway.view.compact')}
             </button>
-            <button onClick={handleCreate} disabled={creating} className="flex-1 sm:flex-none px-4 sm:px-5 py-2 sm:py-2.5 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white rounded-xl font-bold shadow disabled:opacity-50 flex items-center justify-center gap-2">
-              <Plus className="h-4 w-4" /> {creating ? 'جاري...' : 'تيك أوي جديد'}
-            </button>
+            {canCreateTakeaway(user) && (
+              <button onClick={handleCreate} className="flex-1 sm:flex-none px-4 sm:px-5 py-2 sm:py-2.5 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white rounded-xl font-bold shadow flex items-center justify-center gap-2">
+                <Plus className="h-4 w-4" /> {t('takeaway.newOrder')}
+              </button>
+            )}
           </div>
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4">
           {[
-            { label: 'الكل', value: stats.total, color: 'gray' },
-            { label: 'جديد', value: stats.draft, color: 'blue' },
-            { label: 'جزئي', value: stats.partial, color: 'amber' },
-            { label: 'متبقي', value: stats.remaining.toFixed(0), color: 'green' },
+            { label: t('takeaway.stats.all'), value: stats.total, color: 'gray' },
+            { label: t('takeaway.stats.new'), value: stats.draft, color: 'blue' },
+            { label: t('takeaway.stats.partial'), value: stats.partial, color: 'amber' },
+            { label: t('takeaway.stats.remaining'), value: stats.remaining.toFixed(0), color: 'green' },
           ].map(s => (
             <div key={s.label} className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-3 text-center border border-gray-100 dark:border-gray-600">
               <div className="text-xs text-gray-500 dark:text-gray-400">{s.label}</div>
@@ -405,13 +408,9 @@ const Takeaway = () => {
         </div>
       </div>
 
-      <div className="rounded-2xl px-4 py-2.5 bg-green-600 dark:bg-green-800 text-white text-sm font-bold flex flex-wrap items-center gap-x-4 gap-y-1 shadow">
-        <span>1️⃣ تيك أوي جديد</span><span>←</span><span>2️⃣ الزر الكبير يكمل الخطوة</span><span>←</span><span>3️⃣ تحصيل</span>
-      </div>
-
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow border border-gray-200 dark:border-gray-700 p-3 flex flex-wrap gap-2 items-center">
         <div className="flex gap-1.5">
-          {([['unpaid', 'غير مدفوعة'], ['paid', 'مدفوعة'], ['all', 'الكل']] as const).map(([v, label]) => (
+          {([['unpaid', t('takeaway.filters.unpaid')], ['paid', t('takeaway.filters.paid')], ['all', t('takeaway.filters.all')]] as const).map(([v, label]) => (
             <button
               key={v}
               onClick={() => setBillFilter(v)}
@@ -423,11 +422,11 @@ const Takeaway = () => {
         </div>
         <div className="ml-auto relative w-full sm:w-64">
           <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="بحث برقم الفاتورة/الطلب أو صنف..." className="w-full pr-9 pl-9 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl text-sm focus:ring-2 focus:ring-orange-500 outline-none text-gray-900 dark:text-gray-100" />
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder={t('takeaway.searchPlaceholder')} className="w-full pr-9 pl-9 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl text-sm focus:ring-2 focus:ring-orange-500 outline-none text-gray-900 dark:text-gray-100" />
           {feed.refreshing && debouncedSearch.trim() ? (
             <span className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 border-2 border-green-600 border-t-transparent rounded-full animate-spin" />
           ) : search ? (
-            <button onClick={() => setSearch('')} className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-lg leading-none" title="مسح البحث">×</button>
+            <button onClick={() => setSearch('')} className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-lg leading-none" title={t('takeaway.search.clear')}>×</button>
           ) : null}
         </div>
       </div>
@@ -437,15 +436,16 @@ const Takeaway = () => {
           <div key={String(bill._id || bill.id)}>
             <BillTableCard bill={bill} kind="takeaway" compact={compact} showPhone={canViewCustomerContacts(user)}
               method={payMethods[String(bill._id || bill.id)] || 'cash'} onMethodChange={(m) => setPayMethods(p => ({ ...p, [String(bill._id || bill.id)]: m }))}
-              onOpen={setBillToEdit} onAddItems={setBillToEdit} onEditItems={setBillToEdit}
-              onCollect={handleCollect} onPrint={handlePrint} onMove={setMoveBill} onPayItems={setPayItemsBill}
+              drawer={payDrawers[String(bill._id || bill.id)] || 'takeaway'} onDrawerChange={(d) => setPayDrawers(p => ({ ...p, [String(bill._id || bill.id)]: d }))}
+              canEdit={canEditTakeaway(user)}
+              canPayFull={canPayFullTakeaway(user)} canPayPartial={canPayPartialTakeaway(user)}
+              onOpen={guardTakeawayEdit(setBillToEdit)} onAddItems={guardTakeawayEdit(setBillToEdit)} onEditItems={guardTakeawayEdit(setBillToEdit)}
+              onCollect={handleCollect} onPrint={handlePrint} onMove={(b: any) => { if (!canMoveBillTakeawayToTable(user)) { showNotification(t('common.permissionDenied'), 'error'); return; } guardTakeawayEdit(setMoveBill)(b); }} onPayItems={guardTakeawayPartial(setPayItemsBill)}
               onPrepPrint={handlePrepPrint}
-              onWhatsApp={handleWhatsApp} onDelete={handleDelete}>
-              <DiscountStrip bill={bill} onDiscount={handleDiscount} />
-            </BillTableCard>
+              onWhatsApp={handleWhatsApp} onDelete={handleDelete} />
           </div>
         ))}
-        {feed.items.length===0 && !feed.refreshing && !feed.loading && <div className="col-span-full text-center py-12 bg-white dark:bg-gray-800 rounded-2xl border border-dashed border-gray-200 dark:border-gray-700 text-gray-400">{debouncedSearch.trim() ? `لا توجد نتائج مطابقة لـ "${debouncedSearch.trim()}"` : 'لا توجد طلبات — اضغط "تيك أوي جديد"'}</div>}
+        {feed.items.length===0 && !feed.refreshing && !feed.loading && <div className="col-span-full text-center py-12 bg-white dark:bg-gray-800 rounded-2xl border border-dashed border-gray-200 dark:border-gray-700 text-gray-400">{debouncedSearch.trim() ? t('takeaway.empty.searchNoResults', { query: debouncedSearch.trim() }) : t('takeaway.empty.noOrders')}</div>}
       </div>
       <div ref={feed.sentinelRef} className="h-2" />
       {feed.loading && (
@@ -462,11 +462,11 @@ const Takeaway = () => {
       {feed.error && (
         <div className="text-center py-3">
           <span className="text-sm text-red-500">{feed.error}</span>
-          <button onClick={() => feed.loadMore()} className="ml-2 text-sm font-bold text-blue-600 underline">إعادة المحاولة</button>
+          <button onClick={() => feed.loadMore()} className="ml-2 text-sm font-bold text-blue-600 underline">{t('takeaway.retry')}</button>
         </div>
       )}
       {!feed.hasMore && feed.items.length > 0 && (
-        <div className="text-center text-xs text-gray-400 py-2">— تم عرض الكل ({feed.total}) —</div>
+        <div className="text-center text-xs text-gray-400 py-2">{t('takeaway.listEnd', { total: feed.total })}</div>
       )}
       {payItemsBill && (
         <ItemPartialPayModal
@@ -503,7 +503,15 @@ const Takeaway = () => {
         menuItems={menuItems || []}
         menuSections={menuSections || []}
         menuCategories={menuCategories || []}
-        onSuccess={(updated: any) => { applyBill(updated?._id || updated?.id || billToEdit?._id || billToEdit?.id, updated); setBillToEdit(null); }}
+        onSuccess={(updated: any) => {
+          const nid = String(updated?._id || updated?.id || '');
+          applyBill(nid, updated);
+          if (updated) {
+            setBills((prev: any[]) => prev.some((b: any) => String(b._id || b.id) === nid) ? prev : [updated, ...prev]);
+            if (updated.status !== 'paid' && updated.status !== 'cancelled') feedRef.current?.prepend(updated);
+          }
+          setBillToEdit(null);
+        }}
         onPrepPrint={handlePrepPrint}
         printBothTogether={printBoth}
       />

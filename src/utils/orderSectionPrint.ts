@@ -1,8 +1,8 @@
 import type { TFunction } from 'i18next';
 import { printOrder } from './printOrder';
-import { resolveUserPrintSettings } from './resolvePrintSettings';
+import { resolveUserPrintSettings, resolveSectionCopyPrinters } from './resolvePrintSettings';
 import { getCurrentUserCache } from './currentUser';
-import { resolveDocLayout, DocPrintLayout } from './printLayout';
+import { resolveDocLayout, resolveDocCopyPrinters, DocPrintLayout } from './printLayout';
 import api from '../services/api';
 
 // كاش قصير لشعار المنشأة (10 ثوانٍ) — يُستدعى لكل طلب في الدفعة
@@ -78,6 +78,7 @@ export function prepareBillSections(bill: any, ctx: SectionPrintCtx): PreparedBi
     customerName: order.customerName || billCustomerName,
     customerPhone: order.customerPhone || billCustomerPhone,
     deliveryAddress: (order as any).deliveryAddress || billDeliveryAddress,
+    billNumber: (order as any).billNumber || (bill as any).billNumber || '',
     createdAt: order.createdAt instanceof Date ? order.createdAt.toISOString() : order.createdAt,
   }));
   const map = new Map<string, any>();
@@ -147,19 +148,18 @@ export async function printOneOrderSections(
   const specificMap = (settings as any)?.[mapKey] || {};
   const fallbackMap = (settings as any)?.sectionPrinterMap || {};
   const routes: Record<string, string> = { ...fallbackMap, ...specificMap };
-  const prepKey = fulfillment === 'takeaway' ? 'prep_takeaway' : fulfillment === 'delivery' ? 'prep_delivery' : 'prep';
-  // الفارغ يتبع الطاولات (مثل التوجيه) — المحدد صراحةً له الأولوية دائماً.
-  const prepCopies = Math.min(5, Math.max(1, Number(settings?.documentCopies?.[prepKey] ?? settings?.documentCopies?.prep ?? 1) || 1));
+  // حل طابعات النسخ لكل قسم على حدة
+  const sectionCopyPrintersMap = resolveSectionCopyPrinters(settings, fulfillment);
   const layout: DocPrintLayout = resolveDocLayout(settings, 'order');
   const logoUrl = await resolveOrgLogo(ctx.user);
-  const groups = new Map<string, string[]>();
-  mine.forEach((sectionId) => {
-    const printerId = routes[sectionId] || '';
-    groups.set(printerId, [...(groups.get(printerId) || []), sectionId]);
-  });
+  // نطبع كل قسم على حدة مع طابعات نسخه الخاصة
   await Promise.all(
-    Array.from(groups.entries()).map(async ([printerId, sectionIds]) => {
+    mine.map(async (sectionId) => {
+      const printerId = routes[sectionId] || '';
       const profile = profiles.find((item: any) => item.id === printerId);
+      // طابعات النسخ لهذا القسم فقط
+      const sectionCopyPrinterIds = sectionCopyPrintersMap[sectionId] || [];
+      const sectionCopyPrinters = sectionCopyPrinterIds.map((id) => (id ? profiles.find((item: any) => item.id === id)?.printerName : undefined));
       return printOrder(
         order,
         ctx.menuSections,
@@ -168,11 +168,11 @@ export async function printOneOrderSections(
         ctx.language,
         ctx.t,
         undefined,
-        sectionIds,
+        [sectionId], // قسم واحد فقط
         profile?.printerName,
         profile?.paperWidthMm,
-        prepCopies,
-        { logoUrl, layout }
+        sectionCopyPrinterIds.length,
+        { logoUrl, layout, printFont: (settings as any)?.printFont, customFooter: (settings as any)?.customFooterOrder, copyPrinters: sectionCopyPrinters, defaultPrinter: (settings as any)?.printerName }
       );
     })
   );
@@ -195,12 +195,15 @@ export async function startBillPrep(
   if ('error' in prepared) return { status: 'error', message: prepared.error };
   const { orders, sections, menuItemsMap } = prepared;
   const printSettings = await resolvePrintSettings(ctx.user);
-  const defaultSections = (printSettings?.defaultOrderPrintSections || [])
+  // قواعد الأقسام حسب نوع الفاتورة (الفارغ يتبع الطاولات)
+  const billFulfillment = (bill as any)?.fulfillmentType as string | undefined;
+  const { resolveFulfillmentValue, resolveFulfillmentFlag } = await import('./resolvePrintSettings');
+  const defaultSections = ((resolveFulfillmentValue(printSettings, 'defaultOrderPrintSections', billFulfillment, []) || []) as string[])
     .map((id: string) => String(id))
     .filter((id: string) => sections.some((section) => section.id === id));
   const selectedDefaults = defaultSections.length > 0 ? defaultSections : sections.map((section) => section.id);
-  const prompt = printSettings?.promptOrderPrintSections === true;
-  if (printSettings?.autoPrintOrderSections === true) {
+  const prompt = resolveFulfillmentFlag(printSettings, 'promptOrderPrintSections', billFulfillment, false);
+  if (resolveFulfillmentFlag(printSettings, 'autoPrintOrderSections', billFulfillment, false)) {
     for (const order of orders) {
       await printOneOrderSections(order, selectedDefaults, menuItemsMap, ctx);
     }

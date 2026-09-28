@@ -444,16 +444,16 @@ const Costs = () => {
     <ConfigProvider locale={getAntdLocale()} direction={isRTL ? 'rtl' : 'ltr'}>
     <div className="p-2 sm:p-6 space-y-4 sm:space-y-6" dir={isRTL ? 'rtl' : 'ltr'}>
       {/* Header */}
-      <div className="flex justify-between items-center flex-wrap gap-2 slide-up">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 slide-up">
         <div className="min-w-0">
-          <h1 className="text-2xl sm:text-4xl font-bold gradient-text-animated">
+          <h1 className="text-xl sm:text-4xl font-bold gradient-text-animated">
             {t('costs.title')}
           </h1>
-          <p className="text-gray-600 dark:text-gray-400 mt-1 sm:mt-2 text-sm sm:text-lg">
+          <p className="text-gray-600 dark:text-gray-400 mt-1 sm:mt-2 text-xs sm:text-lg">
             {t('costs.subtitle')}
           </p>
         </div>
-        <div className="flex gap-2 sm:gap-3 w-full sm:w-auto">
+        <div className="flex flex-wrap gap-2 sm:gap-3 w-full sm:w-auto">
           <PermissionGuard requiredPermissions={['canEditCost']}>
           <button
             onClick={() => setShowCategoryModal(true)}

@@ -128,10 +128,29 @@ const userSchema = new mongoose.Schema(
                     "canApproveAdvance",
                     // Kitchen display actions
                     "canUpdateOrderStatus",
+                    // Customer QR order review (accept/reject/edit pending requests)
+                    "canReviewCustomerOrders",
                     // Notifications actions
                     "canDeleteNotification",
                     // Reports actions
                     "canExportReports",
+                    // Bills page + creation + date filters
+                    "bills",
+                    // Customers page
+                    "customers",
+                    "canAddCustomer",
+                    "canEditCustomer",
+                    "canDeleteCustomer",
+                    "canCreateTakeaway",
+                    "canCreateDelivery",
+                    "canEditTakeaway",
+                    "canEditDelivery",
+                    "canEditBill",
+                    "canPayFullTakeaway",
+                    "canPayPartialTakeaway",
+                    "canPayFullDelivery",
+                    "canPayPartialDelivery",
+                    "canEditDateFilters",
                     // Active sessions actions
                     "canStartSession",
                     "canEndSession",
@@ -146,6 +165,12 @@ const userSchema = new mongoose.Schema(
             type: String,
             enum: ["active", "inactive", "suspended", "pending"],
             default: "active",
+        },
+        // أقصى مدى زمني (بالأيام) يسمح للمستخدم باختياره في فلاتر التقارير — null/falsy = بلا حد
+        maxDateRangeDays: {
+            type: Number,
+            default: null,
+            min: 0,
         },
         lastLogin: {
             type: Date,

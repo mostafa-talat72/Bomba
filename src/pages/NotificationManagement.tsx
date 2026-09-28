@@ -291,19 +291,19 @@ const NotificationManagement = () => {
   return (
     <div className="space-y-4 sm:space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-2">
-        <div className="flex items-center flex-wrap gap-x-2 min-w-0">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+        <div className="flex flex-col gap-0.5 min-w-0">
           <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100 flex items-center">
             <Bell className="h-5 w-5 sm:h-6 sm:w-6 text-orange-600 dark:text-orange-400 ml-2" />
             {t('notificationManagement.title')}
           </h1>
-          <p className="text-xs sm:text-base text-gray-600 dark:text-gray-300 mr-2 sm:mr-4">{t('notificationManagement.subtitle')}</p>
+          <p className="text-xs sm:text-base text-gray-600 dark:text-gray-300">{t('notificationManagement.subtitle')}</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center flex-wrap gap-2 w-full sm:w-auto">
           <button
             onClick={handleMarkAllAsRead}
             disabled={isMarkingAllAsRead}
-            className="flex items-center gap-1.5 px-3 py-2 text-xs sm:text-sm font-bold text-orange-700 dark:text-orange-300 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-lg hover:bg-orange-100 dark:hover:bg-orange-900/30 transition-colors disabled:opacity-50"
+            className="flex flex-1 sm:flex-none items-center justify-center gap-1.5 px-3 py-2 text-xs sm:text-sm font-bold text-orange-700 dark:text-orange-300 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-lg hover:bg-orange-100 dark:hover:bg-orange-900/30 transition-colors disabled:opacity-50"
           >
             <CheckCheck className="h-4 w-4" />
             {t('notificationManagement.actions.markAllAsRead')}

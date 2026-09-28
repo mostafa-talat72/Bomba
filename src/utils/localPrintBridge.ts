@@ -168,22 +168,24 @@ const getPrintKey = (html: string, printerName?: string): string => {
 const runPrintJob = async (
   html: string,
   printerName?: string,
-  options: { openDrawer?: boolean; cutPaper?: boolean; paperWidthMm?: number; copies?: number; drawerMode?: 'bill' | 'payment'; organization?: unknown; printKey?: string } = {}
+  options: { openDrawer?: boolean; cutPaper?: boolean; paperWidthMm?: number; copies?: number; copyPrinters?: Array<string | undefined>; drawerMode?: 'bill' | 'payment'; organization?: unknown; printKey?: string } = {}
 ): Promise<boolean> => {
   const copies = Math.min(5, Math.max(1, Number(options.copies) || 1));
   // نسخ متعددة: كل نسخة طلب منفصل للوكيل (مهمة منفردة في طابور ويندوز) مع فتح الدرج في الأولى فقط.
   // مفتاح مميز لكل نسخة حتى لا يعتبرها الوكيل تكراراً (كبت التكرار 10 ثوانٍ).
+  // طابعة كل نسخة من copyPrinters — الفارغ = الطابعة الافتراضية الممررة.
   const baseKey = typeof options.printKey === 'string' && options.printKey ? options.printKey : null;
   for (let i = 0; i < copies; i++) {
-    const opts = i === 0 ? options : { ...options, openDrawer: false, copies: 1 };
+    const copyPrinter = options.copyPrinters?.[i] || printerName;
+    const opts = i === 0 ? { ...options, copyPrinters: undefined } : { ...options, openDrawer: false, copies: 1, copyPrinters: undefined };
     // تجاوز copies في الحمولة للنسخة المفردة (الوكيل قد يطبع نسخة واحدة لكل طلب)
     const onceOpts = { ...opts, copies: 1, ...(baseKey ? { printKey: copies > 1 ? `${baseKey}:copy${i + 1}` : baseKey } : {}) };
     try {
-      if (await printThroughAgent(html, printerName, onceOpts)) continue;
+      if (await printThroughAgent(html, copyPrinter, onceOpts)) continue;
     } catch (agentError) {
       console.error('Print Agent rejected the print request; trying the configured fallback:', agentError);
       try {
-        if (await printThroughDesktopFallback(html, printerName, onceOpts)) continue;
+        if (await printThroughDesktopFallback(html, copyPrinter, onceOpts)) continue;
       } catch (desktopError) {
         console.warn('Silent print agent and desktop print fallback failed:', desktopError);
       }
@@ -200,7 +202,7 @@ const runPrintJob = async (
 export const printThroughLocalBridge = (
   html: string,
   printerName?: string,
-  options: { openDrawer?: boolean; cutPaper?: boolean; paperWidthMm?: number; copies?: number; drawerMode?: 'bill' | 'payment'; organization?: unknown; printKey?: string } = {}
+  options: { openDrawer?: boolean; cutPaper?: boolean; paperWidthMm?: number; copies?: number; copyPrinters?: Array<string | undefined>; drawerMode?: 'bill' | 'payment'; organization?: unknown; printKey?: string } = {}
 ): Promise<boolean> => {
   const printKey = options.printKey || getPrintKey(html, printerName);
   const now = Date.now();

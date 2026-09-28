@@ -7,6 +7,7 @@ import {
   resolveDocLayout,
   layoutCss,
   brandHtml,
+  printFontImport,
 } from '../../utils/printLayout';
 import { buildBillPrintHTML } from '../../utils/printBill';
 import { buildOrderPrintHTML } from '../../utils/printOrder';
@@ -19,6 +20,7 @@ interface PrintDesignerProps {
   onPatch: (patch: Record<string, any>) => void;
   logoUrl?: string;
   orgName?: string;
+  saveNote?: string;
 }
 
 export interface PreviewItem {
@@ -30,7 +32,7 @@ export interface PreviewItem {
 const PAPER_OPTIONS = [58, 80];
 const FONT_OPTIONS = ['Tajawal', 'Cairo', 'Amiri', 'IBM Plex Sans Arabic'];
 
-let cachedLogo: { url?: string; expiresAt: number } | null = null;
+let cachedOrg: { name?: string; phone?: string; url?: string; expiresAt: number } | null = null;
 
 const numOrUndef = (raw: string): number | undefined => {
   if (raw === '' || raw === null || raw === undefined) return undefined;
@@ -101,6 +103,73 @@ const Group: React.FC<{ title: string; children: React.ReactNode }> = ({ title, 
   </div>
 );
 
+// سطر مدمج: العنوان + سويتش الإظهار + حجم الخط — حتى لا يتكرر العنصر في مجموعتين
+const HeaderPairRow: React.FC<{
+  title: string;
+  checked: boolean;
+  onToggle: (v: boolean) => void;
+  font: number | undefined;
+  fontFallback: number;
+  onFont: (v: number | undefined) => void;
+  labelChecked?: boolean;
+  labelOnToggle?: (v: boolean) => void;
+  labelFont?: number | undefined;
+  labelFontFallback?: number;
+  labelOnFont?: (v: number | undefined) => void;
+  labelWord?: string;
+  dataWord?: string;
+}> = ({ title, checked, onToggle, font, fontFallback, onFont, labelChecked, labelOnToggle, labelFont, labelFontFallback, labelOnFont, labelWord, dataWord }) => {
+  if (labelOnToggle === undefined) {
+    return (
+      <div className="flex items-center gap-2 py-1">
+        <span className="flex-1 min-w-0 truncate text-xs font-bold text-gray-800 dark:text-gray-100">{title}</span>
+        <label className="flex items-center cursor-pointer flex-shrink-0" title={title}>
+          <input type="checkbox" checked={checked} onChange={(e) => onToggle(e.target.checked)} className="h-4 w-4 accent-orange-600" />
+        </label>
+        <input
+          type="number" min={8} max={60} step={1}
+          value={font ?? ''}
+          placeholder={String(font ?? fontFallback)}
+          onChange={(e) => onFont(numOrUndef(e.target.value))}
+          className="w-14 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 p-1 text-[11px] flex-shrink-0"
+        />
+        <span className="text-[10px] text-gray-400 flex-shrink-0">px</span>
+      </div>
+    );
+  }
+  return (
+    <div className="rounded-lg border border-gray-200 dark:border-gray-600 bg-white/50 dark:bg-gray-800/30 p-2 space-y-1.5">
+      <div className="text-xs font-bold text-gray-800 dark:text-gray-100 truncate">{title}</div>
+      <div className="flex items-center justify-between gap-2">
+        <span className="flex items-center gap-1.5 rounded-lg bg-gray-100 dark:bg-gray-700/60 px-2 py-1 border border-gray-200 dark:border-gray-600">
+          <span className="text-xs font-bold text-gray-800 dark:text-gray-100">{labelWord}</span>
+          <input type="checkbox" checked={labelChecked} onChange={(e) => labelOnToggle(e.target.checked)} className="h-4 w-4 accent-orange-600 flex-shrink-0" />
+          <input
+            type="number" min={8} max={60} step={1}
+            value={labelFont ?? ''}
+            placeholder={String(labelFont ?? labelFontFallback)}
+            onChange={(e) => labelOnFont(numOrUndef(e.target.value))}
+            className="w-12 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 p-0.5 text-[11px] flex-shrink-0"
+          />
+          <span className="text-[10px] text-gray-400 flex-shrink-0">px</span>
+        </span>
+        <span className="flex items-center gap-1.5 rounded-lg bg-gray-100 dark:bg-gray-700/60 px-2 py-1 border border-gray-200 dark:border-gray-600">
+          <span className="text-xs font-bold text-gray-800 dark:text-gray-100">{dataWord}</span>
+          <input type="checkbox" checked={checked} onChange={(e) => onToggle(e.target.checked)} className="h-4 w-4 accent-orange-600 flex-shrink-0" />
+          <input
+            type="number" min={8} max={60} step={1}
+            value={font ?? ''}
+            placeholder={String(font ?? fontFallback)}
+            onChange={(e) => onFont(numOrUndef(e.target.value))}
+            className="w-12 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 p-0.5 text-[11px] flex-shrink-0"
+          />
+          <span className="text-[10px] text-gray-400 flex-shrink-0">px</span>
+        </span>
+      </div>
+    </div>
+  );
+};
+
 const sampleText = (lang: string, ar: string, en: string) => (lang === 'ar' ? ar : en);
 
 export interface PreviewData {
@@ -113,7 +182,8 @@ export interface PreviewData {
 
 function sampleBill(
   lang: string, layout: DocPrintLayout, orgName: string, logoUrl: string | undefined,
-  printFont: string, footerText: string, t: any, data: PreviewData, fulfillment: DesignerFulfillment
+  printFont: string, footerText: string, t: any, data: PreviewData, fulfillment: DesignerFulfillment,
+  orgPhone?: string, printQRCode: boolean = true
 ): any {
   const now = new Date();
   const twoHoursAgo = new Date(now.getTime() - 2 * 3600 * 1000);
@@ -172,11 +242,11 @@ function sampleBill(
     organization: {
       name: orgName,
       logo: logoUrl,
-      phone: '01001234567',
+      phone: orgPhone || '',
       socialLinks: {},
       printSettings: {
         printFont,
-        printQRCode: true,
+        printQRCode,
         customFooterBill: footerText,
         printLayout: { bill: { ...layout } },
       },
@@ -186,6 +256,7 @@ function sampleBill(
 
 function sampleOrder(lang: string, data: PreviewData, fulfillment: DesignerFulfillment) {
   const now = new Date();
+  const tenMinAgo = new Date(now.getTime() - 10 * 60000);
   const items = (data.items ?? defaultItems(lang)).filter((r) => r.name.trim() !== '');
   const rows = items.length > 0 ? items : defaultItems(lang);
   return {
@@ -199,7 +270,7 @@ function sampleOrder(lang: string, data: PreviewData, fulfillment: DesignerFulfi
       customerPhone: fulfillment === 'dine_in' ? '' : data.custPhone,
       deliveryAddress: fulfillment === 'delivery' ? data.address : '',
       notes: '',
-      createdAt: now.toISOString(),
+      createdAt: tenMinAgo.toISOString(),
       updatedAt: now.toISOString(),
       items: rows.map((r, i) => ({
         name: r.name,
@@ -222,7 +293,7 @@ function sampleOrder(lang: string, data: PreviewData, fulfillment: DesignerFulfi
 
 function sampleConsumptionHtml(
   lang: string, layout: DocPrintLayout, orgName: string, logoUrl: string | undefined,
-  t: any, data: PreviewData
+  t: any, data: PreviewData, printFont: string = 'Tajawal', customFooterText: string = ''
 ): string {
   const dir = lang === 'ar' ? 'rtl' : 'ltr';
   const cat = sampleText(lang, 'المشويات', 'Grill');
@@ -233,12 +304,24 @@ function sampleConsumptionHtml(
     p: String(r.price),
     tot: String(r.price * r.qty),
   }));
-  const catTotal = rows.reduce((s, r) => s + Number(r.tot), 0);
+  const half = Math.max(1, Math.ceil(rows.length / 2));
+  const catA = sampleText(lang, 'فئة أولى', 'First category');
+  const catB = sampleText(lang, 'فئة ثانية', 'Second category');
+  const rowsA = rows.slice(0, half);
+  const rowsB = rows.slice(half);
+  const totA = rowsA.reduce((s, r) => s + Number(r.tot), 0);
+  const totB = rowsB.reduce((s, r) => s + Number(r.tot), 0);
+  const secTot = totA + totB;
+  const sampleRows = (list: typeof rows) => list.map((r) => `<tr><td class="item-name">${r.name}</td><td class="item-quantity">${r.q}</td><td class="item-price">${r.p}</td><td class="item-total">${r.tot}</td></tr>`).join('');
+  const sampleTable = `<table class="items-table"><thead><tr>
+<th class="item-name">${t('consumptionReport.table.itemName')}</th><th class="item-quantity">${t('consumptionReport.table.quantity')}</th><th class="item-price">${t('consumptionReport.table.unitPrice')}</th><th class="item-total">${t('consumptionReport.table.total')}</th>
+</tr></thead><tbody>`;
+  const sampleTableEnd = `</tbody></table>`;
   return `<!DOCTYPE html>
 <html dir="${dir}" lang="${lang}">
 <head><meta charset="UTF-8"><title>${t('consumptionReport.print.title')}</title>
-<style>${layoutCss(layout, 'consumption')}
-*{font-family:'Tajawal',sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact;box-sizing:border-box;}
+<style>${printFont !== 'Tajawal' ? `@import url('https://fonts.googleapis.com/css2?family=${printFontImport(printFont)}&display=swap');` : ''}${layoutCss(layout, 'consumption')}
+*{font-family:'${printFont}',sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact;box-sizing:border-box;}
 body{margin:0;padding:0;font-size:11px;color:#000;font-weight:600;width:100%;max-width:100%;text-align:center;direction:${dir};}
 .header{text-align:center;margin-bottom:8px;font-weight:900;border-bottom:2px dashed #000;padding-bottom:6px;}
 .org-name{font-size:1.5em;font-weight:900;margin-bottom:6px;}
@@ -262,19 +345,20 @@ ${layout.showSectionTitle !== false ? `<div class="category-name">${cat}</div>` 
 ${layout.showDate !== false ? `<div class="date-info">${t('consumptionReport.print.date')}: 2026/09/22</div>` : ''}
 </div>
 ${layout.showDividers !== false ? `<div class="divider"></div>` : ''}
-<table class="items-table"><thead><tr>
-<th>${t('consumptionReport.table.itemName')}</th><th>${t('consumptionReport.table.quantity')}</th><th>${t('consumptionReport.table.unitPrice')}</th><th>${t('consumptionReport.table.total')}</th>
-</tr></thead><tbody>
-${rows.map((r) => `<tr><td class="item-name">${r.name}</td><td class="item-quantity">${r.q}</td><td class="item-price">${r.p}</td><td class="item-total">${r.tot}</td></tr>`).join('')}
-</tbody></table>
+${layout.showSectionTitle !== false ? `<div class="category-name">${catA}</div>` : ''}
+${sampleTable}${sampleRows(rowsA)}${sampleTableEnd}
+<div class="category-total">${t('consumptionReport.print.categoryTotal', { category: catA })}: ${totA}</div>
+${rowsB.length > 0 ? `${layout.showSectionTitle !== false ? `<div class="category-name">${catB}</div>` : ''}
+${sampleTable}${sampleRows(rowsB)}${sampleTableEnd}
+<div class="category-total">${t('consumptionReport.print.categoryTotal', { category: catB })}: ${totB}</div>` : ''}
 ${layout.showDividers !== false ? `<div class="divider"></div>` : ''}
-<div class="category-total">${t('consumptionReport.print.categoryTotal', { category: cat })}: ${catTotal}</div>
-${layout.showThanks !== false ? `<div class="thank-you">${t('consumptionReport.print.thankYou')}</div>` : ''}
+<div class="category-total">${t('consumptionReport.print.categoryTotal', { category: cat })}: ${secTot}</div>
+${layout.showThanks !== false ? `<div class="thank-you">${customFooterText || t('consumptionReport.print.thankYou')}</div>` : ''}
 <div class="dev-sign" style="margin-top:10px;text-align:center;font-size:1em;border-top:2px dashed #000;padding-top:10px;font-weight:900;"><strong>${t('consumptionReport.print.footer')}</strong></div>
 </body></html>`;
 }
 
-const PrintDesigner: React.FC<PrintDesignerProps> = ({ settings, onPatch, logoUrl, orgName }) => {
+const PrintDesigner: React.FC<PrintDesignerProps> = ({ settings, onPatch, logoUrl, orgName, saveNote }) => {
   const { t } = useTranslation();
   const [doc, setDoc] = useState<DesignerDoc>('bill');
   const [draft, setDraft] = useState<DocPrintLayout>(() => resolveDocLayout(settings, 'bill'));
@@ -282,10 +366,13 @@ const PrintDesigner: React.FC<PrintDesignerProps> = ({ settings, onPatch, logoUr
   const [previewLang, setPreviewLang] = useState<'ar' | 'en'>('ar');
   const [fulfillment, setFulfillment] = useState<DesignerFulfillment>('dine_in');
   const [paperWidth, setPaperWidth] = useState<number>(80);
+  const widthTouched = useRef(false);
   const [printFont, setPrintFontState] = useState<string>(settings?.printFont || 'Tajawal');
-  const [footerText, setFooterTextState] = useState<string>(
-    settings?.customFooterBill || settings?.customFooterOrder || settings?.customFooterConsumption || ''
-  );
+  const [footers, setFooters] = useState<Record<DesignerDoc, string>>({
+    bill: settings?.customFooterBill || '',
+    order: settings?.customFooterOrder || '',
+    consumption: settings?.customFooterConsumption || '',
+  });
   const [autoCut, setAutoCut] = useState<boolean>(settings?.autoCut ?? false);
   const [charsPerLine, setCharsPerLine] = useState<number>(settings?.charactersPerLine || 48);
   const [printHeader, setPrintHeader] = useState<boolean>(settings?.printHeader ?? true);
@@ -299,43 +386,81 @@ const PrintDesigner: React.FC<PrintDesignerProps> = ({ settings, onPatch, logoUr
   const [customItems, setCustomItems] = useState<PreviewItem[] | null>(null);
   const [html, setHtml] = useState('');
   const [building, setBuilding] = useState(false);
-  const [resolvedLogo, setResolvedLogo] = useState<string | undefined>(logoUrl);
+  const [orgInfo, setOrgInfo] = useState<{ name?: string; phone?: string; url?: string }>({ name: orgName, url: logoUrl });
   const buildId = useRef(0);
 
   const P = (key: string, fallback?: string) => t(`settings.organization.printSettings.${key}` as any, fallback);
+  const lwLabel = P('designerLabelWord', 'العنوان');
+  const lwData = P('designerDataWord', 'البيانات');
+  const lblShow = (showKey: string, lblKey: string, dataShow: boolean) => (draft as any)[lblKey] === undefined ? dataShow : (draft as any)[lblKey] === true;
   const previewData: PreviewData = useMemo(() => ({
     tableNo, custName, custPhone, address, items: customItems,
   }), [tableNo, custName, custPhone, address, customItems]);
 
   useEffect(() => {
+    // وصول الإعدادات متأخراً (تحميل غير متزامن): حدّث المسودة والقيم
+    // فقط إن لم يحرر المستخدم شيئاً — حتى لا تضيع تعديلاته ولا تُبنى
+    // المعاينة على قيم افتراضية قديمة.
+    if (dirty) return;
     setDraft(resolveDocLayout(settings, doc));
-    setDirty(false);
-  }, [doc]);
+    setPrintFontState(settings?.printFont || 'Tajawal');
+    setFooters({
+      bill: settings?.customFooterBill || '',
+      order: settings?.customFooterOrder || '',
+      consumption: settings?.customFooterConsumption || '',
+    });
+    setAutoCut(settings?.autoCut ?? false);
+    setCharsPerLine(settings?.charactersPerLine || 48);
+    setPrintHeader(settings?.printHeader ?? true);
+    setPrintFooter(settings?.printFooter ?? true);
+    setPrintQRCode(settings?.printQRCode ?? true);
+    if (!widthTouched.current) {
+      const w = Number((settings as any)?.printers?.[0]?.paperWidthMm) || 80;
+      setPaperWidth(Math.min(150, Math.max(30, w)));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [JSON.stringify({
+    pl: (settings as any)?.printLayout?.[doc] ?? null,
+    pf: (settings as any)?.printFont ?? null,
+    cfb: (settings as any)?.customFooterBill ?? null,
+    cfo: (settings as any)?.customFooterOrder ?? null,
+    cfc: (settings as any)?.customFooterConsumption ?? null,
+    ac: (settings as any)?.autoCut ?? null,
+    ch: (settings as any)?.charactersPerLine ?? null,
+    ph: (settings as any)?.printHeader ?? null,
+    pf2: (settings as any)?.printFooter ?? null,
+    qr: (settings as any)?.printQRCode ?? null,
+  }), doc]);
+
+  // props أولاً، والناقص (الاسم/الهاتف الحقيقي) من السيرفر — المعاينة ببيانات المنشأة الفعلية
+  useEffect(() => {
+    setOrgInfo((p) => ({
+      ...p,
+      ...(orgName !== undefined ? { name: orgName } : {}),
+      ...(logoUrl !== undefined ? { url: logoUrl } : {}),
+    }));
+  }, [orgName, logoUrl]);
 
   useEffect(() => {
     let alive = true;
-    if (!cachedLogo || cachedLogo.expiresAt < Date.now()) {
-      if (logoUrl) {
-        cachedLogo = { url: logoUrl, expiresAt: Date.now() + 60000 };
-        setResolvedLogo(logoUrl);
-      } else {
-        (async () => {
-          try {
-            const { api } = await import('../../services/api');
-            const r: any = await api.getOrganization().catch(() => null);
-            const url = r?.data?.logo as string | undefined;
-            cachedLogo = { url, expiresAt: Date.now() + 60000 };
-            if (alive) setResolvedLogo(url);
-          } catch {}
-        })();
-      }
-    } else {
-      setResolvedLogo(logoUrl ?? cachedLogo.url);
-    }
+    (async () => {
+      try {
+        if (cachedOrg && cachedOrg.expiresAt > Date.now()) {
+          if (alive) setOrgInfo((p) => ({ name: p.name ?? cachedOrg!.name, phone: p.phone ?? cachedOrg!.phone, url: p.url ?? cachedOrg!.url }));
+          return;
+        }
+        const { api } = await import('../../services/api');
+        const r: any = await api.getOrganization().catch(() => null);
+        cachedOrg = { name: r?.data?.name, phone: r?.data?.phone, url: r?.data?.logo, expiresAt: Date.now() + 60000 };
+        if (alive) setOrgInfo((p) => ({ name: p.name ?? cachedOrg!.name, phone: p.phone ?? cachedOrg!.phone, url: p.url ?? cachedOrg!.url }));
+      } catch {}
+    })();
     return () => { alive = false; };
-  }, [logoUrl]);
+  }, []);
 
-  const effOrgName = orgName || sampleText(previewLang, 'مطعم المشويات', 'Grill Restaurant');
+  const effOrgName = orgInfo.name || sampleText(previewLang, 'مطعم المشويات', 'Grill Restaurant');
+  const previewLogo = orgInfo.url;
+  const previewPhone = orgInfo.phone || '01001234567';
 
   useEffect(() => {
     const id = ++buildId.current;
@@ -347,7 +472,7 @@ const PrintDesigner: React.FC<PrintDesignerProps> = ({ settings, onPatch, logoUr
           let out = '';
           if (doc === 'bill') {
             out = await buildBillPrintHTML(
-              sampleBill(previewLang, draft, effOrgName, resolvedLogo, printFont, footerText, ft as any, previewData, fulfillment) as any,
+              sampleBill(previewLang, draft, effOrgName, previewLogo, printFont, footers.bill, ft as any, previewData, fulfillment, previewPhone, printQRCode) as any,
               effOrgName,
               previewLang,
               ft as any
@@ -356,14 +481,15 @@ const PrintDesigner: React.FC<PrintDesignerProps> = ({ settings, onPatch, logoUr
             const s = sampleOrder(previewLang, previewData, fulfillment);
             // للتيك أوي/الدليفري: الفاتورة تحمل النوع ويورثه الطلب
             if (fulfillment !== 'dine_in') (s.order as any).fulfillmentType = fulfillment;
+            (s.order as any).billNumber = 'BILL-XXXXXX-000001';
             out = await buildOrderPrintHTML(
               s.order, s.menuSections, s.menuItemsMap,
               effOrgName, previewLang, ft as any,
-              undefined, undefined,
-              { logoUrl: resolvedLogo, layout: draft }
+              sampleText(previewLang, 'القسم الأول', 'Section A'), undefined,
+              { logoUrl: previewLogo, layout: draft, printFont, customFooter: footers.order }
             );
           } else {
-            out = sampleConsumptionHtml(previewLang, draft, effOrgName, resolvedLogo, ft as any, previewData);
+            out = sampleConsumptionHtml(previewLang, draft, effOrgName, previewLogo, ft as any, previewData, printFont, footers.consumption);
           }
           if (buildId.current === id) setHtml(out || '');
         } catch (e) {
@@ -375,7 +501,7 @@ const PrintDesigner: React.FC<PrintDesignerProps> = ({ settings, onPatch, logoUr
       })();
     }, 250);
     return () => clearTimeout(timer);
-  }, [doc, draft, previewLang, fulfillment, paperWidth, effOrgName, resolvedLogo, printFont, footerText, previewData]);
+  }, [doc, draft, previewLang, fulfillment, paperWidth, effOrgName, previewLogo, previewPhone, printFont, footers, previewData]);
 
   const setL = (patch: Partial<DocPrintLayout>) => {
     setDraft((d) => ({ ...d, ...patch }));
@@ -383,6 +509,21 @@ const PrintDesigner: React.FC<PrintDesignerProps> = ({ settings, onPatch, logoUr
   };
   const markRootDirty = () => setDirty(true);
 
+  const handleTestPrint = async () => {
+    if (!html) return;
+    try {
+      const { printThroughLocalBridge } = await import('../../utils/localPrintBridge');
+      const { toast } = await import('react-toastify');
+      const ok = await printThroughLocalBridge(html, undefined, { copies: 1 });
+      if (ok) toast.success(P('designerTestSent', 'تم إرسال التجربة للطباعة'));
+      else toast.error(P('designerTestFailed', 'فشلت الطباعة التجريبية'));
+    } catch {
+      try {
+        const { toast } = await import('react-toastify');
+        toast.error(P('designerTestFailed', 'فشلت الطباعة التجريبية'));
+      } catch {}
+    }
+  };
   const handleSave = () => {
     const footerKey = doc === 'bill' ? 'customFooterBill' : doc === 'order' ? 'customFooterOrder' : 'customFooterConsumption';
     onPatch({
@@ -393,7 +534,7 @@ const PrintDesigner: React.FC<PrintDesignerProps> = ({ settings, onPatch, logoUr
       printHeader,
       printFooter,
       printQRCode,
-      ...(doc === 'bill' ? { [footerKey]: footerText } : {}),
+      [footerKey]: footers[doc],
     });
     setDirty(false);
   };
@@ -417,14 +558,49 @@ const PrintDesigner: React.FC<PrintDesignerProps> = ({ settings, onPatch, logoUr
   };
 
   const pxWidth = Math.round(paperWidth * 3.78);
-  const colLabels = useMemo(() => {
-    if (doc === 'bill') return [P('designerColName', 'الصنف'), P('designerColQty', 'الكمية'), P('designerColPaid', 'المدفوع'), P('designerColPrice', 'السعر'), P('designerColTotal', 'الإجمالي')];
-    if (doc === 'order') return [P('designerColName', 'الصنف'), P('designerColQty', 'الكمية')];
-    return [P('designerColName', 'الصنف'), P('designerColQty', 'الكمية'), P('designerColPrice', 'سعر الوحدة'), P('designerColTotal', 'الإجمالي')];
+  // بطاقات الأعمدة: كل عمود وكل ما يخصه (عرض/اتجاه/خط/ظهور) معاً
+  interface ColCard {
+    k: 'colA' | 'colB' | 'colC' | 'colD' | 'colE';
+    label: string;
+    fontKey: 'fontNameCol' | 'fontQtyCol' | 'fontPaidCol' | 'fontPriceCol' | 'fontTotalCol';
+    visKey?: 'showPaidCol' | 'showPriceCol' | 'showTotalCol';
+    visDefTrue?: boolean;
+  }
+  const colCards = useMemo((): ColCard[] => {
+    if (doc === 'bill') return [
+      { k: 'colA', label: P('designerColName', 'الصنف'), fontKey: 'fontNameCol' },
+      { k: 'colB', label: P('designerColQty', 'الكمية'), fontKey: 'fontQtyCol' },
+      { k: 'colC', label: P('designerColPaid', 'المدفوع'), fontKey: 'fontPaidCol', visKey: 'showPaidCol', visDefTrue: true },
+      { k: 'colE', label: P('designerColPrice', 'السعر'), fontKey: 'fontPriceCol', visKey: 'showPriceCol', visDefTrue: false },
+      { k: 'colD', label: P('designerColTotal', 'الإجمالي'), fontKey: 'fontTotalCol' },
+    ];
+    if (doc === 'order') return [
+      { k: 'colA', label: P('designerColName', 'الصنف'), fontKey: 'fontNameCol' },
+      { k: 'colB', label: P('designerColQty', 'الكمية'), fontKey: 'fontQtyCol' },
+      { k: 'colC', label: P('designerColPrice', 'السعر'), fontKey: 'fontPriceCol', visKey: 'showPriceCol', visDefTrue: false },
+      { k: 'colD', label: P('designerColTotal', 'الإجمالي'), fontKey: 'fontTotalCol', visKey: 'showTotalCol', visDefTrue: false },
+    ];
+    return [
+      { k: 'colA', label: P('designerColName', 'الصنف'), fontKey: 'fontNameCol' },
+      { k: 'colB', label: P('designerColQty', 'الكمية'), fontKey: 'fontQtyCol' },
+      { k: 'colC', label: P('designerColPrice', 'سعر الوحدة'), fontKey: 'fontPriceCol' },
+      { k: 'colD', label: P('designerColTotal', 'الإجمالي'), fontKey: 'fontTotalCol' },
+    ];
   }, [doc, t]);
-  const colKeys: Array<'colA' | 'colB' | 'colC' | 'colD' | 'colE'> = useMemo(() => (
-    doc === 'bill' ? ['colA', 'colB', 'colC', 'colE', 'colD'] : doc === 'order' ? ['colA', 'colB'] : ['colA', 'colB', 'colC', 'colD']
-  ), [doc]);
+  const orientSel = (kind: 'headOrient' | 'bodyOrient', letter: string) => {
+    const key = `${kind}${letter}` as keyof DocPrintLayout;
+    const val = (draft[key] as string | undefined) ?? 'h';
+    return (
+      <select
+        value={val}
+        onChange={(e) => setL({ [key]: e.target.value === 'h' ? undefined : 'v' } as any)}
+        className="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 p-1 text-[11px]"
+      >
+        <option value="h">{P('designerOrientH', 'أفقي')}</option>
+        <option value="v">{P('designerOrientV', 'رأسي')}</option>
+      </select>
+    );
+  };
 
   const DocBtn = ({ id, label }: { id: DesignerDoc; label: string }) => (
     <button type="button" onClick={() => setDoc(id)} className={`px-3 py-1.5 text-xs font-bold rounded-lg border ${doc === id ? 'bg-orange-600 text-white border-orange-600' : 'bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-600'}`}>{label}</button>
@@ -436,7 +612,7 @@ const PrintDesigner: React.FC<PrintDesignerProps> = ({ settings, onPatch, logoUr
   const items = customItems ?? defaultItems(previewLang);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 text-gray-900 dark:text-gray-100">
       <div>
         <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">{P('designerTitle', 'مصمم شكل الورقة المطبوعة')}</h4>
         <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{P('designerDesc', 'عدّل أي عنصر وشاهد النتيجة فوراً بنفس كود الطباعة — ما تراه هو ما سيُطبع.')}</p>
@@ -451,7 +627,7 @@ const PrintDesigner: React.FC<PrintDesignerProps> = ({ settings, onPatch, logoUr
         <MiniBtn active={previewLang === 'en'} label={P('designerLangEn', 'English')} onClick={() => setPreviewLang('en')} />
         <span className="mx-1 h-5 w-px bg-gray-200 dark:bg-gray-600" />
         {PAPER_OPTIONS.map((w) => (
-          <MiniBtn key={w} active={paperWidth === w} label={`${w} ${P('designerMm', 'مم')}`} onClick={() => setPaperWidth(w)} />
+          <MiniBtn key={w} active={paperWidth === w} label={`${w} ${P('designerMm', 'مم')}`} onClick={() => { widthTouched.current = true; setPaperWidth(w); }} />
         ))}
         {doc !== 'consumption' && (
           <>
@@ -498,6 +674,7 @@ const PrintDesigner: React.FC<PrintDesignerProps> = ({ settings, onPatch, logoUr
 
           <Group title={P('designerGroupLogo', 'الشعار')}>
             <ToggleRow title={P('designerLogoShow', 'إظهار الشعار')} checked={draft.logoShow !== false} onChange={(v) => setL({ logoShow: v })} />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3">
             <label className="flex items-center justify-between gap-2 py-1 text-xs text-gray-700 dark:text-gray-200">
               <span>{P('designerLogoPosition', 'موضع الشعار')}</span>
               <select value={draft.logoPosition || 'above'} onChange={(e) => setL({ logoPosition: e.target.value as any, logoShow: true })} className="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 p-1.5 text-xs">
@@ -507,6 +684,7 @@ const PrintDesigner: React.FC<PrintDesignerProps> = ({ settings, onPatch, logoUr
               </select>
             </label>
             <NumRow label={P('designerLogoWidth', 'عرض الشعار (بكسل)')} value={draft.logoWidth} fallback={110} min={40} max={200} onChange={(v) => setL({ logoWidth: v ?? 110 })} />
+            </div>
           </Group>
 
           <Group title={P('designerGroupFonts', 'الخطوط')}>
@@ -516,59 +694,147 @@ const PrintDesigner: React.FC<PrintDesignerProps> = ({ settings, onPatch, logoUr
                 {FONT_OPTIONS.map((f) => <option key={f} value={f}>{f}</option>)}
               </select>
             </label>
-            <NumRow label={P('designerFontOrgName', 'اسم المنشأة')} value={draft.fontOrgName} fallback={19} min={8} max={60} suffix="px" onChange={(v) => setL({ fontOrgName: v })} />
-            <NumRow label={P('designerFontBillNumber', 'رقم الفاتورة/الطلب')} value={draft.fontBillNumber} fallback={19} min={8} max={60} suffix="px" onChange={(v) => setL({ fontBillNumber: v })} />
-            <NumRow label={P('designerFontDate', 'التاريخ')} value={draft.fontDate} fallback={12} min={8} max={60} suffix="px" onChange={(v) => setL({ fontDate: v })} />
-            <NumRow label={P('designerFontUser', 'المستخدم (الكاشير)')} value={draft.fontUser} fallback={12} min={8} max={60} suffix="px" onChange={(v) => setL({ fontUser: v })} />
-            {doc !== 'consumption' && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3">
+            <HeaderPairRow title={P('designerShowOrgName', 'اسم المنشأة')} checked={draft.showOrgName !== false} onToggle={(v) => setL({ showOrgName: v })} font={draft.fontOrgName} fontFallback={19} onFont={(v) => setL({ fontOrgName: v })} />
+            {doc === 'bill' && (
+              <div className="sm:col-span-2">
+              <HeaderPairRow title={P('designerShowBillNumber', 'رقم الفاتورة')} checked={draft.showBillNumber !== false} onToggle={(v) => setL({ showBillNumber: v })} font={draft.fontBillNumber} fontFallback={19} onFont={(v) => setL({ fontBillNumber: v })}
+                labelChecked={lblShow('showBillNumber', 'showBillNumberLabel', draft.showBillNumber !== false)} labelOnToggle={(v) => setL({ showBillNumberLabel: v })}
+                labelFont={draft.fontBillNumberLabel} labelFontFallback={14} labelOnFont={(v) => setL({ fontBillNumberLabel: v })}
+                labelWord={lwLabel} dataWord={lwData} />
+              </div>
+            )}
+            {doc === 'order' && (
               <>
-                <NumRow label={P('designerFontCustName', 'اسم العميل')} value={draft.fontCustName} fallback={14} min={8} max={60} suffix="px" onChange={(v) => setL({ fontCustName: v })} />
-                <NumRow label={P('designerFontCustPhone', 'هاتف العميل')} value={draft.fontCustPhone} fallback={13} min={8} max={60} suffix="px" onChange={(v) => setL({ fontCustPhone: v })} />
+                <div className="sm:col-span-2">
+                <HeaderPairRow title={P('designerShowOrderNumber', 'رقم الطلب')} checked={draft.showOrderNumber !== false} onToggle={(v) => setL({ showOrderNumber: v })} font={draft.fontBillNumber} fontFallback={19} onFont={(v) => setL({ fontBillNumber: v })}
+                  labelChecked={lblShow('showOrderNumber', 'showOrderNumberLabel', draft.showOrderNumber !== false)} labelOnToggle={(v) => setL({ showOrderNumberLabel: v })}
+                  labelFont={draft.fontOrderNumberLabel} labelFontFallback={14} labelOnFont={(v) => setL({ fontOrderNumberLabel: v })}
+                  labelWord={lwLabel} dataWord={lwData} />
+                </div>
+                <div className="sm:col-span-2">
+                <HeaderPairRow title={P('designerShowRelatedBill', 'رقم الفاتورة المرتبط')} checked={draft.showRelatedBill !== false} onToggle={(v) => setL({ showRelatedBill: v })} font={draft.fontRelatedBill} fontFallback={16} onFont={(v) => setL({ fontRelatedBill: v })}
+                  labelChecked={lblShow('showRelatedBill', 'showRelatedBillLabel', draft.showRelatedBill !== false)} labelOnToggle={(v) => setL({ showRelatedBillLabel: v })}
+                  labelFont={draft.fontRelatedBillLabel} labelFontFallback={14} labelOnFont={(v) => setL({ fontRelatedBillLabel: v })}
+                  labelWord={lwLabel} dataWord={lwData} />
+                </div>
               </>
             )}
+            {(doc === 'bill' || doc === 'order') && (
+              <div className="sm:col-span-2">
+              <HeaderPairRow title={P('designerShowFulfillmentBadge', 'شارة النوع (دليفري/تيك أوي)')} checked={draft.showFulfillmentBadge !== false} onToggle={(v) => setL({ showFulfillmentBadge: v })} font={draft.fontFulfillmentBadge} fontFallback={20} onFont={(v) => setL({ fontFulfillmentBadge: v })}
+                labelChecked={lblShow('showFulfillmentBadge', 'showFulfillmentBadgeLabel', draft.showFulfillmentBadge !== false)} labelOnToggle={(v) => setL({ showFulfillmentBadgeLabel: v })}
+                labelFont={draft.fontFulfillmentBadgeLabel} labelFontFallback={15} labelOnFont={(v) => setL({ fontFulfillmentBadgeLabel: v })}
+                labelWord={lwLabel} dataWord={lwData} />
+              </div>
+            )}
+            <div className="sm:col-span-2">
+            <HeaderPairRow title={P('designerShowDate', 'سطر التاريخ')} checked={draft.showDate !== false} onToggle={(v) => setL({ showDate: v })} font={draft.fontDate} fontFallback={12} onFont={(v) => setL({ fontDate: v })}
+              labelChecked={lblShow('showDate', 'showDateLabel', draft.showDate !== false)} labelOnToggle={(v) => setL({ showDateLabel: v })}
+              labelFont={draft.fontDateLabel} labelFontFallback={12} labelOnFont={(v) => setL({ fontDateLabel: v })}
+              labelWord={lwLabel} dataWord={lwData} />
+            </div>
             {doc !== 'consumption' && (
-              <NumRow label={P('designerFontAddress', 'العنوان')} value={draft.fontAddress} fallback={12} min={8} max={60} suffix="px" onChange={(v) => setL({ fontAddress: v })} />
+              <div className="sm:col-span-2">
+              <HeaderPairRow title={P('designerShowTime', 'الوقت')} checked={draft.showTime !== false} onToggle={(v) => setL({ showTime: v })} font={draft.fontTime} fontFallback={12} onFont={(v) => setL({ fontTime: v })}
+                labelChecked={lblShow('showTime', 'showTimeLabel', draft.showTime !== false)} labelOnToggle={(v) => setL({ showTimeLabel: v })}
+                labelFont={draft.fontTimeLabel} labelFontFallback={12} labelOnFont={(v) => setL({ fontTimeLabel: v })}
+                labelWord={lwLabel} dataWord={lwData} />
+              </div>
+            )}
+            {doc !== 'consumption' && (
+              <div className="sm:col-span-2">
+              <HeaderPairRow title={P('designerShowUser', 'اسم الكاشير')} checked={draft.showUser !== false} onToggle={(v) => setL({ showUser: v })} font={draft.fontUser} fontFallback={12} onFont={(v) => setL({ fontUser: v })}
+                labelChecked={lblShow('showUser', 'showUserLabel', draft.showUser !== false)} labelOnToggle={(v) => setL({ showUserLabel: v })}
+                labelFont={draft.fontUserLabel} labelFontFallback={12} labelOnFont={(v) => setL({ fontUserLabel: v })}
+                labelWord={lwLabel} dataWord={lwData} />
+              </div>
+            )}
+            {doc !== 'consumption' && (
+              <>
+                <ToggleRow title={P('designerShowTable', 'سطر الطاولة')} checked={draft.showTable !== false} onChange={(v) => setL({ showTable: v })} />
+                <ToggleRow title={P('designerShowCustomer', 'سطر العميل')} checked={draft.showCustomer !== false} onChange={(v) => setL({ showCustomer: v })} />
+                <div className="sm:col-span-2">
+                <HeaderPairRow title={P('designerShowCustName', 'اسم العميل')} checked={draft.showCustName !== false} onToggle={(v) => setL({ showCustName: v })} font={draft.fontCustName} fontFallback={14} onFont={(v) => setL({ fontCustName: v })}
+                  labelChecked={lblShow('showCustName', 'showCustNameLabel', draft.showCustName !== false)} labelOnToggle={(v) => setL({ showCustNameLabel: v })}
+                  labelFont={draft.fontCustNameLabel} labelFontFallback={13} labelOnFont={(v) => setL({ fontCustNameLabel: v })}
+                  labelWord={lwLabel} dataWord={lwData} />
+                </div>
+                <div className="sm:col-span-2">
+                <HeaderPairRow title={P('designerShowPhone', 'هاتف العميل')} checked={draft.showPhone !== false} onToggle={(v) => setL({ showPhone: v })} font={draft.fontCustPhone} fontFallback={13} onFont={(v) => setL({ fontCustPhone: v })}
+                  labelChecked={lblShow('showPhone', 'showPhoneLabel', draft.showPhone !== false)} labelOnToggle={(v) => setL({ showPhoneLabel: v })}
+                  labelFont={draft.fontPhoneLabel} labelFontFallback={13} labelOnFont={(v) => setL({ fontPhoneLabel: v })}
+                  labelWord={lwLabel} dataWord={lwData} />
+                </div>
+              </>
             )}
             {doc === 'bill' && (
-              <NumRow label={P('designerFontOrgPhone', 'هاتف المنشأة')} value={draft.fontOrgPhone} fallback={14} min={8} max={60} suffix="px" onChange={(v) => setL({ fontOrgPhone: v })} />
+              <div className="sm:col-span-2">
+              <HeaderPairRow title={t('settings.organization.printSettings.show_showAddress')} checked={draft.showAddress !== false} onToggle={(v) => setL({ showAddress: v })} font={draft.fontAddress} fontFallback={12} onFont={(v) => setL({ fontAddress: v })}
+                labelChecked={lblShow('showAddress', 'showAddressLabel', draft.showAddress !== false)} labelOnToggle={(v) => setL({ showAddressLabel: v })}
+                labelFont={draft.fontAddressLabel} labelFontFallback={12} labelOnFont={(v) => setL({ fontAddressLabel: v })}
+                labelWord={lwLabel} dataWord={lwData} />
+              </div>
+            )}
+            {doc === 'bill' && (
+              <div className="sm:col-span-2">
+              <HeaderPairRow title={P('designerShowOrgPhone', 'هاتف المنشأة')} checked={draft.showOrgPhone !== false} onToggle={(v) => setL({ showOrgPhone: v })} font={draft.fontOrgPhone} fontFallback={14} onFont={(v) => setL({ fontOrgPhone: v })} />
+              </div>
             )}
             <NumRow label={P('designerFontHeader', 'سطور الرأس الأخرى')} value={draft.fontHeader} fallback={12} min={8} max={60} suffix="px" onChange={(v) => setL({ fontHeader: v })} />
             <NumRow label={P('designerFontItems', 'الأصناف')} value={draft.fontItems} fallback={15} min={8} max={60} suffix="px" onChange={(v) => setL({ fontItems: v ?? 15 })} />
             <NumRow label={P('designerFontTableHeader', 'رأس الجدول')} value={draft.fontTableHeader} fallback={13} min={8} max={60} suffix="px" onChange={(v) => setL({ fontTableHeader: v })} />
             <NumRow label={P('designerFontTableBody', 'بيانات الجدول')} value={draft.fontTableBody} fallback={15} min={8} max={60} suffix="px" onChange={(v) => setL({ fontTableBody: v })} />
-            <NumRow label={P('designerFontNotes', 'الملاحظات')} value={draft.fontNotes} fallback={11} min={8} max={60} suffix="px" onChange={(v) => setL({ fontNotes: v })} />
-            <NumRow label={P('designerFontTotals', 'الإجماليات')} value={draft.fontTotals} fallback={16} min={8} max={60} suffix="px" onChange={(v) => setL({ fontTotals: v ?? 16 })} />
+            {doc === 'order' && (
+              <NumRow label={P('designerFontNotes', 'الملاحظات')} value={draft.fontNotes} fallback={11} min={8} max={60} suffix="px" onChange={(v) => setL({ fontNotes: v })} />
+            )}
+            {doc !== 'order' && (
+              <NumRow label={P('designerFontTotals', 'الإجماليات')} value={draft.fontTotals} fallback={16} min={8} max={60} suffix="px" onChange={(v) => setL({ fontTotals: v ?? 16 })} />
+            )}
             <NumRow label={P('designerFontFooter', 'التذييل')} value={draft.fontFooter} fallback={12} min={8} max={60} suffix="px" onChange={(v) => setL({ fontFooter: v ?? 12 })} />
+            </div>
           </Group>
 
           <Group title={P('designerGroupTable', 'الجدول')}>
-            {colKeys.map((k, i) => {
-              if (doc === 'bill' && k === 'colC' && draft.showPaidCol === false) return null;
-              if (doc === 'bill' && k === 'colE' && draft.showPriceCol !== true) return null;
+            {colCards.map((col) => {
+              const letter = col.k.replace('col', '');
+              const visible = !col.visKey || (col.visDefTrue ? draft[col.visKey] !== false : draft[col.visKey] === true);
               return (
-                <NumRow key={k} label={`${colLabels[i]} (%)`} value={draft[k]} fallback={k === 'colA' ? 50 : 17} min={5} max={90} suffix="%" onChange={(v) => setL({ [k]: v } as any)} />
+                <div key={col.k} className="rounded-lg border border-gray-200 dark:border-gray-700 p-2 space-y-1.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-bold text-gray-800 dark:text-gray-100">{col.label}</span>
+                    {col.visKey && (
+                      <label className="flex items-center gap-1 text-[11px] text-gray-500 dark:text-gray-400 cursor-pointer">
+                        <input type="checkbox" checked={visible} onChange={(e) => setL({ [col.visKey as string]: e.target.checked } as any)} className="h-3.5 w-3.5 accent-orange-600" />
+                        {P('designerShow', 'إظهار')}
+                      </label>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 text-[11px] text-gray-600 dark:text-gray-300 flex-wrap">
+                    <span>{P('designerCardWidth', 'العرض')}</span>
+                    <span className="flex items-center gap-1">
+                      <input type="number" min={5} max={90} step={1} value={draft[col.k] ?? ''} placeholder={col.k === 'colA' ? '50' : '17'} onChange={(e) => setL({ [col.k]: numOrUndef(e.target.value) } as any)} className="w-14 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 p-1 text-[11px]" />
+                      <span className="text-gray-400">%</span>
+                    </span>
+                    <span className="text-gray-400">{P('designerOrientHead', 'الرأس')}</span>
+                    {orientSel('headOrient', letter)}
+                    <span className="text-gray-400">{P('designerOrientBody', 'القيم')}</span>
+                    {orientSel('bodyOrient', letter)}
+                    <input type="number" min={8} max={60} step={1} value={draft[col.fontKey] ?? ''} placeholder="15" title={P('designerFontColHint', 'حجم خط قيم العمود')} onChange={(e) => setL({ [col.fontKey]: numOrUndef(e.target.value) } as any)} className="w-14 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 p-1 text-[11px]" />
+                    <span className="text-gray-400">px</span>
+                  </div>
+                </div>
               );
             })}
-            <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1">{P('designerColsNote', 'تُطبّع النسب تلقائيًا على 100%')}</p>
+            <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1">{P('designerColsNote', 'تُطبّع النسب تلقائيًا على 100% — وحجم عمود القيم يغلب حجم البيانات العام عند الضبط.')}</p>
             <NumRow label={P('designerTableBorder', 'سمك الحدود (0 = بدون)')} value={draft.tableBorder} fallback={1} min={0} max={4} suffix="px" onChange={(v) => setL({ tableBorder: v })} />
             <NumRow label={P('designerRowPadding', 'تباعد الصفوف')} value={draft.rowPadding} fallback={1} min={0} max={12} suffix="px" onChange={(v) => setL({ rowPadding: v })} />
-            <NumRow label={`${P('designerFontColName', 'عمود الصنف')}`} value={draft.fontNameCol} fallback={15} min={8} max={60} suffix="px" onChange={(v) => setL({ fontNameCol: v })} />
-            <NumRow label={`${P('designerFontColQty', 'عمود الكمية')}`} value={draft.fontQtyCol} fallback={15} min={8} max={60} suffix="px" onChange={(v) => setL({ fontQtyCol: v })} />
-            {doc === 'bill' && draft.showPaidCol !== false && (
-              <NumRow label={`${P('designerFontColPaid', 'عمود المدفوع')}`} value={draft.fontPaidCol} fallback={15} min={8} max={60} suffix="px" onChange={(v) => setL({ fontPaidCol: v })} />
-            )}
-            {(doc === 'bill' ? draft.showPriceCol === true : doc === 'consumption') && (
-              <NumRow label={`${P('designerFontColPrice', 'عمود السعر')}`} value={draft.fontPriceCol} fallback={15} min={8} max={60} suffix="px" onChange={(v) => setL({ fontPriceCol: v })} />
-            )}
-            <NumRow label={`${P('designerFontColTotal', 'عمود الإجمالي')}`} value={draft.fontTotalCol} fallback={16} min={8} max={60} suffix="px" onChange={(v) => setL({ fontTotalCol: v })} />
             <ToggleRow title={P('designerShowSectionTitle', 'عناوين الأقسام')} checked={draft.showSectionTitle !== false} onChange={(v) => setL({ showSectionTitle: v })} />
             {doc !== 'order' && (
               <ToggleRow title={P('designerShowDividers', 'الخطوط الفاصلة')} checked={draft.showDividers !== false} onChange={(v) => setL({ showDividers: v })} />
             )}
             {doc === 'bill' && (
               <>
-                <ToggleRow title={P('designerShowPaidCol', 'عمود المدفوع')} checked={draft.showPaidCol !== false} onChange={(v) => setL({ showPaidCol: v })} />
-                <ToggleRow title={P('designerShowPriceCol', 'عمود السعر')} checked={draft.showPriceCol === true} onChange={(v) => setL({ showPriceCol: v })} />
                 <ToggleRow title={P('designerShowItemDetails', 'تفاصيل الصنف (مقاس/إضافات)')} checked={draft.showItemDetails !== false} onChange={(v) => setL({ showItemDetails: v })} />
                 <ToggleRow title={P('designerShowSessions', 'جدول الجلسات')} checked={draft.showSessions !== false} onChange={(v) => setL({ showSessions: v })} />
               </>
@@ -578,66 +844,46 @@ const PrintDesigner: React.FC<PrintDesignerProps> = ({ settings, onPatch, logoUr
                 <ToggleRow title={P('designerShowSectionTotal', 'إجمالي القسم')} checked={draft.showSectionTotal !== false} onChange={(v) => setL({ showSectionTotal: v })} />
                 <ToggleRow title={P('designerShowOrderNotes', 'ملاحظات الطلب')} checked={draft.showOrderNotes !== false} onChange={(v) => setL({ showOrderNotes: v })} />
                 <ToggleRow title={P('designerShowItemNotes', 'ملاحظات كل صنف')} checked={draft.showItemNotes !== false} onChange={(v) => setL({ showItemNotes: v })} />
+                <ToggleRow title={P('designerShowUpdateBanner', 'بانر "طلب مُحدّث"')} checked={draft.showUpdateBanner !== false} onChange={(v) => setL({ showUpdateBanner: v })} />
               </>
             )}
-          </Group>
-
-          <Group title={P('designerGroupHeader', 'محتوى الرأس')}>
-            {doc === 'bill' && (
-              <ToggleRow title={P('designerShowBillNumber', 'رقم الفاتورة')} checked={draft.showBillNumber !== false} onChange={(v) => setL({ showBillNumber: v })} />
-            )}
-            {doc === 'order' && (
-              <>
-                <ToggleRow title={P('designerShowOrderNumber', 'رقم الطلب')} checked={draft.showOrderNumber !== false} onChange={(v) => setL({ showOrderNumber: v })} />
-                <ToggleRow title={P('designerShowFulfillmentBadge', 'شارة النوع (دليفري/تيك أوي)')} checked={draft.showFulfillmentBadge !== false} onChange={(v) => setL({ showFulfillmentBadge: v })} />
-              </>
-            )}
-            <ToggleRow title={P('designerShowDate', 'سطر التاريخ')} checked={draft.showDate !== false} onChange={(v) => setL({ showDate: v })} />
-            {doc !== 'consumption' && (
-              <ToggleRow title={P('designerShowUser', 'اسم الكاشير')} checked={draft.showUser !== false} onChange={(v) => setL({ showUser: v })} />
-            )}
-            {doc !== 'consumption' && (
-              <>
-                <ToggleRow title={P('designerShowTable', 'سطر الطاولة')} checked={draft.showTable !== false} onChange={(v) => setL({ showTable: v })} />
-                <ToggleRow title={P('designerShowCustomer', 'سطر العميل')} checked={draft.showCustomer !== false} onChange={(v) => setL({ showCustomer: v })} />
-                <ToggleRow title={P('designerShowCustName', 'اسم العميل')} checked={draft.showCustName !== false} onChange={(v) => setL({ showCustName: v })} />
-              </>
-            )}
-            {doc === 'bill' && (
-              <ToggleRow title={P('designerShowOrgPhone', 'هاتف المنشأة (أسفل الشكر)')} checked={draft.showOrgPhone !== false} onChange={(v) => setL({ showOrgPhone: v })} />
-            )}
-            <ToggleRow title={t('settings.organization.printSettings.show_showPhone')} checked={draft.showPhone !== false} onChange={(v) => setL({ showPhone: v })} />
-            <ToggleRow title={t('settings.organization.printSettings.show_showAddress')} checked={draft.showAddress !== false} onChange={(v) => setL({ showAddress: v })} />
           </Group>
 
           {doc === 'bill' && (
             <Group title={P('designerGroupTotals', 'الإجماليات')}>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3">
               <ToggleRow title={P('designerShowTotalsTable', 'جدول الإجماليات')} checked={draft.showTotalsTable !== false} onChange={(v) => setL({ showTotalsTable: v })} />
               <ToggleRow title={P('designerShowZeroRows', 'إظهار الخصم/الضريبة/التوصيل ولو صفر')} checked={draft.showZeroRows === true} onChange={(v) => setL({ showZeroRows: v })} />
+              <ToggleRow title={P('designerHidePaidWhenZero', 'إخفاء المدفوع عند الصفر')} checked={draft.hidePaidWhenZero === true} onChange={(v) => setL({ hidePaidWhenZero: v })} />
+              <ToggleRow title={P('designerHideRemainingWhenZero', 'إخفاء المتبقي عند الصفر')} checked={draft.hideRemainingWhenZero === true} onChange={(v) => setL({ hideRemainingWhenZero: v })} />
+              <ToggleRow title={P('designerHideBothWhenEitherZero', 'إخفاء الاثنين معاً عند تصفير أحدهما')} checked={draft.hideBothWhenEitherZero === true} onChange={(v) => setL({ hideBothWhenEitherZero: v })} />
+              </div>
             </Group>
           )}
 
           <Group title={P('designerGroupFooter', 'التذييل')}>
             <ToggleRow title={t('settings.organization.printSettings.show_showThanks')} checked={draft.showThanks !== false} onChange={(v) => setL({ showThanks: v })} />
-            <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1">{P('designerDevSignNote', 'توقيع المطور أسفل الورقة ثابت دائماً ولا يمكن إخفاؤه.')}</p>
+            <label className="block py-1 text-xs text-gray-700 dark:text-gray-200">
+              <span className="block mb-1">{P('designerCustomFooter', 'نص التذييل المخصص (أكثر من سطر)')}</span>
+              <textarea value={footers[doc]} rows={3} onChange={(e) => { setFooters((f) => ({ ...f, [doc]: e.target.value })); markRootDirty(); }} placeholder={t('settings.organization.printSettings.customFooterPlaceholder')} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 p-1.5 text-xs" />
+            </label>
             {doc === 'bill' && (
-              <>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3">
                 <ToggleRow title={t('settings.organization.printSettings.show_showQR')} checked={draft.showQR !== false} onChange={(v) => setL({ showQR: v })} />
                 <NumRow label={P('designerQrSize', 'حجم رمز QR')} value={draft.qrSize} fallback={120} min={50} max={220} suffix="px" onChange={(v) => setL({ qrSize: v })} />
-                <label className="block py-1 text-xs text-gray-700 dark:text-gray-200">
-                  <span className="block mb-1">{P('designerCustomFooter', 'نص التذييل المخصص (أكثر من سطر)')}</span>
-                  <textarea value={footerText} rows={3} onChange={(e) => { setFooterTextState(e.target.value); markRootDirty(); }} placeholder={t('settings.organization.printSettings.customFooterPlaceholder')} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 p-1.5 text-xs" />
-                </label>
-              </>
+              </div>
             )}
+            <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1">{P('designerDevSignNote', 'توقيع المطور أسفل الورقة ثابت دائماً ولا يمكن إخفاؤه.')}</p>
           </Group>
 
           <Group title={P('designerGroupPrint', 'خيارات الطباعة')}>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3">
             <ToggleRow title={t('settings.organization.printSettings.autoCut')} desc={t('settings.organization.printSettings.autoCutDesc')} checked={autoCut} onChange={(v) => { setAutoCut(v); markRootDirty(); }} />
             <NumRow label={t('settings.organization.printSettings.charactersPerLine')} value={charsPerLine} fallback={48} min={32} max={64} onChange={(v) => { setCharsPerLine(v ?? 48); markRootDirty(); }} />
             <ToggleRow title={t('settings.organization.printSettings.printHeader')} desc={t('settings.organization.printSettings.printHeaderDesc')} checked={printHeader} onChange={(v) => { setPrintHeader(v); markRootDirty(); }} />
             <ToggleRow title={t('settings.organization.printSettings.printFooter')} desc={t('settings.organization.printSettings.printFooterDesc')} checked={printFooter} onChange={(v) => { setPrintFooter(v); markRootDirty(); }} />
             <ToggleRow title={t('settings.organization.printSettings.printQRCode')} desc={t('settings.organization.printSettings.printQRCodeDesc')} checked={printQRCode} onChange={(v) => { setPrintQRCode(v); markRootDirty(); }} />
+            </div>
             <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1">{P('designerRawNote', 'عدد الأحرف والرأس/التذييل هنا تُطبق على مسار الطوارئ النصي.')}</p>
           </Group>
 
@@ -652,6 +898,7 @@ const PrintDesigner: React.FC<PrintDesignerProps> = ({ settings, onPatch, logoUr
               ? <span className="text-[11px] text-orange-600 font-bold">{P('designerUnsaved', 'تغييرات غير محفوظة')}</span>
               : <span className="text-[11px] text-emerald-600 font-bold">{P('designerSaved', 'محفوظ')}</span>}
           </div>
+          {saveNote ? <p className="text-[11px] text-gray-500 dark:text-gray-400">{saveNote}</p> : null}
         </div>
 
         <div>
@@ -662,10 +909,14 @@ const PrintDesigner: React.FC<PrintDesignerProps> = ({ settings, onPatch, logoUr
                 {doc !== 'consumption' && ` — ${fulfillment === 'dine_in' ? P('designerFulDineIn', 'طاولات') : fulfillment === 'takeaway' ? P('designerFulTakeaway', 'تيك أوي') : P('designerFulDelivery', 'دليفري')}`}
               </span>
               {building && <span className="text-[11px] text-gray-500">…</span>}
+              <button type="button" onClick={handleTestPrint} disabled={!html} className="px-2.5 py-1 text-[11px] font-bold rounded-lg border bg-emerald-600 text-white border-emerald-600 disabled:bg-gray-400 disabled:border-gray-400 disabled:cursor-not-allowed">
+                {P('designerTestPrint', 'طباعة تجريبية')}
+              </button>
             </div>
             <div className="mx-auto bg-white shadow overflow-hidden" style={{ width: pxWidth, maxWidth: '100%' }}>
+              {/* نفس تحجيم وإزاحة وكيل الطباعة (scale 0.93 و left -3mm) — المعاينة بحجم الطباعة الفعلي */}
               {html
-                ? <iframe title="print-preview" srcDoc={html} style={{ width: pxWidth, maxWidth: '100%', height: 620, border: 0, background: '#fff' }} />
+                ? <iframe title="print-preview" srcDoc={html} style={{ width: pxWidth, maxWidth: '100%', height: 620, border: 0, background: '#fff', transform: 'scale(0.93)', transformOrigin: 'top center', position: 'relative', left: '-11px' }} />
                 : <div className="p-6 text-center text-xs text-gray-500">{P('designerBuilding', 'جاري بناء المعاينة...')}</div>}
             </div>
             <p className="mt-2 text-[11px] text-gray-500 dark:text-gray-400">{P('designerPreviewNote', 'المعاينة ببيانات عينة وبنفس كود الطباعة — الناتج المطبوع مطابق.')}</p>

@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { Search } from 'lucide-react';
 import ModalPortal from '../ModalPortal';
 import { getTableDisplay } from './tableHelpers';
+import { collationLocale } from '../../utils/formatters';
 
 interface Props {
   billLabel: string;
@@ -42,7 +43,7 @@ const ChangeTableModal: React.FC<Props> = ({
           onClick={(e) => e.stopPropagation()}
         >
           <h3 className="text-xl sm:text-2xl font-semibold text-gray-900 dark:text-gray-100 mb-1">{t('billing.changeTableTitle')}</h3>
-          <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">فاتورة #{billLabel}</p>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">{t('billing.invoiceLabel', { label: billLabel })}</p>
           <div className="mb-4">
             {selected && (() => {
               const sn = getSectionName ? getSectionName(selected) : '';
@@ -72,7 +73,7 @@ const ChangeTableModal: React.FC<Props> = ({
               {(tables || [])
                 .filter((x: any) => x.isActive !== false && String(x._id || x.id) !== String(excludeTableId || ''))
                 .filter((x: any) => !search || String(x.number).toLowerCase().includes(search.toLowerCase()))
-                .sort((a: any, b: any) => String(a.number).localeCompare(String(b.number), 'ar', { numeric: true }))
+                .sort((a: any, b: any) => String(a.number).localeCompare(String(b.number), collationLocale(i18n.language), { numeric: true }))
                 .map((table: any) => (
                   <button
                     key={table._id || table.id}

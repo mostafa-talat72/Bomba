@@ -36,6 +36,7 @@ interface FormData {
   position: string;
   hireDate: string;
   salary: string;
+  maxDays: string;
   notes: string;
 }
 
@@ -369,6 +370,25 @@ const UserFormModal: React.FC<UserFormModalProps> = ({
                     className={`w-full px-4 py-3 border-2 border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all font-semibold ${getInputDirClass()}`}
                     dir="ltr"
                   />
+                </div>
+
+                {/* Max date-range days */}
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">
+                    {t('users.form.maxDays')}
+                  </label>
+                  <input
+                    type="number"
+                    name="maxDays"
+                    value={formData.maxDays}
+                    onChange={onInputChange}
+                    placeholder={t('users.form.maxDaysPlaceholder')}
+                    min="0"
+                    step="1"
+                    className={`w-full px-4 py-3 border-2 border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all font-semibold ${getInputDirClass()}`}
+                    dir="ltr"
+                  />
+                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{t('users.form.maxDaysHint')}</p>
                 </div>
 
                 {/* Notes */}

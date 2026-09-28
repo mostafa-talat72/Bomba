@@ -21,6 +21,7 @@ import Login from './pages/Login';
 import Register from './pages/Register';
 import EmailActions from './pages/EmailActions';
 import HomeRedirect from './components/HomeRedirect';
+import appIcon from './assets/app-icon.png';
 
 // ── Code Splitting: تحميل الصفحات عند الطلب لتسريع الإقلاع ──────────────────
 const Dashboard = lazy(() => import('./pages/Dashboard'));
@@ -39,6 +40,8 @@ const Subscription = lazy(() => import('./pages/Subscription'));
 const VerifyEmail = lazy(() => import('./pages/VerifyEmail'));
 const ResetPassword = lazy(() => import('./pages/ResetPassword'));
 const ConsumptionReport = lazy(() => import('./pages/ConsumptionReport'));
+const Bills = lazy(() => import('./pages/Bills'));
+const Customers = lazy(() => import('./pages/Customers'));
 const Payroll = lazy(() => import('./pages/Payroll'));
 const SoldItems = lazy(() => import('./pages/SoldItems'));
 const Warehouse = lazy(() => import('./pages/Warehouse'));
@@ -52,7 +55,7 @@ const Shifts = lazy(() => import('./pages/Shifts'));
 const PageLoader = () => (
   <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
     <div className="text-center">
-      <div className="w-16 h-16 border-4 border-orange-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+      <img src={appIcon} alt="MTE Systems" className="w-20 h-20 rounded-3xl shadow-lg object-contain mx-auto mb-4 animate-spin" style={{ animationDuration: '2.5s' }} />
       <p className="text-gray-600 dark:text-gray-300">جارٍ التحميل...</p>
     </div>
   </div>
@@ -265,6 +268,8 @@ const ProtectedRoute = ({ children, requiredPermissions = [], requiredRole }: {
         { path: '/menu', permission: 'menu' },
         { path: '/reports', permission: 'reports' },
         { path: '/consumption-report', permission: 'consumption' },
+        { path: '/bills', permission: 'bills' },
+        { path: '/customers', permission: 'customers' },
         { path: '/sold-items', permission: 'soldItems' },
         { path: '/kitchen-display', permission: 'kitchenDisplay' },
         { path: '/inventory', permission: 'inventory' },
@@ -426,6 +431,16 @@ const RouteHandler = () => {
           <Route path="consumption-report" element={
             <ProtectedRoute requiredPermissions={['reports', 'consumption']}>
               <ConsumptionReport />
+            </ProtectedRoute>
+          } />
+          <Route path="bills" element={
+            <ProtectedRoute requiredPermissions={['bills']}>
+              <Bills />
+            </ProtectedRoute>
+          } />
+          <Route path="customers" element={
+            <ProtectedRoute requiredPermissions={['customers']}>
+              <Customers />
             </ProtectedRoute>
           } />
           <Route path="sold-items" element={

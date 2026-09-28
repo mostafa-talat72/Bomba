@@ -4,7 +4,7 @@ import {
   AlertTriangle, Search, CheckCircle, DollarSign,
   Calendar, Receipt, Table as TableIcon, Eye, EyeOff,
   Gamepad2, ChevronDown, ChevronUp, User as UserIcon,
-  Clock, Zap, History, ArrowLeftRight
+  Clock, Zap, History, ArrowLeftRight, QrCode
 } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
@@ -14,8 +14,11 @@ import { useOrganization } from '../context/OrganizationContext';
 import { useTablesHeader } from '../context/TablesHeaderContext';
 import { MenuItem, MenuSection, MenuCategory, TableSection, Table, Order, Bill, Session } from '../services/api';
 import { api } from '../services/api';
-import { formatCurrency as formatCurrencyUtil, formatDecimal, getShortBillNumber } from '../utils/formatters';
+import { formatCurrency as formatCurrencyUtil, formatDecimal, getShortBillNumber, localeTag } from '../utils/formatters';
 import { getId, sameId } from '../utils/id';
+import { paymentMethodLabel, paymentMethodIcon, PAYMENT_METHODS, type PaymentMethod } from '../utils/paymentMethod';
+import { DrawerSelect } from '../components/ui/DrawerSelect';
+import { defaultDrawerForFulfillment, drawerLabel, type CashDrawer } from '../utils/paymentDrawer';
 import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
 import { printOrder } from '../utils/printOrder';
 import { resolveMenuItem } from '../utils/orderSectionPrint';
@@ -27,7 +30,8 @@ import { useInfiniteList } from '../hooks/useInfiniteList';
 import {
   canAddOrder, canEditOrder, canDeleteOrder,
   canPartialPayment, canPayFullBill, canDeleteBill,
-  canEditSessionTime, canEditPartialPayment, canStartSession, canEndSession
+  canEditSessionTime, canEditPartialPayment, canStartSession, canEndSession,
+  canReviewCustomerOrders, canApplyManualDiscount, canMoveOrderTableToTable, canMoveBillTableToTable
 } from '../utils/permissionHelper';
 import PermissionDenied from '../components/PermissionDenied';
 import ConfirmModal from '../components/ConfirmModal';
@@ -36,6 +40,7 @@ import { API_BASE_URL } from '../utils/apiBase';
 import '../styles/billing-animations.css';
 import TableButton from '../components/tables/TableButton';
 import ChangeTableModal from '../components/tables/ChangeTableModal';
+import TableQrModal from '../components/tables/TableQrModal';
 import PlaystationBillItem from '../components/tables/PlaystationBillItem';
 import { ItemCard, OrderItemRow } from '../components/tables/OrderItems';
 import { getTableDisplay } from '../components/tables/tableHelpers';
@@ -98,6 +103,13 @@ const Tables: React.FC = () => {
   // ── Unified modal state ──────────────────────────────────────────────────
   const [showUnifiedTableModal, setShowUnifiedTableModal] = useState(false);
   const [activeTab, setActiveTab] = useState<'orders' | 'billing' | 'sessions'>('orders');
+  const [qrTable, setQrTable] = useState<Table | null>(null);
+  const orgIdForQr = (() => {
+    const o = (user as any)?.organization;
+    if (!o) return '';
+    if (typeof o === 'string') return o;
+    return String(o._id || o.id || '');
+  })();
 
   // ── Orders state ─────────────────────────────────────────────────────────
   const [loading, setLoading] = useState(false);
@@ -143,8 +155,11 @@ const Tables: React.FC = () => {
   const [isMovingOrder, setIsMovingOrder] = useState(false);
   const [isChangingTable, setIsChangingTable] = useState(false);
   const [paymentAmount, setPaymentAmount] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'card' | 'transfer'>('cash');
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash');
+  // درج الدفع — افتراضي الصالة لسياق الطاولات، قابل للتغيير وقت الدفع
+  const [paymentDrawer, setPaymentDrawer] = useState<CashDrawer>('hall');
   const [orderDiscount, setOrderDiscount] = useState<number>(0);
+  const [orderDiscountType, setOrderDiscountType] = useState<'amount' | 'percent'>('percent');
   const [statusFilter, setStatusFilter] = useState('all');
   const [orgFixedDiscount, setOrgFixedDiscount] = useState<{ enabled: boolean; percentage: number; maxCap: number; sections?: Record<string, number> } | null>(null);
   const [playstationStatusFilter, setPlaystationStatusFilter] = useState('unpaid');
@@ -154,7 +169,7 @@ const Tables: React.FC = () => {
   const [showPayFullBillConfirmModal, setShowPayFullBillConfirmModal] = useState(false);
   const [showSessionPaymentConfirmModal, setShowSessionPaymentConfirmModal] = useState(false);
   const [billToPayFull, setBillToPayFull] = useState<Bill | null>(null);
-  const [sessionToPayData, setSessionToPayData] = useState<{ session: Session; amount: string; method: 'cash' | 'card' | 'transfer' } | null>(null);
+  const [sessionToPayData, setSessionToPayData] = useState<{ session: Session; amount: string; method: PaymentMethod } | null>(null);
   const [isCancelingBill, setIsCancelingBill] = useState(false);
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
   const [isProcessingPartialPayment, setIsProcessingPartialPayment] = useState(false);
@@ -170,7 +185,8 @@ const Tables: React.FC = () => {
   const [showSessionPaymentModal, setShowSessionPaymentModal] = useState(false);
   const [selectedSession, setSelectedSession] = useState<Session | null>(null);
   const [sessionPaymentAmount, setSessionPaymentAmount] = useState('');
-  const [sessionPaymentMethod, setSessionPaymentMethod] = useState<'cash' | 'card' | 'transfer'>('cash');
+  const [sessionPaymentMethod, setSessionPaymentMethod] = useState<PaymentMethod>('cash');
+  const [sessionPaymentDrawer, setSessionPaymentDrawer] = useState<CashDrawer>('hall');
   const [isProcessingSessionPayment, setIsProcessingSessionPayment] = useState(false);
   const [showPaidAmount, setShowPaidAmount] = useState(false);
   const [showRemainingAmount, setShowRemainingAmount] = useState(false);
@@ -178,13 +194,15 @@ const Tables: React.FC = () => {
   const [showEditPaymentModal, setShowEditPaymentModal] = useState(false);
   const [paymentToEdit, setPaymentToEdit] = useState<{ session: Session; payment: any; paymentIndex: number } | null>(null);
   const [editPaymentAmount, setEditPaymentAmount] = useState('');
-  const [editPaymentMethod, setEditPaymentMethod] = useState<'cash' | 'card' | 'transfer'>('cash');
+  const [editPaymentMethod, setEditPaymentMethod] = useState<PaymentMethod>('cash');
+  const [editPaymentDrawer, setEditPaymentDrawer] = useState<CashDrawer>('hall');
   const [editPaymentReference, setEditPaymentReference] = useState('');
   const [isEditingPayment, setIsEditingPayment] = useState(false);
   const [showEditItemPaymentModal, setShowEditItemPaymentModal] = useState(false);
   const [itemPaymentToEdit, setItemPaymentToEdit] = useState<{ itemPayment: any; payment: any; paymentIndex: number; itemPaymentId: string; } | null>(null);
   const [editItemPaymentAmount, setEditItemPaymentAmount] = useState('');
-  const [editItemPaymentMethod, setEditItemPaymentMethod] = useState<'cash' | 'card' | 'transfer'>('cash');
+  const [editItemPaymentMethod, setEditItemPaymentMethod] = useState<PaymentMethod>('cash');
+  const [editItemPaymentDrawer, setEditItemPaymentDrawer] = useState<CashDrawer>('hall');
   const [editItemPaymentReference, setEditItemPaymentReference] = useState('');
   const [isEditingItemPayment, setIsEditingItemPayment] = useState(false);
   const [sessionToEdit, setSessionToEdit] = useState<Session | null>(null);
@@ -1110,12 +1128,12 @@ const loadInitialData = async () => {
       if (e.key === 'F2') {
         e.preventDefault();
         const tb = lastFocusedTableRef.current;
-        if (!tb) { showNotification('مرّر مؤشر الفأرة على طاولة أولاً', 'info'); return; }
+        if (!tb) { showNotification(t('tables.hoverTableHint'), 'info'); return; }
         handleQuickBilling(tb, { stopPropagation: () => {} } as unknown as React.MouseEvent);
       } else if (e.key === 'F3') {
         e.preventDefault();
         const tb = lastFocusedTableRef.current;
-        if (!tb) { showNotification('مرّر مؤشر الفأرة على طاولة أولاً', 'info'); return; }
+        if (!tb) { showNotification(t('tables.hoverTableHint'), 'info'); return; }
         handleTableClick(tb);
         setTimeout(() => { setActiveTab3('sessions'); }, 0);
       } else if (/^[0-9]$/.test(e.key)) {
@@ -1193,8 +1211,8 @@ const loadInitialData = async () => {
         // الفواتير المدفوعة خارج الـ state — تُجلب مباشرة
         api.getBill(bid).then((r: any) => {
           if (r?.success && r.data) { setBills(prev => [...prev, r.data]); openIt(r.data); }
-          else showNotification('تعذر فتح فاتورة الطلب', 'error');
-        }).catch(() => showNotification('تعذر فتح فاتورة الطلب', 'error'));
+          else showNotification(t('tables.billOpenError'), 'error');
+        }).catch(() => showNotification(t('tables.billOpenError'), 'error'));
       }
     }
   }, [tables, bills, orders, location.state]);
@@ -1210,7 +1228,7 @@ const loadInitialData = async () => {
       return !activeIds.has(getCanonicalTableSectionKey(table));
     });
     return orphanTables.length > 0
-      ? [...active, { id: '__unassigned__', _id: '__unassigned__', name: 'غير مصنف', sortOrder: Number.MAX_SAFE_INTEGER, isActive: true }]
+      ? [...active, { id: '__unassigned__', _id: '__unassigned__', name: t('tables.unassignedSection'), sortOrder: Number.MAX_SAFE_INTEGER, isActive: true }]
       : active;
   }, [tableSections, tables]);
 
@@ -1280,10 +1298,27 @@ const loadInitialData = async () => {
 
   const filteredTableOrders = useMemo(() =>
     tableOrders.filter((o: Order) => {
+      if ((o as any).status === 'awaiting_approval') return false;
       if (!o.bill) return true;
       if (typeof o.bill === 'object' && o.bill !== null) return (o.bill as any).status !== 'paid';
       return true;
     }), [tableOrders]);
+
+  // طلبات العملاء المعلقة للمراجعة (inbox) — منفصلة عن قائمة الطلبات العادية
+  const pendingRequests = useMemo(() =>
+    tableOrders.filter((o: any) => o?.status === 'awaiting_approval'),
+  [tableOrders]);
+
+  // عدد الطلبات المعلقة لكل طاولة (شارة على الكارت)
+  const pendingByTable = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const o of orders as any[]) {
+      if ((o as any)?.status !== 'awaiting_approval') continue;
+      const tid = String((o as any).table?._id || (o as any).table?.id || (o as any).table || '');
+      if (tid) map[tid] = (map[tid] || 0) + 1;
+    }
+    return map;
+  }, [orders]);
 
   const filteredBills = useMemo(() => {
     return bills.filter(bill => {
@@ -1375,7 +1410,7 @@ const loadInitialData = async () => {
     allGamingBills.forEach((bill: Bill) => {
       const gamingSessions = (bill.sessions || []).filter((s: any) => s.deviceType === 'playstation' || s.deviceType === 'computer');
       gamingSessions.forEach((session: any) => {
-        const key = session.deviceName || `جهاز ${session.deviceNumber}`;
+        const key = session.deviceName || t('tables.deviceFallback', { number: session.deviceNumber });
         if (!deviceMap.has(key)) deviceMap.set(key, { deviceName: key, deviceType: session.deviceType, hasActiveSession: false, bills: [] });
         const d = deviceMap.get(key)!;
         if (session.status === 'active') d.hasActiveSession = true;
@@ -1560,7 +1595,7 @@ const loadInitialData = async () => {
       }
       setQuickDigits('');
       setQuickPickerTables(null);
-      showNotification(`⚠️ الطاولة ${digits} غير موجودة`, 'error');
+      showNotification(t('tables.tableNotFoundQuick', { digits }), 'error');
     }
   }, [activeTables, handleTableClick, showNotification, activeSectionFilter, tableSections, tables]);
 
@@ -1583,10 +1618,10 @@ const loadInitialData = async () => {
     const log: Array<{type: string; message: string; time: Date; color: string}> = [];
 
     activeBills.forEach((b: Bill) => {
-      const statusAr: Record<string, string> = { draft: 'معلقة', partial: 'مدفوعة جزئياً', overdue: 'متأخرة' };
+      const statusAr: Record<string, string> = { draft: t('tables.logBillStatusDraft'), partial: t('tables.logBillStatusPartial'), overdue: t('tables.logBillStatusOverdue') };
       log.push({
         type: 'bill',
-        message: `فاتورة #${b.billNumber || (b.id || b._id)?.slice(-6)}  •  ${statusAr[b.status] || b.status}  •  إجمالي: ${fmt(b.total || 0)}  •  متبقي: ${fmt(b.remaining || 0)}`,
+        message: t('tables.logBillLine', { bill: b.billNumber || (b.id || b._id)?.slice(-6), status: statusAr[b.status] || b.status, total: fmt(b.total || 0), remaining: fmt(b.remaining || 0) }),
         time: new Date(b.createdAt),
         color: 'blue',
       });
@@ -1598,11 +1633,11 @@ const loadInitialData = async () => {
       });
       billOrders.forEach((o: any) => {
         const total = o.items?.reduce((s: number, i: any) => s + (i.price || 0) * (i.quantity || 0), 0) || o.finalAmount || o.totalAmount || 0;
-        const itemsSummary = o.items?.slice(0, 3).map((i: any) => `${i.name} ×${i.quantity}`).join('، ') || '';
-        const more = (o.items?.length || 0) > 3 ? ` و${o.items.length - 3} أخرى` : '';
+        const itemsSummary = o.items?.slice(0, 3).map((i: any) => `${i.name} ×${i.quantity}`).join(t('tables.logItemsSeparator')) || '';
+        const more = (o.items?.length || 0) > 3 ? t('tables.logMoreItems', { count: o.items.length - 3 }) : '';
         log.push({
           type: 'order',
-          message: `طلب #${o.orderNumber}  •  ${fmt(total)}${itemsSummary ? `\n${itemsSummary}${more}` : ''}`,
+          message: t('tables.logOrderLine', { order: o.orderNumber, total: fmt(total) }) + (itemsSummary ? `\n${itemsSummary}${more}` : ''),
           time: new Date(o.createdAt || b.createdAt),
           color: 'orange',
         });
@@ -1611,14 +1646,14 @@ const loadInitialData = async () => {
       if (b.sessions && Array.isArray(b.sessions)) {
         (b.sessions as any[]).forEach((s: any) => {
           if (!s) return;
-          const statusSessionAr: Record<string, string> = { active: 'نشطة 🟢', completed: 'منتهية', paused: 'متوقفة', cancelled: 'ملغاة' };
-          const start = s.startTime ? new Date(s.startTime).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }) : '—';
-          const end   = s.endTime   ? new Date(s.endTime).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }) : 'جارية';
+          const statusSessionAr: Record<string, string> = { active: t('tables.logSessionActive'), completed: t('tables.logSessionCompleted'), paused: t('tables.logSessionPaused'), cancelled: t('tables.logSessionCancelled') };
+          const start = s.startTime ? new Date(s.startTime).toLocaleTimeString(localeTag(i18n.language), { hour: '2-digit', minute: '2-digit' }) : '—';
+          const end   = s.endTime   ? new Date(s.endTime).toLocaleTimeString(localeTag(i18n.language), { hour: '2-digit', minute: '2-digit' }) : t('tables.logSessionOngoing');
           const cost  = getSessionCost(s);
           const icon  = s.deviceType === 'playstation' ? '🎮' : '💻';
           log.push({
             type: 'session',
-            message: `${icon} ${s.deviceName || s.deviceNumber}  •  ${statusSessionAr[s.status] || s.status}\nمن ${start} إلى ${end}  •  ${fmt(cost)}`,
+            message: t('tables.logSessionLine', { icon, device: s.deviceName || s.deviceNumber, status: statusSessionAr[s.status] || s.status, start, end, cost: fmt(cost) }),
             time: new Date(s.startTime || b.createdAt),
             color: s.status === 'active' ? 'red' : 'purple',
           });
@@ -1626,11 +1661,10 @@ const loadInitialData = async () => {
       }
 
       if (b.payments?.length) {
-        const methodAr: Record<string, string> = { cash: 'كاش', card: 'بطاقة', transfer: 'تحويل' };
         b.payments.forEach((p: any) => {
           log.push({
             type: 'payment',
-            message: `دفعة  •  ${fmt(p.amount)}  •  ${methodAr[p.method] || p.method || 'كاش'}`,
+            message: t('tables.logPaymentLine', { amount: fmt(p.amount), method: paymentMethodLabel(p.method || 'cash', t) }),
             time: new Date(p.timestamp),
             color: 'green',
           });
@@ -1661,7 +1695,7 @@ const loadInitialData = async () => {
     setShowUnifiedTableModal(true);
     setCurrentOrderItems([]);
     setOrderNotes('');
-    setOrderDiscount(0);
+    setOrderDiscount(0); setOrderDiscountType('percent');
     setExpandedSections({});
     setExpandedCategories({});
     setTimeout(() => setShowOrderModal(true), 50);
@@ -1756,11 +1790,11 @@ const loadInitialData = async () => {
     setIsPrintingReport(true);
     // ⚡ إشعار فوري: الطباعة بدأت لحظة الضغط.
     try {
-      const msg = i18n.language === 'ar' ? 'جارٍ طباعة التقرير...' : i18n.language === 'fr' ? 'Impression en cours...' : 'Printing report...';
+      const msg = t('tables.printingReport');
       showNotification(msg, 'info');
     } catch {}
     const today = new Date();
-    const todayStr = today.toLocaleDateString('ar-EG', { weekday:'long', year:'numeric', month:'long', day:'numeric' });
+    const todayStr = today.toLocaleDateString(localeTag(i18n.language), { weekday:'long', year:'numeric', month:'long', day:'numeric' });
     // التقرير يحتاج مدفوعة اليوم أيضاً: جلب عند الطلب فقط ودمجها (الجلب الأساسي غير مدفوعة).
     let reportPool: Bill[] = bills;
     try {
@@ -1786,7 +1820,7 @@ const loadInitialData = async () => {
     const fmt = (n: number) => formatCurrencyUtil(n, 'ar', cur);
     const reportHtml = `
       <!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8">
-      <title>تقرير يومي - ${todayStr}</title>
+      <title>${t('tables.reportTitle', { date: todayStr })}</title>
       <style>
         body { font-family: 'Segoe UI', Arial, sans-serif; margin: 20px; color: #1f2937; direction: rtl; }
         .header { text-align: center; border-bottom: 3px solid #f97316; padding-bottom: 16px; margin-bottom: 24px; }
@@ -1812,33 +1846,33 @@ const loadInitialData = async () => {
       </style></head><body>
       <div class="header">
         <h1>${orgName}</h1>
-        <p>التقرير اليومي — ${todayStr}</p>
+        <p>${t('tables.reportHeader', { date: todayStr })}</p>
       </div>
       <div class="stats">
-        <div class="stat-card green"><div class="value">${fmt(totalRevenue)}</div><div class="label">إجمالي الفواتير المدفوعة</div></div>
-        <div class="stat-card blue"><div class="value">${fmt(totalPaid)}</div><div class="label">إجمالي المبالغ المحصلة</div></div>
-        <div class="stat-card red"><div class="value">${fmt(totalRemaining)}</div><div class="label">إجمالي المبالغ المتبقية</div></div>
-        <div class="stat-card"><div class="value">${todayBills.length}</div><div class="label">إجمالي الفواتير</div></div>
-        <div class="stat-card green"><div class="value">${paidCount}</div><div class="label">فواتير مدفوعة</div></div>
-        <div class="stat-card red"><div class="value">${unpaidCount}</div><div class="label">فواتير غير مدفوعة</div></div>
+        <div class="stat-card green"><div class="value">${fmt(totalRevenue)}</div><div class="label">${t('tables.reportPaidBillsTotal')}</div></div>
+        <div class="stat-card blue"><div class="value">${fmt(totalPaid)}</div><div class="label">${t('tables.reportCollectedTotal')}</div></div>
+        <div class="stat-card red"><div class="value">${fmt(totalRemaining)}</div><div class="label">${t('tables.reportRemainingTotal')}</div></div>
+        <div class="stat-card"><div class="value">${todayBills.length}</div><div class="label">${t('tables.reportBillsTotal')}</div></div>
+        <div class="stat-card green"><div class="value">${paidCount}</div><div class="label">${t('tables.reportPaidBills')}</div></div>
+        <div class="stat-card red"><div class="value">${unpaidCount}</div><div class="label">${t('tables.reportUnpaidBills')}</div></div>
       </div>
       <table>
-        <thead><tr><th>#</th><th>رقم الفاتورة</th><th>الطاولة</th><th>الإجمالي</th><th>المدفوع</th><th>المتبقي</th><th>الحالة</th></tr></thead>
+        <thead><tr><th>#</th><th>${t('tables.reportColNumber')}</th><th>${t('tables.reportColTable')}</th><th>${t('tables.reportColTotal')}</th><th>${t('tables.reportColPaid')}</th><th>${t('tables.reportColRemaining')}</th><th>${t('tables.reportColStatus')}</th></tr></thead>
         <tbody>
           ${todayBills.map((b, i) => `
             <tr>
               <td>${i + 1}</td>
               <td>#${b.billNumber || b.id?.slice(-6)}</td>
-              <td>${b.table ? `طاولة ${(b.table as any).number || ''}${getTableSectionName(b.table) ? ` (${getTableSectionName(b.table)})` : ''}` : '—'}</td>
+              <td>${b.table ? `${t('cafe.table')} ${(b.table as any).number || ''}${getTableSectionName(b.table) ? ` (${getTableSectionName(b.table)})` : ''}` : '—'}</td>
               <td>${fmt(b.total || 0)}</td>
               <td>${fmt(b.paid || 0)}</td>
               <td>${fmt(b.remaining || 0)}</td>
-              <td><span class="badge ${b.status}">${b.status === 'paid' ? 'مدفوعة' : b.status === 'partial' ? 'جزئي' : b.status === 'draft' ? 'معلقة' : b.status}</span></td>
+              <td><span class="badge ${b.status}">${b.status === 'paid' ? t('tables.reportStatusPaid') : b.status === 'partial' ? t('tables.reportStatusPartial') : b.status === 'draft' ? t('tables.reportStatusDraft') : b.status}</span></td>
             </tr>
           `).join('')}
         </tbody>
       </table>
-      <div class="footer">طُبع في ${new Date().toLocaleTimeString('ar-EG')}</div>
+      <div class="footer">${t('tables.reportPrintedAt', { time: new Date().toLocaleTimeString(localeTag(i18n.language)) })}</div>
       </body></html>`;
     // ⚡ إعدادات متزامنة من الذاكرة + طابعة مخزنة — بدون انتظار متسلسل.
     const [savedPrinter, organizationResponse] = await Promise.all([
@@ -1871,7 +1905,7 @@ const loadInitialData = async () => {
   const handleAddOrder = () => {
     if (!canAddOrder(user)) { showNotification(t('common.permissionDenied'), 'error'); return; }
     if (!selectedTable) { showNotification(t('cafe.selectTable'), 'error'); return; }
-    setCurrentOrderItems([]); setOrderNotes(''); setOrderDiscount(0); setExpandedSections({}); setExpandedCategories({});
+    setCurrentOrderItems([]); setOrderNotes(''); setOrderDiscount(0); setOrderDiscountType('percent'); setExpandedSections({}); setExpandedCategories({});
     setShowOrderModal(true);
   };
 
@@ -1884,7 +1918,7 @@ const loadInitialData = async () => {
       name: item.name, price: item.price, variant: (item as any).variant || null, quantity: item.quantity, notes: (item as any).notes || '',
     })));
     setOrderNotes(order.notes || '');
-    setOrderDiscount((order as any).discount || 0);
+    setOrderDiscount((order as any).discount || 0); setOrderDiscountType('percent');
     setExpandedSections({}); setExpandedCategories({});
     setShowEditOrderModal(true);
   };
@@ -2023,7 +2057,7 @@ const loadInitialData = async () => {
         customerName: selectedTable.number.toString(),
         items: currentOrderItems.map(i => ({ menuItem: i.menuItem, name: i.name, price: i.price, variant: i.variant || null, quantity: i.quantity, notes: i.notes || null })),
         notes: orderNotes || null, status,
-        discount: orderDiscount || 0,
+        discount: canApplyManualDiscount(user) ? (orderDiscount || 0) : 0,
       });
         if (order) {
         setShowOrderModal(false); setCurrentOrderItems([]); setOrderNotes('');
@@ -2064,7 +2098,7 @@ const loadInitialData = async () => {
       const orderData: Record<string, any> = {
         items: currentOrderItems.map(i => ({ menuItem: i.menuItem, name: i.name, price: i.price, variant: i.variant || null, quantity: i.quantity, notes: i.notes || null })),
         notes: orderNotes || null,
-        discount: orderDiscount || 0,
+        discount: canApplyManualDiscount(user) ? (orderDiscount || 0) : (Number((selectedOrder as any)?.discount) || 0),
       };
       if (status) orderData.status = status;
       const updated = await updateOrder(selectedOrder.id, orderData);
@@ -2094,20 +2128,58 @@ const loadInitialData = async () => {
   const printOrderRouted = async (order: Order, selectedIds: string[], map: Map<string, any>, tableForOrder?: Table | null) => {
     // الإعدادات الفعالة الطازجة (كاش 10 ثوانٍ): المحفوظ حديثاً يُطبق فوراً.
     // الطاولات dine_in دائماً → sectionPrinterMap العام + نسخ prep العام.
+    // التنسيق والشعار يُمرران صراحةً — بدونهما يطبع القالب الافتراضي ويتجاهل المصمم.
     const settings = await getEffectivePrintSettingsFresh(user).catch(() => null)
       ?? (user as any)?.organization?.printSettings
       ?? (await api.getOrganization().catch(() => null))?.data?.printSettings;
+    const { resolveDocLayout } = await import('../utils/printLayout');
+    const layout = resolveDocLayout(settings, 'order');
+    const orgObj = (user as any)?.organization;
+    let logoUrl: string | undefined = orgObj && typeof orgObj === 'object' ? (orgObj as any).logo : undefined;
+    if (!logoUrl) {
+      try {
+        const r: any = await api.getOrganization().catch(() => null);
+        logoUrl = r?.data?.logo;
+      } catch {}
+    }
     const profiles = settings?.printers || [];
     const routes = settings?.sectionPrinterMap || {};
-    const prepCopies = Math.min(5, Math.max(1, Number(settings?.documentCopies?.prep ?? 1) || 1));
+    const { resolveDocCopyPrinters } = await import('../utils/printLayout');
+    const { resolveSectionCopyPrinters } = await import('../utils/resolvePrintSettings');
+    const prepCopyIds = resolveDocCopyPrinters(settings, 'prep');
+    const prepCopyPrinters = prepCopyIds.map((id) => (id ? profiles.find((item: any) => item.id === id)?.printerName : undefined));
+    // نسخ كل قسم على حدة (صالة): إن وُجدت لأي قسم — الورقة المجمعة نسخة واحدة + نسخ كل قسم بمحتواه الخاص
+    const sectionCopyMap = resolveSectionCopyPrinters(settings, undefined);
+    const hasSectionCopies = selectedIds.some((sid) => (sectionCopyMap[String(sid)] || []).length > 0);
+    const settingsDefaultPrinter = (settings as any)?.printerName || undefined;
+    const profileNameOf = (id: string) => profiles.find((item: any) => item.id === id)?.printerName;
     const groups = new Map<string, string[]>();
     selectedIds.forEach(sectionId => {
       const printerId = routes[sectionId] || '';
       groups.set(printerId, [...(groups.get(printerId) || []), sectionId]);
     });
+    const mountedOrder = (() => {
+      if ((order as any).billNumber) return order;
+      const parent = (bills || []).find((b: any) => {
+        const ords = (b.orders || []) as any[];
+        return ords.some((o: any) => String(o._id || o.id) === String((order as any)._id || (order as any).id));
+      });
+      return parent?.billNumber ? { ...order, billNumber: parent.billNumber } : order;
+    })();
     await Promise.all(Array.from(groups.entries()).map(async ([printerId, sectionIds]) => {
       const profile = profiles.find((item: any) => item.id === printerId);
-      return printOrder(order, menuSections, map, user?.organizationName || '', i18n.language, t, getTableSectionName(tableForOrder || order.table), sectionIds, profile?.printerName, profile?.paperWidthMm, prepCopies);
+      if (!hasSectionCopies) {
+        return printOrder(mountedOrder, menuSections, map, user?.organizationName || '', i18n.language, t, getTableSectionName(tableForOrder || order.table), sectionIds, profile?.printerName, profile?.paperWidthMm, prepCopyIds.length, { logoUrl, layout, printFont: (settings as any)?.printFont, customFooter: (settings as any)?.customFooterOrder, copyPrinters: prepCopyPrinters, defaultPrinter: settingsDefaultPrinter });
+      }
+      // الورقة المجمعة للمجموعة (نسخة واحدة على طابعة الأقسام)
+      await printOrder(mountedOrder, menuSections, map, user?.organizationName || '', i18n.language, t, getTableSectionName(tableForOrder || order.table), sectionIds, profile?.printerName, profile?.paperWidthMm, 1, { logoUrl, layout, printFont: (settings as any)?.printFont, customFooter: (settings as any)?.customFooterOrder, defaultPrinter: settingsDefaultPrinter });
+      // نسخ كل قسم بمحتواه الخاص على طابعات نسخه
+      for (const sid of sectionIds) {
+        const extraIds = sectionCopyMap[String(sid)] || [];
+        if (!extraIds.length) continue;
+        const extraNames = extraIds.map((id) => profileNameOf(id));
+        await printOrder(mountedOrder, menuSections, map, user?.organizationName || '', i18n.language, t, getTableSectionName(tableForOrder || order.table), [sid], profile?.printerName, profile?.paperWidthMm, extraIds.length, { logoUrl, layout, printFont: (settings as any)?.printFont, customFooter: (settings as any)?.customFooterOrder, copyPrinters: extraNames, defaultPrinter: settingsDefaultPrinter });
+      }
     }));
   };
 
@@ -2163,7 +2235,7 @@ const loadInitialData = async () => {
     await printOrderRouted(selection.order, selectedOrderPrintSections, map);
   };
 
-  const showConfirm = (title: string, message: string, onConfirm: () => void, confirmText = 'تأكيد', cancelText = 'إلغاء', confirmColor = 'bg-red-600 hover:bg-red-700') => {
+  const showConfirm = (title: string, message: string, onConfirm: () => void, confirmText = t('common.confirm'), cancelText = t('common.cancel'), confirmColor = 'bg-red-600 hover:bg-red-700') => {
     setConfirmModalData({ title, message, onConfirm, confirmText, cancelText, confirmColor });
     setShowConfirmModal(true);
   };
@@ -2252,6 +2324,7 @@ const loadInitialData = async () => {
       paid: newPaidAmount, remaining: newRemaining, status: newStatus,
       paymentAmount: payVal, method,
       reference: method === paymentMethod ? paymentReference : '',
+      drawer: paymentDrawer,
       total: bill.total || 0, effectiveTotal: effTotal,
     };
     if (discountPct && parseFloat(discountPct) > 0) {
@@ -2323,14 +2396,14 @@ const loadInitialData = async () => {
   };
 
   // بيانات الجزء الثاني للدفع المقسوم — ref لتفادي re-render المودال
-  const splitPartsRef = useRef<{ amount2: string; method2: 'cash' | 'card' | 'transfer' } | null>(null);
+  const splitPartsRef = useRef<{ amount2: string; method2: PaymentMethod } | null>(null);
 
   // ref لدالة processPayment الحية — يسمح بـ useCallback مستقر لا يتغير مرجعه
   const processPaymentRef = useRef(processPayment);
   useEffect(() => { processPaymentRef.current = processPayment; });
 
   // onSplitSubmit مستقر — لا يتغير مرجعه في كل render (يقلل إعادة رسم نافذة الدفع)
-  const handleSplitSubmit = useCallback(async (amount2: string, method2: 'cash' | 'card' | 'transfer') => {
+  const handleSplitSubmit = useCallback(async (amount2: string, method2: PaymentMethod) => {
     splitPartsRef.current = { amount2, method2 };
     await processPaymentRef.current();
   }, []);
@@ -2358,7 +2431,7 @@ const loadInitialData = async () => {
   const confirmPayFullBill = async () => {
     if (!billToPayFull || paymentActionLockRef.current) return;
     paymentActionLockRef.current = true;
-    fireInstantDrawer(billToPayFull, 'payment');
+    if (paymentMethod === 'cash') fireInstantDrawer(billToPayFull, 'payment');
     try {
       setIsProcessingPayment(true);
       if (selectedBill && (selectedBill.id === billToPayFull.id || selectedBill._id === billToPayFull._id)) {
@@ -2370,7 +2443,8 @@ const loadInitialData = async () => {
       setBills(prev => prev.map(b => String(b._id || b.id) === String(billToPayFull._id || billToPayFull.id) ? optimisticFull : b));
       const result = await api.updatePayment(billToPayFull.id || billToPayFull._id, {
         paid: (billToPayFull.paid || 0) + remaining, remaining: 0, status: 'paid',
-        paymentAmount: remaining, method: 'cash', reference: '',
+        paymentAmount: remaining, method: paymentMethod, reference: '',
+        drawer: paymentDrawer,
       } as any);
       if (result?.data) {
         const finalPaidBill = result.data;
@@ -2413,7 +2487,7 @@ const loadInitialData = async () => {
     if (bill && hasActiveSession(bill)) { showNotification(t('billing.notifications.cannotPayActiveSession'), 'error'); return; }
     if (bill.status === 'paid') { showNotification(t('billing.notifications.billAlreadyPaid'), 'info'); return; }
     if ((bill.remaining || 0) <= 0) { showNotification(t('billing.notifications.noRemainingAmount'), 'info'); return; }
-    fireInstantDrawer(bill, 'payment');
+    if (paymentMethod === 'cash') fireInstantDrawer(bill, 'payment');
     try {
       setIsProcessingPayment(true);
       if (selectedBill && (selectedBill.id === bill.id || (selectedBill as any)._id === (bill as any).id)) {
@@ -2437,7 +2511,8 @@ const loadInitialData = async () => {
       // مسح كاش كروت الطاولات عشان اللون يتحدث فورا
       const result = await api.updatePayment((bill as any).id || (bill as any)._id, {
         paid: (bill.paid || 0) + remaining, remaining: 0, status: 'paid',
-        paymentAmount: remaining, method: 'cash', reference: '',
+        paymentAmount: remaining, method: paymentMethod, reference: '',
+        drawer: paymentDrawer,
       } as any);
       if (result?.data) {
         const finalPaidBill = result.data;
@@ -2473,7 +2548,7 @@ const loadInitialData = async () => {
   };
 
   // طباعة + دفع كامل من نافذة الدفع: يدفع أولاً ثم يطبع مرة واحدة فقط.
-  const handlePrintAndPayFull = async (bill: Bill, method: 'cash' | 'card' | 'transfer' = 'cash') => {
+  const handlePrintAndPayFull = async (bill: Bill, method: PaymentMethod = 'cash') => {
     if (!canPayFullBill(user)) { showNotification(t('common.permissionDenied'), 'error'); return; }
     if (!bill) return;
     if (bill.status === 'paid') {
@@ -2486,12 +2561,13 @@ const loadInitialData = async () => {
     if (bill && hasActiveSession(bill)) { showNotification(t('billing.notifications.cannotPayActiveSession'), 'error'); return; }
     const remaining = bill.remaining || 0;
     if (remaining <= 0) { showNotification(t('billing.notifications.noRemainingAmount'), 'info'); return; }
-    fireInstantDrawer(bill, 'payment');
+    if (method === 'cash') fireInstantDrawer(bill, 'payment');
     setIsProcessingPayment(true);
     try {
       const result = await api.updatePayment((bill as any).id || (bill as any)._id, {
         paid: (bill.paid || 0) + remaining, remaining: 0, status: 'paid',
         paymentAmount: remaining, method, reference: '',
+        drawer: paymentDrawer,
       } as any);
       if (result?.data) {
         const finalPaidBill = result.data;
@@ -2512,9 +2588,9 @@ const loadInitialData = async () => {
         // خطأ الطباعة منفصل عن خطأ الدفع: الدفع تم بنجاح أعلاه، فلا نعرض رسالة دفع خاطئة.
         try {
           const printed = await printBill(finalPaidBill, user?.organizationName, i18n.language, t, getTableSectionName(finalPaidBill.table), 'payment');
-          if (!printed) showNotification(i18n.language === 'ar' ? 'تم الدفع بنجاح لكن فشلت طباعة الفاتورة' : 'Paid successfully but the bill failed to print', 'error');
+          if (!printed) showNotification(t('tables.printPayError'), 'error');
         } catch {
-          showNotification(i18n.language === 'ar' ? 'تم الدفع بنجاح لكن فشلت طباعة الفاتورة' : 'Paid successfully but the bill failed to print', 'error');
+          showNotification(t('tables.printPayError'), 'error');
         }
         scheduleBackgroundRefetch(true);
       }
@@ -2553,7 +2629,7 @@ const loadInitialData = async () => {
     setSelectedBill(bill); setShowPartialPaymentModal(true);
   };
 
-  const handlePartialPaymentSubmit = async (items: Array<{ itemId: string; quantity: number }>, method: 'cash' | 'card' | 'transfer') => {
+  const handlePartialPaymentSubmit = async (items: Array<{ itemId: string; quantity: number }>, method: PaymentMethod, drawer?: CashDrawer) => {
     if (!selectedBill || items.length === 0) return;
     if (method === 'cash') fireInstantDrawer(selectedBill, 'payment');
     const snapBills = [...bills] as Bill[];
@@ -2569,7 +2645,7 @@ const loadInitialData = async () => {
     } catch {}
     try {
       setIsProcessingPartialPayment(true);
-      const bill = await addPartialPaymentAggregated(selectedBill.id || selectedBill._id, { items, paymentMethod: method });
+      const bill = await addPartialPaymentAggregated(selectedBill.id || selectedBill._id, { items, paymentMethod: method, drawer: drawer || paymentDrawer });
       if (bill) {
         setIsProcessingPartialPayment(false);
         showNotification(t('billing.notifications.partialPaymentSuccess', { amount: formatCurrency(totalPaidOptimistic) }), 'success');
@@ -2619,6 +2695,7 @@ const loadInitialData = async () => {
       const bill = await paySessionPartial(selectedBill.id || selectedBill._id, {
         sessionId: sessionToPayData.session._id || sessionToPayData.session.id,
         amount: parseFloat(sessionToPayData.amount), paymentMethod: sessionToPayData.method,
+        drawer: sessionPaymentDrawer,
       });
       if (bill) {
         setBills(prev => prev.map((b: any) => String(b._id || b.id) === String(selectedBill._id || selectedBill.id) ? { ...b, ...bill, _optimistic: undefined } : b));
@@ -2703,7 +2780,7 @@ const loadInitialData = async () => {
           const s = endedSession;
           const billId = String(targetBill._id || targetBill.id);
           setUndoRequest({
-            message: `تم إنهاء جلسة ${s.deviceName || s.deviceNumber}`,
+            message: t('tables.sessionEndedUndo', { device: s.deviceName || s.deviceNumber }),
             action: async () => {
               try {
                 if (!canStartSession(user)) { showNotification(t('common.permissionDenied'), 'error'); return; }
@@ -2715,8 +2792,8 @@ const loadInitialData = async () => {
                   controllers: s.controllers || 1,
                   billId,
                 } as any);
-                showNotification('تمت إعادة فتح الجلسة', 'success');
-              } catch { showNotification('تعذر إعادة فتح الجلسة', 'error'); }
+                showNotification(t('tables.sessionReopened'), 'success');
+              } catch { showNotification(t('tables.sessionReopenError'), 'error'); }
               scheduleBackgroundRefetch(true);
             },
           });
@@ -2736,7 +2813,7 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
     e.stopPropagation();
     const tid = String((table as any)._id || table.id || '');
     const info = sessionUrgencyByTable.get(tid);
-    if (!info || info.sessions.length === 0) { showNotification(t('billing.noActiveSessions', 'لا توجد جلسات نشطة'), 'error'); return; }
+    if (!info || info.sessions.length === 0) { showNotification(t('billing.noActiveSessions'), 'error'); return; }
     setEndAllTarget({ table, sessions: info.sessions });
   }, [sessionUrgencyByTable]);
 
@@ -2762,7 +2839,7 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
     }));
     // ↩️ تراجع — إعادة فتح كل الجلسات المنتهية
     setUndoRequest({
-      message: `تم إنهاء ${ended.length} جلسة على ${getTableDisplay(target.table.number, i18n.language)}`,
+      message: t('tables.sessionsEndedUndo', { count: ended.length, table: getTableDisplay(target.table.number, i18n.language) }),
       action: async () => {
         if (!canStartSession(user)) { showNotification(t('common.permissionDenied'), 'error'); return; }
         for (const s of ended) {
@@ -2777,7 +2854,7 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
             } as any);
           } catch { /* التالي */ }
         }
-        showNotification('تمت إعادة فتح الجلسات', 'success');
+        showNotification(t('tables.sessionsReopened'), 'success');
         scheduleBackgroundRefetch(true);
       },
     });
@@ -2790,7 +2867,7 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
           api.endSession(String(s._id || s.id)).then(r => !!(r as any)?.success).catch(() => false)
         ));
         const ok = results.filter(Boolean).length;
-        if (ok > 0) showNotification(`تم إنهاء ${ok} جلسة`, 'success');
+        if (ok > 0) showNotification(t('tables.sessionsEndedCount', { count: ok }), 'success');
         else showNotification(t('billing.notifications.endSessionError'), 'error');
         scheduleBackgroundRefetch(true);
       } catch {
@@ -2816,17 +2893,52 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
     e.stopPropagation();
     const bills = tableCardData.get((tb._id || (tb as any).id).toString())?.tBills || [];
     const unpaid = bills.filter((b: any) => ['draft', 'partial', 'overdue'].includes(b.status));
-    if (unpaid.length === 0) { showNotification('لا توجد فاتورة غير مدفوعة', 'error'); return; }
+    if (unpaid.length === 0) { showNotification(t('tables.noUnpaidBill'), 'error'); return; }
     // ⚡ الدرج لحظياً + الطباعة مباشرة (printBill تجلب الكاملة داخلياً عند الحاجة فقط).
     fireInstantDrawer(unpaid[0] as Bill, 'bill');
     printBill(unpaid[0] as Bill, user?.organizationName, i18n.language, t, getTableSectionName(tb))
-      .catch(() => { showNotification('خطأ في الطباعة', 'error'); });
+      .catch(() => { showNotification(t('tables.printError'), 'error'); });
   }, [tableCardData, user, i18n.language, t]);
 
   const stableQuickPrint = useCallback((tb: Table, e: React.MouseEvent) => { handleQuickPrint(tb, e); }, [handleQuickPrint]);
 
-  const handleCancelBill = async () => {
-    if (!canDeleteBill(user)) { showNotification(t('common.permissionDenied'), 'error'); return; }
+  // ── مراجعة طلبات العملاء المعلقة (QR): قبول / رفض ──
+  const handleAcceptRequest = async (order: any) => {
+    if (!canReviewCustomerOrders(user)) { showNotification(t('common.permissionDenied'), 'error'); return; }
+    const oid = String(order._id || order.id);
+    try {
+      const res: any = await (api as any).acceptCustomerOrder(oid);
+      if (res?.success) {
+        showNotification(t('customerOrders.accepted'), 'success');
+        // تفاؤلي: اقلب الحالة فوراً — وصدى السوكت سيؤكد
+        setOrders((prev: any[]) => prev.map((o: any) => String(o._id || o.id) === oid ? { ...o, status: 'pending', bill: res.data?.bill || o.bill, createdBy: res.data?.createdBy || o.createdBy } : o));
+        scheduleBackgroundRefetch(true);
+      } else {
+        showNotification(res?.message || t('customerOrders.acceptFailed'), 'error');
+      }
+    } catch (e: any) { showNotification(e?.message || t('customerOrders.acceptFailed'), 'error'); }
+  };
+
+  const handleRejectRequest = async (order: any) => {
+    if (!canReviewCustomerOrders(user)) { showNotification(t('common.permissionDenied'), 'error'); return; }
+    const oid = String(order._id || order.id);
+    // تفاؤلي: احذف فوراً
+    setOrders((prev: any[]) => prev.filter((o: any) => String(o._id || o.id) !== oid));
+    try {
+      const res: any = await (api as any).rejectCustomerOrder(oid);
+      if (res?.success) {
+        showNotification(t('customerOrders.rejected'), 'success');
+      } else {
+        showNotification(res?.message || t('customerOrders.rejectFailed'), 'error');
+        fetchOrders().catch(() => {});
+      }
+    } catch (e: any) {
+      showNotification(e?.message || t('customerOrders.rejectFailed'), 'error');
+      fetchOrders().catch(() => {});
+    }
+  };
+
+  const handleCancelBill = async () => {    if (!canDeleteBill(user)) { showNotification(t('common.permissionDenied'), 'error'); return; }
     if (!selectedBill) return;
     try {
       setIsCancelingBill(true);
@@ -2842,6 +2954,7 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
   };
 
   const handleOpenChangeTableModal = (bill: Bill) => {
+    if (!canMoveBillTableToTable(user)) { showNotification(t('common.permissionDenied'), 'error'); return; }
     setSelectedBill(bill); setShowChangeTableModal(true); setNewTableNumber(null); setTableChangeSearch('');
   };
 
@@ -2899,12 +3012,13 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
     e.stopPropagation();
     const bills = tableCardData.get((tb._id || (tb as any).id).toString())?.tBills || [];
     const unpaid = bills.filter((b: any) => ['draft', 'partial', 'overdue'].includes(b.status));
-    if (unpaid.length === 0) { showNotification('لا توجد فاتورة غير مدفوعة', 'error'); return; }
+    if (unpaid.length === 0) { showNotification(t('tables.noUnpaidBill'), 'error'); return; }
     handleOpenChangeTableModal(unpaid[0]);
   }, [tableCardData, handleOpenChangeTableModal]);
 
   // نقل طلب واحد لطاولة أخرى — يراعي الطلب مع الفاتورة حسب القواعد المطلوبة
   const handleOpenMoveOrderModal = (order: Order) => {
+    if (!canMoveOrderTableToTable(user)) { showNotification(t('common.permissionDenied'), 'error'); return; }
     setOrderToMove(order);
     setShowMoveOrderModal(true);
   };
@@ -2914,7 +3028,7 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
     try {
       const res: any = await api.moveOrderToTable(orderToMove._id || (orderToMove as any).id, targetTableId);
       if (res?.success) {
-        showNotification('تم نقل الطلب بنجاح', 'success');
+        showNotification(t('tables.orderMoved'), 'success');
         setShowMoveOrderModal(false);
         setOrderToMove(null);
         // تحديث محلي سريع + مزامنة
@@ -2949,10 +3063,10 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
         }
         scheduleBackgroundRefetch(true);
       } else {
-        showNotification(res?.message || 'فشل نقل الطلب', 'error');
+        showNotification(res?.message || t('tables.orderMoveError'), 'error');
       }
     } catch (e: any) {
-      showNotification(e?.message || 'فشل نقل الطلب', 'error');
+      showNotification(e?.message || t('tables.orderMoveError'), 'error');
     } finally {
       setIsMovingOrder(false);
     }
@@ -2965,7 +3079,7 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
     lastFocusedTableRef.current = tb;
     const bills = tableCardData.get((tb._id || (tb as any).id).toString())?.tBills || [];
     const firstUnpaid = bills.find((b: any) => ['draft','partial','overdue'].includes(b.status));
-    if (!firstUnpaid) { showNotification('لا توجد فاتورة غير مدفوعة', 'error'); return; }
+    if (!firstUnpaid) { showNotification(t('tables.noUnpaidBill'), 'error'); return; }
     if (!canEditOrder(user)) { showNotification(t('common.permissionDenied'), 'error'); return; }
     setBillToEdit(firstUnpaid);
     setShowBillItemsEditModal(true);
@@ -3041,7 +3155,7 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
   const handleEditSessionPayment = (session: Session, payment: any, paymentIndex: number) => {
     if (!canEditPartialPayment(user)) { showNotification(t('common.permissionDenied'), 'error'); return; }
     setPaymentToEdit({ session, payment, paymentIndex });
-    setEditPaymentAmount(payment.amount.toString()); setEditPaymentMethod(payment.method); setEditPaymentReference(payment.reference || '');
+    setEditPaymentAmount(payment.amount.toString()); setEditPaymentMethod(payment.method); setEditPaymentReference(payment.reference || ''); setEditPaymentDrawer((payment as any).drawer || 'hall');
     setShowEditPaymentModal(true);
   };
 
@@ -3053,7 +3167,7 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
     setIsEditingPayment(true);
     try {
       const sid = paymentToEdit.session._id || paymentToEdit.session.id;
-      const response = await api.updateSessionPayment(selectedBill.id || selectedBill._id, sid, paymentToEdit.paymentIndex, { amount: newAmount, method: editPaymentMethod, reference: editPaymentReference });
+      const response = await api.updateSessionPayment(selectedBill.id || selectedBill._id, sid, paymentToEdit.paymentIndex, { amount: newAmount, method: editPaymentMethod, reference: editPaymentReference, drawer: editPaymentDrawer });
       if (response.success) {
         showNotification(t('billing.editPayment.success'), 'success');
         setShowEditPaymentModal(false); setPaymentToEdit(null);
@@ -3071,7 +3185,7 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
     if (!canEditPartialPayment(user)) { showNotification(t('common.permissionDenied'), 'error'); return; }
     const { itemPayment, payment, paymentIdx } = data;
     setItemPaymentToEdit({ itemPayment, payment, paymentIndex: paymentIdx, itemPaymentId: itemPayment._id || itemPayment.id });
-    setEditItemPaymentAmount(payment.quantity.toString()); setEditItemPaymentMethod(payment.method || 'cash'); setEditItemPaymentReference(payment.reference || '');
+    setEditItemPaymentAmount(payment.quantity.toString()); setEditItemPaymentMethod(payment.method || 'cash'); setEditItemPaymentReference(payment.reference || ''); setEditItemPaymentDrawer((payment as any).drawer || 'hall');
     setShowEditItemPaymentModal(true);
   };
 
@@ -3083,7 +3197,7 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
     if (!Number.isInteger(newQty)) { showNotification(t('billing.editPayment.quantityMustBeInteger'), 'error'); return; }
     setIsEditingItemPayment(true);
     try {
-      const response = await api.updateItemPayment(selectedBill.id || selectedBill._id, itemPaymentToEdit.itemPaymentId, itemPaymentToEdit.paymentIndex, { quantity: newQty, method: editItemPaymentMethod, reference: editItemPaymentReference });
+      const response = await api.updateItemPayment(selectedBill.id || selectedBill._id, itemPaymentToEdit.itemPaymentId, itemPaymentToEdit.paymentIndex, { quantity: newQty, method: editItemPaymentMethod, reference: editItemPaymentReference, drawer: editItemPaymentDrawer });
       if (response.success) {
         showNotification(newQty === 0 ? t('billing.editPayment.paymentDeleted') : t('billing.editPayment.success'), 'success');
         setShowEditItemPaymentModal(false); setItemPaymentToEdit(null);
@@ -3129,7 +3243,7 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
               <CheckCircle className="h-20 w-20 text-white" />
             </div>
             <span className="mt-4 text-4xl font-bold text-green-600 bg-white dark:bg-gray-900 px-6 py-2 rounded-full shadow-xl">
-              ✅ تم الدفع بنجاح!
+              {t('tables.paymentSuccessBanner')}
             </span>
           </div>
           {/* Confetti-style dots */}
@@ -3146,7 +3260,7 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
       )}
 
       {/* -- Sticky Departments Bar: ??????? ????? ???? ?????? ?? ????? -- */}
-      <div className="sticky top-0 z-30 px-4 sm:px-6 py-2.5 bg-white/95 dark:bg-gray-900/95 backdrop-blur-md border-b border-orange-200 dark:border-orange-800 shadow-sm">
+      <div className="sticky top-0 z-[25] px-4 sm:px-6 py-2.5 bg-white/95 dark:bg-gray-900/95 backdrop-blur-md border-b border-orange-200 dark:border-orange-800 shadow-sm">
         <div className="flex flex-col items-center gap-1.5">
           <div className="flex flex-nowrap overflow-x-auto lg:flex-wrap items-center justify-between gap-2 sm:gap-3 w-full pb-1">
             <button
@@ -3155,7 +3269,7 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
                 ? 'bg-blue-600 border-blue-700 text-white shadow-md scale-[1.02]'
                 : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:border-blue-400 hover:shadow-sm')}>
               <span className="text-xl sm:text-2xl leading-none">🗂️</span>
-              <span className="truncate max-w-full px-1 text-[11px] sm:text-xs leading-tight">الكل</span>
+              <span className="truncate max-w-full px-1 text-[11px] sm:text-xs leading-tight">{t('billing.filters.all')}</span>
               <span className={"text-[10px] px-1.5 py-0.5 rounded-full font-bold " + (activeSectionFilter === 'all' ? 'bg-white/25 text-white' : 'bg-blue-100 dark:bg-gray-700 text-blue-700 dark:text-gray-300')}>{activeTables.length}</span>
             </button>
             {activeTableSections.map(sec => {
@@ -3173,7 +3287,7 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
                   <span className="text-xl sm:text-2xl leading-none">🪑</span>
                   <span className="truncate max-w-full px-1 text-[11px] sm:text-xs leading-tight">{sec.name}</span>
                   <span className={"text-[10px] px-1.5 py-0.5 rounded-full font-bold " + (isActive ? 'bg-white/25 text-white' : occ > 0 ? 'bg-red-100 dark:bg-gray-700 text-red-600 dark:text-red-300' : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400')}>
-                    {occ > 0 ? occ + ' مشغولة' : cnt + ' طاولة'}
+                    {occ > 0 ? t('tables.sectionBusy', { count: occ }) : t('tables.sectionTables', { count: cnt })}
                   </span>
                 </button>
               );
@@ -3182,10 +3296,10 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3 w-full max-w-5xl mx-auto pt-2 mt-2 border-t border-gray-200 dark:border-gray-700/60">
             <div className="flex flex-wrap items-center justify-center gap-1.5">
               {([
-                { id: 'all', label: 'الكل', icon: '🗂️' },
-                { id: 'occupied', label: 'مشغولة', icon: '🔴' },
-                { id: 'empty', label: 'فارغة', icon: '🟢' },
-                { id: 'sessions', label: 'جلسات', icon: '⏱️' },
+                { id: 'all', label: t('billing.filters.all'), icon: '🗂️' },
+                { id: 'occupied', label: t('tables.filterOccupied'), icon: '🔴' },
+                { id: 'empty', label: t('tables.filterEmpty'), icon: '🟢' },
+                { id: 'sessions', label: t('tables.filterSessions'), icon: '⏱️' },
               ] as const).map(f => (
                 <button key={f.id}
                   onClick={() => { scrollToTop(); setTableStatusFilter(f.id); }}
@@ -3198,10 +3312,10 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
               ))}
               <button
                 onClick={() => setSoundEnabledState(!soundEnabled)}
-                title={soundEnabled ? 'إيقاف صوت الجلسات' : 'تفعيل صوت الجلسات'}
+                title={soundEnabled ? t('tables.soundOff') : t('tables.soundOn')}
                 className={"px-2.5 py-1 rounded-full border text-xs font-bold transition-all flex items-center gap-1 " + (soundEnabled ? 'bg-emerald-50 dark:bg-emerald-900/40 border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300' : 'bg-gray-100 dark:bg-gray-700 border-gray-200 dark:border-gray-600 text-gray-400 opacity-70')}>
                 <span className="text-xs leading-none">🔔</span>
-                <span className="hidden sm:inline">{soundEnabled ? 'الصوت: متاح' : 'الصوت: كتم'}</span>
+                <span className="hidden sm:inline">{soundEnabled ? t('tables.soundAvailable') : t('tables.soundMuted')}</span>
               </button>
             </div>
             <div className="relative w-full sm:w-64 flex-shrink-0">
@@ -3211,7 +3325,7 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
                 type="text"
                 value={tableSearch}
                   onChange={e => { setTableSearch(e.target.value); scrollToTop(); }}
-                placeholder="ابحث عن طاولة بالأرقام..."
+                placeholder={t('tables.searchTablePlaceholder')}
                 className="w-full pr-9 pl-3 py-1.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm text-gray-800 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"
               />
             </div>
@@ -3239,24 +3353,29 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
                       <span className="truncate">{section.name}</span>
                       <span className="text-sm text-gray-400 font-normal">({shownTables.length})</span>
                     </h3>
-                    <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-1.5 sm:gap-2">
+                    <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-2 sm:gap-3">
                       {shownTables.map(table => {
                         const tableIdStr = (table._id || (table as any).id).toString();
                         // استخدام tableCardData المحسوبة مسبقاً بدلاً من O(N×M) في الـ render
                         const cardData = tableCardData.get(tableIdStr);
                         const sessInfo = sessionUrgencyByTable.get(tableIdStr);
                         return (
-                          <div key={tableIdStr} className="[content-visibility:auto] [contain-intrinsic-size:auto_140px]">
+                          <div key={tableIdStr} className="[content-visibility:auto] [contain-intrinsic-size:auto_170px]">
                             <TableButton
                               table={table}
                               isSelected={selectedTable?.id === table.id && showUnifiedTableModal}
                               isOccupied={tableStatuses[String((table as any)._id || table.id)]?.hasUnpaid || false}
                               tableBills={cardData?.tBills || []}
                               tableOrdersCount={cardData?.tOrdersCount || 0}
+                              pendingRequestsCount={pendingByTable[tableIdStr] || 0}
                               activeSessionType={cardData?.activeSessionType || null}
                               activeSessionCount={sessInfo?.count || 0}
                               sessionUrgency={sessInfo?.urgency || 'none'}
                               liveExtra={cardData?.liveExtra || 0}
+                              method={paymentMethod}
+                              onMethodChange={setPaymentMethod}
+                              drawer={paymentDrawer}
+                              onDrawerChange={setPaymentDrawer}
                               onClick={stableTableClick}
                               onOpen={stableOpenTable}
                               onQuickOrder={stableQuickOrder}
@@ -3461,10 +3580,10 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
         const sessionsRemaining = Math.max(0, sessionsTotalCost - sessionsPaid);
 
         const sideItems = [
-          { id: 'orders',   icon: ShoppingCart, label: 'الطلبات',  count: filteredTableOrders.length, color: 'orange' },
-          { id: 'billing',  icon: Receipt,      label: 'الفواتير', count: unpaidBills.length,          color: 'blue',  dot: unpaidBills.length > 0 },
-          { id: 'sessions', icon: Gamepad2,      label: 'الجلسات', count: sessionsCount,               color: 'purple', dot: activeSessionsCount > 0 },
-          { id: 'log',      icon: History,       label: 'السجل',   count: tableActivityLog.length,     color: 'gray' },
+          { id: 'orders',   icon: ShoppingCart, label: t('billing.orders'),  count: filteredTableOrders.length, color: 'orange' },
+          { id: 'billing',  icon: Receipt,      label: t('billing.bills'), count: unpaidBills.length,          color: 'blue',  dot: unpaidBills.length > 0 },
+          { id: 'sessions', icon: Gamepad2,      label: t('billing.sessions'), count: sessionsCount,               color: 'purple', dot: activeSessionsCount > 0 },
+          { id: 'log',      icon: History,       label: t('tables.tabs.log'),   count: tableActivityLog.length,     color: 'gray' },
         ] as const;
 
         const colorMap: Record<string, { active: string; activeBg: string; dot: string; icon: string; accent: string }> = {
@@ -3494,7 +3613,7 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
                   <div className="min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <h2 className="text-lg sm:text-xl font-bold text-white leading-tight">
-                        طاولة {getTableDisplay(selectedTable.number, i18n.language)}
+                        {t('cafe.table')} {getTableDisplay(selectedTable.number, i18n.language)}
                       </h2>
                       {(() => {
                         const sec = typeof selectedTable.section === 'object'
@@ -3507,31 +3626,51 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
                           ? 'bg-red-500/15 text-red-300 border-red-500/30'
                           : 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
                       }`}>
-                        {hasUnpaid ? '● مشغولة' : '○ فارغة'}
+                        {hasUnpaid ? t('tables.tableOccupied') : t('tables.tableEmpty')}
                       </span>
                     </div>
                     {/* ── الإجماليات: تظهر فقط عند وجود فواتير غير مدفوعة ── */}
-                    {hasUnpaid && (
+                    {hasUnpaid && (() => {
+                      const totalDiscount = unpaidBills.reduce((s: number, b: any) => {
+                        const fd = (b.orders || []).reduce((ss: number, o: any) => ss + (Number(o?.fixedDiscount?.amount) || 0), 0);
+                        const md = (b.orders || []).reduce((ss: number, o: any) => ss + (Number(o?.discount) || 0), 0);
+                        return s + fd + md;
+                      }, 0);
+                      const subtotalBefore = unpaidTotal + totalDiscount;
+                      return (
                       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1.5">
+                        {totalDiscount > 0 ? (
+                          <>
+                            <div className="flex items-center gap-1.5">
+                              <span className="w-1.5 h-1.5 rounded-full bg-gray-400 inline-block"></span>
+                              <span className="text-sm sm:text-base text-gray-400 line-through">{formatCurrency(subtotalBefore)}</span>
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                              <span className="w-1.5 h-1.5 rounded-full bg-yellow-400 inline-block"></span>
+                              <span className="text-sm sm:text-base text-yellow-300 font-bold">{t('tables.discountLabel', { amount: formatCurrency(totalDiscount) })}</span>
+                            </div>
+                          </>
+                        ) : null}
                         <div className="flex items-center gap-1.5">
                           <span className="w-1.5 h-1.5 rounded-full bg-white/40 inline-block"></span>
-                          <span className="text-sm sm:text-base text-gray-400">إجمالي</span>
+                          <span className="text-sm sm:text-base text-gray-400">{t('tables.amountTotal')}</span>
                           <span className="text-sm sm:text-base font-bold text-white">{formatCurrency(unpaidTotal)}</span>
                         </div>
                         <div className="flex items-center gap-1.5">
                           <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block"></span>
-                          <span className="text-sm sm:text-base text-gray-400">مدفوع</span>
+                          <span className="text-sm sm:text-base text-gray-400">{t('billing.paid')}</span>
                           <span className="text-sm sm:text-base font-bold text-emerald-400">{formatCurrency(unpaidPaid)}</span>
                         </div>
                         {unpaidRemaining > 0 && (
                           <div className="flex items-center gap-1.5">
                             <span className="w-1.5 h-1.5 rounded-full bg-red-400 inline-block animate-pulse"></span>
-                            <span className="text-sm sm:text-base text-gray-400">متبقي</span>
-                            <span className="text-sm sm:text-base font-bold text-red-400">{formatCurrency(unpaidRemaining)}</span>
+                            <span className="text-sm sm:text-base text-gray-400">{t('tables.amountRemaining')}</span>
+                            <span className="text-base sm:text-lg font-bold text-red-400">{formatCurrency(unpaidRemaining)}</span>
                           </div>
                         )}
                       </div>
-                    )}
+                      );
+                    })()}
                   </div>
                 </div>
                 {/* زر الإغلاق */}
@@ -3547,23 +3686,24 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
               {(() => {
                 const stubEvt = { stopPropagation() {} } as unknown as React.MouseEvent;
                 const acts: { key: string; label: string; icon: React.ReactNode; cls: string; show: boolean; run: () => void }[] = [
-                  { key: 'order', label: 'طلب جديد', icon: <Plus className="h-4 w-4" />, cls: 'bg-green-500 border-green-600 text-white', show: true, run: () => stableQuickOrder(selectedTable, stubEvt) },
+                  { key: 'order', label: t('tables.actions.newOrder'), icon: <Plus className="h-4 w-4" />, cls: 'bg-green-500 border-green-600 text-white', show: true, run: () => stableQuickOrder(selectedTable, stubEvt) },
                   ...(hasUnpaid ? [
                     // NOTE: لا زر "فتح" هنا — المستخدم داخل نافذة الطاولة أصلاً، وفتحها مجدداً بلا معنى
-                    { key: 'pay', label: 'دفع', icon: <DollarSign className="h-4 w-4" />, cls: 'bg-blue-600 border-blue-700 text-white', show: true, run: () => stableQuickBilling(selectedTable, stubEvt) },
+                    { key: 'pay', label: t('tables.actions.pay'), icon: <DollarSign className="h-4 w-4" />, cls: 'bg-blue-600 border-blue-700 text-white', show: true, run: () => stableQuickBilling(selectedTable, stubEvt) },
                   ] as typeof acts : []),
                   ...(unpaidBills.some((b: Bill) => ['draft','partial','overdue'].includes(b.status)) ? [
-                    { key: 'edit', label: 'تعديل', icon: <Edit className="h-4 w-4" />, cls: 'bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-blue-600 dark:text-blue-400', show: true, run: () => stableQuickEditBill(selectedTable, stubEvt) },
+                    { key: 'edit', label: t('common.edit'), icon: <Edit className="h-4 w-4" />, cls: 'bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-blue-600 dark:text-blue-400', show: true, run: () => stableQuickEditBill(selectedTable, stubEvt) },
                   ] as typeof acts : []),
                   ...(hasUnpaid ? [
-                    { key: 'move', label: 'نقل', icon: <ArrowLeftRight className="h-4 w-4" />, cls: 'bg-white dark:bg-gray-700 border-purple-300 dark:border-purple-700 text-purple-600 dark:text-purple-400', show: true, run: () => stableQuickChangeTable(selectedTable, stubEvt) },
+                    { key: 'move', label: t('tables.actions.move'), icon: <ArrowLeftRight className="h-4 w-4" />, cls: 'bg-white dark:bg-gray-700 border-purple-300 dark:border-purple-700 text-purple-600 dark:text-purple-400', show: canMoveBillTableToTable(user), run: () => stableQuickChangeTable(selectedTable, stubEvt) },
                   ] as typeof acts : []),
-                  ...(unpaidRemaining > 0 ? [
-                    { key: 'print', label: 'طباعة', icon: <Printer className="h-4 w-4" />, cls: 'bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300', show: true, run: () => stableQuickPrint(selectedTable, stubEvt) },
+                  ...(unpaidBills.length > 0 ? [
+                    { key: 'print', label: t('billing.print'), icon: <Printer className="h-4 w-4" />, cls: 'bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300', show: true, run: () => stableQuickPrint(selectedTable, stubEvt) },
                   ] as typeof acts : []),
                   ...(activeSessionsCount > 0 ? [
-                    { key: 'stop', label: 'إيقاف الجلسات', icon: <span className="text-base leading-none">⏹</span>, cls: 'bg-white dark:bg-gray-700 border-red-300 dark:border-red-800 text-red-600 dark:text-red-400', show: true, run: () => handleEndAllSessions(selectedTable, stubEvt) },
+                    { key: 'stop', label: t('tables.actions.stopSessions'), icon: <span className="text-base leading-none">⏹</span>, cls: 'bg-white dark:bg-gray-700 border-red-300 dark:border-red-800 text-red-600 dark:text-red-400', show: true, run: () => handleEndAllSessions(selectedTable, stubEvt) },
                   ] as typeof acts : []),
+                  { key: 'qr', label: t('tables.qr.action'), icon: <QrCode className="h-4 w-4" />, cls: 'bg-white dark:bg-gray-700 border-orange-300 dark:border-orange-700 text-orange-600 dark:text-orange-400', show: !!orgIdForQr, run: () => setQrTable(selectedTable) },
                 ];
                 return acts.filter(a => a.show).map(a => (
                   <button
@@ -3622,7 +3762,38 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
                 {activeTab3 === 'orders' && (
                   <>
                     <div className="flex-1 overflow-y-auto p-2 sm:p-3 min-h-0">
-                      {filteredTableOrders.length === 0 ? (
+                      {/* طلبات العملاء المعلقة — inbox المراجعة */}
+                      {canReviewCustomerOrders(user) && pendingRequests.length > 0 && (
+                        <div className="mb-3 rounded-xl border-2 border-dashed border-violet-400 dark:border-violet-600 bg-violet-50/60 dark:bg-violet-900/10 p-2 sm:p-3 space-y-2">
+                          <p className="text-sm font-bold text-violet-700 dark:text-violet-300 flex items-center gap-1.5">
+                            <span>🔔</span>{t('customerOrders.inboxTitle')} ({pendingRequests.length})
+                          </p>
+                          {pendingRequests.map((order: any) => {
+                            const oid = String(order._id || order.id);
+                            const total = Number(order.finalAmount ?? order.subtotal ?? 0);
+                            return (
+                              <div key={oid} className="bg-white dark:bg-gray-800 rounded-xl border border-violet-200 dark:border-violet-800 p-2.5">
+                                <div className="flex items-center gap-2 flex-wrap mb-1">
+                                  <span className="font-bold text-gray-900 dark:text-gray-100">#{order.orderNumber}</span>
+                                  <span className="text-xs font-bold text-violet-700 dark:text-violet-300 bg-violet-100 dark:bg-violet-900/40 px-2 py-0.5 rounded-full">{t('customerOrders.pendingBadge')}</span>
+                                  <span className="text-xs text-gray-500">👤 {order.customerName || '—'}</span>
+                                  <span className="text-xs text-gray-400">{order.createdAt ? formatDateTime(order.createdAt) : ''}</span>
+                                </div>
+                                <p className="text-sm text-gray-600 dark:text-gray-300 truncate mb-2">
+                                  {(order.items || []).map((i: any) => `${i.name} ×${i.quantity}${i.variant ? ` (${i.variant})` : ''}`).join(' · ')}
+                                </p>
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className="text-sm font-bold text-green-600 dark:text-green-400 mr-auto">{formatCurrency(total)}</span>
+                                  <button onClick={() => handleAcceptRequest(order)} className="px-3 py-1.5 text-xs font-bold bg-green-600 hover:bg-green-700 text-white rounded-lg">✓ {t('customerOrders.accept')}</button>
+                                  <button onClick={() => handleEditOrder(order)} className="px-3 py-1.5 text-xs font-bold bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 rounded-lg">✎ {t('customerOrders.edit')}</button>
+                                  <button onClick={() => handleRejectRequest(order)} className="px-3 py-1.5 text-xs font-bold bg-red-50 dark:bg-red-900/20 border border-red-300 dark:border-red-700 text-red-600 dark:text-red-400 rounded-lg">✕ {t('customerOrders.reject')}</button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                      {filteredTableOrders.length === 0 && pendingRequests.length === 0 ? (
                         <div className="flex flex-col items-center justify-center h-full py-16 text-gray-400">
                           <div className="w-16 h-16 bg-orange-50 dark:bg-orange-900/20 rounded-2xl flex items-center justify-center mb-4 border border-orange-100 dark:border-orange-800">
                             <ShoppingCart className="h-8 w-8 text-orange-300" />
@@ -3635,12 +3806,12 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
                           {filteredTableOrders.map(order => {
                             const total = order.finalAmount ?? order.totalAmount ?? order.items?.reduce((s: number, i: any) => s + (i.price || 0) * (i.quantity || 0), 0) ?? 0;
                             const statusCfg: Record<string, { color: string; label: string; dot: string }> = {
-                              pending:   { color: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300',     label: 'معلق',   dot: 'bg-amber-400' },
-                              preparing: { color: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300',         label: 'يُحضَّر', dot: 'bg-blue-400' },
-                              ready:     { color: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300',     label: 'جاهز',   dot: 'bg-green-400' },
-                              delivered: { color: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300', label: 'سُلِّم', dot: 'bg-emerald-400' },
-                              cancelled: { color: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300',             label: 'ملغي',   dot: 'bg-red-400' },
-                              draft:     { color: 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300',            label: 'مسودة',  dot: 'bg-gray-400' },
+                              pending:   { color: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300',     label: t('tables.orderStatus.pending'),   dot: 'bg-amber-400' },
+                              preparing: { color: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300',         label: t('tables.orderStatus.preparing'), dot: 'bg-blue-400' },
+                              ready:     { color: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300',     label: t('tables.orderStatus.ready'),     dot: 'bg-green-400' },
+                              delivered: { color: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300', label: t('tables.orderStatus.delivered'), dot: 'bg-emerald-400' },
+                              cancelled: { color: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300',             label: t('tables.orderStatus.cancelled'), dot: 'bg-red-400' },
+                              draft:     { color: 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300',            label: t('tables.orderStatus.draft'),  dot: 'bg-gray-400' },
                             };
                             const sc = statusCfg[order.status] || statusCfg.draft;
                             const orderTime = order.createdAt ? formatDateTime(order.createdAt) : '';
@@ -3672,14 +3843,14 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
                                       </p>
                                     )}
                                   </div>
-                                  <div className="flex flex-col items-end flex-shrink-0">
-                                    {(order as any).fixedDiscount?.amount > 0 && (
-                                      <span className="text-[10px] text-gray-400 dark:text-gray-500 line-through">{formatCurrency(total + (order as any).fixedDiscount.amount + ((order as any).discount || 0))}</span>
+                                  <div className="flex flex-col items-end flex-shrink-0 min-w-[90px]">
+                                    {((order as any).fixedDiscount?.amount > 0 || ((order as any).discount || 0) > 0) && (
+                                      <span className="text-sm text-gray-400 dark:text-gray-500 line-through">{formatCurrency(total + ((order as any).fixedDiscount?.amount || 0) + ((order as any).discount || 0))}</span>
+                                    )}
+                                    {((order as any).fixedDiscount?.amount > 0 || ((order as any).discount || 0) > 0) && (
+                                      <span className="text-base sm:text-lg font-bold text-purple-600 dark:text-purple-400">{t('tables.discountLabel', { amount: formatCurrency(((order as any).fixedDiscount?.amount || 0) + ((order as any).discount || 0)) })}</span>
                                     )}
                                     <span className="font-bold text-orange-600 dark:text-orange-400 text-base sm:text-lg">{formatCurrency(total)}</span>
-                                    {((order as any).fixedDiscount?.amount > 0 || ((order as any).discount || 0) > 0) && (
-                                      <span className="text-[10px] font-bold text-purple-600 dark:text-purple-400">-{((order as any).fixedDiscount?.amount || 0) + ((order as any).discount || 0)}</span>
-                                    )}
                                   </div>
                                   <div className="flex items-center gap-1 flex-shrink-0">
                                     <button onClick={(e) => { e.stopPropagation(); handlePrintOrder(order); }} title={t('cafe.tableOrdersModal.print')}
@@ -3690,10 +3861,12 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
                                       className="w-8 h-8 flex items-center justify-center bg-green-100 dark:bg-green-900/40 text-green-600 hover:bg-green-200 dark:hover:bg-green-800 rounded-lg transition-all shadow-sm">
                                       <Edit className="h-4 w-4" />
                                     </button>
-                                    <button onClick={(e) => { e.stopPropagation(); handleOpenMoveOrderModal(order); }} title="نقل الطلب لطاولة أخرى"
+                                    {canMoveOrderTableToTable(user) && (
+                                    <button onClick={(e) => { e.stopPropagation(); handleOpenMoveOrderModal(order); }} title={t('tables.moveOrderTitle')}
                                       className="w-8 h-8 flex items-center justify-center bg-purple-100 dark:bg-purple-900/40 text-purple-600 hover:bg-purple-200 dark:hover:bg-purple-800 rounded-lg transition-all shadow-sm">
                                       <ArrowLeftRight className="h-3.5 w-3.5" />
                                     </button>
+                                    )}
                                     <button onClick={(e) => { e.stopPropagation(); handleDeleteOrder(order); }} title={t('cafe.tableOrdersModal.delete')}
                                       className="w-8 h-8 flex items-center justify-center hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-all text-gray-400">
                                       <Trash2 className="h-3.5 w-3.5" />
@@ -3730,15 +3903,15 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
                     <div className="px-2 sm:px-3 py-2 bg-white dark:bg-gray-800/80 border-b border-gray-200 dark:border-gray-700/60 flex items-center gap-2 flex-shrink-0 flex-wrap">
                       <select value={tableBillsFilter} onChange={e => setTableBillsFilter(e.target.value)}
                         className="flex-1 min-w-[110px] text-sm sm:text-base border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1.5 bg-gray-50 dark:bg-gray-900 text-gray-700 dark:text-gray-300 focus:ring-1 focus:ring-blue-400 outline-none">
-                        <option value="all">الكل</option>
-                        <option value="unpaid">غير مدفوعة</option>
-                        <option value="paid">مدفوعة</option>
-                        <option value="partial">جزئية</option>
+                        <option value="all">{t('billing.filters.all')}</option>
+                        <option value="unpaid">{t('tables.billFilterUnpaid')}</option>
+                        <option value="paid">{t('tables.billFilterPaid')}</option>
+                        <option value="partial">{t('tables.billFilterPartial')}</option>
                       </select>
                       <div className="relative flex-[2] min-w-[140px]">
                         <Search className="absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
                         <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
-                          placeholder="بحث..." className="w-full pr-7 pl-2 py-1.5 text-sm sm:text-base border border-gray-200 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-700 dark:text-gray-300 outline-none focus:ring-1 focus:ring-blue-400" />
+                          placeholder={t('billing.filters.search')} className="w-full pr-7 pl-2 py-1.5 text-sm sm:text-base border border-gray-200 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-700 dark:text-gray-300 outline-none focus:ring-1 focus:ring-blue-400" />
                       </div>
                       {searchQuery && (
                         <button onClick={() => { setSearchQuery(''); setSearchResults(null); }} className="w-6 h-6 flex items-center justify-center text-gray-400 hover:text-red-500 transition-colors flex-shrink-0">
@@ -3753,7 +3926,7 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
                         return (
                           <button onClick={() => { setBillToEdit(firstUnpaid); setShowBillItemsEditModal(true); }}
                             className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded-lg flex items-center gap-1.5 flex-shrink-0 shadow-sm">
-                            <Edit className="h-3.5 w-3.5" />تعديل
+                            <Edit className="h-3.5 w-3.5" />{t('common.edit')}
                           </button>
                         );
                       })()}
@@ -3772,22 +3945,22 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
                         <div className="flex-shrink-0 px-3 py-2 bg-blue-50/60 dark:bg-blue-900/10 border-b border-blue-100 dark:border-blue-900/30 flex items-center gap-4">
                           <div className="flex items-center gap-1.5">
                             <span className="w-1.5 h-1.5 rounded-full bg-gray-400 inline-block"></span>
-                            <span className="text-[10px] text-gray-500">إجمالي</span>
+                            <span className="text-[10px] text-gray-500">{t('tables.amountTotal')}</span>
                             <span className="text-base font-bold text-gray-700 dark:text-gray-300">{formatCurrency(fTotal)}</span>
                           </div>
                           <div className="flex items-center gap-1.5">
                             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block"></span>
-                            <span className="text-[10px] text-gray-500">مدفوع</span>
+                            <span className="text-[10px] text-gray-500">{t('billing.paid')}</span>
                             <span className="text-base font-bold text-emerald-600 dark:text-emerald-400">{formatCurrency(fPaid)}</span>
                           </div>
                           {fRemaining > 0 && (
                             <div className="flex items-center gap-1.5">
                               <span className="w-1.5 h-1.5 rounded-full bg-red-400 inline-block"></span>
-                              <span className="text-[10px] text-gray-500">متبقي</span>
+                              <span className="text-[10px] text-gray-500">{t('tables.amountRemaining')}</span>
                               <span className="text-base font-bold text-red-600 dark:text-red-400">{formatCurrency(fRemaining)}</span>
                             </div>
                           )}
-                          <span className="mr-auto text-[10px] text-gray-400">{filtered.length} فاتورة</span>
+                          <span className="mr-auto text-[10px] text-gray-400">{t('tables.billsCount', { count: filtered.length })}</span>
                         </div>
                       );
                     })()}
@@ -3824,41 +3997,41 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
                                         <span className="font-bold text-base sm:text-lg text-gray-900 dark:text-gray-100">#{bill.billNumber || (bill.id || bill._id)?.toString().slice(-6)}</span>
                                         <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${getStatusColor(bill.status)}`}>{getStatusText(bill.status)}</span>
                                         {hasSessions && <span className="text-[10px] px-1.5 py-0.5 rounded-full font-bold bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300 flex items-center gap-0.5"><Gamepad2 className="h-2.5 w-2.5" />{(bill as any).sessions?.length}</span>}
-                                        {hasSessions && (bill as any).sessions?.some((s: any) => s.status === 'active') && <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" title="تحديث لحظي كل 10 ثوانٍ" />}
+                                        {hasSessions && (bill as any).sessions?.some((s: any) => s.status === 'active') && <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" title={t('tables.billLiveHint')} />}
                                       </div>
                                       {billTime && <div className="flex items-center gap-1 text-[10px] text-gray-400 mb-1"><Clock className="h-3 w-3" />{billTime}</div>}
                                       {(getOrderCreatorName(bill) || getUpdaterName(bill)) && (
                                         <div className="flex items-center gap-2 text-[10px] mb-1 flex-wrap">
                                           {getOrderCreatorName(bill) && (
                                             <span className="text-violet-600 dark:text-violet-400 flex items-center gap-1 font-semibold">
-                                              <UserIcon className="h-3 w-3" />أنشأها: {getOrderCreatorName(bill)}
+                                              <UserIcon className="h-3 w-3" />{t('tables.createdBy', { name: getOrderCreatorName(bill) })}
                                             </span>
                                           )}
                                           {getUpdaterName(bill) && getUpdaterName(bill) !== getOrderCreatorName(bill) && (
                                             <span className="text-teal-600 dark:text-teal-400 flex items-center gap-1 font-semibold">
-                                              ✎ آخر تعديل: {getUpdaterName(bill)}
+                                              ✎ {t('tables.updatedBy', { name: getUpdaterName(bill) })}
                                             </span>
                                           )}
                                         </div>
                                       )}
                                       <div className="flex items-center gap-x-3 gap-y-0.5 text-sm sm:text-base flex-wrap">
-                                        <span className="text-gray-500">إجمالي: <strong className="text-gray-800 dark:text-gray-200">{formatCurrency(liveTotal)}</strong></span>
-                                        <span className="text-emerald-600 dark:text-emerald-400">مدفوع: <strong>{formatCurrency(Number(bill.paid)||0)}</strong></span>
-                                        {liveRemaining > 0 && <span className="text-red-600 dark:text-red-400 font-bold">متبقي: {formatCurrency(liveRemaining)}</span>}
+                                        <span className="text-gray-500">{t('tables.billTotalLabel', { amount: formatCurrency(liveTotal) })}</span>
+                                        <span className="text-emerald-600 dark:text-emerald-400">{t('tables.billPaidLabel', { amount: formatCurrency(Number(bill.paid)||0) })}</span>
+                                        {liveRemaining > 0 && <span className="text-red-600 dark:text-red-400 font-bold">{t('tables.billRemainingLabel', { amount: formatCurrency(liveRemaining) })}</span>}
                                       </div>
                                     </div>
                                     <div className="flex gap-1 flex-shrink-0 items-center">
                                       {/* تعديل أصناف الفاتورة مجمعة - زر واضح (يشمل المدفوعة: السيرفر يعيد حساب المتبقي/الحالة) */}
                                       {canEditOrder(user) && ['draft','partial','overdue','paid'].includes(bill.status) && (
                                         <button onClick={e => { e.stopPropagation(); setBillToEdit(bill); setShowBillItemsEditModal(true); }}
-                                          className="min-h-9 px-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded-lg flex items-center gap-1 shadow-sm" title="تعديل الأصناف">
-                                          <Edit className="h-3.5 w-3.5" />تعديل
+                                          className="min-h-9 px-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded-lg flex items-center gap-1 shadow-sm" title={t('tables.editItemsTitle')}>
+                                          <Edit className="h-3.5 w-3.5" />{t('common.edit')}
                                         </button>
                                       )}
                                       {isUnpaid && (
                                         <button onClick={e => { e.stopPropagation(); setPayChoiceBill(bill); setShowPayChoiceModal(true); }}
                                           className="min-h-9 px-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold rounded-lg flex items-center gap-1 transition-all whitespace-nowrap">
-                                          <DollarSign className="h-3 w-3" />دفع
+                                          <DollarSign className="h-3 w-3" />{t('tables.actions.pay')}
                                         </button>
                                       )}
                                       <button onClick={e => { e.stopPropagation(); printBill(bill as any, user?.organizationName, i18n.language, t, getTableSectionName(bill.table)).catch(() => {}); }}
@@ -3882,7 +4055,7 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
                               </div>
                             )}
                             {!modalBillsFeed.hasMore && modalBillsFeed.items.length > 0 && (
-                              <div className="text-center text-[10px] text-gray-400 py-1">— تم عرض الكل ({modalBillsFeed.total}) —</div>
+                              <div className="text-center text-[10px] text-gray-400 py-1">{t('tables.billsShownAll', { total: modalBillsFeed.total })}</div>
                             )}
                           </div>
                         );
@@ -3899,24 +4072,24 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
                       <div className="flex-shrink-0 px-2 sm:px-3 py-2 bg-white dark:bg-gray-800/80 border-b border-gray-200 dark:border-gray-700/60 flex items-center gap-x-4 gap-y-1 flex-wrap">
                         <div className="flex items-center gap-1.5">
                           <span className="w-1.5 h-1.5 rounded-full bg-gray-400 inline-block"></span>
-                          <span className="text-[10px] text-gray-500">إجمالي</span>
+                          <span className="text-[10px] text-gray-500">{t('tables.amountTotal')}</span>
                           <span className="text-base font-bold text-gray-700 dark:text-gray-300">{formatCurrency(sessionsTotalCost)}</span>
                         </div>
                         <div className="flex items-center gap-1.5">
                           <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block"></span>
-                          <span className="text-[10px] text-gray-500">مدفوع</span>
+                          <span className="text-[10px] text-gray-500">{t('billing.paid')}</span>
                           <span className="text-base font-bold text-emerald-600 dark:text-emerald-400">{formatCurrency(sessionsPaid)}</span>
                         </div>
                         {sessionsRemaining > 0 && (
                           <div className="flex items-center gap-1.5">
                             <span className="w-1.5 h-1.5 rounded-full bg-red-400 inline-block"></span>
-                            <span className="text-[10px] text-gray-500">متبقي</span>
+                            <span className="text-[10px] text-gray-500">{t('tables.amountRemaining')}</span>
                             <span className="text-base font-bold text-red-600 dark:text-red-400">{formatCurrency(sessionsRemaining)}</span>
                           </div>
                         )}
                         <span className="mr-auto text-[10px] text-gray-400 flex items-center gap-1">
                           {activeSessionsCount > 0 && <span className="w-1.5 h-1.5 rounded-full bg-green-500 inline-block animate-pulse"></span>}
-                          {activeSessionsCount > 0 ? `${activeSessionsCount} نشطة · ` : ''}{sessionsCount} جلسة
+                          {activeSessionsCount > 0 ? t('tables.sessionsActivePart', { count: activeSessionsCount }) : ''}{t('tables.sessionsCount', { count: sessionsCount })}
                         </span>
                       </div>
                     )}
@@ -3926,7 +4099,7 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
                           <div className="w-16 h-16 bg-purple-50 dark:bg-purple-900/20 rounded-2xl flex items-center justify-center mb-4 border border-purple-100 dark:border-purple-800">
                             <Gamepad2 className="h-8 w-8 text-purple-300" />
                           </div>
-                          <p className="text-lg font-medium text-gray-500">لا توجد جلسات لهذه الطاولة</p>
+                          <p className="text-lg font-medium text-gray-500">{t('tables.noSessions')}</p>
                         </div>
                       ) : (
                         <div className="space-y-2">
@@ -3946,9 +4119,9 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
                             const durMs    = startMs ? Math.max(0, endMs - startMs) : 0;
                             const durH     = Math.floor(durMs / 3600000);
                             const durM     = Math.floor((durMs % 3600000) / 60000);
-                            const durStr   = durH > 0 ? `${durH}س ${durM}د` : `${durM}د`;
-                            const startStr = session.startTime ? new Date(session.startTime).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }) : '—';
-                            const endStr   = session.endTime   ? new Date(session.endTime).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }) : 'جارية';
+                            const durStr   = durH > 0 ? t('tables.durationHm', { h: durH, m: durM }) : t('tables.durationM', { m: durM });
+                            const startStr = session.startTime ? new Date(session.startTime).toLocaleTimeString(localeTag(i18n.language), { hour: '2-digit', minute: '2-digit' }) : '—';
+                            const endStr   = session.endTime   ? new Date(session.endTime).toLocaleTimeString(localeTag(i18n.language), { hour: '2-digit', minute: '2-digit' }) : t('tables.logSessionOngoing');
 
                             // ── المدفوع/المتبقي من sessionPayments ──
                             const sessId         = session._id || session.id;
@@ -3974,9 +4147,9 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
                                       <span className="text-xl leading-none">{icon}</span>
                                       <div>
                                         <p className="font-bold text-lg text-gray-900 dark:text-gray-100 leading-tight">
-                                          {session.deviceName || `جهاز ${session.deviceNumber || ''}`}
+                                          {session.deviceName || t('tables.deviceFallback', { number: session.deviceNumber || '' })}
                                         </p>
-                                        <p className="text-[10px] text-gray-400">{isPS ? 'بلايستيشن' : 'كمبيوتر'}</p>
+                                        <p className="text-[10px] text-gray-400">{isPS ? t('billing.gamingDevices.playstation') : t('billing.gamingDevices.computer')}</p>
                                       </div>
                                     </div>
                                     <div className="flex items-center gap-2">
@@ -3990,7 +4163,7 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
                                         isCompleted ? 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400' :
                                                       'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
                                       }`}>
-                                        {isActive ? '● نشطة' : isCompleted ? '✓ منتهية' : session.status}
+                                        {isActive ? t('tables.sessionActiveBadge') : isCompleted ? t('tables.sessionCompletedBadge') : session.status}
                                       </span>
                                     </div>
                                   </div>
@@ -3998,22 +4171,22 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
                                   <div className="flex items-center gap-3 text-[11px] text-gray-500">
                                     <span className="flex items-center gap-1"><Clock className="h-3 w-3" />{startStr} → {endStr}</span>
                                     <span className="font-semibold text-gray-600 dark:text-gray-400">⏱ {durStr}</span>
-                                    {session.controllers > 0 && <span>🕹 {session.controllers} دراعة</span>}
+                                    {session.controllers > 0 && <span>{t('tables.controllersCount', { count: session.controllers })}</span>}
                                   </div>
                                   {/* الملخص المالي */}
                                   <div className="flex items-stretch gap-2 bg-gray-50 dark:bg-gray-700/40 rounded-xl p-2">
                                     <div className="flex-1 text-center">
-                                      <p className="text-[10px] text-gray-400 mb-0.5">الاجمالي</p>
+                                      <p className="text-[10px] text-gray-400 mb-0.5">{t('tables.sessionTotalLabel')}</p>
                                       <p className="text-lg font-bold text-gray-800 dark:text-gray-200">{formatCurrency(cost)}</p>
                                     </div>
                                     <div className="w-px bg-gray-200 dark:bg-gray-600" />
                                     <div className="flex-1 text-center">
-                                      <p className="text-[10px] text-gray-400 mb-0.5">مدفوع</p>
+                                      <p className="text-[10px] text-gray-400 mb-0.5">{t('billing.paid')}</p>
                                       <p className="text-lg font-bold text-emerald-600 dark:text-emerald-400">{formatCurrency(spPaid)}</p>
                                     </div>
                                     <div className="w-px bg-gray-200 dark:bg-gray-600" />
                                     <div className="flex-1 text-center">
-                                      <p className="text-[10px] text-gray-400 mb-0.5">متبقي</p>
+                                      <p className="text-[10px] text-gray-400 mb-0.5">{t('tables.amountRemaining')}</p>
                                       <p className={`text-lg font-bold ${spRemaining > 0 ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
                                         {formatCurrency(spRemaining)}
                                       </p>
@@ -4025,13 +4198,13 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
                                           {isActive && billForSession && (
                                             <button onClick={() => handleEndSession(sessId)}
                                               className="px-2.5 py-1 bg-red-500 hover:bg-red-600 text-white text-[10px] font-bold rounded-lg transition-all whitespace-nowrap">
-                                              ⏹ إنهاء
+                                              {t('tables.sessionEndButton')}
                                             </button>
                                           )}
                                           {billForSession && spRemaining > 0 && !isActive && (
                                             <button onClick={async () => { const r = await api.getBill(billForSession._id || (billForSession as any).id); if (r?.data) setSelectedBill(r.data); else setSelectedBill(billForSession as Bill); setShowPaymentModal(true); setPaymentAmount(spRemaining.toString()); }}
                                               className="px-2.5 py-1 bg-blue-500 hover:bg-blue-600 text-white text-[10px] font-bold rounded-lg transition-all whitespace-nowrap">
-                                              💵 دفع
+                                              {t('tables.sessionPayButton')}
                                             </button>
                                           )}
                                         </div>
@@ -4041,12 +4214,12 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
                                   {/* سجل الدراعات */}
                                   {isCompleted && session.controllersHistory && session.controllersHistory.length > 1 && (
                                     <div className="pt-1.5 border-t border-gray-100 dark:border-gray-700">
-                                      <p className="text-[10px] text-gray-400 mb-1 flex items-center gap-1"><Gamepad2 className="h-2.5 w-2.5" />سجل الدراعات</p>
+                                      <p className="text-[10px] text-gray-400 mb-1 flex items-center gap-1"><Gamepad2 className="h-2.5 w-2.5" />{t('tables.controllersHistory')}</p>
                                       <div className="space-y-0.5">
                                         {session.controllersHistory.map((period: any, pi: number) => (
                                           <div key={pi} className="flex items-center justify-between text-[10px] text-gray-500 bg-gray-50 dark:bg-gray-700/30 rounded px-2 py-0.5">
-                                            <span>{period.controllers} دراعة</span>
-                                            <span>{new Date(period.from).toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'})} — {period.to ? new Date(period.to).toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'}) : 'الآن'}</span>
+                                            <span>{t('tables.controllersUnit', { count: period.controllers })}</span>
+                                            <span>{new Date(period.from).toLocaleTimeString(localeTag(i18n.language),{hour:'2-digit',minute:'2-digit'})} — {period.to ? new Date(period.to).toLocaleTimeString(localeTag(i18n.language),{hour:'2-digit',minute:'2-digit'}) : t('tables.historyNow')}</span>
                                           </div>
                                         ))}
                                       </div>
@@ -4069,17 +4242,17 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
                       {tableActivityLog.length === 0 ? (
                         <div className="flex flex-col items-center justify-center h-full py-12 text-gray-400">
                           <CheckCircle className="h-10 w-10 mb-3 text-green-300" />
-                          <p className="text-lg font-semibold text-gray-500">لا توجد فواتير مفتوحة</p>
-                          <p className="text-base text-gray-400 mt-1">السجل يعرض الفواتير غير المدفوعة فقط</p>
+                          <p className="text-lg font-semibold text-gray-500">{t('tables.logEmpty')}</p>
+                          <p className="text-base text-gray-400 mt-1">{t('tables.logHint')}</p>
                         </div>
                       ) : (
                         <div className="space-y-1.5">
                           {tableActivityLog.map((entry, idx) => {
                             const cfgMap: Record<string, { dot: string; border: string; bg: string; label: string; labelColor: string }> = {
-                              bill:    { dot: 'bg-blue-500',   border: 'border-r-2 border-blue-400',   bg: 'bg-white dark:bg-gray-800',        label: 'فاتورة', labelColor: 'text-blue-600' },
-                              order:   { dot: 'bg-orange-500', border: 'border-r-2 border-orange-400', bg: 'bg-orange-50 dark:bg-orange-900/20', label: 'طلب',    labelColor: 'text-orange-600' },
-                              payment: { dot: 'bg-green-500',  border: 'border-r-2 border-green-400',  bg: 'bg-green-50 dark:bg-green-900/20',  label: 'دفعة',   labelColor: 'text-green-600' },
-                              session: { dot: entry.color === 'red' ? 'bg-red-500' : 'bg-purple-500', border: entry.color === 'red' ? 'border-r-2 border-red-400' : 'border-r-2 border-purple-400', bg: entry.color === 'red' ? 'bg-red-50 dark:bg-red-900/20' : 'bg-purple-50 dark:bg-purple-900/20', label: 'جلسة', labelColor: entry.color === 'red' ? 'text-red-600' : 'text-purple-600' },
+                              bill:    { dot: 'bg-blue-500',   border: 'border-r-2 border-blue-400',   bg: 'bg-white dark:bg-gray-800',        label: t('billing.bill'), labelColor: 'text-blue-600' },
+                              order:   { dot: 'bg-orange-500', border: 'border-r-2 border-orange-400', bg: 'bg-orange-50 dark:bg-orange-900/20', label: t('cafe.order'),    labelColor: 'text-orange-600' },
+                              payment: { dot: 'bg-green-500',  border: 'border-r-2 border-green-400',  bg: 'bg-green-50 dark:bg-green-900/20',  label: t('tables.logTypePayment'),   labelColor: 'text-green-600' },
+                              session: { dot: entry.color === 'red' ? 'bg-red-500' : 'bg-purple-500', border: entry.color === 'red' ? 'border-r-2 border-red-400' : 'border-r-2 border-purple-400', bg: entry.color === 'red' ? 'bg-red-50 dark:bg-red-900/20' : 'bg-purple-50 dark:bg-purple-900/20', label: t('billing.session'), labelColor: entry.color === 'red' ? 'text-red-600' : 'text-purple-600' },
                             };
                             const cfg = cfgMap[entry.type] || cfgMap.bill;
                             const iconMap: Record<string, React.ReactNode> = {
@@ -4098,9 +4271,9 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
                                   <div className="flex items-center justify-between gap-2">
                                     <span className={`text-base font-bold ${cfg.labelColor}`}>{cfg.label}</span>
                                     <span className="text-base text-gray-400">
-                                      {entry.time.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}
+                                      {entry.time.toLocaleTimeString(localeTag(i18n.language), { hour: '2-digit', minute: '2-digit' })}
                                       {' • '}
-                                      {entry.time.toLocaleDateString('ar-EG', { month: 'short', day: 'numeric' })}
+                                      {entry.time.toLocaleDateString(localeTag(i18n.language), { month: 'short', day: 'numeric' })}
                                     </span>
                                   </div>
                                   <p className="text-base text-gray-800 dark:text-gray-200 font-medium mt-0.5">{mainLine}</p>
@@ -4125,9 +4298,9 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
             >
               <div className="px-3 py-2.5 sm:px-4 sm:py-3 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between bg-gradient-to-l from-orange-50 to-white dark:from-gray-700 dark:to-gray-800 flex-shrink-0">
                 <div className="min-w-0">
-                  <h3 className="font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2 text-base sm:text-lg"><Receipt className="h-4 w-4 text-orange-500 flex-shrink-0" />طلب #{previewOrder.orderNumber}</h3>
+                  <h3 className="font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2 text-base sm:text-lg"><Receipt className="h-4 w-4 text-orange-500 flex-shrink-0" />{t('tables.previewTitle', { order: previewOrder.orderNumber })}</h3>
                   <p className="text-[11px] text-gray-500 dark:text-gray-400 flex items-center gap-1 mt-0.5 flex-wrap">
-                    <Clock className="h-3 w-3 flex-shrink-0" />{previewOrder.createdAt ? formatDateTime(previewOrder.createdAt) : ''} · مثبت
+                    <Clock className="h-3 w-3 flex-shrink-0" />{previewOrder.createdAt ? t('tables.previewPinned', { time: formatDateTime(previewOrder.createdAt) }) : t('tables.previewPinned', { time: '' })}
                     {getOrderCreatorName(previewOrder) && (
                       <span className="text-violet-600 dark:text-violet-400 font-semibold flex items-center gap-0.5">
                         <UserIcon className="h-3 w-3" />{getOrderCreatorName(previewOrder)}
@@ -4135,7 +4308,7 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
                     )}
                   </p>
                 </div>
-                <button onClick={() => setPinnedOrder(null)} className="w-8 h-8 flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors flex-shrink-0" title="إغلاق">
+                <button onClick={() => setPinnedOrder(null)} className="w-8 h-8 flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors flex-shrink-0" title={t('common.close')}>
                   <X className="h-4 w-4" />
                 </button>
               </div>
@@ -4144,7 +4317,7 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
                   <div key={idx} className="flex justify-between items-center p-2 sm:p-3 bg-gray-50 dark:bg-gray-700/40 rounded-xl border border-gray-100 dark:border-gray-600">
                     <div className="flex-1 min-w-0">
                       <p className="font-semibold text-gray-900 dark:text-gray-100 text-base sm:text-lg truncate">{it.name}</p>
-                      {it.notes && <p className="text-sm sm:text-base text-gray-500 dark:text-gray-400 truncate">ملاحظة: {it.notes}</p>}
+                      {it.notes && <p className="text-sm sm:text-base text-gray-500 dark:text-gray-400 truncate">{t('tables.previewNote', { notes: it.notes })}</p>}
                       <p className="text-sm sm:text-base text-gray-400">{formatCurrency(it.price || 0)} × {it.quantity}</p>
                     </div>
                     <div className="text-right flex flex-col items-end gap-1 flex-shrink-0">
@@ -4162,9 +4335,9 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
                   const subtotal = Number((previewOrder as any).finalAmount ?? (previewOrder as any).totalAmount ?? 0) + fd + md;
                   if (fd + md <= 0) return null;
                   return (
-                    <div className="flex justify-between items-center mb-1 text-sm">
-                      <span className="text-gray-500">المجموع الفرعي</span>
-                      <span className="text-gray-500">{formatCurrency(subtotal)}</span>
+                    <div className="flex justify-between items-center mb-1">
+                      <span className="text-base sm:text-lg text-gray-400 dark:text-gray-500 line-through">{t('tables.previewSubtotal')}</span>
+                      <span className="text-base sm:text-lg text-gray-400 dark:text-gray-500 line-through">{formatCurrency(subtotal)}</span>
                     </div>
                   );
                 })()}
@@ -4175,22 +4348,22 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
                   const totalD = fd + md;
                   if (totalD <= 0) return null;
                   return (
-                    <div className="flex justify-between items-center mb-1 text-sm">
-                      <span className="text-purple-600 dark:text-purple-400">الخصومات</span>
-                      <span className="font-medium text-purple-600 dark:text-purple-400">-{formatCurrency(totalD)}</span>
+                    <div className="flex justify-between items-center mb-1">
+                      <span className="text-base sm:text-lg font-bold text-purple-600 dark:text-purple-400">{t('tables.previewDiscounts')}</span>
+                      <span className="text-base sm:text-lg font-bold text-purple-600 dark:text-purple-400">-{formatCurrency(totalD)}</span>
                     </div>
                   );
                 })()}
                 <div className="flex justify-between items-center mb-2 sm:mb-3">
-                  <span className="text-base sm:text-lg text-gray-500">الإجمالي</span>
+                  <span className="text-base sm:text-lg text-gray-500">{t('billing.total')}</span>
                   <span className="font-bold text-orange-600 dark:text-orange-400 text-xl sm:text-2xl">{formatCurrency((previewOrder as any).finalAmount ?? (previewOrder as any).totalAmount ?? (previewOrder.items as any[])?.reduce((s: number, i: any) => s + (i.price || 0) * (i.quantity || 0), 0) ?? 0)}</span>
                 </div>
                 {!pinnedOrder ? (
-                  <p className="text-[11px] text-center text-gray-400 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg py-2">اضغط على الطلب لتثبيت النافذة والتحكم بها</p>
+                  <p className="text-[11px] text-center text-gray-400 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg py-2">{t('tables.previewTapHint')}</p>
                 ) : (
                   <div className="flex gap-2">
-                    <button onClick={() => handlePrintOrder(pinnedOrder)} className="flex-1 py-2 sm:py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-base sm:text-lg font-bold rounded-xl flex items-center justify-center gap-1.5 transition-colors"><Printer className="h-4 w-4" />طباعة</button>
-                    <button onClick={() => handleEditOrder(pinnedOrder)} className="flex-1 py-2 sm:py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-base sm:text-lg font-bold rounded-xl flex items-center justify-center gap-1.5"><Edit className="h-4 w-4" />تعديل</button>
+                    <button onClick={() => handlePrintOrder(pinnedOrder)} className="flex-1 py-2 sm:py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-base sm:text-lg font-bold rounded-xl flex items-center justify-center gap-1.5 transition-colors"><Printer className="h-4 w-4" />{t('billing.print')}</button>
+                    <button onClick={() => handleEditOrder(pinnedOrder)} className="flex-1 py-2 sm:py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-base sm:text-lg font-bold rounded-xl flex items-center justify-center gap-1.5"><Edit className="h-4 w-4" />{t('common.edit')}</button>
                   </div>
                 )}
               </div>
@@ -4209,6 +4382,7 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
         user={user}
         paymentAmount={paymentAmount} setPaymentAmount={setPaymentAmount}
         paymentMethod={paymentMethod} setPaymentMethod={setPaymentMethod}
+        paymentDrawer={paymentDrawer} setPaymentDrawer={setPaymentDrawer}
         paymentReference={paymentReference} setPaymentReference={setPaymentReference}
         isProcessingPayment={isProcessingPayment}
         handlePaymentSubmit={handlePaymentSubmit}
@@ -4226,7 +4400,7 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
         getSessionCost={getSessionCost}
         formatCurrency={formatCurrency}
         showNotification={showNotification}
-        roundingLabel={roundingMode === 'none' ? 'بدون' : roundingMode === 'half' ? '0.5' : '1'}
+        roundingLabel={roundingMode === 'none' ? t('tables.roundingNone') : roundingMode === 'half' ? '0.5' : '1'}
         onToggleRounding={cycleRounding}
         applyRounding={applyRounding}
         onSplitSubmit={handleSplitSubmit}
@@ -4251,8 +4425,8 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
       {quickPickerTables && (
         <div className="fixed inset-0 z-[400] flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => setQuickPickerTables(null)}>
           <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-5 w-[90vw] max-w-md border border-gray-200 dark:border-gray-700" onClick={e => e.stopPropagation()}>
-            <h3 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-1">اختر الطاولة</h3>
-            <p className="text-lg text-gray-500 dark:text-gray-400 mb-4">عدة نتائج متطابقة — اختر واحدة:</p>
+            <h3 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-1">{t('tables.quickPickTitle')}</h3>
+            <p className="text-lg text-gray-500 dark:text-gray-400 mb-4">{t('tables.quickPickHint')}</p>
             <div className="space-y-2 max-h-60 overflow-y-auto">
               {quickPickerTables.map(tb => (
                 <button key={(tb._id || (tb as any).id) as string}
@@ -4264,12 +4438,12 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
                   <div className="flex-1 min-w-0">
                     <p className="font-semibold text-gray-900 dark:text-gray-100 truncate">{(tb as any).name || getTableDisplay(tb.number, i18n.language)}</p>
                     <p className="text-base text-gray-500 dark:text-gray-400">
-                      رقم {getTableDisplay(tb.number, i18n.language)}
+                      {t('tables.quickPickNumber', { number: getTableDisplay(tb.number, i18n.language) })}
                       {(() => {
                         const secName = typeof (tb as any).section === 'object'
                           ? (tb as any)?.section?.name
                           : tableSections.find((s: any) => s._id === (tb as any).section || s.id === (tb as any).section)?.name;
-                        return secName ? <span> • القسم: {secName}</span> : null;
+                        return secName ? <span>{t('tables.quickPickSection', { name: secName })}</span> : null;
                       })()}
                     </p>
                   </div>
@@ -4278,7 +4452,7 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
             </div>
             <button onClick={() => setQuickPickerTables(null)}
               className="w-full mt-4 py-2 text-lg text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 font-semibold rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-all">
-              إلغاء
+              {t('common.cancel')}
             </button>
           </div>
         </div>
@@ -4289,9 +4463,9 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
         isOpen={!!endAllTarget}
         onClose={() => !isEndingAll && setEndAllTarget(null)}
         onConfirm={confirmEndAllSessions}
-        title="إنهاء كل الجلسات"
-        message={`سيتم إنهاء ${endAllTarget?.sessions.length || 0} جلسة على طاولة ${endAllTarget ? getTableDisplay(endAllTarget.table.number, i18n.language) : ''}. سيكون لديك 10 ثوانٍ للتراجع بعد التنفيذ.`}
-        confirmText={isEndingAll ? 'جارٍ الإنهاء...' : 'إنهاء الكل'}
+        title={t('tables.endAllTitle')}
+        message={t('tables.endAllMessage', { count: endAllTarget?.sessions.length || 0, table: endAllTarget ? getTableDisplay(endAllTarget.table.number, i18n.language) : '' })}
+        confirmText={isEndingAll ? t('tables.endAllProcessing') : t('tables.endAllConfirm')}
         cancelText={t('common.cancel')}
         confirmColor="bg-red-600 hover:bg-red-700"
         loading={isEndingAll}
@@ -4302,7 +4476,8 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
       <PartialPaymentModal
         key={`partial-${selectedBill?._id || selectedBill?.id}-${selectedBill?.itemPayments?.length || 0}-${selectedBill?.paid || 0}`}
         isOpen={showPartialPaymentModal} onClose={() => setShowPartialPaymentModal(false)}
-        bill={selectedBill} onPaymentSubmit={handlePartialPaymentSubmit} isProcessing={isProcessingPartialPayment} />
+        bill={selectedBill} onPaymentSubmit={handlePartialPaymentSubmit} isProcessing={isProcessingPartialPayment}
+        initialDrawer={paymentDrawer} />
       </React.Suspense>
 
       {/* ── Cancel Bill Confirm Modal ── */}
@@ -4317,7 +4492,7 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
       <ConfirmModal isOpen={showPayFullBillConfirmModal} onClose={() => !isProcessingPayment && setShowPayFullBillConfirmModal(false)}
         onConfirm={confirmPayFullBill}
         title={t('billing.confirmModals.payFullBillTitle')}
-        message={t('billing.confirmModals.payFullBillMessage', { billNumber: billToPayFull?.billNumber || billToPayFull?.id || billToPayFull?._id, amount: formatCurrency(billToPayFull?.remaining || 0), method: paymentMethod ? t(`billing.paymentMethod${paymentMethod.charAt(0).toUpperCase() + paymentMethod.slice(1)}`) : t('billing.paymentMethodCash') })}
+        message={`${t('billing.confirmModals.payFullBillMessage', { billNumber: billToPayFull?.billNumber || billToPayFull?.id || billToPayFull?._id, amount: formatCurrency(billToPayFull?.remaining || 0), method: paymentMethodLabel(paymentMethod, t) })} · ${drawerLabel(paymentDrawer, t)}`}
         confirmText={isProcessingPayment ? t('billing.confirmModals.payFullBillProcessing') : t('billing.confirmModals.payFullBillConfirm')}
         cancelText={t('billing.confirmModals.payFullBillCancel')} confirmColor="bg-green-600 hover:bg-green-700" loading={isProcessingPayment} />
 
@@ -4325,7 +4500,7 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
       <ConfirmModal isOpen={showSessionPaymentConfirmModal} onClose={() => !isProcessingSessionPayment && setShowSessionPaymentConfirmModal(false)}
         onConfirm={confirmSessionPayment}
         title={t('billing.confirmModals.sessionPaymentTitle')}
-        message={t('billing.confirmModals.sessionPaymentMessage', { device: sessionToPayData?.session?.deviceName || t('common.unknown'), amount: formatCurrency(parseFloat(sessionToPayData?.amount || '0')), method: sessionToPayData?.method ? t(`billing.paymentMethod${sessionToPayData.method.charAt(0).toUpperCase() + sessionToPayData.method.slice(1)}`) : t('billing.paymentMethodCash') })}
+        message={`${t('billing.confirmModals.sessionPaymentMessage', { device: sessionToPayData?.session?.deviceName || t('common.unknown'), amount: formatCurrency(parseFloat(sessionToPayData?.amount || '0')), method: paymentMethodLabel(sessionToPayData?.method, t) })} · ${drawerLabel(sessionPaymentDrawer, t)}`}
         confirmText={isProcessingSessionPayment ? t('billing.confirmModals.sessionPaymentProcessing') : t('billing.confirmModals.sessionPaymentConfirm')}
         cancelText={t('billing.confirmModals.sessionPaymentCancel')} confirmColor="bg-blue-600 hover:bg-blue-700" loading={isProcessingSessionPayment} />
 
@@ -4416,16 +4591,29 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
                       <div className="text-center p-2 bg-white dark:bg-gray-700 rounded-lg"><p className="text-xs text-gray-600 dark:text-gray-400">{t('billing.sessionPaymentModal.remaining')}</p><p className="font-bold text-sm sm:text-base text-red-600 dark:text-red-400">{formatCurrency(remainingAmt)}</p></div>
                     </div>
                     {!isFullyPaid && (
-                      <div className="flex flex-col sm:flex-row gap-2">
-                        <input type="text" inputMode="numeric" placeholder={t('billing.sessionPaymentModal.amountPlaceholder')}
-                          value={selectedSession?._id === sid || selectedSession?.id === sid ? sessionPaymentAmount : ''}
-                          onChange={e => { const v = e.target.value; if (v === '' || /^\d+$/.test(v)) { setSessionPaymentAmount(v); setSelectedSession(session); } }}
-                          className="flex-1 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm sm:text-base" />
-                        <button onClick={async () => { await handlePaySessionPartial(session); }}
-                          disabled={!canPartialPayment(user) || !sessionPaymentAmount || parseInt(sessionPaymentAmount) <= 0 || (selectedSession?._id !== sid && selectedSession?.id !== sid)}
-                          className="px-4 sm:px-6 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-bold rounded-lg transition-colors text-sm sm:text-base whitespace-nowrap">
-                          {t('billing.sessionPaymentModal.payButton')}
-                        </button>
+                      <div className="space-y-2">
+                        <div className="grid grid-cols-4 gap-1.5">
+                          {PAYMENT_METHODS.map(m => (
+                            <button key={m} type="button" onClick={() => { setSessionPaymentMethod(m); setSelectedSession(session); }}
+                              className={`py-1.5 rounded-lg border-2 text-center text-xs sm:text-sm font-bold transition-all ${
+                                sessionPaymentMethod === m ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300' : 'border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:border-blue-300'
+                              }`}>
+                              {paymentMethodIcon(m)} {paymentMethodLabel(m, t)}
+                            </button>
+                          ))}
+                        </div>
+                        <DrawerSelect value={sessionPaymentDrawer} onChange={setSessionPaymentDrawer} className="w-full" showLabels={true} />
+                        <div className="flex flex-col sm:flex-row gap-2">
+                          <input type="text" inputMode="numeric" placeholder={t('billing.sessionPaymentModal.amountPlaceholder')}
+                            value={selectedSession?._id === sid || selectedSession?.id === sid ? sessionPaymentAmount : ''}
+                            onChange={e => { const v = e.target.value; if (v === '' || /^\d+$/.test(v)) { setSessionPaymentAmount(v); setSelectedSession(session); } }}
+                            className="flex-1 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm sm:text-base" />
+                          <button onClick={async () => { await handlePaySessionPartial(session); }}
+                            disabled={!canPartialPayment(user) || !sessionPaymentAmount || parseInt(sessionPaymentAmount) <= 0 || (selectedSession?._id !== sid && selectedSession?.id !== sid)}
+                            className="px-4 sm:px-6 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-bold rounded-lg transition-colors text-sm sm:text-base whitespace-nowrap">
+                            {t('billing.sessionPaymentModal.payButton')}
+                          </button>
+                        </div>
                       </div>
                     )}
                     {sp?.payments && sp.payments.length > 0 && (
@@ -4434,7 +4622,7 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
                         <div className="space-y-1">
                           {sp.payments.map((payment: any, idx: number) => (
                             <div key={idx} className="flex justify-between items-center text-sm bg-white dark:bg-gray-700 p-2 rounded gap-2">
-                              <span className="text-gray-600 dark:text-gray-400 truncate flex-1">{formatCurrency(payment.amount)} - {payment.method ? t(`billing.paymentMethod${payment.method.charAt(0).toUpperCase() + payment.method.slice(1)}`) : t('billing.paymentMethodCash')}</span>
+                              <span className="text-gray-600 dark:text-gray-400 truncate flex-1">{formatCurrency(payment.amount)} - {paymentMethodLabel(payment.method || 'cash', t)}</span>
                               {canEditPartialPayment(user) && (
                                 <button onClick={() => handleEditSessionPayment(session, payment, idx)} className="text-blue-600 hover:text-blue-800 dark:text-blue-400 font-medium whitespace-nowrap">{t('common.edit')}</button>
                               )}
@@ -4471,7 +4659,7 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
       )}
       {showMoveOrderModal && orderToMove && (
         <ChangeTableModal
-          billLabel={`طلب #${orderToMove.orderNumber}`}
+          billLabel={t('tables.moveOrderLabel', { order: orderToMove.orderNumber })}
           tables={tables}
           excludeTableId={String((orderToMove.table as any)?._id || (orderToMove as any)?.id || (orderToMove as any).table || "")}
           getSectionName={getTableSectionName}
@@ -4571,15 +4759,16 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
               </div>
               <div>
                 <label className="block text-lg font-semibold text-gray-700 dark:text-gray-300 mb-3">{t('billing.editPayment.newMethod')}</label>
-                <div className="grid grid-cols-3 gap-3">
-                  {(['cash', 'card', 'transfer'] as const).map(m => (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  {PAYMENT_METHODS.map(m => (
                     <button key={m} onClick={() => setEditPaymentMethod(m)} disabled={isEditingPayment}
                       className={`p-4 border-2 rounded-xl text-center transition-all ${editPaymentMethod === m ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 shadow-lg scale-105' : 'border-gray-200 dark:border-gray-600 hover:border-gray-300'}`}>
-                      <div className="text-5xl mb-2">{m === 'cash' ? '💵' : m === 'card' ? '💳' : '📱'}</div>
-                      <div className="text-base font-semibold">{t(`billing.paymentMethod${m.charAt(0).toUpperCase() + m.slice(1)}`)}</div>
+                      <div className="text-5xl mb-2">{paymentMethodIcon(m)}</div>
+                      <div className="text-base font-semibold">{paymentMethodLabel(m, t)}</div>
                     </button>
                   ))}
                 </div>
+                <DrawerSelect value={editPaymentDrawer} onChange={setEditPaymentDrawer} className="w-full" showLabels={true} />
               </div>
             </div>
             <div className="flex gap-3 p-6 bg-gray-50 dark:bg-gray-900/50 rounded-b-xl border-t border-gray-200 dark:border-gray-700">
@@ -4621,6 +4810,20 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
                 </div>
                 <p className="text-base text-gray-500 dark:text-gray-400 mt-2 text-center">{t('billing.editPayment.maxQuantity')}: {formatDecimal(itemPaymentToEdit.payment.quantity, i18n.language)}</p>
               </div>
+              <div>
+                <label className="block text-lg font-semibold text-gray-700 dark:text-gray-300 mb-2">{t('billing.editPayment.newMethod')}</label>
+                <div className="grid grid-cols-4 gap-2">
+                  {PAYMENT_METHODS.map(m => (
+                    <button key={m} type="button" onClick={() => setEditItemPaymentMethod(m)} disabled={isEditingItemPayment}
+                      className={`py-2 rounded-xl border-2 text-center text-sm font-bold transition-all ${editItemPaymentMethod === m ? 'border-green-500 bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-300' : 'border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:border-green-300'}`}>
+                      {paymentMethodIcon(m)} {paymentMethodLabel(m, t)}
+                    </button>
+                  ))}
+                </div>
+                <div className="mt-2">
+                  <DrawerSelect value={editItemPaymentDrawer} onChange={setEditItemPaymentDrawer} className="w-full" showLabels={true} />
+                </div>
+              </div>
             </div>
             <div className="flex gap-3 p-6 bg-gray-50 dark:bg-gray-900/50 rounded-b-xl border-t border-gray-200 dark:border-gray-700">
               <button onClick={() => { setShowEditItemPaymentModal(false); setItemPaymentToEdit(null); }} disabled={isEditingItemPayment}
@@ -4647,36 +4850,47 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
             toggleSection={toggleSection} toggleCategory={toggleCategory} getCategoriesForSection={getCategoriesForSection}
             getItemsForCategory={getItemsForCategory} addItemToOrder={addItemToOrder} updateItemQuantity={updateItemQuantity}
             updateItemNotes={updateItemNotes} removeItemFromOrder={removeItemFromOrder} calculateTotal={calculateOrderTotal}
-          onSave={() => handleSaveOrder('pending', false)} onSaveAndSend={() => handleSaveOrder('pending', false)}
+          onSaveAndSend={() => handleSaveOrder('pending', false)}
           onSaveAndPrint={() => handleSaveOrder('pending', true)}
-          onClose={() => { setShowOrderModal(false); setCurrentOrderItems([]); setOrderNotes(''); setOrderDiscount(0); }} loading={savingOrder} isEdit={false}
+          onClose={() => { setShowOrderModal(false); setCurrentOrderItems([]); setOrderNotes(''); setOrderDiscount(0); setOrderDiscountType('percent'); }} loading={savingOrder} isEdit={false}
           canEditPrice={canEditItemPrice(user)} onEditPrice={(idx, item) => { setPriceEditItem({ index: idx, item }); setShowPriceEditModal(true); }}
-          estimatedDiscount={estDiscount} manualDiscount={orderDiscount} setManualDiscount={setOrderDiscount} />
+          estimatedDiscount={estDiscount} manualDiscount={orderDiscount} setManualDiscount={setOrderDiscount} manualDiscountType={orderDiscountType} setManualDiscountType={setOrderDiscountType} canApplyDiscount={canApplyManualDiscount(user)} />
         );
       })()}
-      {showEditOrderModal && selectedOrder && selectedTable && (
+      {showEditOrderModal && selectedOrder && selectedTable && (() => {
+        const orderTotal = calculateOrderTotal();
+        const fType = (selectedOrder as any)?.fulfillmentType || 'dine_in';
+        const secKey = fType === 'takeaway' ? 'takeaway' : fType === 'delivery' ? 'delivery' : 'tables';
+        const savedPct = Number((selectedOrder as any)?.fixedDiscount?.percentage) || 0;
+        const savedCap = Number((selectedOrder as any)?.fixedDiscount?.maxCap) || 0;
+        const orgPct = orgFixedDiscount?.enabled ? (orgFixedDiscount?.sections?.[secKey] || orgFixedDiscount?.percentage || 0) : 0;
+        const fdPct = savedPct > 0 ? savedPct : orgPct;
+        const fdCap = savedCap > 0 ? savedCap : (orgFixedDiscount?.maxCap || Infinity);
+        const estDiscount = fdPct > 0 ? Math.min(Math.round((orderTotal * fdPct) / 100), fdCap) : 0;
+        return (
         <OrderModal table={selectedTable} orderItems={currentOrderItems} setOrderItems={setCurrentOrderItems}
           orderNotes={orderNotes} setOrderNotes={setOrderNotes} menuSections={menuSections} menuCategories={menuCategories}
           menuItems={menuItems} expandedSections={expandedSections} expandedCategories={expandedCategories}
           toggleSection={toggleSection} toggleCategory={toggleCategory} getCategoriesForSection={getCategoriesForSection}
           getItemsForCategory={getItemsForCategory} addItemToOrder={addItemToOrder} updateItemQuantity={updateItemQuantity}
           updateItemNotes={updateItemNotes} removeItemFromOrder={removeItemFromOrder} calculateTotal={calculateOrderTotal}
-          onSave={() => handleUpdateOrder(false, 'pending')} onSaveAndSend={() => handleUpdateOrder(false, 'pending')}
+          onSaveAndSend={() => handleUpdateOrder(false, 'pending')}
           onSaveAndPrint={() => handleUpdateOrder(true, 'pending')}
-          onClose={() => { setShowEditOrderModal(false); setSelectedOrder(null); setCurrentOrderItems([]); setOrderNotes(''); setOrderDiscount(0); }} loading={savingOrder} isEdit={true}
+          onClose={() => { setShowEditOrderModal(false); setSelectedOrder(null); setCurrentOrderItems([]); setOrderNotes(''); setOrderDiscount(0); setOrderDiscountType('percent'); }} loading={savingOrder} isEdit={true}
           canEditPrice={canEditItemPrice(user)} onEditPrice={(idx, item) => { setPriceEditItem({ index: idx, item }); setShowPriceEditModal(true); }}
-          estimatedDiscount={selectedOrder?.fixedDiscount?.amount || 0} manualDiscount={orderDiscount} setManualDiscount={setOrderDiscount} />
-      )}
+          estimatedDiscount={estDiscount} manualDiscount={orderDiscount} setManualDiscount={setOrderDiscount} manualDiscountType={orderDiscountType} setManualDiscountType={setOrderDiscountType} canApplyDiscount={canApplyManualDiscount(user)} />
+        );
+      })()}
 
       {/* ── Table Management Modal ── */}
       {showManagementModal && (
         <ManagementModal tableSections={tableSections} tables={tables} onClose={() => setShowManagementModal(false)}
           onAddSection={() => { setEditingSection(null); setSectionFormData({ name: '', description: '', sortOrder: 0 }); setShowSectionModal(true); }}
           onEditSection={section => { setEditingSection(section); setSectionFormData({ name: section.name, description: section.description || '', sortOrder: section.sortOrder }); setShowSectionModal(true); }}
-          onDeleteSection={async id => { showConfirm('حذف القسم', 'هل أنت متأكد من حذف هذا القسم؟ سيتم حذف جميع الطاولات التابعة له.', async () => { await deleteTableSection(id); setShowConfirmModal(false); }); }}
+          onDeleteSection={async id => { showConfirm(t('tables.deleteSectionTitle'), t('tables.deleteSectionMessage'), async () => { await deleteTableSection(id); setShowConfirmModal(false); }); }}
           onAddTable={sectionId => { setEditingTable(null); setTableFormData({ number: '', section: sectionId }); setShowTableModal(true); }}
           onEditTable={table => { setEditingTable(table); const sid = typeof table.section === 'string' ? table.section : (table.section as TableSection)?.id || (table.section as TableSection)?._id || ''; setTableFormData({ number: table.number.toString(), section: sid }); setShowTableModal(true); }}
-          onDeleteTable={async id => { showConfirm('حذف الطاولة', 'هل أنت متأكد من حذف هذه الطاولة؟', async () => { await deleteTable(id); setShowConfirmModal(false); }); }}
+          onDeleteTable={async id => { showConfirm(t('tables.deleteTableTitle'), t('tables.deleteTableMessage'), async () => { await deleteTable(id); setShowConfirmModal(false); }); }}
           getTablesBySection={sid => getTablesBySection[sid] || []} />
       )}
       {showSectionModal && (
@@ -4686,7 +4900,7 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
       )}
       {showTableModal && (
         <TableModalComp formData={tableFormData} setFormData={setTableFormData} tableSections={tableSections} editingTable={editingTable}
-          onSave={async () => { if (!tableFormData.number || tableFormData.number.trim() === '') { showNotification(t('cafe.enterTableNumber'), 'error'); return; } if (!tableFormData.section) { showNotification(t('cafe.notifications.selectSection'), 'error'); return; } const numberStr = tableFormData.number.trim(); const editingId = String((editingTable as any)?._id || (editingTable as any)?.id || ''); const dup = tables.find(tb => { const tbSec = typeof tb.section === 'string' ? tb.section : (tb.section as any)?.id || (tb.section as any)?._id; const tbId = String((tb as any)._id || (tb as any).id); return tbSec === tableFormData.section && String(tb.number).toString() === numberStr && tbId !== editingId; }); if (dup) { showNotification(`الطاولة "${numberStr}" موجودة بالفعل في هذا القسم`, 'error'); return; } editingTable ? await updateTable(editingTable.id, { number: tableFormData.number, section: tableFormData.section }) : await createTable({ number: tableFormData.number, section: tableFormData.section }); setShowTableModal(false); setEditingTable(null); setTableFormData({ number: '', section: '' }); }}
+          onSave={async () => { if (!tableFormData.number || tableFormData.number.trim() === '') { showNotification(t('cafe.enterTableNumber'), 'error'); return; } if (!tableFormData.section) { showNotification(t('cafe.notifications.selectSection'), 'error'); return; } const numberStr = tableFormData.number.trim(); const editingId = String((editingTable as any)?._id || (editingTable as any)?.id || ''); const dup = tables.find(tb => { const tbSec = typeof tb.section === 'string' ? tb.section : (tb.section as any)?.id || (tb.section as any)?._id; const tbId = String((tb as any)._id || (tb as any).id); return tbSec === tableFormData.section && String(tb.number).toString() === numberStr && tbId !== editingId; }); if (dup) { showNotification(t('tables.tableExists', { number: numberStr }), 'error'); return; } editingTable ? await updateTable(editingTable.id, { number: tableFormData.number, section: tableFormData.section }) : await createTable({ number: tableFormData.number, section: tableFormData.section }); setShowTableModal(false); setEditingTable(null); setTableFormData({ number: '', section: '' }); }}
           onClose={() => { setShowTableModal(false); setEditingTable(null); setTableFormData({ number: '', section: '' }); }} />
       )}
 
@@ -4826,7 +5040,7 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
                 printBill(updatedBill, user?.organizationName, i18n.language, t, getTableSectionName((updatedBill as any).table), 'payment').catch(() => {});
               }
           }
-          showNotification('تم تحديث أصناف الفاتورة بنجاح', 'success');
+          showNotification(t('tables.billItemsUpdated'), 'success');
         }}
       />
 
@@ -4836,25 +5050,36 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
           <div className="fixed inset-0 z-[320] flex items-center justify-center bg-black/70 backdrop-blur-sm p-3 sm:p-4" onClick={() => setShowPayChoiceModal(false)}>
             <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md border border-gray-200 dark:border-gray-700 overflow-hidden" onClick={e => e.stopPropagation()}>
               <div className="bg-gradient-to-r from-emerald-500 to-blue-600 px-4 py-3 sm:px-5 sm:py-4 text-white">
-                <h3 className="text-lg sm:text-xl font-bold flex items-center gap-2"><DollarSign className="h-5 w-5" />تأكيد الدفع</h3>
-                <p className="text-sm opacity-90 mt-1">فاتورة #{payChoiceBill.billNumber || (payChoiceBill as any)._id?.toString().slice(-6)} - المتبقي {formatCurrency(Number(payChoiceBill.remaining) || 0)}</p>
+                <h3 className="text-lg sm:text-xl font-bold flex items-center gap-2"><DollarSign className="h-5 w-5" />{t('tables.payChoiceTitle')}</h3>
+                <p className="text-sm opacity-90 mt-1">{t('tables.payChoiceSubtitle', { bill: payChoiceBill.billNumber || (payChoiceBill as any)._id?.toString().slice(-6), remaining: formatCurrency(Number(payChoiceBill.remaining) || 0) })}</p>
               </div>
               <div className="p-4 sm:p-5 space-y-2.5 sm:space-y-3 bg-gray-50 dark:bg-gray-900">
-                <p className="text-sm sm:text-base text-gray-700 dark:text-gray-300 text-center">اختر طريقة الدفع</p>
+                <p className="text-sm sm:text-base text-gray-700 dark:text-gray-300 text-center">{t('tables.payChoiceHint')}</p>
+                <div className="grid grid-cols-4 gap-2">
+                  {PAYMENT_METHODS.map(m => (
+                    <button key={m} type="button" onClick={() => setPaymentMethod(m)}
+                      className={`py-2 rounded-xl border-2 text-center text-sm font-bold transition-all ${
+                        paymentMethod === m ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300' : 'border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:border-emerald-300 bg-white dark:bg-gray-800'
+                      }`}>
+                      {paymentMethodIcon(m)} {paymentMethodLabel(m, t)}
+                    </button>
+                  ))}
+                </div>
+                <DrawerSelect value={paymentDrawer} onChange={setPaymentDrawer} className="w-full" showLabels={true} />
                 <button
                   onClick={() => { const b = payChoiceBill; setShowPayChoiceModal(false); setPayChoiceBill(null); if (b) handleDirectPayFull(b); }}
                   className="w-full py-2.5 sm:py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl flex items-center justify-center gap-2 shadow">
-                  <CheckCircle className="h-5 w-5" />دفع الفاتورة بالكامل
+                  <CheckCircle className="h-5 w-5" />{t('tables.payChoicePayFull')}
                 </button>
                 <button
                   onClick={() => { const b = payChoiceBill; setShowPayChoiceModal(false); setPayChoiceBill(null); if (b) handlePaymentClick(b); }}
                   className="w-full py-2.5 sm:py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl flex items-center justify-center gap-2 shadow">
-                  <Receipt className="h-5 w-5" />الذهاب لإدارة الدفع
+                  <Receipt className="h-5 w-5" />{t('tables.payChoiceManage')}
                 </button>
-                <p className="text-xs text-gray-500 text-center">إدارة الدفع تتيح الدفع الجزئي والتقسيم والخصم</p>
+                <p className="text-xs text-gray-500 text-center">{t('tables.payChoiceManageHint')}</p>
               </div>
               <div className="p-2.5 sm:p-3 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 flex justify-center">
-                <button onClick={() => { setShowPayChoiceModal(false); setPayChoiceBill(null); }} className="px-4 min-h-9 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg text-sm">إلغاء</button>
+                <button onClick={() => { setShowPayChoiceModal(false); setPayChoiceBill(null); }} className="px-4 min-h-9 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg text-sm">{t('common.cancel')}</button>
               </div>
             </div>
           </div>
@@ -4868,6 +5093,15 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
         onSave={handlePriceEditSave}
         formatCurrency={formatCurrency}
       />
+
+      {qrTable && (
+        <TableQrModal
+          tableNumber={qrTable.number}
+          tableId={String((qrTable as any)._id || (qrTable as any).id)}
+          orgId={orgIdForQr}
+          onClose={() => setQrTable(null)}
+        />
+      )}
 
     </div>
   );

@@ -7,6 +7,7 @@ import Bonus from '../models/Bonus.js';
 import Settings from '../models/Settings.js';
 import { createTombstone } from '../utils/tombstoneHelper.js';
 import Logger from "../middleware/logger.js";
+import { dailyRateOf, countWorkedDays, advanceInstallment } from '../utils/payrollMath.js';
 
 // Get employee salary summary (cumulative)
 export const getEmployeeSalarySummary = async (req, res) => {
@@ -29,15 +30,17 @@ export const getEmployeeSalarySummary = async (req, res) => {
     
     const hireDate = employee.personalInfo?.hireDate || employee.createdAt || new Date('2020-01-01');
     
-    // تحديد نطاق الشهر الحالي
+    // تحديد نطاق الشهر الحالي (نهاية اليوم الأخير — وإلا سقطت سجلات آخر يوم)
     const currentMonthStart = new Date(month + '-01');
     const currentMonthEnd = new Date(month + '-01');
     currentMonthEnd.setMonth(currentMonthEnd.getMonth() + 1);
     currentMonthEnd.setDate(0);
-    
+    currentMonthEnd.setHours(23, 59, 59, 999);
+
     // تحديد نطاق الأشهر السابقة - من تاريخ التوظيف
     const previousMonthEnd = new Date(currentMonthStart);
     previousMonthEnd.setDate(0); // آخر يوم من الشهر السابق
+    previousMonthEnd.setHours(23, 59, 59, 999);
     
   
     // ========== الشهر الحالي ==========
@@ -145,34 +148,31 @@ export const getEmployeeSalarySummary = async (req, res) => {
       };
     });
     
-    // حساب راتب الشهر الحالي بناءً على نوع التوظيف
+    // حساب راتب الشهر الحالي — القاعدة المعتمدة الموحدة (أساسي كامل − غياب ÷ 30)
     let currentMonthSalary = 0;
-    
+
     if (employee.employment.type === 'monthly') {
-      // للموظف الشهري: نحسب الراتب بناءً على أيام الحضور
-      const daysInMonth = new Date(currentMonthStart.getFullYear(), currentMonthStart.getMonth() + 1, 0).getDate();
-      const daysPresent = formattedAttendance.filter(record => 
-        record.status === 'present' || record.status === 'late'
-      ).length;
-      
-      const monthlySalary = employee.compensation?.monthly || 0;
-      currentMonthSalary = (monthlySalary / daysInMonth) * daysPresent;
-      
+      const half = formattedAttendance.filter(record => record.status === 'half_day').length;
+      const absent = formattedAttendance.filter(record => record.status === 'absent' && !record.excused).length;
+      const dailyRate = dailyRateOf(employee.compensation, 'monthly');
+      currentMonthSalary = (employee.compensation?.monthly || 0) - dailyRate * (absent + half * 0.5);
+
     } else {
-      // للموظف اليومي أو بالساعة: نستخدم totalPay من السجلات
-      currentMonthSalary = formattedAttendance.reduce((sum, record) => 
+      // للموظف اليومي أو بالساعة: نستخدم totalPay من السجلات (محسوبة بالقاعدة الموحدة)
+      currentMonthSalary = formattedAttendance.reduce((sum, record) =>
         sum + (record.totalPay || 0), 0
       );
     }
-    
+
+    // السلف: أقساط المصروفة فقط (القاعدة المعتمدة)
     const currentMonthAdvances = await Advance.find({
       employeeId,
-      status: { $in: ['approved', 'paid'] },
-      requestDate: { $gte: currentMonthStart, $lte: currentMonthEnd },
+      status: 'paid',
+      'repayment.remainingAmount': { $gt: 0 },
       organizationId: req.user.organization
     });
-    
-    const currentMonthAdvancesTotal = currentMonthAdvances.reduce((sum, adv) => sum + adv.amount, 0);
+
+    const currentMonthAdvancesTotal = currentMonthAdvances.reduce((sum, adv) => sum + advanceInstallment(adv), 0);
     
     const currentMonthDeductions = await Deduction.find({
       employeeId,
@@ -363,11 +363,12 @@ export const makePayment = async (req, res) => {
     }
     
     
-    // التحقق من الرصيد المتاح - حساب للشهر الحالي فقط
+    // التحقق من الرصيد المتاح - حساب للشهر الحالي فقط (لنهاية اليوم الأخير)
     const monthStart = new Date(month + '-01');
     const monthEnd = new Date(month + '-01');
     monthEnd.setMonth(monthEnd.getMonth() + 1);
     monthEnd.setDate(0);
+    monthEnd.setHours(23, 59, 59, 999);
     
     // حساب مرتبات الشهر الحالي فقط
     const attendanceRecords = await Attendance.find({
@@ -380,15 +381,15 @@ export const makePayment = async (req, res) => {
       sum + (record.details?.totalPay || 0), 0
     );
         
-    // حساب سلف الشهر الحالي فقط
+    // حساب سلف الشهر الحالي فقط — القاعدة المعتمدة: أقساط المصروفة فقط
     const advances = await Advance.find({
       employeeId,
-      status: { $in: ['approved', 'paid'] },
-      requestDate: { $gte: monthStart, $lte: monthEnd },
+      status: 'paid',
+      'repayment.remainingAmount': { $gt: 0 },
       organizationId: req.user.organization
     });
-    
-    const currentMonthAdvances = advances.reduce((sum, adv) => sum + adv.amount, 0);
+
+    const currentMonthAdvances = advances.reduce((sum, adv) => sum + advanceInstallment(adv), 0);
     
     // حساب خصومات الشهر الحالي فقط
     const deductions = await Deduction.find({

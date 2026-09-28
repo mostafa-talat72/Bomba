@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Utensils, Search, Star, Clock, ShoppingCart, Plus, Minus, X, CheckCircle, Sun, Moon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useApp } from '../context/AppContext';
 import { useTheme } from '../context/ThemeContext';
 import LanguageSwitcher from '../components/LanguageSwitcher';
 import { MenuItem } from '../services/api';
+import { api } from '../services/api';
 import { formatCurrency, formatDecimal } from '../utils/formatters';
 import '../styles/menu-animations.css';
 
@@ -12,7 +14,17 @@ interface CartItem {
 	menuItem: MenuItem;
 	quantity: number;
 	notes: string;
+	variant?: string | null;
 }
+
+const cartKey = (menuId: string, variant?: string | null) => `${menuId}::${variant || ''}`;
+const priceFor = (item: MenuItem, variant?: string | null): number => {
+	if (variant && Array.isArray((item as any).variants)) {
+		const m = (item as any).variants.find((v: any) => v.size === variant);
+		if (m) return Number(m.price) || 0;
+	}
+	return Number(item.price) || 0;
+};
 
 const CustomerMenu: React.FC = () => {
 	const { t, i18n } = useTranslation();
@@ -34,108 +46,240 @@ const CustomerMenu: React.FC = () => {
 	const [cart, setCart] = useState<CartItem[]>([]);
 	const [showCart, setShowCart] = useState(false);
 	const [showOrderSuccess, setShowOrderSuccess] = useState(false);
+	const [lastOrderNumber, setLastOrderNumber] = useState('');
 	const [orderNotes, setOrderNotes] = useState('');
+	const [customerName, setCustomerName] = useState('');
+	const [orderError, setOrderError] = useState('');
+	const [submitting, setSubmitting] = useState(false);
+	// تتبع حالة طلب العميل بعد الإرسال (للطلبات المعلقة)
+	const [requestOrderId, setRequestOrderId] = useState('');
+	const [requestStatus, setRequestStatus] = useState<'idle' | 'pending' | 'accepted' | 'rejected'>('idle');
 	const [activeFilters, setActiveFilters] = useState({
 		availableOnly: true,
 		popularOnly: false
 	});
 
+	// Public QR mode: ?org=<id>&table=<id> — works without login
+	const [searchParams] = useSearchParams();
+	const publicOrgId = (searchParams.get('org') || '').trim();
+	const publicTableId = (searchParams.get('table') || '').trim();
+	const isPublicMode = publicOrgId.length > 0;
+	const [pubItems, setPubItems] = useState<MenuItem[]>([]);
+	const [pubSections, setPubSections] = useState<any[]>([]);
+	const [pubCategories, setPubCategories] = useState<any[]>([]);
+	const [pubLoadError, setPubLoadError] = useState('');
+	const [chosenVariant, setChosenVariant] = useState<Record<string, string>>({});
+
+	const effItems = isPublicMode ? pubItems : (menuItems || []);
+	const effSections = isPublicMode ? pubSections : (menuSections || []);
+	const effCategories = isPublicMode ? pubCategories : (menuCategories || []);
+
 	useEffect(() => {
-		const loadMenu = async () => {
+		if (!isPublicMode) {
+			const loadMenu = async () => {
+				setLoading(true);
+				try {
+					await Promise.all([
+						fetchMenuItems(),
+						fetchMenuSections(),
+						fetchMenuCategories()
+					]);
+				} catch (error) {
+					console.error('Error loading menu:', error);
+				} finally {
+					setLoading(false);
+				}
+			};
+			loadMenu();
+			return;
+		}
+		let cancelled = false;
+		(async () => {
 			setLoading(true);
+			setPubLoadError('');
 			try {
-				await Promise.all([
-					fetchMenuItems(),
-					fetchMenuSections(),
-					fetchMenuCategories()
-				]);
+				const res: any = await (api as any).publicRequest(`/menu/public/full?organization=${encodeURIComponent(publicOrgId)}`);
+				if (cancelled) return;
+				if (res?.success && res?.data) {
+					setPubItems(res.data.items || []);
+					setPubSections(res.data.sections || []);
+					setPubCategories(res.data.categories || []);
+				} else if (!cancelled) {
+					setPubLoadError(res?.message || t('menu.public.loadError'));
+				}
 			} catch (error) {
-				console.error('Error loading menu:', error);
+				if (!cancelled) {
+					console.error('Error loading public menu:', error);
+					setPubLoadError(t('menu.public.loadError'));
+				}
 			} finally {
-				setLoading(false);
+				if (!cancelled) setLoading(false);
 			}
-		};
-		loadMenu();
-	}, []);
+		})();
+		return () => { cancelled = true; };
+	}, [isPublicMode, publicOrgId]);
 
 	const filteredItems = useMemo(() => {
-		return menuItems.filter(item => {
+		return effItems.filter(item => {
+			if (!item) return false;
 			if (activeFilters.availableOnly && !item.isAvailable) return false;
 			if (activeFilters.popularOnly && !item.isPopular) return false;
 			if (searchTerm) {
-				const matches = item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-					(item.description?.toLowerCase()?.includes(searchTerm.toLowerCase()) ?? false);
+				const q = searchTerm.toLowerCase();
+				const matches = String(item.name || '').toLowerCase().includes(q) ||
+					(item.description?.toLowerCase()?.includes(q) ?? false);
 				if (!matches) return false;
 			}
 			return true;
 		});
-	}, [menuItems, searchTerm, activeFilters]);
+	}, [effItems, searchTerm, activeFilters]);
 
 	const getCategoriesForSection = (sectionId: string) => {
-		return menuCategories.filter(cat => {
+		return effCategories.filter(cat => {
 			const section = typeof cat.section === 'string' ? cat.section : cat.section?.id || cat.section?._id;
 			return section === sectionId;
-		}).sort((a, b) => a.sortOrder - b.sortOrder);
+		}).sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
 	};
 
 	const getItemsForCategory = (categoryId: string) => {
 		return filteredItems.filter(item => {
 			const category = typeof item.category === 'string' ? item.category : item.category?.id || item.category?._id;
 			return category === categoryId;
-		}).sort((a, b) => a.name.localeCompare(b.name));
+		}).sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
 	};
 
-	const addToCart = (item: MenuItem) => {
+	const flashError = (msg: string) => {
+		setOrderError(msg);
+		setTimeout(() => setOrderError((cur) => (cur === msg ? '' : cur)), 3000);
+	};
+
+	const addToCart = (item: MenuItem, variant?: string | null) => {
+		if (!item) return;
+		if (item.isAvailable === false) { flashError(t('menu.itemUnavailable')); return; }
+		const v = variant ?? null;
+		const key = cartKey(String((item as any).id || (item as any)._id), v);
 		setCart(prev => {
-			const existing = prev.find(c => c.menuItem.id === item.id);
+			const existing = prev.find(c => cartKey(String((c.menuItem as any).id || (c.menuItem as any)._id), c.variant) === key);
 			if (existing) {
-				return prev.map(c => c.menuItem.id === item.id ? { ...c, quantity: c.quantity + 1 } : c);
+				return prev.map(c => cartKey(String((c.menuItem as any).id || (c.menuItem as any)._id), c.variant) === key ? { ...c, quantity: c.quantity + 1 } : c);
 			}
-			return [...prev, { menuItem: item, quantity: 1, notes: '' }];
+			return [...prev, { menuItem: item, quantity: 1, notes: '', variant: v }];
 		});
 	};
 
-	const removeFromCart = (itemId: string) => {
+	const removeFromCart = (itemId: string, variant?: string | null) => {
+		const key = cartKey(String(itemId), variant ?? null);
 		setCart(prev => {
-			const existing = prev.find(c => c.menuItem.id === itemId);
+			const existing = prev.find(c => cartKey(String((c.menuItem as any).id || (c.menuItem as any)._id), c.variant) === key);
 			if (existing && existing.quantity > 1) {
-				return prev.map(c => c.menuItem.id === itemId ? { ...c, quantity: c.quantity - 1 } : c);
+				return prev.map(c => cartKey(String((c.menuItem as any).id || (c.menuItem as any)._id), c.variant) === key ? { ...c, quantity: c.quantity - 1 } : c);
 			}
-			return prev.filter(c => c.menuItem.id !== itemId);
+			return prev.filter(c => cartKey(String((c.menuItem as any).id || (c.menuItem as any)._id), c.variant) !== key);
 		});
 	};
 
-	const getCartQuantity = (itemId: string) => {
-		return cart.find(c => c.menuItem.id === itemId)?.quantity || 0;
+	const getCartQuantity = (itemId: string, variant?: string | null) => {
+		const key = cartKey(String(itemId), variant ?? null);
+		return cart.find(c => cartKey(String((c.menuItem as any).id || (c.menuItem as any)._id), c.variant) === key)?.quantity || 0;
 	};
 
-	const cartTotal = cart.reduce((acc, item) => acc + (item.menuItem.price * item.quantity), 0);
+	const cartTotal = cart.reduce((acc, item) => acc + (priceFor(item.menuItem, item.variant) * item.quantity), 0);
 	const cartCount = cart.reduce((acc, item) => acc + item.quantity, 0);
 
 	const handleOrder = async () => {
-		if (cart.length === 0) return;
-
+		if (cart.length === 0 || submitting) return;
+		const name = customerName.trim();
+		if (name.length < 2) { flashError(t('menu.customerNameRequired')); return; }
+		setSubmitting(true);
+		setOrderError('');
 		try {
+			if (isPublicMode) {
+				if (!publicTableId) { flashError(t('menu.public.tableRequired')); return; }
+				const res: any = await (api as any).publicRequest('/orders/public', {
+					method: 'POST',
+					body: JSON.stringify({
+						organization: publicOrgId,
+						table: publicTableId,
+						customerName: name,
+						notes: orderNotes,
+						items: cart.map(c => ({
+							menuItem: (c.menuItem as any).id || (c.menuItem as any)._id,
+							quantity: c.quantity,
+							notes: c.notes,
+							variant: c.variant || undefined,
+						})),
+					}),
+				});
+				if (res?.success && res?.data) {
+					setLastOrderNumber(res.data.orderNumber || '');
+					setRequestOrderId(String(res.data._id || res.data.id || ''));
+					setRequestStatus('pending');
+					setShowOrderSuccess(true);
+					setCart([]);
+					setOrderNotes('');
+					setTimeout(() => setShowOrderSuccess(false), 4000);
+				} else {
+					flashError(res?.message || t('menu.orderFailed'));
+				}
+				return;
+			}
 			const orderData = {
+				customerName: name,
 				items: cart.map(c => ({
-					menuItem: c.menuItem.id,
+					menuItem: (c.menuItem as any).id || (c.menuItem as any)._id,
 					name: c.menuItem.name,
-					price: c.menuItem.price,
+					price: priceFor(c.menuItem, c.variant),
 					quantity: c.quantity,
-					notes: c.notes
+					notes: c.notes,
+					variant: c.variant || undefined,
 				})),
 				notes: orderNotes
 			};
 
-			await createOrder(orderData);
-			setShowOrderSuccess(true);
-			setCart([]);
-			setOrderNotes('');
-			setTimeout(() => setShowOrderSuccess(false), 3000);
+			const created: any = await createOrder(orderData);
+			if (created) {
+				setLastOrderNumber(created.orderNumber || '');
+				setShowOrderSuccess(true);
+				setCart([]);
+				setOrderNotes('');
+				setTimeout(() => setShowOrderSuccess(false), 4000);
+			} else {
+				flashError(t('menu.orderFailed'));
+			}
 		} catch (error) {
 			console.error('Error placing order:', error);
+			flashError(t('menu.orderFailed'));
+		} finally {
+			setSubmitting(false);
 		}
 	};
+
+	// متابعة حالة الطلب المعلق كل 10 ثوانٍ (مقبول / مرفوض)
+	useEffect(() => {
+		if (!isPublicMode || requestStatus !== 'pending' || !requestOrderId) return;
+		let cancelled = false;
+		const poll = async () => {
+			try {
+				const res: any = await (api as any).publicRequest(
+					`/orders/public/${requestOrderId}?organization=${encodeURIComponent(publicOrgId)}`
+				);
+				if (cancelled) return;
+				if (res?.success && res?.data) {
+					if (res.data.status && res.data.status !== 'awaiting_approval') {
+						setRequestStatus('accepted');
+					}
+				} else if (res && res.success === false) {
+					// 404 = اتحذف (رفض أو إلغاء تلقائي)
+					setRequestStatus('rejected');
+				}
+			} catch {
+				// تجاهل أخطاء الشبكة المؤقتة — المحاولة القادمة بعد 10 ثوانٍ
+			}
+		};
+		poll();
+		const id = setInterval(poll, 10000);
+		return () => { cancelled = true; clearInterval(id); };
+	}, [isPublicMode, requestStatus, requestOrderId, publicOrgId]);
 
 	if (loading) {
 		return (
@@ -143,6 +287,17 @@ const CustomerMenu: React.FC = () => {
 				<div className="text-center">
 					<div className="animate-spin rounded-full h-16 w-16 border-4 border-orange-200 border-t-orange-600 mx-auto"></div>
 					<p className="mt-4 text-gray-600 dark:text-gray-300 font-medium">{t('menu.loading')}</p>
+				</div>
+			</div>
+		);
+	}
+
+	if (isPublicMode && pubLoadError && effItems.length === 0) {
+		return (
+			<div className="min-h-screen bg-gradient-to-br from-orange-50 to-white dark:from-gray-900 dark:to-gray-800 flex items-center justify-center p-4">
+				<div className="text-center bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-8 max-w-sm">
+					<p className="text-red-600 dark:text-red-400 font-bold mb-2">{pubLoadError}</p>
+					<p className="text-sm text-gray-500 dark:text-gray-400">{t('menu.public.retryHint')}</p>
 				</div>
 			</div>
 		);
@@ -190,6 +345,25 @@ const CustomerMenu: React.FC = () => {
 		</div>
 
 		<div className="max-w-7xl mx-auto px-4 py-6">
+				{/* حالة الطلب المعلق (وضع عام فقط) */}
+				{isPublicMode && requestStatus === 'pending' && (
+					<div className="mb-4 p-3 rounded-2xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 text-amber-800 dark:text-amber-300 text-sm font-bold flex items-center gap-2">
+						<span className="animate-pulse">⏳</span>
+						<span>{t('menu.request.pending')}</span>
+					</div>
+				)}
+				{isPublicMode && requestStatus === 'accepted' && (
+					<div className="mb-4 p-3 rounded-2xl bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-700 text-green-800 dark:text-green-300 text-sm font-bold flex items-center gap-2">
+						<span>✅</span>
+						<span>{t('menu.request.accepted')}</span>
+					</div>
+				)}
+				{isPublicMode && requestStatus === 'rejected' && (
+					<div className="mb-4 p-3 rounded-2xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 text-red-800 dark:text-red-300 text-sm font-bold">
+						<span>❌ {t('menu.request.rejected')}</span>
+						<button onClick={() => setRequestStatus('idle')} className="block mt-1 underline text-xs">{t('menu.request.orderAgain')}</button>
+					</div>
+				)}
 				{/* Search + Filters */}
 				<div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700 p-4 mb-6">
 					<div className="flex items-center gap-4">
@@ -241,7 +415,7 @@ const CustomerMenu: React.FC = () => {
 					>
 						{t('menu.all')}
 					</button>
-					{menuSections.sort((a, b) => a.sortOrder - b.sortOrder).map(section => (
+					{[...effSections].sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0)).map(section => (
 						<button
 							key={section.id}
 							onClick={() => { setSelectedSection(section.id); setSelectedCategory(null); }}
@@ -293,11 +467,18 @@ const CustomerMenu: React.FC = () => {
 						<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
 							{(selectedCategory ? getItemsForCategory(selectedCategory) : filteredItems.filter(item => {
 								const categoryId = typeof item.category === 'string' ? item.category : item.category?.id || item.category?._id;
-								const category = menuCategories.find(c => c.id === categoryId);
+								const category = effCategories.find(c => c.id === categoryId);
 								const sectionId = category ? (typeof category.section === 'string' ? category.section : category.section?.id || category.section?._id) : null;
 								return sectionId === selectedSection;
-							})).map(item => (
-								<div key={item.id} className="bg-white dark:bg-gray-800 rounded-xl shadow-md border border-gray-200 dark:border-gray-700 p-4 hover:shadow-lg transition-all duration-300">
+							})).map(item => {
+								const itemId = String((item as any).id || (item as any)._id);
+								const variants = Array.isArray((item as any).variants) ? (item as any).variants : [];
+								const selVariant = chosenVariant[itemId] ?? (variants[0]?.size || null);
+								const showPrice = priceFor(item, selVariant);
+								const qty = getCartQuantity(itemId, selVariant);
+								const unavailable = item.isAvailable === false;
+								return (
+								<div key={itemId + '::' + (selVariant || '')} className="bg-white dark:bg-gray-800 rounded-xl shadow-md border border-gray-200 dark:border-gray-700 p-4 hover:shadow-lg transition-all duration-300">
 									<div className="flex items-start justify-between mb-3">
 										<div className="flex-1 min-w-0">
 											<h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 truncate">{item.name}</h3>
@@ -309,18 +490,32 @@ const CustomerMenu: React.FC = () => {
 									</div>
 									<div className="flex items-center justify-between mb-3">
 										<span className="text-lg font-bold text-green-600 dark:text-green-400">
-											{formatCurrency(item.price, i18n.language)}
+											{formatCurrency(showPrice, i18n.language)}
 										</span>
 										<div className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
 											<Clock className="h-3 w-3" />
 											<span>{formatDecimal(item.preparationTime, i18n.language)} {t('menu.minutes')}</span>
 										</div>
 									</div>
+									{variants.length > 1 && (
+										<select
+											value={selVariant || ''}
+											onChange={(e) => setChosenVariant((p) => ({ ...p, [itemId]: e.target.value }))}
+											className="w-full mb-2 px-2 py-1.5 text-sm border border-gray-200 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-gray-100 outline-none"
+											aria-label={t('menu.variantLabel')}
+										>
+											{variants.map((v: any) => (
+												<option key={v.size} value={v.size}>{v.size} — {formatCurrency(v.price, i18n.language)}</option>
+											))}
+										</select>
+									)}
 									<div className="flex items-center justify-end">
-										{getCartQuantity(item.id) === 0 ? (
+										{qty === 0 ? (
 											<button
-												onClick={() => addToCart(item)}
-												className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-sm font-medium transition-all duration-200 flex items-center gap-1"
+												onClick={() => addToCart(item, selVariant)}
+												disabled={unavailable}
+												title={unavailable ? t('menu.itemUnavailable') : undefined}
+												className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-sm font-medium transition-all duration-200 flex items-center gap-1 disabled:opacity-40 disabled:cursor-not-allowed"
 											>
 												<Plus className="h-4 w-4" />
 												{t('menu.add')}
@@ -328,16 +523,16 @@ const CustomerMenu: React.FC = () => {
 										) : (
 											<div className="flex items-center gap-2">
 												<button
-													onClick={() => removeFromCart(item.id)}
+													onClick={() => removeFromCart(itemId, selVariant)}
 													className="p-2 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-lg hover:bg-red-200 dark:hover:bg-red-900/50 transition-all"
 												>
 													<Minus className="h-4 w-4" />
 												</button>
 												<span className="text-lg font-bold text-gray-900 dark:text-gray-100 w-8 text-center">
-													{getCartQuantity(item.id)}
+													{qty}
 												</span>
 												<button
-													onClick={() => addToCart(item)}
+													onClick={() => addToCart(item, selVariant)}
 													className="p-2 bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 rounded-lg hover:bg-green-200 dark:hover:bg-green-900/50 transition-all"
 												>
 													<Plus className="h-4 w-4" />
@@ -346,16 +541,17 @@ const CustomerMenu: React.FC = () => {
 										)}
 									</div>
 								</div>
-							))}
+								);
+							})}
 						</div>
 					</div>
 				) : (
 					/* All Sections View */
 					<div className="space-y-8">
-						{menuSections.sort((a, b) => a.sortOrder - b.sortOrder).map(section => {
+						{[...effSections].sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0)).map(section => {
 							const sectionItems = filteredItems.filter(item => {
 								const categoryId = typeof item.category === 'string' ? item.category : item.category?.id || item.category?._id;
-								const category = menuCategories.find(c => c.id === categoryId);
+								const category = effCategories.find(c => c.id === categoryId);
 								const sectionId = category ? (typeof category.section === 'string' ? category.section : category.section?.id || category.section?._id) : null;
 								return sectionId === section.id;
 							});
@@ -372,36 +568,57 @@ const CustomerMenu: React.FC = () => {
 									</div>
 									<div className="p-4">
 										<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-											{sectionItems.slice(0, 8).map(item => (
-												<div key={item.id} className="bg-gray-50 dark:bg-gray-700 rounded-xl p-4 border border-gray-100 dark:border-gray-700 hover:shadow-md transition-all duration-300">
+											{sectionItems.map(item => {
+												const itemId = String((item as any).id || (item as any)._id);
+												const variants = Array.isArray((item as any).variants) ? (item as any).variants : [];
+												const selVariant = chosenVariant[itemId] ?? (variants[0]?.size || null);
+												const showPrice = priceFor(item, selVariant);
+												const qty = getCartQuantity(itemId, selVariant);
+												const unavailable = item.isAvailable === false;
+												return (
+												<div key={itemId + '::' + (selVariant || '')} className="bg-gray-50 dark:bg-gray-700 rounded-xl p-4 border border-gray-100 dark:border-gray-700 hover:shadow-md transition-all duration-300">
 													<div className="flex items-start justify-between mb-2">
 														<h3 className="text-base font-bold text-gray-900 dark:text-gray-100 truncate">{item.name}</h3>
 														{item.isPopular && <Star className="h-3 w-3 text-yellow-500 fill-yellow-500 shrink-0" />}
 													</div>
 													<div className="flex items-center justify-between mb-3">
 														<span className="text-sm font-bold text-green-600 dark:text-green-400">
-															{formatCurrency(item.price, i18n.language)}
+															{formatCurrency(showPrice, i18n.language)}
 														</span>
 													</div>
+													{variants.length > 1 && (
+														<select
+															value={selVariant || ''}
+															onChange={(e) => setChosenVariant((p) => ({ ...p, [itemId]: e.target.value }))}
+															className="w-full mb-2 px-2 py-1 text-xs border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 outline-none"
+															aria-label={t('menu.variantLabel')}
+														>
+															{variants.map((v: any) => (
+																<option key={v.size} value={v.size}>{v.size} — {formatCurrency(v.price, i18n.language)}</option>
+															))}
+														</select>
+													)}
 													<div className="flex items-center justify-end">
-														{getCartQuantity(item.id) === 0 ? (
+														{qty === 0 ? (
 															<button
-																onClick={() => addToCart(item)}
-																className="px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-xs font-medium transition-all duration-200"
+																onClick={() => addToCart(item, selVariant)}
+																disabled={unavailable}
+																title={unavailable ? t('menu.itemUnavailable') : undefined}
+																className="px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-xs font-medium transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed"
 															>
 																<Plus className="h-3 w-3" />
 															</button>
 														) : (
 															<div className="flex items-center gap-1">
 																<button
-																	onClick={() => removeFromCart(item.id)}
+																	onClick={() => removeFromCart(itemId, selVariant)}
 																	className="p-1 bg-red-100 dark:bg-red-900/30 text-red-600 rounded-md"
 																>
 																	<Minus className="h-3 w-3" />
 																</button>
-																<span className="text-sm font-bold w-6 text-center">{getCartQuantity(item.id)}</span>
+																<span className="text-sm font-bold w-6 text-center">{qty}</span>
 																<button
-																	onClick={() => addToCart(item)}
+																	onClick={() => addToCart(item, selVariant)}
 																	className="p-1 bg-green-100 dark:bg-green-900/30 text-green-600 rounded-md"
 																>
 																	<Plus className="h-3 w-3" />
@@ -410,7 +627,8 @@ const CustomerMenu: React.FC = () => {
 														)}
 													</div>
 												</div>
-											))}
+												);
+											})}
 										</div>
 									</div>
 								</div>
@@ -445,31 +663,34 @@ const CustomerMenu: React.FC = () => {
 										<p className="text-gray-500 dark:text-gray-400">{t('menu.cartEmpty')}</p>
 									</div>
 								) : (
-									cart.map(item => (
-										<div key={item.menuItem.id} className="bg-gray-50 dark:bg-gray-700 rounded-xl p-3 flex items-center gap-3">
+									cart.map(item => {
+										const cid = String((item.menuItem as any).id || (item.menuItem as any)._id);
+										return (
+										<div key={cid + '::' + (item.variant || '')} className="bg-gray-50 dark:bg-gray-700 rounded-xl p-3 flex items-center gap-3">
 											<div className="flex-1 min-w-0">
-												<h4 className="font-medium text-gray-900 dark:text-gray-100 truncate">{item.menuItem.name}</h4>
+												<h4 className="font-medium text-gray-900 dark:text-gray-100 truncate">{item.menuItem.name}{item.variant ? ` (${item.variant})` : ''}</h4>
 												<p className="text-sm text-green-600 dark:text-green-400">
-													{formatCurrency(item.menuItem.price, i18n.language)} × {item.quantity}
+													{formatCurrency(priceFor(item.menuItem, item.variant), i18n.language)} × {item.quantity}
 												</p>
 											</div>
 											<div className="flex items-center gap-2">
 												<button
-													onClick={() => removeFromCart(item.menuItem.id)}
+													onClick={() => removeFromCart(cid, item.variant)}
 													className="p-1.5 bg-red-100 dark:bg-red-900/30 text-red-600 rounded-lg hover:bg-red-200 dark:hover:bg-red-900/50 transition-all"
 												>
 													<Minus className="h-3 w-3" />
 												</button>
 												<span className="text-sm font-bold w-6 text-center">{item.quantity}</span>
 												<button
-													onClick={() => addToCart(item.menuItem)}
+													onClick={() => addToCart(item.menuItem, item.variant)}
 													className="p-1.5 bg-green-100 dark:bg-green-900/30 text-green-600 rounded-lg hover:bg-green-200 dark:hover:bg-green-900/50 transition-all"
 												>
 													<Plus className="h-3 w-3" />
 												</button>
 											</div>
 										</div>
-									))
+										);
+									})
 								)}
 							</div>
 
@@ -480,6 +701,12 @@ const CustomerMenu: React.FC = () => {
 										<span className="text-gray-900 dark:text-gray-100">{t('menu.total')}</span>
 										<span className="text-green-600 dark:text-green-400">{formatCurrency(cartTotal, i18n.language)}</span>
 									</div>
+									<input
+										value={customerName}
+										onChange={(e) => setCustomerName(e.target.value)}
+										placeholder={t('menu.customerNamePlaceholder')}
+										className="w-full px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm outline-none"
+									/>
 									<textarea
 										value={orderNotes}
 										onChange={(e) => setOrderNotes(e.target.value)}
@@ -487,12 +714,16 @@ const CustomerMenu: React.FC = () => {
 										className="w-full px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm resize-none"
 										rows={2}
 									/>
+									{orderError && (
+										<p className="text-sm font-bold text-red-600 dark:text-red-400">{orderError}</p>
+									)}
 									<button
 										onClick={handleOrder}
-										className="w-full py-3 bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white rounded-xl font-medium transition-all duration-200 flex items-center justify-center gap-2 shadow-md hover:shadow-lg"
+										disabled={submitting}
+										className="w-full py-3 bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white rounded-xl font-medium transition-all duration-200 flex items-center justify-center gap-2 shadow-md hover:shadow-lg disabled:opacity-50"
 									>
 										<CheckCircle className="h-5 w-5" />
-										{t('menu.placeOrder')}
+										{submitting ? t('menu.sending') : t('menu.placeOrder')}
 									</button>
 								</div>
 							)}
@@ -506,7 +737,7 @@ const CustomerMenu: React.FC = () => {
 				<div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 z-50">
 					<div className="bg-green-500 text-white px-6 py-3 rounded-xl shadow-lg flex items-center gap-2 animate-bounce">
 						<CheckCircle className="h-5 w-5" />
-						<span className="font-medium">{t('menu.orderSuccess')}</span>
+						<span className="font-medium">{lastOrderNumber ? t('menu.orderSuccessWithNumber', { number: lastOrderNumber }) : t('menu.orderSuccess')}</span>
 					</div>
 				</div>
 			)}

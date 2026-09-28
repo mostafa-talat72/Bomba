@@ -458,6 +458,25 @@ class SyncWorker {
         } catch {}
         rehydrateDocument(collName, operation.data);
 
+        // For bills: never overwrite orders with stale snapshot — merge via $addToSet.
+        // Order creation adds to bill.orders via $addToSet locally; a concurrent bill
+        // push with a stale orders array would otherwise revert the link (order.bill set
+        // but bill.orders missing) on Atlas, then propagate back via polling.
+        if (collName === "bills" && operation.data && Array.isArray(operation.data.orders)) {
+            const { _id: _bid, orders, ...restWithoutOrders } = operation.data;
+            const r1 = await collection.updateOne(operation.filter, { $set: restWithoutOrders }, { upsert: false });
+            let r2 = { modifiedCount: 0, matchedCount: 0 };
+            if (orders.length > 0) {
+                r2 = await collection.updateOne(operation.filter, { $addToSet: { orders: { $each: orders } } });
+            }
+            // Report merged result (r1 carries matchedCount/modifiedCount)
+            if (r1.matchedCount > 0 || r2.matchedCount > 0) {
+                Logger.debug(`🔄 Update (bills merged): Modified bill ${operation.filter._id} — orders merged via $addToSet`);
+            } else {
+                Logger.warn(`⚠️ Update matched 0 documents: ${operation.collection} - filter may be incorrect`);
+            }
+            return;
+        }
         // Use updateOne WITHOUT upsert — updates must never create ghost documents.
         // If the document doesn't exist in Atlas, it will be synced via full sync or polling.
         const result = await collection.updateOne(

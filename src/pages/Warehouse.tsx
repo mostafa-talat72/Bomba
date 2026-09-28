@@ -642,13 +642,13 @@ const Warehouse = () => {
       )}
 
       {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-2">
-        <div className="flex items-center flex-wrap gap-x-2 min-w-0">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+        <div className="flex flex-col gap-0.5 min-w-0">
           <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100 flex items-center">
             <Package className={`h-5 w-5 sm:h-6 sm:w-6 text-orange-600 dark:text-orange-400 ${isRTL ? 'ml-2' : 'mr-2'}`} />
             {t('warehouse.title')}
           </h1>
-          <p className={`text-sm sm:text-base text-gray-600 dark:text-gray-300 ${isRTL ? 'mr-2 sm:mr-4' : 'ml-2 sm:ml-4'}`}>{t('warehouse.subtitle')}</p>
+          <p className="text-xs sm:text-base text-gray-600 dark:text-gray-300">{t('warehouse.subtitle')}</p>
         </div>
         <PermissionGuard requiredPermissions={['canAddWarehouseItem', 'all']}>
           <button onClick={() => openAddModal()}

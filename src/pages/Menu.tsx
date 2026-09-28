@@ -186,7 +186,7 @@ const Menu: React.FC = () => {
 		setFormData({
 			name: '',
 			price: '',
-			variants: [{ size: 'عادي', price: '' }],
+			variants: [{ size: t('menu.defaultSize'), price: '' }],
 			category: categoryId || '',
 			description: '',
 			isAvailable: true,
@@ -203,7 +203,7 @@ const Menu: React.FC = () => {
 		const categoryId = typeof item.category === 'string' ? item.category : item.category?.id || item.category?._id || '';
 		const variantsData = item.variants && item.variants.length > 0
 			? item.variants.map(v => ({ size: v.size, price: String(v.price), sku: v.sku || '', barcode: v.barcode || '' }))
-			: [{ size: 'عادي', price: item.price != null ? item.price.toString() : '' }];
+			: [{ size: t('menu.defaultSize'), price: item.price != null ? item.price.toString() : '' }];
 		setFormData({
 			name: item.name,
 			price: item.price != null ? item.price.toString() : (variantsData[0]?.price || ''),
@@ -224,7 +224,7 @@ const Menu: React.FC = () => {
 		const categoryId = typeof item.category === 'string' ? item.category : item.category?.id || item.category?._id || '';
 		const variantsData = item.variants && item.variants.length > 0
 			? item.variants.map(v => ({ size: v.size, price: String(v.price), sku: v.sku || '', barcode: v.barcode || '' }))
-			: [{ size: 'عادي', price: item.price != null ? item.price.toString() : '' }];
+			: [{ size: t('menu.defaultSize'), price: item.price != null ? item.price.toString() : '' }];
 		setFormData({
 			name: `${item.name} (${t('menu.duplicate')})`,
 			price: variantsData[0]?.price || '',
@@ -250,7 +250,7 @@ const Menu: React.FC = () => {
 			return;
 		}
 		// Variants validation
-		const rawVariants = data.variants && data.variants.length > 0 ? data.variants : [{ size: 'عادي', price: data.price }];
+		const rawVariants = data.variants && data.variants.length > 0 ? data.variants : [{ size: t('menu.defaultSize'), price: data.price }];
 		const cleanedVariants = rawVariants.map(v => ({
 			size: String(v.size || '').trim(),
 			price: parseFloat(String(v.price)),
@@ -262,7 +262,7 @@ const Menu: React.FC = () => {
 			return;
 		}
 		for (const v of cleanedVariants) {
-			if (!v.size) { showNotification('اسم الحجم مطلوب', 'error'); return; }
+			if (!v.size) { showNotification(t('menu.notifications.sizeNameRequired'), 'error'); return; }
 			if (isNaN(v.price) || v.price <= 0) { showNotification(t('menu.notifications.enterPrice'), 'error'); return; }
 		}
 		const price = cleanedVariants[0].price;
@@ -480,7 +480,7 @@ const Menu: React.FC = () => {
 		setSelectedMergeIds(prev => {
 			if (prev.includes(itemId)) return prev.filter(id => id !== itemId);
 			if (prev.length >= 4) {
-				showNotification('يمكن اختيار حتى 4 عناصر فقط للدمج', 'warning');
+				showNotification(t('menu.notifications.mergeMaxItems'), 'warning');
 				return prev;
 			}
 			if (prev.length > 0 && item) {
@@ -489,7 +489,7 @@ const Menu: React.FC = () => {
 					const firstCatId = getItemCategoryId(firstItem);
 					const newCatId = getItemCategoryId(item);
 					if (firstCatId && newCatId && String(firstCatId) !== String(newCatId)) {
-						showNotification('لا يمكن دمج أصناف من فئات مختلفة', 'warning');
+						showNotification(t('menu.notifications.mergeDifferentCategories'), 'warning');
 						return prev;
 					}
 				}
@@ -509,9 +509,9 @@ const Menu: React.FC = () => {
 		};
 		const sorted = [...selectedItems].sort((a, b) => getPrice(a) - getPrice(b));
 		let sizes: string[] = [];
-		if (sorted.length === 4) sizes = ['صغير', 'وسط', 'كبير', 'عائلي'];
-		else if (sorted.length === 3) sizes = ['صغير', 'وسط', 'كبير'];
-		else if (sorted.length === 2) sizes = ['وسط', 'كبير'];
+		if (sorted.length === 4) sizes = [t('menu.merge.sizes.small'), t('menu.merge.sizes.medium'), t('menu.merge.sizes.large'), t('menu.merge.sizes.family')];
+			else if (sorted.length === 3) sizes = [t('menu.merge.sizes.small'), t('menu.merge.sizes.medium'), t('menu.merge.sizes.large')];
+			else if (sorted.length === 2) sizes = [t('menu.merge.sizes.medium'), t('menu.merge.sizes.large')];
 		const variants = sorted.map((it, idx) => ({ size: sizes[idx], price: getPrice(it), name: it.name }));
 		const cheapest = sorted[0];
 		const cheapestName = cheapest?.name || '';
@@ -536,11 +536,11 @@ const Menu: React.FC = () => {
 	const handleConfirmMerge = async () => {
 		if (!canDeleteMenuItem(user)) { showNotification(t('common.permissionDenied'), 'error'); return; }
 		if (selectedMergeIds.length < 2 || selectedMergeIds.length > 4) {
-			showNotification('يجب اختيار من 2 إلى 4 عناصر للدمج', 'error');
+			showNotification(t('menu.notifications.mergeCountInvalid'), 'error');
 			return;
 		}
 		if (!mergeName.trim()) {
-			showNotification('اسم الصنف المدمج مطلوب', 'error');
+			showNotification(t('menu.notifications.mergeNameRequired'), 'error');
 			return;
 		}
 		setMerging(true);
@@ -554,15 +554,15 @@ const Menu: React.FC = () => {
 					const { default: api } = await import('../services/api');
 					const resp: any = await api.mergeMenuItems(selectedMergeIds, trimmedName);
 					if (resp.success) {
-						showNotification('تم دمج العناصر بنجاح', 'success');
+						showNotification(t('menu.notifications.mergeSuccess'), 'success');
 						await loadMenuItems();
 					} else {
-						showNotification(resp.message || 'خطأ في دمج العناصر', 'error');
+						showNotification(resp.message || t('menu.notifications.mergeError'), 'error');
 						setMerging(false);
 						return;
 					}
 				} catch (apiErr: any) {
-					showNotification(apiErr?.message || 'خطأ في دمج العناصر', 'error');
+					showNotification(apiErr?.message || t('menu.notifications.mergeError'), 'error');
 					setMerging(false);
 					return;
 				}
@@ -572,7 +572,7 @@ const Menu: React.FC = () => {
 			setMergeName('');
 			await loadMenuItems();
 		} catch (e: any) {
-			showNotification(e?.message || 'خطأ في دمج العناصر', 'error');
+			showNotification(e?.message || t('menu.notifications.mergeError'), 'error');
 		} finally {
 			setMerging(false);
 		}
@@ -588,7 +588,7 @@ const Menu: React.FC = () => {
 
 		setFormData(prev => ({
 			...prev,
-			ingredients: [...prev.ingredients, { item: '', quantity: 0, unit: 'جرام' }]
+			ingredients: [...prev.ingredients, { item: '', quantity: 0, unit: t('menu.units.gram') }]
 		}));
 	};
 
@@ -721,25 +721,25 @@ const Menu: React.FC = () => {
 							</div>
 						</div>
 					</div>
-					<div className="flex items-center gap-2 flex-wrap">
+					<div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
 						<button
 							onClick={() => window.open('/menu-view', '_blank')}
-							className="action-button bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white px-4 py-2.5 rounded-xl flex items-center gap-2 shadow-md hover:shadow-lg transition-all duration-200"
+							className="action-button bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white px-4 py-2.5 rounded-xl flex flex-1 sm:flex-none items-center justify-center gap-2 shadow-md hover:shadow-lg transition-all duration-200 text-sm sm:text-base"
 						>
-							<Eye className="h-5 w-5" />
+							<Eye className="h-5 w-5 flex-shrink-0" />
 							<span className="font-medium">{t('menu.preview')}</span>
 						</button>
-						<div className="relative" data-add-dropdown>
+						<div className="relative flex-1 sm:flex-none" data-add-dropdown>
 							<button
 								onClick={() => setShowAddDropdown(!showAddDropdown)}
-								className="action-button bg-gradient-to-r from-orange-600 to-orange-700 hover:from-orange-700 hover:to-orange-800 dark:from-orange-500 dark:to-orange-600 text-white px-5 py-2.5 rounded-xl flex items-center gap-2 shadow-md hover:shadow-lg transition-all duration-200"
+								className="action-button w-full sm:w-auto bg-gradient-to-r from-orange-600 to-orange-700 hover:from-orange-700 hover:to-orange-800 dark:from-orange-500 dark:to-orange-600 text-white px-5 py-2.5 rounded-xl flex items-center justify-center gap-2 shadow-md hover:shadow-lg transition-all duration-200 text-sm sm:text-base"
 							>
 								<Plus className="h-5 w-5" />
 								<span className="font-medium">{t('menu.add')}</span>
 								<ChevronDown className={`h-4 w-4 transition-transform duration-200 ${showAddDropdown ? 'rotate-180' : ''}`} />
 							</button>
 							{showAddDropdown && (
-								<div className="absolute right-0 mt-2 w-52 bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-gray-200 dark:border-gray-700 py-2 z-50">
+								<div className="absolute right-0 mt-2 w-52 max-w-[calc(100vw-2rem)] bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-gray-200 dark:border-gray-700 py-2 z-50">
 									<button
 										onClick={() => { setShowAddDropdown(false); handleAddSection(); }}
 										className="w-full px-4 py-2.5 text-left flex items-center gap-3 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
@@ -819,11 +819,11 @@ const Menu: React.FC = () => {
 							<Layers className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
 						</div>
 						<div className="min-w-0">
-							<p className="text-sm font-bold text-gray-900 dark:text-gray-100">تم اختيار {formatDecimal(selectedMergeIds.length, i18n.language)} عناصر</p>
+							<p className="text-sm font-bold text-gray-900 dark:text-gray-100">{t('menu.merge.selectedCount', { total: formatDecimal(selectedMergeIds.length, i18n.language) })}</p>
 							<p className="text-xs text-gray-500 dark:text-gray-400">
-								{selectedMergeIds.length < 2 && 'اختر عنصرًا إضافيًا واحدًا على الأقل للدمج'}
-								{selectedMergeIds.length >= 2 && selectedMergeIds.length <= 4 && 'جاهز للدمج كأحجام'}
-								{selectedMergeIds.length > 4 && 'يمكن دمج 4 عناصر كحد أقصى'}
+								{selectedMergeIds.length < 2 && t('menu.merge.needOneMore')}
+								{selectedMergeIds.length >= 2 && selectedMergeIds.length <= 4 && t('menu.merge.ready')}
+								{selectedMergeIds.length > 4 && t('menu.merge.maxReached')}
 							</p>
 						</div>
 						<div className="flex items-center gap-1 ms-2 flex-wrap">
@@ -845,7 +845,7 @@ const Menu: React.FC = () => {
 							onClick={clearMergeSelection}
 							className="px-4 py-2 rounded-xl text-sm font-medium bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
 						>
-							إلغاء
+							{t('menu.cancel')}
 						</button>
 						{selectedMergeIds.length >= 2 && selectedMergeIds.length <= 4 && (
 							<button
@@ -857,7 +857,7 @@ const Menu: React.FC = () => {
 								className="px-5 py-2.5 rounded-xl text-sm font-bold bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white shadow-md hover:shadow-lg transition-all duration-200 flex items-center gap-2"
 							>
 								<Layers className="h-4 w-4" />
-								دمج كأحجام
+								{t('menu.merge.mergeAsSizes')}
 							</button>
 						)}
 					</div>
@@ -1273,8 +1273,8 @@ const Menu: React.FC = () => {
 										<Layers className="h-5 w-5 text-white" />
 									</div>
 									<div>
-										<h3 className="text-lg font-bold text-white">دمج كأحجام</h3>
-										<p className="text-xs text-indigo-100">سيتم إنشاء صنف واحد بأحجام متعددة</p>
+										<h3 className="text-lg font-bold text-white">{t('menu.merge.mergeAsSizes')}</h3>
+										<p className="text-xs text-indigo-100">{t('menu.merge.dialogSubtitle')}</p>
 									</div>
 								</div>
 								<button onClick={() => setShowMergePreview(false)} className="p-2 hover:bg-white/20 rounded-xl text-white transition-colors">
@@ -1284,21 +1284,21 @@ const Menu: React.FC = () => {
 							<div className="p-6 space-y-4">
 								<div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-xl p-3">
 									<p className="text-sm text-amber-800 dark:text-amber-300">
-										سيتم الاحتفاظ بالصنف الأرخص <span className="font-bold">"{preview.cheapest?.name}"</span> وتحويل العناصر المحددة إلى أحجام له، وسيتم حذف باقي العناصر نهائياً.
+										{t('menu.merge.keepCheapest', { name: preview.cheapest?.name })}
 									</p>
-									<p className="text-xs text-amber-600 dark:text-amber-400 mt-1">العناصر ستبقى لقطة في الطلبات/الفواتير السابقة (snapshot).</p>
+									<p className="text-xs text-amber-600 dark:text-amber-400 mt-1">{t('menu.merge.snapshotNote')}</p>
 								</div>
 								<div>
-									<label className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1 block">اسم الصنف المدمج</label>
-									<input value={mergeName} onChange={e=>setMergeName(e.target.value)} placeholder="اسم الصنف المدمج" className="w-full px-3 py-2.5 border-2 border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors mb-2" />
-									<p className="text-xs text-gray-500 dark:text-gray-400 mb-2">الفئة والصور ستؤخذ من الصنف الأرخص. الترتيب حسب السعر من الأقل للأعلى.</p>
+									<label className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1 block">{t('menu.merge.mergedNameLabel')}</label>
+									<input value={mergeName} onChange={e=>setMergeName(e.target.value)} placeholder={t('menu.merge.mergedNameLabel')} className="w-full px-3 py-2.5 border-2 border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors mb-2" />
+									<p className="text-xs text-gray-500 dark:text-gray-400 mb-2">{t('menu.merge.categoryNote')}</p>
 									<div className="border border-gray-200 dark:border-gray-600 rounded-xl overflow-hidden">
 										<table className="w-full text-sm">
 											<thead className="bg-gray-50 dark:bg-gray-700">
 												<tr>
-													<th className="px-3 py-2 text-right font-semibold text-gray-600 dark:text-gray-300">الحجم</th>
-													<th className="px-3 py-2 text-right font-semibold text-gray-600 dark:text-gray-300">السعر</th>
-													<th className="px-3 py-2 text-right font-semibold text-gray-600 dark:text-gray-300">من عنصر</th>
+													<th className="px-3 py-2 text-right font-semibold text-gray-600 dark:text-gray-300">{t('menu.merge.sizeHeader')}</th>
+													<th className="px-3 py-2 text-right font-semibold text-gray-600 dark:text-gray-300">{t('menu.price')}</th>
+													<th className="px-3 py-2 text-right font-semibold text-gray-600 dark:text-gray-300">{t('menu.merge.fromItemHeader')}</th>
 												</tr>
 											</thead>
 											<tbody className="divide-y divide-gray-100 dark:divide-gray-700">
@@ -1314,7 +1314,7 @@ const Menu: React.FC = () => {
 									</div>
 								</div>
 								<div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-3">
-									<p className="text-xs text-red-700 dark:text-red-400 font-medium">سيتم حذف العناصر التالية نهائياً:</p>
+									<p className="text-xs text-red-700 dark:text-red-400 font-medium">{t('menu.merge.deleteWarning')}</p>
 									<ul className="mt-1 space-y-1">
 										{preview.sorted.slice(1).map((it: MenuItem) => (
 											<li key={it.id} className="text-xs text-red-600 dark:text-red-300 flex items-center gap-1">
@@ -1330,7 +1330,7 @@ const Menu: React.FC = () => {
 									disabled={merging}
 									className="px-5 py-2.5 rounded-xl text-sm font-medium bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors disabled:opacity-50"
 								>
-									إلغاء
+									{t('menu.cancel')}
 								</button>
 								<button
 									onClick={handleConfirmMerge}
@@ -1340,12 +1340,12 @@ const Menu: React.FC = () => {
 									{merging ? (
 										<>
 											<div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
-											جاري الدمج...
+											{t('menu.merge.merging')}
 										</>
 									) : (
 										<>
 											<Check className="h-4 w-4" />
-											تأكيد الدمج
+											{t('menu.merge.confirm')}
 										</>
 									)}
 								</button>

@@ -112,17 +112,29 @@ export function KitchenDisplay() {
     };
   }, []);
 
+  const statusChangeInFlight = useRef<Set<string>>(new Set());
   const handleStatusChange = async (orderId: string, newStatus: string) => {
     if (!canUpdateOrderStatus(user)) { showNotification(t('common.permissionDenied'), 'error'); return; }
+    if (statusChangeInFlight.current.has(orderId)) return;
+    statusChangeInFlight.current.add(orderId);
     try {
       const res = await api.updateOrderStatus(orderId, newStatus as any);
-      if (!res.success) return;
+      if (!res.success) {
+        showNotification((res as any)?.message || t('kitchenDisplay.statusChangeFailed'), 'error');
+        const refresh = await api.getOrders({ status: 'pending,preparing,ready' });
+        if (refresh.success && refresh.data) setOrders(refresh.data);
+        return;
+      }
       setOrders(prev =>
         newStatus && VISIBLE_STATUSES.includes(newStatus)
           ? prev.map(o => o._id === orderId ? { ...o, status: newStatus as Order['status'] } : o)
           : prev.filter(o => o._id !== orderId)
       );
-    } catch { }
+    } catch {
+      showNotification(t('kitchenDisplay.statusChangeFailed'), 'error');
+    } finally {
+      statusChangeInFlight.current.delete(orderId);
+    }
   };
 
   const handleItemToggle = async (orderId: string, item: Order['items'][number]) => {
@@ -134,15 +146,33 @@ export function KitchenDisplay() {
     const current = order.items[itemIndex];
     const newCount = (current.preparedCount ?? 0) >= (current.quantity ?? 1) ? 0 : (current.quantity ?? 1);
     const res = await api.updateOrderItemPrepared(orderId, itemIndex, { preparedCount: newCount });
-    if (!res.success) return;
+    if (!res.success) { showNotification((res as any)?.message || t('kitchenDisplay.statusChangeFailed'), 'error'); return; }
     const fetchRes = await api.getOrders({ status: 'pending,preparing,ready' });
     if (fetchRes.success && fetchRes.data) setOrders(fetchRes.data);
   };
 
   const handleSectionDeliver = async (orderId: string, sectionId: string) => {
     if (!canUpdateOrderStatus(user)) { showNotification(t('common.permissionDenied'), 'error'); return; }
+    // الأصناف بلا قسم: لا يدعمها deliver-section في السيرفر — توصيل فردي لكل صنف
+    if (sectionId === '__unknown__') {
+      const order = orders.find(o => o._id === orderId);
+      if (!order) return;
+      const targets = order.items
+        .map((item, idx) => ({ item, idx }))
+        .filter(({ item }) => !getOrderItemSection(item) && (item.deliveredCount ?? 0) < (item.quantity ?? 0));
+      if (targets.length === 0) return;
+      let failed = false;
+      for (const { idx } of targets) {
+        const res = await api.deliverItem(orderId, idx).catch(() => null);
+        if (!res?.success) failed = true;
+      }
+      if (failed) showNotification(t('kitchenDisplay.sectionActionFailed'), 'error');
+      const fetchRes = await api.getOrders({ status: 'pending,preparing,ready' });
+      if (fetchRes.success && fetchRes.data) setOrders(fetchRes.data);
+      return;
+    }
     const res = await api.deliverOrderSection(orderId, sectionId);
-    if (!res.success) return;
+    if (!res.success) { showNotification((res as any)?.message || t('kitchenDisplay.sectionActionFailed'), 'error'); return; }
     const data = res.data;
     if (!data) return;
     setOrders(prev => {
@@ -167,19 +197,18 @@ export function KitchenDisplay() {
     const itemIndices = order.items
       .map((item, idx) => ({ item, idx }))
       .filter(({ item }) => {
-        const s = getOrderItemSection(item);
-        return s === sectionId && (item.deliveredCount ?? 0) < (item.quantity ?? 0);
+        return sectionMatches(item, sectionId) && (item.deliveredCount ?? 0) < (item.quantity ?? 0);
       });
     if (itemIndices.length === 0) return;
     try {
       for (const { item, idx } of itemIndices) {
         const newCount = item.quantity;
         const res = await api.updateOrderItemPrepared(orderId, idx, { preparedCount: newCount });
-        if (!res.success) break;
+        if (!res.success) { showNotification((res as any)?.message || t('kitchenDisplay.sectionActionFailed'), 'error'); break; }
       }
       const fetchRes = await api.getOrders({ status: 'pending,preparing,ready' });
       if (fetchRes.success && fetchRes.data) setOrders(fetchRes.data);
-    } catch { }
+    } catch { showNotification(t('kitchenDisplay.sectionActionFailed'), 'error'); }
   };
 
   // تجهيز وتوصيل الطلبات المتأخرة تلقائيًا (أكثر من ساعتين بدون تجهيز/توصيل)
@@ -197,9 +226,11 @@ export function KitchenDisplay() {
           .filter(({ item }) => (item.deliveredCount ?? 0) < (item.quantity ?? 1));
 
         // 1) تجهيز كل الأصناف الغير مسلمة (preparedCount = الكمية)
+        let prepOk = true;
         for (const { item, idx } of undelivered) {
           if ((item.preparedCount ?? 0) < (item.quantity ?? 1)) {
-            await api.updateOrderItemPrepared(order._id, idx, { preparedCount: item.quantity ?? 1 });
+            const r = await api.updateOrderItemPrepared(order._id, idx, { preparedCount: item.quantity ?? 1 }).catch(() => null);
+            if (!r?.success) prepOk = false;
           }
         }
 
@@ -208,23 +239,34 @@ export function KitchenDisplay() {
           undelivered.map(({ item }) => item.section).filter(Boolean)
         )] as string[];
         for (const sectionId of sectionIds) {
-          await api.deliverOrderSection(order._id, sectionId);
+          const r = await api.deliverOrderSection(order._id, sectionId).catch(() => null);
+          if (!r?.success) prepOk = false;
         }
 
         // 3) توصيل الأصناف اللي بدون قسم (deliver-item يجهّز ويسلّم معًا)
         for (const { item, idx } of undelivered) {
           if (!item.section && (item.preparedCount ?? 0) < (item.quantity ?? 1)) {
-            await api.deliverItem(order._id, idx).catch(() => {});
+            const r = await api.deliverItem(order._id, idx).catch(() => null);
+            if (!r?.success) prepOk = false;
           }
         }
 
-        // 4) لو لسه مش delivered (أي حاجة غير متطابقة) نضبطه قسريًا
-        const latest = await api.getOrders({ status: 'pending,preparing,ready' });
-        const liveOrder = latest.success && latest.data
-          ? latest.data.find(o => o._id === order._id)
-          : null;
+        // 4) تحقق قبل الإزالة: لا نحذف من الشاشة إلا لو تأكد التسليم أو اختفى الطلب
+        const latest = await api.getOrders({ status: 'pending,preparing,ready' }).catch(() => null);
+        const liveOrder = latest?.success && latest?.data
+          ? latest.data.find((o: any) => o._id === order._id)
+          : undefined;
         if (liveOrder && liveOrder.status !== 'delivered') {
-          await api.updateOrderStatus(order._id, 'delivered');
+          if (prepOk) {
+            const d = await api.updateOrderStatus(order._id, 'delivered').catch(() => null);
+            if (!d?.success) {
+              showNotification(t('kitchenDisplay.autoCompleteFailed'), 'error');
+              continue;
+            }
+          } else {
+            showNotification(t('kitchenDisplay.autoCompleteFailed'), 'error');
+            continue;
+          }
         }
 
         autoCompletedRef.current.add(order._id);
@@ -273,6 +315,12 @@ export function KitchenDisplay() {
     return item.section || null;
   };
 
+  // مطابقة القسم بما فيها مجموعة '__unknown__' (أصناف بلا قسم)
+  const sectionMatches = (item: Order['items'][number], sectionId: string): boolean => {
+    const s = getOrderItemSection(item);
+    return sectionId === '__unknown__' ? !s : s === sectionId;
+  };
+
   const visibleOrders = useMemo(() =>
     orders
       .filter(o => o.status && VISIBLE_STATUSES.includes(o.status))
@@ -281,8 +329,7 @@ export function KitchenDisplay() {
 
   const getSectionStatus = (order: Order, sectionId: string): string | null => {
     const sectionItems = order.items.filter(item => {
-      const s = getOrderItemSection(item);
-      return s === sectionId && (item.deliveredCount ?? 0) < (item.quantity ?? 0);
+      return sectionMatches(item, sectionId) && (item.deliveredCount ?? 0) < (item.quantity ?? 0);
     });
     if (sectionItems.length === 0) return null;
     const anyPrepared = sectionItems.some(item => (item.preparedCount ?? 0) > 0);
@@ -294,6 +341,8 @@ export function KitchenDisplay() {
   };
 
   const getOrderAggregateStatus = (order: Order): string => {
+    // الحالة الصريحة أولاً (إجراء العامل) — التجميع احتياطي لحالة pending فقط
+    if (order.status === 'preparing' || order.status === 'ready') return order.status;
     const items = order.items.filter(
       item => (item.deliveredCount ?? 0) < (item.quantity ?? 0)
     );
@@ -311,8 +360,7 @@ export function KitchenDisplay() {
     .map(order => {
       if (selectedSection === 'all') return order;
       const filteredItems = order.items.filter(item => {
-        const itemSection = getOrderItemSection(item);
-        return itemSection === selectedSection && (item.deliveredCount ?? 0) < (item.quantity ?? 0);
+        return sectionMatches(item, selectedSection) && (item.deliveredCount ?? 0) < (item.quantity ?? 0);
       });
       if (filteredItems.length === 0) return null;
       return { ...order, items: filteredItems };
@@ -328,7 +376,7 @@ export function KitchenDisplay() {
     if (sectionId === 'all') return visibleOrders.length;
     return visibleOrders.filter(o =>
       o.items.some(item => {
-        const matchesSection = getOrderItemSection(item) === sectionId;
+        const matchesSection = sectionMatches(item, sectionId);
         const notDelivered = (item.deliveredCount ?? 0) < (item.quantity ?? 1);
         return matchesSection && notDelivered;
       })
@@ -420,7 +468,7 @@ export function KitchenDisplay() {
                     <div className="flex items-center justify-between mb-3">
                       <div className="flex items-center gap-2.5 flex-wrap">
                         <span className="font-extrabold text-base text-gray-900 dark:text-gray-100 tracking-tight">
-                          #{order.orderNumber || order._id.slice(-6)}
+                          #{order.orderNumber || String(order._id || '').slice(-6) || '؟'}
                         </span>
                         {(order as any).fulfillmentType === 'delivery' ? <span className="inline-flex items-center bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 text-xs font-bold px-2 h-7 rounded-md">🛵 دليفري</span> : (order as any).fulfillmentType === 'takeaway' ? <span className="inline-flex items-center bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 text-xs font-bold px-2 h-7 rounded-md">🥡 تيك أوي</span> : null}
                         {order.table && (

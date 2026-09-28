@@ -885,7 +885,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         const { session, bill } = response.data as any;
         if (session) setSessions(prev => prev.map((s: any) => String(s._id || s.id) === String(sessionId) ? { ...s, ...session, _optimistic: undefined } : s));
         if (bill) applyResponseBill(bill);
-        if (!silent) showNotification('تم نقل الجلسة بنجاح', 'success');
+        if (!silent) showNotification(t('toast.session.transferred'), 'success');
         return response.data;
       }
       setSessions(snapSessions); setBills(snapBills); setTables(snapTables);
@@ -893,7 +893,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     } catch (e: unknown) {
       setSessions(snapSessions); setBills(snapBills); setTables(snapTables);
       const err = e as { message?: string };
-      if (!silent) showNotification(err.message || 'خطأ في نقل الجلسة', 'error');
+      if (!silent) showNotification(err.message || t('toast.session.transferError'), 'error');
       return null;
     }
   };
@@ -909,7 +909,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         const { session, bill } = response.data as any;
         if (session) setSessions(prev => prev.map((s: any) => String(s._id || s.id) === String(sessionId) ? { ...s, ...session, _optimistic: undefined } : s));
         if (bill) applyResponseBill(bill);
-        if (!silent) showNotification('تم ربط الجلسة بالطاولة', 'success');
+        if (!silent) showNotification(t('toast.session.linked'), 'success');
         return response.data;
       }
       setSessions(snapSessions); setBills(snapBills);
@@ -917,7 +917,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     } catch (e: unknown) {
       setSessions(snapSessions); setBills(snapBills);
       const err = e as { message?: string };
-      if (!silent) showNotification(err.message || 'خطأ في ربط الجلسة', 'error');
+      if (!silent) showNotification(err.message || t('toast.session.linkError'), 'error');
       return null;
     }
   };
@@ -932,7 +932,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         const { session, bill } = response.data as any;
         if (session) setSessions(prev => prev.map((s: any) => String(s._id || s.id) === String(sessionId) ? { ...s, ...session, _optimistic: undefined } : s));
         if (bill) applyResponseBill(bill);
-        if (!silent) showNotification('تم فك ربط الجلسة', 'success');
+        if (!silent) showNotification(t('toast.session.unlinked'), 'success');
         return response.data;
       }
       setSessions(snapSessions); setBills(snapBills);
@@ -940,7 +940,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     } catch (e: unknown) {
       setSessions(snapSessions); setBills(snapBills);
       const err = e as { message?: string };
-      if (!silent) showNotification(err.message || 'خطأ في فك الربط', 'error');
+      if (!silent) showNotification(err.message || t('toast.session.unlinkError'), 'error');
       return null;
     }
   };
@@ -963,7 +963,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         applyResponseBill((response as any).bill);
         const sess = response.data as any;
         if (sess.bill) setBills(prev => prev.map((b: any) => String(b._id || b.id) === String(sess.bill?._id || sess.bill) ? { ...b, sessions: (b.sessions || []).map((ss: any) => String(ss._id || ss.id || ss) === String(sessionId) ? sess : ss) } : b));
-        if (!silent) showNotification('تم تعديل أوقات الجلسة', 'success');
+        if (!silent) showNotification(t('toast.session.timesUpdated'), 'success');
         return response.data;
       }
       if (didOptimistic) setSessions(snapshot);
@@ -971,7 +971,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     } catch (e: unknown) {
       if (didOptimistic) setSessions(snapshot);
       const err = e as { message?: string };
-      if (!silent) showNotification(err.message || 'خطأ في تعديل الوقت', 'error');
+      if (!silent) showNotification(err.message || t('toast.session.timeUpdateError'), 'error');
       return null;
     }
   };
@@ -990,7 +990,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (response.success && response.data) {
         setSessions(prev => prev.map((s: any) => String(s._id || s.id) === String(sessionId) ? { ...s, ...response.data, _optimistic: undefined } : s));
         applyResponseBill((response as any).bill);
-        showNotification('تم تعديل وقت البداية', 'success');
+        showNotification(t('toast.session.startTimeUpdated'), 'success');
         return response.data;
       }
       if (didOptimistic) setSessions(snapshot);
@@ -998,7 +998,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     } catch (e: unknown) {
       if (didOptimistic) setSessions(snapshot);
       const err = e as { message?: string };
-      showNotification(err.message || 'خطأ في تعديل الوقت', 'error');
+      showNotification(err.message || t('toast.session.timeUpdateError'), 'error');
       return null;
     }
   };
@@ -1031,7 +1031,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (response.success && response.data) {
         setSessions(prev => prev.map((s: any) => String(s._id || s.id) === String(sessionId) ? { ...s, ...response.data, _optimistic: undefined } : s));
         applyResponseBill((response as any).bill);
-        if (!silent) showNotification('تم تعديل فترة الدراعات', 'success');
+        if (!silent) showNotification(t('toast.session.periodUpdated'), 'success');
         return response.data;
       }
       if (didOptimistic) setSessions(snapshot);
@@ -1040,7 +1040,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     } catch (e: unknown) {
       if (didOptimistic) setSessions(snapshot);
       const err = e as { message?: string };
-      if (!silent) showNotification(err.message || 'خطأ في تعديل الفترة', 'error');
+      if (!silent) showNotification(err.message || t('toast.session.periodError'), 'error');
       return null;
     }
   };
@@ -1060,7 +1060,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
       setSessions(snapshot);
       return null;
-    } catch (e: unknown) { setSessions(snapshot); const err = e as { message?: string }; showNotification(err.message || 'خطأ في تحديث التكلفة', 'error'); return null; }
+    } catch (e: unknown) { setSessions(snapshot); const err = e as { message?: string }; showNotification(err.message || t('toast.session.costError'), 'error'); return null; }
   };
 
   // ⚡ تحديث فاتورة واحدة بالضبط بدل fetchBills الكامل (10k) بعد عمليات الطلبات —
@@ -1085,6 +1085,9 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const createOrder = async (orderData: any): Promise<Order | null> => {
     let optimisticId: string | null = null;
     let optimisticOrder: any = null;
+    let optimisticBillId: any = null;
+    let optimisticAmt = 0;
+    let optimisticTableId: any = null;
     try {
       if (!orderData.customerName || !orderData.items || orderData.items.length === 0) {
         showNotification(t('toast.order.incompleteData'), 'error');
@@ -1118,6 +1121,27 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         _optimistic: true,
       } as any;
       setOrders(prev => [optimisticOrder, ...prev]);
+      // optimistic bill totals if order linked to existing bill
+      try {
+        const bid = (orderData as any).bill ? getId((orderData as any).bill) : null;
+        const amt = Number(optimisticOrder.subtotal) || 0;
+        optimisticBillId = bid;
+        optimisticAmt = amt;
+        optimisticTableId = orderData.table ? getId(orderData.table) : null;
+        if (bid && amt) {
+          setBills(prev => prev.map((b: any) => sameId(b, bid) ? { ...b, subtotal: Number(b.subtotal||0)+amt, total: Number(b.total||0)+amt, remaining: Number(b.remaining||0)+amt, updatedAt: new Date().toISOString(), orders: [...(b.orders||[]), optimisticOrder] } : b));
+        } else if (amt && optimisticTableId) {
+          const tid = optimisticTableId;
+          // find unpaid bill for this table
+          setBills(prev => prev.map((b: any) => {
+            const bt = getId((b as any).table);
+            if (bt && tid && bt === tid && !['paid','cancelled'].includes(b.status)) {
+              return { ...b, subtotal: Number(b.subtotal||0)+amt, total: Number(b.total||0)+amt, remaining: Number(b.remaining||0)+amt, updatedAt: new Date().toISOString(), orders: [...(b.orders||[]), optimisticOrder] };
+            }
+            return b;
+          }));
+        }
+      } catch {}
 
       const response = await api.createOrder(orderData);
 
@@ -1146,8 +1170,24 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         updateNotificationCount(1);
         return newOrder;
       } else {
-        // remove optimistic on any failure
-        if (optimisticId) setOrders(prev => prev.filter((o: any) => o._id !== optimisticId && o.id !== optimisticId));
+        // remove optimistic on any failure — also revert bill
+        if (optimisticId) {
+          setOrders(prev => prev.filter((o: any) => o._id !== optimisticId && o.id !== optimisticId));
+          try {
+            if (optimisticBillId && optimisticAmt) {
+              setBills(prev => prev.map((b: any) => sameId(b, optimisticBillId) ? { ...b, subtotal: Math.max(0, Number(b.subtotal||0)-optimisticAmt), total: Math.max(0, Number(b.total||0)-optimisticAmt), remaining: Math.max(0, Number(b.remaining||0)-optimisticAmt), orders: (b.orders||[]).filter((o:any)=>!sameId(o, optimisticId)) } : b));
+            } else if (optimisticTableId && optimisticAmt) {
+              const tid = optimisticTableId;
+              setBills(prev => prev.map((b: any) => {
+                const bt = getId((b as any).table);
+                if (bt && tid && bt===tid && !['paid','cancelled'].includes(b.status)) {
+                  return { ...b, subtotal: Math.max(0, Number(b.subtotal||0)-optimisticAmt), total: Math.max(0, Number(b.total||0)-optimisticAmt), remaining: Math.max(0, Number(b.remaining||0)-optimisticAmt), orders: (b.orders||[]).filter((o:any)=>!sameId(o, optimisticId)) };
+                }
+                return b;
+              }));
+            }
+          } catch {}
+        }
         const responseWithErrors = response as any;
         const currentLang = window.i18n?.language || 'ar';
         if (response.data && typeof response.data === 'object' && 'details' in response.data && Array.isArray((response.data as any).details) && (response.data as any).details.length > 0) {
@@ -1181,9 +1221,23 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         return null;
       }
     } catch (error: unknown) {
-      // remove optimistic on error
+      // remove optimistic on error — also revert bill
       if (optimisticId) {
         setOrders(prev => prev.filter((o: any) => o._id !== optimisticId && o.id !== optimisticId));
+        try {
+          if (optimisticBillId && optimisticAmt) {
+            setBills(prev => prev.map((b: any) => sameId(b, optimisticBillId) ? { ...b, subtotal: Math.max(0, Number(b.subtotal||0)-optimisticAmt), total: Math.max(0, Number(b.total||0)-optimisticAmt), remaining: Math.max(0, Number(b.remaining||0)-optimisticAmt), orders: (b.orders||[]).filter((o:any)=>!sameId(o, optimisticId)) } : b));
+          } else if (optimisticTableId && optimisticAmt) {
+            const tid = optimisticTableId;
+            setBills(prev => prev.map((b: any) => {
+              const bt = getId((b as any).table);
+              if (bt && tid && bt===tid && !['paid','cancelled'].includes(b.status)) {
+                return { ...b, subtotal: Math.max(0, Number(b.subtotal||0)-optimisticAmt), total: Math.max(0, Number(b.total||0)-optimisticAmt), remaining: Math.max(0, Number(b.remaining||0)-optimisticAmt), orders: (b.orders||[]).filter((o:any)=>!sameId(o, optimisticId)) };
+              }
+              return b;
+            }));
+          }
+        } catch {}
       }
       const err = error as { message?: string; response?: { data?: any } };
       const currentLang = window.i18n?.language || 'ar';
@@ -1211,6 +1265,8 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const updateOrder = async (id: string, updates: any): Promise<Order | null> => {
     let snapshot: Order[] = [];
     let didOptimistic = false;
+    let optBillId: any = null;
+    let optDelta = 0;
     try {
       // ── optimistic <50ms ──
       setOrders(prev => {
@@ -1218,12 +1274,38 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         const idx = prev.findIndex((o: any) => String(o._id || o.id) === String(id));
         if (idx !== -1) {
           didOptimistic = true;
+          const old: any = prev[idx];
           const copy = [...prev];
           copy[idx] = { ...copy[idx], ...updates, _optimistic: true } as any;
+          // compute delta for bill totals
+          try {
+            optBillId = getId(old.bill) || getId((copy[idx] as any).bill) || getId((updates as any).bill);
+            const oldAmt = Number(old.finalAmount ?? old.total ?? 0) || 0;
+            let newAmt = oldAmt;
+            if (Array.isArray((updates as any).items)) {
+              newAmt = (updates as any).items.reduce((s: number, it: any) => s + (Number(it.price) || 0) * (Number(it.quantity) || 1), 0);
+              // include manual discount if present in updates
+              if (typeof (updates as any).discount === 'number') newAmt -= Number((updates as any).discount);
+            } else if (typeof (updates as any).finalAmount === 'number') {
+              newAmt = Number((updates as any).finalAmount);
+            }
+            optDelta = newAmt - oldAmt;
+          } catch {}
           return copy;
         }
         return prev;
       });
+      if (optBillId && optDelta !== 0) {
+        setBills(prev => prev.map((b: any) => {
+          if (!sameId(b, optBillId)) return b;
+          const patched: any = { ...b };
+          patched.subtotal = Number(b.subtotal || 0) + optDelta;
+          patched.total = Number(b.total || 0) + optDelta;
+          patched.remaining = Number(b.remaining || 0) + optDelta;
+          patched.updatedAt = new Date().toISOString();
+          return patched;
+        }));
+      }
       const response = await api.updateOrder(id, updates);
       if (response.success && response.data) {
         setOrders(prev => prev.map((order: any) =>
@@ -1806,7 +1888,27 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setBills(prev => {
         snapshot = [...prev];
         const idx = prev.findIndex((b: any) => String(b._id || b.id) === String(id));
-        if (idx !== -1) { didOptimistic = true; const copy = [...prev] as any[]; copy[idx] = { ...copy[idx], _optimistic: true }; return copy; }
+        if (idx !== -1) {
+          didOptimistic = true;
+          const copy = [...prev] as any[];
+          const cur: any = copy[idx];
+          const items: any[] = Array.isArray(data?.items) ? data.items : [];
+          const estSubtotal = items.reduce((s: number, it: any) => s + (Number(it.price) || 0) * (Number(it.quantity) || 1), 0);
+          const estDiscount = Number(data?.discount || 0) || 0;
+          // optimistic totals: show new remaining instantly, corrected by server response / socket
+          const optimistic: any = { ...cur, _optimistic: true };
+          if (items.length > 0) {
+            // approximate: fixed discount not known without org settings; keep current fixed portion
+            const fixedAmt = Number(cur.fixedDiscount?.amount || 0) || 0;
+            optimistic.subtotal = estSubtotal;
+            const discTotal = estSubtotal - fixedAmt - estDiscount;
+            optimistic.total = Math.max(0, discTotal);
+            optimistic.remaining = Math.max(0, discTotal - Number(cur.paid || 0));
+            optimistic.updatedAt = new Date().toISOString();
+          }
+          copy[idx] = optimistic;
+          return copy;
+        }
         return prev;
       });
       const response = await api.updateBillAggregatedItems(id, data);
@@ -1831,7 +1933,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       });
       const response = await api.deleteBill(id);
       if (response.success) {
-        showNotification(t('toast.bill.deleted') || 'تم حذف الفاتورة', 'success');
+        showNotification(t('toast.bill.deleted'), 'success');
         // update tables optimistically to empty if no other unpaid bills for that table
         if ((deleted as any)?.table) {
           const tid = String(((deleted as any).table as any)?._id || ((deleted as any).table as any)?.id || (deleted as any).table);
@@ -1849,14 +1951,14 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const response = await api.createCost(costData);
       if (response.success && response.data) {
         setCosts(prev => [...prev, response.data!]);
-        showNotification('تم إضافة التكلفة بنجاح', 'success');
+        showNotification(t('toast.cost.added'), 'success');
         updateNotificationCount(1);
         return response.data;
       }
       return null;
     } catch (error: unknown) {
       const err = error as { message?: string };
-      showNotification(err.message || 'فشل في إضافة التكلفة', 'error');
+      showNotification(err.message || t('toast.cost.addError'), 'error');
       return null;
     }
   };
@@ -1868,13 +1970,13 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         setCosts(prev => prev.map(cost =>
           cost.id === id ? response.data! : cost
         ));
-        showNotification('تم تحديث التكلفة بنجاح', 'success');
+        showNotification(t('toast.cost.updated'), 'success');
         return response.data;
       }
       return null;
     } catch (error: unknown) {
       const err = error as { message?: string };
-      showNotification(err.message || 'فشل في تحديث التكلفة', 'error');
+      showNotification(err.message || t('toast.cost.updateError'), 'error');
       return null;
     }
   };
@@ -1884,13 +1986,13 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const response = await api.deleteCost(id);
       if (response.success) {
         setCosts(prev => prev.filter(cost => cost.id !== id));
-        showNotification('تم حذف التكلفة بنجاح', 'success');
+        showNotification(t('toast.cost.deleted'), 'success');
         return true;
       }
       return false;
     } catch (error: unknown) {
       const err = error as { message?: string };
-      showNotification(err.message || 'فشل في حذف التكلفة', 'error');
+      showNotification(err.message || t('toast.cost.deleteError'), 'error');
       return false;
     }
   };
@@ -1900,14 +2002,14 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const response = await api.createDevice(deviceData);
       if (response.success && response.data) {
         setDevices(prev => [...prev, response.data!]);
-        showNotification('تم إضافة الجهاز بنجاح', 'success');
+        showNotification(t('toast.device.added'), 'success');
         updateNotificationCount(1);
         return response.data;
       }
       return null;
     } catch (error: unknown) {
       const err = error as { message?: string };
-      showNotification(err.message || 'فشل في إضافة الجهاز', 'error');
+      showNotification(err.message || t('toast.device.addError'), 'error');
       return null;
     }
   };
@@ -1919,13 +2021,13 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         setDevices(prev => prev.map(device =>
           device.id === id ? response.data! : device
         ));
-        showNotification('تم تحديث الجهاز بنجاح', 'success');
+        showNotification(t('toast.device.updated'), 'success');
         return response.data;
       }
       return null;
     } catch (error: unknown) {
       const err = error as { message?: string };
-      showNotification(err.message || 'فشل في تحديث الجهاز', 'error');
+      showNotification(err.message || t('toast.device.updateError'), 'error');
       return null;
     }
   };
@@ -1937,13 +2039,13 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         setDevices(prev => prev.map(device =>
           device.id === id ? response.data! : device
         ));
-        showNotification('تم تحديث حالة الجهاز بنجاح', 'success');
+        showNotification(t('toast.device.statusUpdated'), 'success');
         return response.data;
       }
       return null;
     } catch (error: unknown) {
       const err = error as { message?: string };
-      showNotification(err.message || 'فشل في تحديث حالة الجهاز', 'error');
+      showNotification(err.message || t('toast.device.statusError'), 'error');
       return null;
     }
   };
@@ -1953,13 +2055,13 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const response = await api.deleteDevice(id);
       if (response.success) {
         await fetchDevices();
-        showNotification('تم حذف الجهاز بنجاح', 'success');
+        showNotification(t('toast.device.deleted'), 'success');
         return true;
       }
       return false;
     } catch (error: unknown) {
       const err = error as { message?: string };
-      showNotification(err.message || 'خطأ في حذف الجهاز', 'error');
+      showNotification(err.message || t('toast.device.deleteError'), 'error');
       return false;
     }
   };
@@ -1978,14 +2080,14 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const response = await api.createMenuItem(itemData);
       if (response.success && response.data) {
         await fetchMenuItems();
-        showNotification('تم إضافة العنصر بنجاح', 'success');
+        showNotification(t('toast.menu.itemAdded'), 'success');
         updateNotificationCount(1);
         return response.data;
       }
       return null;
     } catch (error: unknown) {
       const err = error as { message?: string };
-      showNotification(err.message || 'خطأ في إضافة العنصر', 'error');
+      showNotification(err.message || t('toast.menu.itemAddError'), 'error');
       return null;
     }
   };
@@ -1995,13 +2097,13 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const response = await api.updateMenuItem(id, updates);
       if (response.success && response.data) {
         await fetchMenuItems();
-        showNotification('تم تحديث العنصر بنجاح', 'success');
+        showNotification(t('toast.menu.itemUpdated'), 'success');
         return response.data;
       }
       return null;
     } catch (error: unknown) {
       const err = error as { message?: string };
-      showNotification(err.message || 'خطأ في تحديث العنصر', 'error');
+      showNotification(err.message || t('toast.menu.itemUpdateError'), 'error');
       return null;
     }
   };
@@ -2011,13 +2113,13 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const response = await api.deleteMenuItem(id);
       if (response.success) {
         await fetchMenuItems();
-        showNotification('تم حذف العنصر بنجاح', 'success');
+        showNotification(t('toast.menu.itemDeleted'), 'success');
         return true;
       }
       return false;
     } catch (error: unknown) {
       const err = error as { message?: string };
-      showNotification(err.message || 'خطأ في حذف العنصر', 'error');
+      showNotification(err.message || t('toast.menu.itemDeleteError'), 'error');
       return false;
     }
   };
@@ -2027,14 +2129,14 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const response = await api.mergeMenuItems(itemIds, name);
       if (response.success && response.data) {
         await fetchMenuItems();
-        showNotification('تم دمج العناصر بنجاح', 'success');
+        showNotification(t('toast.menu.itemsMerged'), 'success');
         return response.data;
       }
-      showNotification((response as any).message || 'خطأ في دمج العناصر', 'error');
+      showNotification((response as any).message || t('toast.menu.mergeError'), 'error');
       return null;
     } catch (error: unknown) {
       const err = error as { message?: string };
-      showNotification(err.message || 'خطأ في دمج العناصر', 'error');
+      showNotification(err.message || t('toast.menu.mergeError'), 'error');
       return null;
     }
   };
@@ -2081,13 +2183,13 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const response = await api.createMenuSection(sectionData);
       if (response.success && response.data) {
         await fetchMenuSections();
-        showNotification('تم إضافة القسم بنجاح', 'success');
+        showNotification(t('toast.menuSection.added'), 'success');
         return response.data;
       }
       return null;
     } catch (error: unknown) {
       const err = error as { message?: string };
-      showNotification(err.message || 'خطأ في إضافة القسم', 'error');
+      showNotification(err.message || t('toast.menuSection.addError'), 'error');
       return null;
     }
   };
@@ -2097,13 +2199,13 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const response = await api.updateMenuSection(id, updates);
       if (response.success && response.data) {
         await fetchMenuSections();
-        showNotification('تم تحديث القسم بنجاح', 'success');
+        showNotification(t('toast.menuSection.updated'), 'success');
         return response.data;
       }
       return null;
     } catch (error: unknown) {
       const err = error as { message?: string };
-      showNotification(err.message || 'خطأ في تحديث القسم', 'error');
+      showNotification(err.message || t('toast.menuSection.updateError'), 'error');
       return null;
     }
   };
@@ -2113,13 +2215,13 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const response = await api.deleteMenuSection(id);
       if (response.success) {
         await fetchMenuSections();
-        showNotification('تم حذف القسم بنجاح', 'success');
+        showNotification(t('toast.menuSection.deleted'), 'success');
         return true;
       }
       return false;
     } catch (error: unknown) {
       const err = error as { message?: string };
-      showNotification(err.message || 'خطأ في حذف القسم', 'error');
+      showNotification(err.message || t('toast.menuSection.deleteError'), 'error');
       return false;
     }
   };
@@ -2139,13 +2241,13 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const response = await api.createMenuCategory(categoryData);
       if (response.success && response.data) {
         await fetchMenuCategories();
-        showNotification('تم إضافة الفئة بنجاح', 'success');
+        showNotification(t('toast.menuCategory.added'), 'success');
         return response.data;
       }
       return null;
     } catch (error: unknown) {
       const err = error as { message?: string };
-      showNotification(err.message || 'خطأ في إضافة الفئة', 'error');
+      showNotification(err.message || t('toast.menuCategory.addError'), 'error');
       return null;
     }
   };
@@ -2155,13 +2257,13 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const response = await api.updateMenuCategory(id, updates);
       if (response.success && response.data) {
         await fetchMenuCategories();
-        showNotification('تم تحديث الفئة بنجاح', 'success');
+        showNotification(t('toast.menuCategory.updated'), 'success');
         return response.data;
       }
       return null;
     } catch (error: unknown) {
       const err = error as { message?: string };
-      showNotification(err.message || 'خطأ في تحديث الفئة', 'error');
+      showNotification(err.message || t('toast.menuCategory.updateError'), 'error');
       return null;
     }
   };
@@ -2171,13 +2273,13 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const response = await api.deleteMenuCategory(id);
       if (response.success) {
         await fetchMenuCategories();
-        showNotification('تم حذف الفئة بنجاح', 'success');
+        showNotification(t('toast.menuCategory.deleted'), 'success');
         return true;
       }
       return false;
     } catch (error: unknown) {
       const err = error as { message?: string };
-      showNotification(err.message || 'خطأ في حذف الفئة', 'error');
+      showNotification(err.message || t('toast.menuCategory.deleteError'), 'error');
       return false;
     }
   };
@@ -2224,16 +2326,16 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           }
           return [...prev.filter((s: any) => String(s._id || s.id) !== tempId), real];
         });
-        showNotification('تم إضافة القسم بنجاح', 'success');
+        showNotification(t('toast.tableSection.added'), 'success');
         return response.data;
       }
       setTableSections(prev => prev.filter((s: any) => String(s._id || s.id) !== tempId));
-      showNotification((response as any)?.message || 'خطأ في إضافة القسم', 'error');
+      showNotification((response as any)?.message || t('toast.tableSection.addError'), 'error');
       return null;
     } catch (error: unknown) {
       setTableSections(prev => prev.filter((s: any) => String(s._id || s.id) !== tempId));
       const err = error as { message?: string };
-      showNotification(err.message || 'خطأ في إضافة القسم', 'error');
+      showNotification(err.message || t('toast.tableSection.addError'), 'error');
       return null;
     }
   };
@@ -2250,16 +2352,16 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (response.success && response.data) {
         const real: any = { ...response.data, _id: response.data._id || response.data.id, id: response.data._id || response.data.id };
         setTableSections(prev => prev.map((s: any) => String(s._id || s.id) === String(id) ? { ...s, ...real } : s));
-        showNotification('تم تحديث القسم بنجاح', 'success');
+        showNotification(t('toast.tableSection.updated'), 'success');
         return response.data;
       }
       if (revertData) setTableSections(prev => prev.map((s: any) => String(s._id || s.id) === String(id) ? revertData : s));
-      showNotification((response as any)?.message || 'خطأ في تحديث القسم', 'error');
+      showNotification((response as any)?.message || t('toast.tableSection.updateError'), 'error');
       return null;
     } catch (error: unknown) {
       if (revertData) setTableSections(prev => prev.map((s: any) => String(s._id || s.id) === String(id) ? revertData : s));
       const err = error as { message?: string };
-      showNotification(err.message || 'خطأ في تحديث القسم', 'error');
+      showNotification(err.message || t('toast.tableSection.updateError'), 'error');
       return null;
     }
   };
@@ -2273,16 +2375,16 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     try {
       const response = await api.deleteTableSection(id);
       if (response.success) {
-        showNotification('تم حذف القسم بنجاح', 'success');
+        showNotification(t('toast.tableSection.deleted'), 'success');
         return true;
       }
       if (deleted) setTableSections(prev => [...prev, deleted]);
-      showNotification((response as any)?.message || 'خطأ في حذف القسم', 'error');
+      showNotification((response as any)?.message || t('toast.tableSection.deleteError'), 'error');
       return false;
     } catch (error: unknown) {
       if (deleted) setTableSections(prev => [...prev, deleted]);
       const err = error as { message?: string };
-      showNotification(err.message || 'خطأ في حذف القسم', 'error');
+      showNotification(err.message || t('toast.tableSection.deleteError'), 'error');
       return false;
     }
   };
@@ -2333,7 +2435,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       return null;
     } catch (error: unknown) {
       const err = error as { message?: string };
-      showNotification(err.message || 'خطأ في جلب حالة الطاولة', 'error');
+      showNotification(err.message || t('toast.table.statusError'), 'error');
       return null;
     }
   };
@@ -2370,16 +2472,16 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           // if there was an optimistic with same number+section still lingering (matching logic in socket), it's already filtered
           return [...filtered, { ...optimisticTable, ...real, _id: real._id, id: real._id, _optimistic: undefined }];
         });
-        showNotification('تم إضافة الطاولة بنجاح', 'success');
+        showNotification(t('toast.table.added'), 'success');
         return response.data;
       }
       setTables(prev => prev.filter((t: any) => String(t._id || t.id) !== tempId));
-      showNotification((response as any)?.message || 'خطأ في إضافة الطاولة', 'error');
+      showNotification((response as any)?.message || t('toast.table.addError'), 'error');
       return null;
     } catch (error: unknown) {
       setTables(prev => prev.filter((t: any) => String(t._id || t.id) !== tempId));
       const err = error as { message?: string };
-      showNotification(err.message || 'خطأ في إضافة الطاولة', 'error');
+      showNotification(err.message || t('toast.table.addError'), 'error');
       return null;
     }
   };
@@ -2400,16 +2502,16 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (response.success && response.data) {
         const real: any = { ...response.data, _id: response.data._id || response.data.id, id: response.data._id || response.data.id };
         setTables(prev => prev.map((t: any) => String(t._id || t.id) === String(id) ? { ...t, ...real } : t));
-        showNotification('تم تحديث الطاولة بنجاح', 'success');
+        showNotification(t('toast.table.updated'), 'success');
         return response.data;
       }
       if (revertData) setTables(prev => prev.map((t: any) => String(t._id || t.id) === String(id) ? revertData : t));
-      showNotification((response as any)?.message || 'خطأ في تحديث الطاولة', 'error');
+      showNotification((response as any)?.message || t('toast.table.updateError'), 'error');
       return null;
     } catch (error: unknown) {
       if (revertData) setTables(prev => prev.map((t: any) => String(t._id || t.id) === String(id) ? revertData : t));
       const err = error as { message?: string };
-      showNotification(err.message || 'خطأ في تحديث الطاولة', 'error');
+      showNotification(err.message || t('toast.table.updateError'), 'error');
       return null;
     }
   };
@@ -2423,16 +2525,16 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     try {
       const response = await api.deleteTable(id);
       if (response.success) {
-        showNotification('تم حذف الطاولة بنجاح', 'success');
+        showNotification(t('toast.table.deleted'), 'success');
         return true;
       }
       if (deleted) setTables(prev => [...prev, deleted]);
-      showNotification((response as any)?.message || 'خطأ في حذف الطاولة', 'error');
+      showNotification((response as any)?.message || t('toast.table.deleteError'), 'error');
       return false;
     } catch (error: unknown) {
       if (deleted) setTables(prev => [...prev, deleted]);
       const err = error as { message?: string };
-      showNotification(err.message || 'خطأ في حذف الطاولة', 'error');
+      showNotification(err.message || t('toast.table.deleteError'), 'error');
       return false;
     }
   };
@@ -2449,16 +2551,16 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
       const response = await api.createUser(payload);
       if (response.success && response.data) {
-        showNotification('تم إضافة المستخدم بنجاح', 'success');
+        showNotification(t('toast.user.added'), 'success');
         await fetchUsers();
         updateNotificationCount(1);
         return response.data;
       }
-      showNotification(response.message || 'فشل في إضافة المستخدم', 'error');
+      showNotification(response.message || t('toast.user.addError'), 'error');
       return null;
     } catch (error: unknown) {
       const err = error as { message?: string };
-      showNotification(err.message || 'فشل في إضافة المستخدم', 'error');
+      showNotification(err.message || t('toast.user.addError'), 'error');
       return null;
     }
   };
@@ -2467,15 +2569,15 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     try {
       const response = await api.updateUser(id, updates);
       if (response.success && response.data) {
-        showNotification('تم تحديث المستخدم بنجاح', 'success');
+        showNotification(t('toast.user.updated'), 'success');
         await fetchUsers();
         return response.data;
       }
-      showNotification(response.message || 'فشل في تحديث المستخدم', 'error');
+      showNotification(response.message || t('toast.user.updateError'), 'error');
       return null;
     } catch (error: unknown) {
       const err = error as { message?: string };
-      showNotification(err.message || 'فشل في تحديث المستخدم', 'error');
+      showNotification(err.message || t('toast.user.updateError'), 'error');
       return null;
     }
   };
@@ -2484,23 +2586,23 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     try {
       const response = await api.deleteUser(id);
       if (response.success) {
-        showNotification('تم حذف المستخدم بنجاح', 'success');
+        showNotification(t('toast.user.deleted'), 'success');
         await fetchUsers();
         return true;
       }
-      showNotification(response.message || 'فشل في حذف المستخدم', 'error');
+      showNotification(response.message || t('toast.user.deleteError'), 'error');
       return false;
     } catch (error: any) {
       console.error('Delete user error:', error);
 
-      let errorMessage = 'فشل في حذف المستخدم';
+      let errorMessage = t('toast.user.deleteError');
 
       if (error.response?.status === 403) {
-        errorMessage = error.response?.data?.message || 'ليس لديك صلاحية لحذف هذا المستخدم. تحتاج لصلاحية إدارة المستخدمين أو دور مدير.';
+        errorMessage = error.response?.data?.message || t('toast.user.deleteForbidden');
       } else if (error.response?.status === 401) {
-        errorMessage = 'انتهت صلاحية جلستك. يرجى تسجيل الدخول مرة أخرى.';
+        errorMessage = t('toast.user.sessionExpired');
       } else if (error.response?.status === 404) {
-        errorMessage = 'المستخدم غير موجود أو تم حذفه مسبقاً.';
+        errorMessage = t('toast.user.notFound');
       } else if (error.response?.data?.message) {
         errorMessage = error.response.data.message;
       } else if (error.message) {
@@ -2688,9 +2790,18 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
               const copy = [...prev] as any[];
               const b: any = { ...copy[idx] };
               const ordersArr = Array.isArray(b.orders) ? [...b.orders] : [];
-              if (!ordersArr.some((o: any) => sameId(o, oid))) {
+              const isNew = !ordersArr.some((o: any) => sameId(o, oid));
+              if (isNew) {
                 ordersArr.push(order);
                 b.orders = ordersArr;
+                // instant totals: until bill:updated arrives (≤100ms) show correct remaining
+                const amt = Number((order as any).finalAmount ?? (order as any).total ?? (order as any).totalAmount ?? 0) || 0;
+                if (amt) {
+                  b.subtotal = Number(b.subtotal || 0) + amt;
+                  b.total = Number(b.total || 0) + amt;
+                  b.remaining = Number(b.remaining || 0) + amt;
+                  b.updatedAt = new Date().toISOString();
+                }
               } else {
                 b.orders = ordersArr.map((o: any) => sameId(o, oid) ? order : o);
               }
@@ -2710,14 +2821,27 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (!order || !(order._id || order.id)) return;
       const oid = order._id || order.id;
       setOrders(prev => prev.map((o: any) => (normalizeId(o._id) === normalizeId(oid) || normalizeId(o.id) === normalizeId(oid)) ? { ...o, ...order, id: oid, _id: oid } : o));
-      // cross-sync bill
+      // cross-sync bill — also patch totals by delta until bill:updated arrives
       try {
         const billId = getId((order as any).bill);
         if (billId) {
           setBills(prev => prev.map((b: any) => {
             if (!sameId(b, billId)) return b;
-            const ordersArr = Array.isArray(b.orders) ? b.orders.map((o: any) => sameId(o, oid) ? order : o) : [order];
-            return { ...b, orders: ordersArr };
+            const ordersArrRaw = Array.isArray(b.orders) ? b.orders : [];
+            const oldOrd = ordersArrRaw.find((o: any) => sameId(o, oid));
+            const oldAmt = oldOrd ? Number((oldOrd as any).finalAmount ?? (oldOrd as any).total ?? 0) || 0 : 0;
+            const newAmt = Number((order as any).finalAmount ?? (order as any).total ?? 0) || 0;
+            const delta = newAmt - oldAmt;
+            const ordersArr = ordersArrRaw.map((o: any) => sameId(o, oid) ? order : o);
+            if (!ordersArr.some((o: any) => sameId(o, oid))) ordersArr.push(order);
+            const patched: any = { ...b, orders: ordersArr };
+            if (delta !== 0) {
+              patched.subtotal = Number(b.subtotal || 0) + delta;
+              patched.total = Number(b.total || 0) + delta;
+              patched.remaining = Number(b.remaining || 0) + delta;
+              patched.updatedAt = new Date().toISOString();
+            }
+            return patched;
           }));
         }
       } catch {}
@@ -2730,9 +2854,23 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const oid = payload?._id || payload?.id || payload;
       if (!oid) return;
       setOrders(prev => prev.filter((o: any) => !sameId(o, oid)));
-      // cross-sync bill + table
+      // cross-sync bill + table — also decrement totals instantly from embedded order
       try {
-        setBills(prev => prev.map((b: any) => ({ ...b, orders: (b.orders || []).filter((o: any) => !sameId(o, oid)) })));
+        setBills(prev => prev.map((b: any) => {
+          const has = (b.orders || []).some((o: any) => sameId(o, oid));
+          if (!has) return b;
+          const embedded = (b.orders || []).find((o: any) => sameId(o, oid));
+          const localAmt = embedded ? Number((embedded as any).finalAmount ?? (embedded as any).total ?? (embedded as any).totalAmount ?? 0) || 0 : 0;
+          const filtered = (b.orders || []).filter((o: any) => !sameId(o, oid));
+          const patched: any = { ...b, orders: filtered };
+          if (localAmt) {
+            patched.subtotal = Math.max(0, Number(b.subtotal || 0) - localAmt);
+            patched.total = Math.max(0, Number(b.total || 0) - localAmt);
+            patched.remaining = Math.max(0, Number(b.remaining || 0) - localAmt);
+            patched.updatedAt = new Date().toISOString();
+          }
+          return patched;
+        }));
       } catch {}
     };
     const onBillUpdated = (bill: any, eventType?: string) => {
@@ -2930,6 +3068,15 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     socket.on('order:created', onOrderCreated);
     socket.on('order:updated', onOrderUpdated);
     socket.on('order:deleted', onOrderDeleted);
+    // طلبات عملاء QR المعلقة — إدراج لحظي + تنبيه للعاملين (ليست للمطبخ)
+    socket.on('customer-order-request', (data: any) => {
+      try {
+        const order = data?.order || data;
+        if (!order) return;
+        onOrderCreated(order);
+        showNotification(t('customerOrders.newRequest') || 'طلب عميل جديد بانتظار المراجعة', 'info');
+      } catch {}
+    });
     socket.on('bill:updated', onBillUpdated);
     socket.on('bill:created', onBillUpdated);
     socket.on('bill:deleted', (bill: any) => onBillUpdated(bill, 'deleted'));
@@ -3025,7 +3172,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           if (!isToastKindEnabled(user, kk)) return;
         } catch {}
         const actor = (data as any)?.metadata?.actor;
-        const who = actor?.name ? ` — ${actor.name}${actor.source === 'mobile' ? ' (هاتف)' : ''}` : '';
+        const who = actor?.name ? ` — ${actor.name}${actor.source === 'mobile' ? ' (' + t('toast.common.mobile') + ')' : ''}` : '';
         const text = `${(data as any)?.title || ''}: ${(data as any)?.message || ''}${who}`.trim();
         const ntype = (data as any)?.type;
         const toastType = ntype === 'success' ? 'success' : ntype === 'error' ? 'error' : ntype === 'warning' ? 'warning' : 'info';
@@ -3218,6 +3365,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       socket.off('menu-update'); socket.off('cost-update'); socket.off('device-update'); socket.off('notification:new'); socket.off('activity:new'); socket.off('connect'); socket.off('disconnect'); socket.off('connect_error');
       socket.off('table-update'); socket.off('table-section-update'); socket.off('settings-update');
       socket.off('order:created', onOrderCreated); socket.off('order:updated', onOrderUpdated); socket.off('order:deleted', onOrderDeleted);
+      socket.off('customer-order-request');
       socket.off('bill:updated', onBillUpdated); socket.off('bill:created', onBillUpdated);
       socket.off('bill:deleted');
       socket.off('table:statusChanged', onTableStatusChanged);
@@ -3344,14 +3492,14 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     try {
       const response = await api.createNotification(notificationData);
       if (response.success && response.data) {
-        showNotification('تم إنشاء الإشعار بنجاح', 'success');
+        showNotification(t('toast.notification.created'), 'success');
         updateNotificationCount(1);
         return response.data;
       }
       return null;
     } catch (error: unknown) {
       const err = error as { message?: string };
-      showNotification(err.message || 'فشل في إنشاء الإشعار', 'error');
+      showNotification(err.message || t('toast.notification.createError'), 'error');
       return null;
     }
   };
@@ -3360,14 +3508,14 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     try {
       const response = await api.sendNotificationToRole(role, notificationData);
       if (response.success && response.data) {
-        showNotification(`تم إرسال الإشعار لدور ${role} بنجاح`, 'success');
+        showNotification(t('toast.notification.sentToRole', { role }), 'success');
         updateNotificationCount(1);
         return response.data;
       }
       return null;
     } catch (error: unknown) {
       const err = error as { message?: string };
-      showNotification(err.message || 'فشل في إرسال الإشعار', 'error');
+      showNotification(err.message || t('toast.notification.sendError'), 'error');
       return null;
     }
   };
@@ -3376,14 +3524,14 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     try {
       const response = await api.sendNotificationToPermission(permission, notificationData);
       if (response.success && response.data) {
-        showNotification(`تم إرسال الإشعار لمن لديهم صلاحية ${permission} بنجاح`, 'success');
+        showNotification(t('toast.notification.sentToPermission', { permission }), 'success');
         updateNotificationCount(1);
         return response.data;
       }
       return null;
     } catch (error: unknown) {
       const err = error as { message?: string };
-      showNotification(err.message || 'فشل في إرسال الإشعار', 'error');
+      showNotification(err.message || t('toast.notification.sendError'), 'error');
       return null;
     }
   };
@@ -3392,14 +3540,14 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     try {
       const response = await api.broadcastNotification(notificationData);
       if (response.success && response.data) {
-        showNotification('تم إرسال الإشعار لجميع المستخدمين بنجاح', 'success');
+        showNotification(t('toast.notification.broadcasted'), 'success');
         updateNotificationCount(1);
         return response.data;
       }
       return null;
     } catch (error: unknown) {
       const err = error as { message?: string };
-      showNotification(err.message || 'فشل في إرسال الإشعار', 'error');
+      showNotification(err.message || t('toast.notification.sendError'), 'error');
       return null;
     }
   };
@@ -3415,9 +3563,9 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       a.click();
       a.remove();
       window.URL.revokeObjectURL(url);
-      showNotification('تم تصدير التقرير بنجاح', 'success');
+      showNotification(t('toast.report.exported'), 'success');
     } catch (error) {
-      showNotification('فشل في تصدير التقرير', 'error');
+      showNotification(t('toast.report.exportError'), 'error');
     }
   };
 
@@ -3432,10 +3580,10 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       link.click();
       document.body.removeChild(link);
       window.URL.revokeObjectURL(url);
-      showNotification('تم تصدير التقرير بنجاح', 'success');
+      showNotification(t('toast.report.exported'), 'success');
     } catch (error: unknown) {
       const err = error as { message?: string };
-      showNotification(err.message || 'فشل في تصدير التقرير', 'error');
+      showNotification(err.message || t('toast.report.exportError'), 'error');
     }
   };
 
@@ -3462,15 +3610,15 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           console.warn('Failed to refresh user data:', refreshError);
         }
 
-        showNotification('تم تحديث الملف الشخصي بنجاح', 'success');
+        showNotification(t('toast.profile.updated'), 'success');
         return true;
       } else {
-        showNotification(response.message || 'فشل في تحديث الملف الشخصي', 'error');
+        showNotification(response.message || t('toast.profile.updateError'), 'error');
         return false;
       }
     } catch (error) {
       console.error('Error updating user profile:', error);
-      showNotification('فشل في تحديث الملف الشخصي', 'error');
+      showNotification(t('toast.profile.updateError'), 'error');
       return false;
     }
   };
@@ -3488,11 +3636,11 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         }
         return true;
       } else {
-        showNotification(response.message || 'فشل في حفظ إعدادات الطباعة', 'error');
+        showNotification(response.message || t('toast.settings.printSaveError'), 'error');
         return false;
       }
     } catch (error) {
-      showNotification('فشل في حفظ إعدادات الطباعة', 'error');
+      showNotification(t('toast.settings.printSaveError'), 'error');
       return false;
     }
   };
@@ -3501,14 +3649,14 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     try {
       const response = await api.changePassword(passwordData);
       if (response.success) {
-        showNotification('تم تغيير كلمة المرور بنجاح', 'success');
+        showNotification(t('toast.profile.passwordChanged'), 'success');
         return true;
       } else {
-        showNotification(response.message || 'فشل في تغيير كلمة المرور', 'error');
+        showNotification(response.message || t('toast.profile.passwordError'), 'error');
         return false;
       }
     } catch (error) {
-      showNotification('فشل في تغيير كلمة المرور', 'error');
+      showNotification(t('toast.profile.passwordError'), 'error');
       return false;
     }
   };
@@ -3519,14 +3667,14 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
       const response = await api.updateNotificationSettings(settingsData);
       if (response.success) {
-        showNotification('تم حفظ إعدادات الإشعارات بنجاح', 'success');
+        showNotification(t('toast.settings.notificationsSaved'), 'success');
         return true;
       } else {
-        showNotification(response.message || 'فشل في حفظ إعدادات الإشعارات', 'error');
+        showNotification(response.message || t('toast.settings.notificationsSaveError'), 'error');
         return false;
       }
     } catch (error) {
-      showNotification('تم حفظ إعدادات الإشعارات محلياً', 'warning');
+      showNotification(t('toast.settings.notificationsSavedLocal'), 'warning');
       return true;
     }
   };
@@ -3535,14 +3683,14 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     try {
       const response = await api.updateGeneralSettings(settingsData);
       if (response.success) {
-        showNotification('تم حفظ الإعدادات العامة بنجاح', 'success');
+        showNotification(t('toast.settings.generalSaved'), 'success');
         return true;
       } else {
-        showNotification(response.message || 'فشل في حفظ الإعدادات العامة', 'error');
+        showNotification(response.message || t('toast.settings.generalSaveError'), 'error');
         return false;
       }
     } catch (error) {
-      showNotification('فشل في حفظ الإعدادات العامة', 'error');
+      showNotification(t('toast.settings.generalSaveError'), 'error');
       return false;
     }
   };
@@ -3609,12 +3757,12 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         return response.data;
       } else {
         console.warn('Failed to fetch organization:', response.message);
-        showNotification(response.message || 'فشل في جلب بيانات المنشأة', 'error');
+        showNotification(response.message || t('toast.organization.fetchError'), 'error');
         return null;
       }
     } catch (error) {
       console.error('Error fetching organization:', error);
-      showNotification('فشل في جلب بيانات المنشأة', 'error');
+      showNotification(t('toast.organization.fetchError'), 'error');
       return null;
     }
   };
@@ -3623,14 +3771,14 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     try {
       const response = await api.updateOrganization(organizationData);
       if (response.success) {
-        showNotification('تم تحديث بيانات المنشأة بنجاح', 'success');
+        showNotification(t('toast.organization.updated'), 'success');
         return true;
       } else {
-        showNotification(response.message || 'فشل في تحديث بيانات المنشأة', 'error');
+        showNotification(response.message || t('toast.organization.updateError'), 'error');
         return false;
       }
     } catch (error) {
-      showNotification('فشل في تحديث بيانات المنشأة', 'error');
+      showNotification(t('toast.organization.updateError'), 'error');
       return false;
     }
   };
@@ -3639,14 +3787,14 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     try {
       const response = await api.updateOrganizationPermissions(permissions);
       if (response.success) {
-        showNotification('تم تحديث صلاحيات المنشأة بنجاح', 'success');
+        showNotification(t('toast.organization.permissionsUpdated'), 'success');
         return true;
       } else {
-        showNotification(response.message || 'فشل في تحديث صلاحيات المنشأة', 'error');
+        showNotification(response.message || t('toast.organization.permissionsError'), 'error');
         return false;
       }
     } catch (error) {
-      showNotification('فشل في تحديث صلاحيات المنشأة', 'error');
+      showNotification(t('toast.organization.permissionsError'), 'error');
       return false;
     }
   };
@@ -3683,11 +3831,11 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (response.success) {
         return response.data;
       } else {
-        showNotification(response.message || 'فشل في جلب قائمة المديرين', 'error');
+        showNotification(response.message || t('toast.organization.managersFetchError'), 'error');
         return [];
       }
     } catch (error) {
-      showNotification('فشل في جلب قائمة المديرين', 'error');
+      showNotification(t('toast.organization.managersFetchError'), 'error');
       return [];
     }
   };
@@ -3698,11 +3846,11 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (response.success) {
         return response.data;
       } else {
-        showNotification(response.message || 'فشل في جلب إعدادات التقارير', 'error');
+        showNotification(response.message || t('toast.report.settingsFetchError'), 'error');
         return null;
       }
     } catch (error) {
-      showNotification('فشل في جلب إعدادات التقارير', 'error');
+      showNotification(t('toast.report.settingsFetchError'), 'error');
       return null;
     }
   };
@@ -3711,14 +3859,14 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     try {
       const response = await api.updateReportSettings(reportSettings);
       if (response.success) {
-        showNotification('تم تحديث إعدادات التقارير بنجاح', 'success');
+        showNotification(t('toast.report.settingsUpdated'), 'success');
         return true;
       } else {
-        showNotification(response.message || 'فشل في تحديث إعدادات التقارير', 'error');
+        showNotification(response.message || t('toast.report.settingsUpdateError'), 'error');
         return false;
       }
     } catch (error) {
-      showNotification('فشل في تحديث إعدادات التقارير', 'error');
+      showNotification(t('toast.report.settingsUpdateError'), 'error');
       return false;
     }
   };
@@ -3737,14 +3885,14 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     try {
       const response = await api.sendReportNow();
       if (response.success) {
-        showNotification(response.message || 'تم إرسال التقرير بنجاح', 'success');
+        showNotification(response.message || t('toast.report.sent'), 'success');
         return true;
       } else {
-        showNotification(response.message || 'فشل في إرسال التقرير', 'error');
+        showNotification(response.message || t('toast.report.sendError'), 'error');
         return false;
       }
     } catch (error) {
-      showNotification('فشل في إرسال التقرير', 'error');
+      showNotification(t('toast.report.sendError'), 'error');
       return false;
     }
   };
@@ -3763,14 +3911,14 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     try {
       const response = await api.updatePayrollPermissions(permissions);
       if (response.success) {
-        showNotification(response.message || 'تم تحديث صلاحيات المرتبات بنجاح', 'success');
+        showNotification(response.message || t('toast.payroll.permissionsUpdated'), 'success');
         return true;
       } else {
-        showNotification(response.message || 'فشل في تحديث صلاحيات المرتبات', 'error');
+        showNotification(response.message || t('toast.payroll.permissionsError'), 'error');
         return false;
       }
     } catch (error) {
-      showNotification('فشل في تحديث صلاحيات المرتبات', 'error');
+      showNotification(t('toast.payroll.permissionsError'), 'error');
       return false;
     }
   };

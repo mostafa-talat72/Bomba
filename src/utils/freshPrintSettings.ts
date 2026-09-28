@@ -34,3 +34,17 @@ export async function getPrintFlagFresh(user: any, flag: string): Promise<boolea
     return false;
   }
 }
+
+export async function getFulfillmentFlagFresh(
+  user: any,
+  base: string,
+  fulfillment?: string,
+  def = false
+): Promise<boolean> {
+  try {
+    const { resolveFulfillmentFlag } = await import('./resolvePrintSettings');
+    return resolveFulfillmentFlag(await getEffectivePrintSettingsFresh(user), base, fulfillment, def);
+  } catch {
+    return def;
+  }
+}

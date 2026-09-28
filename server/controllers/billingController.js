@@ -39,6 +39,24 @@ const FAWRY_MERCHANT_CODE = process.env.FAWRY_MERCHANT_CODE || "YOUR_MERCHANT_CO
 const FAWRY_SECURE_KEY = process.env.FAWRY_SECURE_KEY || "YOUR_SECURE_KEY";
 const VALID_SUBSCRIPTION_AMOUNTS = { monthly: 299, yearly: 2999 };
 
+// ── الخصم اليدوي يتطلب صلاحية مستقلة (canApplyManualDiscount أو all) ──
+function canApplyManualDiscount(user) {
+    try {
+        if (user && typeof user.hasPermission === 'function') return user.hasPermission('canApplyManualDiscount') === true;
+        const perms = user?.permissions || [];
+        return perms.includes('all') || perms.includes('canApplyManualDiscount');
+    } catch { return false; }
+}
+function discountForbidden(res) {
+    return res.status(403).json({ success: false, message: 'ليس لديك صلاحية تطبيق خصم يدوي' });
+}
+// هل التغيير يمس الخصم فعلياً؟ (تجاهل 0→0 حتى لا يُمنع الحفظ العادي)
+function discountTouched(newVal, oldVal) {
+    const n = Number(newVal) || 0;
+    const o = Number(oldVal) || 0;
+    return n !== o && (n > 0 || o > 0);
+}
+
 // ── Helper: instant <100ms emit for bills + table status, keeps DB writes immediate ──
 function emitBillUpdated(req, bill, type = "updated", opts) {
     // invalidate getBill cache (<50ms) — fire-and-forget
@@ -84,7 +102,7 @@ function emitBillUpdated(req, bill, type = "updated", opts) {
         }
     } catch (e) { Logger.warn('emitBillUpdated failed', e.message); }
 }
-function emitBillDeleted(req, billId, tableId) {
+function emitBillDeleted(req, billId, tableId, extra) {
     try {
         const orgIdInv = getOrganizationId(req.user);
         if (orgIdInv && billId) {
@@ -98,7 +116,8 @@ function emitBillDeleted(req, billId, tableId) {
         const orgId = getOrganizationId(req.user);
         if (!orgId) return;
         const orgStr = String(orgId);
-        const payload = { _id: billId };
+        // حمولة غنية (رقم الفاتورة) لتوست النشاط — واستدعاء واحد فقط لمنع صفّي إشعار (race في الـ dedup)
+        const payload = { _id: billId, ...(extra && typeof extra === 'object' ? extra : {}) };
         req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('bill-update', { type: 'deleted', bill: payload });
         try {
             if (typeof req.io.notifyBillUpdate === "function") {
@@ -212,12 +231,13 @@ export const getBills = async (req, res) => {
             table,  // Support table parameter (ObjectId)
             page = 1,
             limit = 50,
-            startDate,  // IGNORED - Date filtering removed per requirements
-            endDate,    // IGNORED - Date filtering removed per requirements
+            startDate,  // ISO date — filters bills by createdAt (Bills archive page)
+            endDate,    // ISO date — filters bills by createdAt (Bills archive page)
             customerName,
             q,  // Search by bill number or ID - bypasses the default visibility filter
             all, // if all=true fetch all bills (paginated), otherwise unpaid only
             fulfillmentType, // dine_in | takeaway | delivery — server-side filter for paged views
+            sort, // newest (default, createdAt desc) | oldest (createdAt asc) — Bills archive page
             deliveryStatus, // preparing | out_for_delivery | delivered — delivery pipeline filter
             mode, // mode=list → صفوف خفيفة للقوائم (بلا أصناف/مدفوعات مفصلة) — التفاصيل عبر getBill
         } = req.query;
@@ -248,6 +268,20 @@ export const getBills = async (req, res) => {
         
         if (customerName) {
             query.customerName = { $regex: customerName, $options: "i" };
+        }
+
+        // Date range filter on creation time (Bills archive page)
+        if (startDate || endDate) {
+            query.createdAt = {};
+            if (startDate) {
+                const sd = new Date(startDate);
+                if (!Number.isNaN(sd.getTime())) query.createdAt.$gte = sd;
+            }
+            if (endDate) {
+                const ed = new Date(endDate);
+                if (!Number.isNaN(ed.getTime())) query.createdAt.$lte = ed;
+            }
+            if (Object.keys(query.createdAt).length === 0) delete query.createdAt;
         }
 
         if (['dine_in', 'takeaway', 'delivery'].includes(fulfillmentType)) {
@@ -349,7 +383,7 @@ export const getBills = async (req, res) => {
         // Version key: any Bill write bumps getVersion("bills"), so the cache
         // never serves stale data after a change (local or from sync).
         const billsOrgId = String(getOrganizationId(req.user));
-        const billsCacheKey = `bills:${billsOrgId}:${getVersion("bills")}:${JSON.stringify({ status, table, tableNumber, customerName, q, all, page, limit, fulfillmentType, deliveryStatus, mode })}`;
+        const billsCacheKey = `bills:${billsOrgId}:${getVersion("bills")}:${JSON.stringify({ status, table, tableNumber, customerName, q, all, page, limit, fulfillmentType, deliveryStatus, mode, startDate, endDate, sort })}`;
         const cachedBills = cache.get(billsCacheKey);
         if (cachedBills && !q) {
             return res.json(cachedBills);
@@ -399,7 +433,7 @@ export const getBills = async (req, res) => {
                         select: "name arabicName preparationTime price",
                     },
                 })
-            .sort({ createdAt: -1 })
+            .sort({ createdAt: sort === 'oldest' ? 1 : -1 })
             .lean();
 
         if (shouldPaginate) {
@@ -945,6 +979,11 @@ export const createBill = async (req, res) => {
             });
         }
 
+        // إنشاء فاتورة بخصم يتطلب صلاحية الخصم اليدوي
+        if ((Number(discount) > 0 || Number(discountPercentage) > 0) && !canApplyManualDiscount(req.user)) {
+            return discountForbidden(res);
+        }
+
         // Validate sessions if provided
         if (sessions && sessions.length > 0) {
             try {
@@ -1211,9 +1250,33 @@ export const updateBill = async (req, res) => {
             });
         }
 
+        // تغيير الخصم (مبلغ/نسبة) يتطلب صلاحية الخصم اليدوي
+        if ((discountTouched(discount, bill.discount) || discountTouched(discountPercentage, bill.discountPercentage)) && !canApplyManualDiscount(req.user)) {
+            return discountForbidden(res);
+        }
+
+        // نقل الفاتورة لطاولة يتطلب صلاحية حسب نوعها الحالي (صالة/تيك أوي/دليفري)
+        if (table !== undefined) {
+            const __oldT = String((bill.table && (bill.table._id || bill.table.id)) || bill.table || '');
+            const __newT = String((table && (table._id || table.id)) || table || '');
+            if (__newT && __newT !== __oldT) {
+                const __ft = String(bill.fulfillmentType || 'dine_in');
+                const __need = __ft === 'takeaway' ? 'canMoveBillTakeawayToTable' : __ft === 'delivery' ? 'canMoveBillDeliveryToTable' : 'canMoveBillTableToTable';
+                let __canMove = false;
+                try {
+                    if (req.user && typeof req.user.hasPermission === 'function') __canMove = req.user.hasPermission(__need) === true;
+                    else { const __p = (req.user && req.user.permissions) || []; __canMove = __p.includes('all') || __p.includes(__need); }
+                } catch { __canMove = false; }
+                if (!__canMove) {
+                    return res.status(403).json({ success: false, message: 'ليس لديك صلاحية نقل الفاتورة إلى طاولة' });
+                }
+            }
+        }
+
         // Paid bills CAN be edited: totals/remaining/status are recomputed on
         // save by pre-save hooks (paid→partial if the total grows, stays paid
         // if still fully covered). Only cancelled bills stay locked.
+        const __oldCustPhone = (bill.deliveryInfo && bill.deliveryInfo.phone) || bill.customerPhone || "";
         const wasPaid = bill.status === "paid";
         if (wasPaid) {
             Logger.info(`✏️ Editing paid bill ${bill.billNumber} — totals will be recomputed on save`);
@@ -1628,16 +1691,18 @@ export const updateBill = async (req, res) => {
             data: responseData,
         });
 
-        // دليل العملاء الموحد (دليفري): حدّث الاسم/العنوان عند تغير بيانات التوصيل — خلفية.
+        // دليل العملاء الموحد (دليفري): تحديث الاسم/العنوان دائمًا، والعداد
+        // يتحرك فقط عند تغير الرقم فعليًا (إنقاص القديم وزيادة الجديد) — خلفية.
         setImmediate(async () => {
             try {
                 const eff = updatedBill.fulfillmentType || updatedBill.billType;
                 const di = updatedBill.deliveryInfo;
                 const ph = di?.phone || updatedBill.customerPhone;
                 if (eff === 'delivery' && ph) {
-                    const { upsertDeliveryCustomer } = await import("../utils/deliveryCustomer.js");
-                    await upsertDeliveryCustomer({
-                        phone: ph,
+                    const { adjustDeliveryCustomerOnPhoneChange } = await import("../utils/deliveryCustomer.js");
+                    await adjustDeliveryCustomerOnPhoneChange({
+                        oldPhone: __oldCustPhone,
+                        newPhone: ph,
                         customerName: di?.customerName || updatedBill.customerName,
                         address: di?.address,
                         organization: getOrganizationId(req.user),
@@ -1710,6 +1775,7 @@ export const addPayment = async (req, res) => {
             status,
             paymentAmount,
             discountPercentage,
+            drawer,
         } = req.body;
 
         const bill = await Bill.findOne({ _id: req.params.id, ...organizationFilter(req.user) });
@@ -1719,6 +1785,11 @@ export const addPayment = async (req, res) => {
                 success: false,
                 message: "الفاتورة غير موجودة",
             });
+        }
+
+        // تغيير نسبة الخصم عند الدفع يتطلب صلاحية الخصم اليدوي
+        if (discountTouched(discountPercentage, bill.discountPercentage) && !canApplyManualDiscount(req.user)) {
+            return discountForbidden(res);
         }
 
         // إذا تم إرسال البيانات المحدثة مباشرة (من الفرونت إند الجديد)
@@ -1743,7 +1814,8 @@ export const addPayment = async (req, res) => {
                     false,
                     discountPercentage !== undefined
                         ? parseFloat(discountPercentage)
-                        : undefined
+                        : undefined,
+                    drawer || "safe"
                 );
                 bill.updatedBy = req.user._id;
                 
@@ -1832,7 +1904,8 @@ export const addPayment = async (req, res) => {
                             method: method || 'cash',
                             paidBy: req.user._id,
                             paidAt: new Date(),
-                            reference: reference || null
+                            reference: reference || null,
+                            drawer: drawer || 'safe'
                         });
                         sessionPayment.paidAmount = (sessionPayment.paidAmount || 0) + remainingAmount;
                         sessionPayment.remainingAmount = 0;
@@ -1939,9 +2012,12 @@ export const addPayment = async (req, res) => {
 
         emitBillUpdated(req, bill, "updated", { silent: true });
 
-        // Populate only essential fields for response (QR يُنشأ في الخلفية بلا حجب)
+        // Populate للاستجابة: الطباعة (فاتورة + تحضير) تحتاج الأصناف كاملة —
+        // بدونها تصل IDs فقط فيفشل التحضير بـ"لا توجد أصناف" وتطبع الفاتورة بلا أصناف
         await bill.populate([
-            { path: "table", select: "number name" }
+            { path: "table", select: "number name" },
+            { path: "orders", populate: { path: "items.menuItem", select: "name price" } },
+            { path: "sessions" },
         ]);
 
         // Real-time notify BEFORE response
@@ -2145,7 +2221,7 @@ export const removeOrderFromBill = async (req, res) => {
             // Tombstone FIRST (before delete).
             try { await createTombstone('bills', deletedBillId, getOrganizationId(req.user), req.user._id); } catch (e) {}
             await deleteFromBothDatabases(updatedBill, 'bills', `bill ${updatedBill.billNumber}`);
-            emitBillDeleted(req, deletedBillId, deletedBillTable);
+            emitBillDeleted(req, deletedBillId, deletedBillTable, { billNumber: updatedBill.billNumber, table: deletedBillTable });
             
             // Update table status if bill had a table
             if (deletedBillTable) {
@@ -2482,6 +2558,17 @@ export const deleteBill = async (req, res) => {
                 // حذف من Local
                 const deleteResult = await Order.deleteMany({ _id: { $in: orderIds } });
                 Logger.info(`✓ Deleted ${deleteResult.deletedCount} orders from Local MongoDB`);
+
+                // بث لحظي لحذف الطلبات — صامت (بلا صفوف إشعار/توست: صف الفاتورة يكفي)
+                // بدونه تفضل الطلبات ظاهرة في الطاولات/المطبخ حتى إعادة الجلب التالية
+                try {
+                    if (req.io && typeof req.io.notifyOrderUpdate === 'function' && orderIds.length > 0) {
+                        const orgIdForEmit = getOrganizationId(req.user);
+                        for (const oid of orderIds) {
+                            try { req.io.notifyOrderUpdate('deleted', { _id: oid }, orgIdForEmit, { silent: true }); } catch {}
+                        }
+                    }
+                } catch {}
                 
                 // حذف من Atlas مباشرة (non-blocking)
                 if (atlasDb) {
@@ -2618,6 +2705,17 @@ export const deleteBill = async (req, res) => {
                 } catch (e) {}
             }
 
+            // دليل العملاء (دليفري): حذف الفاتورة يلغي طلبها — إنقاص العداد.
+            try {
+                const __ph = (bill.deliveryInfo && bill.deliveryInfo.phone) || bill.customerPhone;
+                if ((bill.fulfillmentType || bill.billType) === 'delivery' && __ph) {
+                    const { decrementDeliveryCustomer } = await import("../utils/deliveryCustomer.js");
+                    await decrementDeliveryCustomer({ phone: __ph, organization: organizationId });
+                }
+            } catch (e) {
+                Logger.warn(`⚠️ Failed to decrement delivery customer count: ${e.message}`);
+            }
+
         } finally {
             // إعادة تفعيل المزامنة
             syncConfig.enabled = originalSyncEnabled;
@@ -2629,10 +2727,9 @@ export const deleteBill = async (req, res) => {
             await updateTableStatusIfNeeded(tableId, organizationId, req.io);
         }
 
-        // Emit bill-deleted event — instant
+        // Emit bill-deleted event — instant (single notify: emitBillDeleted already notifies)
         if (req.io) {
-            emitBillDeleted(req, bill._id, tableId);
-            req.io.notifyBillUpdate("deleted", { _id: bill._id, billNumber: bill.billNumber, table: tableId }, getOrganizationId(req.user));
+            emitBillDeleted(req, bill._id, tableId, { billNumber: bill.billNumber, table: tableId });
         }
 
         // Audit (fire-and-forget)
@@ -2666,7 +2763,7 @@ export const deleteBill = async (req, res) => {
 // @access  Private
 export const addPartialPayment = async (req, res) => {
     try {
-        const { items, paymentMethod } = req.body;
+        const { items, paymentMethod, drawer = "safe" } = req.body;
 
         Logger.info(`🔄 [addPartialPayment] Processing partial payment for bill: ${req.params.id}`, {
             itemsCount: items?.length,
@@ -2813,7 +2910,8 @@ export const addPartialPayment = async (req, res) => {
                 amount: paymentAmount,
                 paidAt: new Date(),
                 paidBy: req.user._id,
-                method: paymentMethod || "cash"
+                method: paymentMethod || "cash",
+                drawer: drawer || "safe"
             });
 
             totalPaymentAmount += paymentAmount;
@@ -2845,6 +2943,16 @@ export const addPartialPayment = async (req, res) => {
             totalPaymentAmount,
             processedItemsCount: processedItems.length,
             processedItems
+        });
+
+        // سجل موحد على مستوى الفاتورة (مصدر التقارير) — مرة واحدة لكل طلب
+        bill.paymentHistory.push({
+            amount: totalPaymentAmount,
+            method: paymentMethod || "cash",
+            paidBy: req.user._id,
+            type: "partial-items",
+            drawer: drawer || "safe",
+            details: { paidItems: processedItems, paidSessions: [] },
         });
 
         // حفظ الفاتورة
@@ -3521,7 +3629,7 @@ export const fawryWebhook = async (req, res) => {
 // Requirements: 1.1, 1.2, 1.3, 4.1, 4.2, 4.3
 export const payForItems = async (req, res) => {
     try {
-        const { items, paymentMethod = "cash" } = req.body;
+        const { items, paymentMethod = "cash", drawer = "safe" } = req.body;
 
         // Validate items array (Requirement 4.2)
         if (!items || !Array.isArray(items) || items.length === 0) {
@@ -3646,7 +3754,8 @@ export const payForItems = async (req, res) => {
             const result = bill.payForItems(
                 items,
                 paymentMethod,
-                req.user._id
+                req.user._id,
+                drawer
             );
             await bill.save();
         emitBillUpdated(req, bill, "updated", { silent: true });
@@ -3736,7 +3845,7 @@ export const payForItems = async (req, res) => {
 // @access  Private
 export const paySessionPartial = async (req, res) => {
     try {
-        const { sessionId, amount, paymentMethod = "cash" } = req.body;
+        const { sessionId, amount, paymentMethod = "cash", drawer = "safe" } = req.body;
 
         // Validate sessionId and amount
         if (!sessionId) {
@@ -3805,7 +3914,8 @@ export const paySessionPartial = async (req, res) => {
                 sessionId,
                 amount,
                 paymentMethod,
-                req.user._id
+                req.user._id,
+                drawer
             );
             await bill.save();
         emitBillUpdated(req, bill, "updated", { silent: true });
@@ -3944,7 +4054,7 @@ export const getBillAggregatedItems = async (req, res) => {
 // @access  Private
 export const addPartialPaymentAggregated = async (req, res) => {
     try {
-        const { items, paymentMethod } = req.body;
+        const { items, paymentMethod, drawer = "safe" } = req.body;
 
         Logger.info(`🔄 [addPartialPaymentAggregated] Processing aggregated partial payment for bill: ${req.params.id}`, {
             itemsCount: items?.length,
@@ -4098,7 +4208,8 @@ export const addPartialPaymentAggregated = async (req, res) => {
                 amount: paymentAmount,
                 paidAt: new Date(),
                 paidBy: req.user._id,
-                method: paymentMethod || "cash"
+                method: paymentMethod || "cash",
+                drawer: drawer || "safe"
             });
 
             totalPaymentAmount += paymentAmount;
@@ -4130,6 +4241,16 @@ export const addPartialPaymentAggregated = async (req, res) => {
             totalPaymentAmount,
             processedItemsCount: processedItems.length,
             processedItems
+        });
+
+        // سجل موحد على مستوى الفاتورة (مصدر التقارير) — مرة واحدة لكل طلب
+        bill.paymentHistory.push({
+            amount: totalPaymentAmount,
+            method: paymentMethod || "cash",
+            paidBy: req.user._id,
+            type: "partial-items",
+            drawer: drawer || "safe",
+            details: { paidItems: processedItems, paidSessions: [] },
         });
 
         // حفظ الفاتورة
@@ -4206,7 +4327,9 @@ export const addPartialPaymentAggregated = async (req, res) => {
 export const updateBillAggregatedItems = async (req, res) => {
     try {
         const { id } = req.params;
-        const { items } = req.body; // final aggregated items: [{menuItem?, name, price, quantity, notes, addons}]
+        const { items, discount, customerName, customerPhone, address, deliveryInfo, deliveryFee } = req.body; // final aggregated items + manual discount (amount) + customer identity (delivery)
+
+        const manualDiscountAmount = Math.max(0, Math.round(Number(discount) || 0));
 
         if (!mongoose.Types.ObjectId.isValid(id)) {
             return res.status(400).json({ success: false, message: "معرف الفاتورة غير صحيح" });
@@ -4219,6 +4342,19 @@ export const updateBillAggregatedItems = async (req, res) => {
 
         if (bill.status === "cancelled") {
             return res.status(400).json({ success: false, message: "لا يمكن تعديل فاتورة ملغاة" });
+        }
+
+        // رقم العميل قبل التعديل — لضبط عداد الدليل فقط عند تغيره فعليًا.
+        const __oldCustPhone = (bill.deliveryInfo && bill.deliveryInfo.phone) || bill.customerPhone || "";
+
+        // تغيير الخصم اليدوي المجمع يتطلب صلاحية الخصم اليدوي
+        // (تقريب الحالي لتفادي حظر كاذب مع كسور قديمة مخزنة)
+        {
+            const currentAggDiscount = (bill.orders || []).reduce((s, o) => s + (Number(o?.discount) || 0), 0);
+            const currentRounded = Math.round(currentAggDiscount);
+            if (manualDiscountAmount !== currentRounded && (manualDiscountAmount > 0 || currentRounded > 0) && !canApplyManualDiscount(req.user)) {
+                return discountForbidden(res);
+            }
         }
 
         // Validate items array (allow empty = clear bill)
@@ -4460,11 +4596,14 @@ export const updateBillAggregatedItems = async (req, res) => {
             orderFixedDiscount = { percentage: effectivePct, amount: fdAmount, maxCap: cap };
         }
 
+        // Track order mutations for instant socket sync (table card reads orders count)
+        const _orderEvents = [];
         if (processedItems.length === 0) {
             // Clear all orders (tombstones FIRST, then delete)
             for (const ord of existingOrders) {
                 try { await createTombstone("orders", ord._id, getOrganizationId(req.user), req.user._id); } catch {}
                 await Order.deleteOne({ _id: ord._id });
+                _orderEvents.push({ type: 'deleted', doc: { _id: ord._id } });
             }
             bill.orders = [];
         } else if (existingOrders.length === 0) {
@@ -4476,8 +4615,9 @@ export const updateBillAggregatedItems = async (req, res) => {
                 table: tableId,
                 items: processedItems,
                 subtotal,
+                discount: manualDiscountAmount,
                 fixedDiscount: orderFixedDiscount,
-                finalAmount: subtotal - orderFixedDiscount.amount,
+                finalAmount: subtotal - orderFixedDiscount.amount - manualDiscountAmount,
                 totalCost,
                 organization: getOrganizationId(req.user),
                 createdBy: req.user._id,
@@ -4488,6 +4628,7 @@ export const updateBillAggregatedItems = async (req, res) => {
             });
             await newOrder.save();
             bill.orders = [newOrder._id];
+            _orderEvents.push({ type: 'created', doc: newOrder });
         } else {
             // Update primary order, delete others
             const sorted = [...existingOrders].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
@@ -4497,18 +4638,21 @@ export const updateBillAggregatedItems = async (req, res) => {
             }
             primary.items = processedItems;
             primary.subtotal = subtotal;
+            primary.discount = manualDiscountAmount;
             primary.fixedDiscount = orderFixedDiscount;
-            primary.finalAmount = subtotal - orderFixedDiscount.amount;
+            primary.finalAmount = subtotal - orderFixedDiscount.amount - manualDiscountAmount;
             primary.totalCost = totalCost;
             primary.fulfillmentType = orderFulfillmentType;
             // Keep table/bill linkage
             primary.bill = bill._id;
             await primary.save();
+            _orderEvents.push({ type: 'updated', doc: primary });
             // Delete other orders (inventory already adjusted via delta, so no extra restore)
             // Tombstones FIRST, then delete.
             for (let i = 1; i < sorted.length; i++) {
                 try { await createTombstone("orders", sorted[i]._id, getOrganizationId(req.user), req.user._id); } catch {}
                 await Order.deleteOne({ _id: sorted[i]._id });
+                _orderEvents.push({ type: 'deleted', doc: { _id: sorted[i]._id } });
             }
             bill.orders = [primary._id];
         }
@@ -4598,6 +4742,32 @@ export const updateBillAggregatedItems = async (req, res) => {
             bill.itemPayments = rebuiltItemPayments;
         }
 
+        // Customer identity (delivery bills only — pricing untouched)
+        if (bill.fulfillmentType === "delivery") {
+            if (customerName !== undefined) {
+                bill.customerName = customerName;
+                if (!bill.deliveryInfo) bill.deliveryInfo = {};
+                bill.deliveryInfo.customerName = customerName;
+            }
+            if (customerPhone !== undefined) {
+                bill.customerPhone = customerPhone;
+                if (!bill.deliveryInfo) bill.deliveryInfo = {};
+                bill.deliveryInfo.phone = customerPhone;
+            }
+            const addrSrc = address !== undefined ? address : (deliveryInfo && typeof deliveryInfo === "object" ? deliveryInfo.address : undefined);
+            if (addrSrc !== undefined) {
+                if (!bill.deliveryInfo) bill.deliveryInfo = {};
+                bill.deliveryInfo.address = addrSrc;
+            }
+            if (deliveryFee !== undefined) {
+                const df = Number(deliveryFee);
+                if (Number.isFinite(df) && df >= 0) {
+                    if (!bill.deliveryInfo) bill.deliveryInfo = {};
+                    bill.deliveryInfo.deliveryFee = df;
+                }
+            }
+        }
+
         // Recalculate bill totals
         await bill.calculateSubtotal();
         bill.calculateRemainingAmount();
@@ -4615,10 +4785,25 @@ export const updateBillAggregatedItems = async (req, res) => {
         const billResponse = bill.toObject();
 
         emitBillUpdated(req, bill);
-        // Socket notify
+        // Socket notify — bills
         if (req.io) {
             try {
                 req.io.notifyBillUpdate?.("updated", bill, req.user.organization);
+            } catch {}
+            // Socket notify — orders (table card reads orders count, not just bill.orders)
+            try {
+                const orgId = getOrganizationId(req.user);
+                for (const ev of _orderEvents) {
+                    if (ev.type === 'created') req.io.notifyOrderUpdate?.("created", ev.doc, orgId);
+                    else if (ev.type === 'updated') req.io.notifyOrderUpdate?.("updated", ev.doc, orgId);
+                    else if (ev.type === 'deleted') req.io.notifyOrderUpdate?.("deleted", ev.doc, orgId);
+                    try {
+                        if (syncConfig?.isAtlasEnabled?.()) {
+                            if (ev.type === 'deleted') writeToAtlas("orders", "delete", null, { _id: ev.doc._id });
+                            else writeToAtlas("orders", "upsert", ev.doc.toObject ? ev.doc.toObject() : ev.doc, { _id: ev.doc._id });
+                        }
+                    } catch {}
+                }
             } catch {}
         }
 
@@ -4630,6 +4815,26 @@ export const updateBillAggregatedItems = async (req, res) => {
         } catch {}
 
         res.json({ success: true, message: "تم تحديث أصناف الفاتورة بنجاح", data: billResponse });
+
+        // دليل العملاء (دليفري): العداد يتحرك فقط عند تغير الرقم فعليًا — خلفية.
+        setImmediate(async () => {
+            try {
+                if (bill.fulfillmentType === "delivery") {
+                    const di = bill.deliveryInfo;
+                    const ph = (di && di.phone) || bill.customerPhone;
+                    if (ph) {
+                        const { adjustDeliveryCustomerOnPhoneChange } = await import("../utils/deliveryCustomer.js");
+                        await adjustDeliveryCustomerOnPhoneChange({
+                            oldPhone: __oldCustPhone,
+                            newPhone: ph,
+                            customerName: (di && di.customerName) || bill.customerName,
+                            address: di && di.address,
+                            organization: getOrganizationId(req.user),
+                        });
+                    }
+                }
+            } catch {}
+        });
     } catch (error) {
         Logger.error("خطأ في تحديث أصناف الفاتورة المجمعة", error);
         res.status(500).json({ success: false, message: "خطأ في تحديث أصناف الفاتورة", error: error.message });

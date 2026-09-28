@@ -22,6 +22,7 @@ import { syncApi } from './api/sync';
 import { auditApi } from './api/audit';
 import { shiftsApi } from './api/shifts';
 import { connectedDevicesApi } from './api/connectedDevices';
+import { customersApi } from './api/customers';
 
 // Single composed client: one ApiClient instance plus domain APIs.
 import { apiClient } from './api/client';
@@ -47,6 +48,7 @@ export const api = Object.assign(apiClient,
   auditApi,
   shiftsApi,
   connectedDevicesApi,
+  customersApi,
 );
 
 export default api;

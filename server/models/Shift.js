@@ -18,6 +18,9 @@ const shiftSchema = new mongoose.Schema(
         },
         openedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
         openedByName: { type: String, default: null },
+        // صاحب الوردية (درجه الخاص) — النطاق: وردية مفتوحة واحدة لكل مستخدم.
+        // تُملأ تلقائياً من openedBy للسجلات القديمة عند أول لمس.
+        user: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null, index: true },
         openedAt: { type: Date, default: Date.now, required: true },
         openingCash: { type: Number, default: 0, min: 0 }, // cash in drawer at open
         closedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
@@ -39,6 +42,7 @@ const shiftSchema = new mongoose.Schema(
 );
 
 shiftSchema.index({ organization: 1, status: 1, openedAt: -1 });
+shiftSchema.index({ organization: 1, user: 1, status: 1 });
 
 applySyncMiddleware(shiftSchema, 'Shift');
 

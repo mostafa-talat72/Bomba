@@ -1,10 +1,10 @@
 import api from '../services/api';
 import { toast } from 'react-toastify';
-import { formatDecimal, getCurrencySymbol, getDisplayNumber, splitDailySeq } from './formatters';
+import { formatDecimal, getCurrencySymbol, getDisplayNumber } from './formatters';
 import type { TFunction } from 'i18next';
 import { getCachedDevicePrinter, printThroughLocalBridge } from './localPrintBridge';
 import { getCurrentUserCache } from './currentUser';
-import { resolveDocLayout, brandHtml, layoutCss, DEFAULT_DOC_LAYOUT, DocPrintLayout } from './printLayout';
+import { resolveDocLayout, brandHtml, layoutCss, printFontImport, DEFAULT_DOC_LAYOUT, DocPrintLayout } from './printLayout';
 import { isMobileDevice } from './deviceDetect';
 
 interface OrderItem {
@@ -68,7 +68,7 @@ export const buildOrderPrintHTML = async (
   t: TFunction = ((key: string) => key) as TFunction,
   tableSectionName?: string,
   selectedSectionIds?: string[],
-  extra?: { logoUrl?: string; layout?: DocPrintLayout }
+  extra?: { logoUrl?: string; layout?: DocPrintLayout; printFont?: string; customFooter?: string; copyPrinters?: Array<string | undefined>; billNumber?: string }
 ): Promise<string> => {
   // Get establishment name from order data or use fallback
   let establishmentName = fallbackOrganizationName || t('orderPrint.defaultEstablishment') || 'Cafe Management System';
@@ -242,20 +242,12 @@ const printAllSectionsInOnePage = (
   language: string,
   t: TFunction,
   tableSectionName?: string,
-  extra?: { logoUrl?: string; layout?: DocPrintLayout }
+  extra?: { logoUrl?: string; layout?: DocPrintLayout; printFont?: string; customFooter?: string; copyPrinters?: Array<string | undefined>; billNumber?: string }
 ) => {
   const now = new Date();
   const locale = language === 'ar' ? 'ar-EG' : language === 'fr' ? 'fr-FR' : 'en-US';
   const organizationTimezone = localStorage.getItem('organizationTimezone') || 'Africa/Cairo';
-  const dateTimeString = now.toLocaleString(locale, {
-    timeZone: organizationTimezone,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: true
-  });
+  const billNum = String(extra?.billNumber || (order as any)?.billNumber || '');
 
   const isUpdatedOrder = order.updatedAt && 
     new Date(order.updatedAt).getTime() > new Date(order.createdAt).getTime();
@@ -263,7 +255,10 @@ const printAllSectionsInOnePage = (
   const dir = language === 'ar' ? 'rtl' : 'ltr';
   const align = language === 'ar' ? 'right' : 'left';
   const layout = extra?.layout || DEFAULT_DOC_LAYOUT;
+  const showPrice = layout.showPriceCol === true;
+  const showTotal = layout.showTotalCol === true;
   const logoUrl = extra?.logoUrl;
+  const printFont = extra?.printFont || 'Tajawal';
   const showLogo = layout.logoShow !== false && layout.logoPosition !== 'hide' && !!logoUrl;
   const logoW = Math.min(200, Math.max(40, Number(layout.logoWidth) || 110));
   const logoImg = showLogo ? `<img src="${logoUrl}" style="width:${logoW}px;max-width:${logoW}px;height:auto;" />` : '';
@@ -289,10 +284,15 @@ const printAllSectionsInOnePage = (
       <div class="section-block">
         <!-- Header for each section -->
         <div class="header">
-          ${showLogo ? (layout.logoPosition === 'beside'
-            ? `<div style="display:flex;align-items:center;justify-content:center;gap:8px;"><h1 style="margin:0;">${establishmentName}</h1><div>${logoImg}</div></div>`
-            : `<div style="text-align:center;margin-bottom:4px;">${logoImg}</div><h1>${establishmentName}</h1>`) : `<h1>${establishmentName}</h1>`}
-          ${isUpdatedOrder ? `
+          ${(() => {
+            const showN = layout.showOrgName !== false;
+            if (!showLogo && !showN) return '';
+            if (!showLogo) return `<h1>${establishmentName}</h1>`;
+            return layout.logoPosition === 'beside'
+              ? `<div style="display:flex;align-items:center;justify-content:center;gap:8px;">${showN ? `<h1 style="margin:0;">${establishmentName}</h1>` : ''}<div>${logoImg}</div></div>`
+              : `<div style="text-align:center;margin-bottom:4px;">${logoImg}</div>${showN ? `<h1>${establishmentName}</h1>` : ''}`;
+          })()}
+          ${isUpdatedOrder && layout.showUpdateBanner !== false ? `
           <div class="update-banner">
             <span>🔄 ${t('orderPrint.orderUpdated')}</span>
             <small>${new Date(order.updatedAt!).toLocaleString(locale, { timeZone: organizationTimezone })}</small>
@@ -302,31 +302,60 @@ const printAllSectionsInOnePage = (
         <!-- Order info for each section -->
         <div class="order-info">
           <div style="margin-bottom: 2px;">
-            ${layout.showOrderNumber !== false ? `<div style="font-size: 19px; font-weight: 700; margin: 2px 0;">${splitDailySeq(order.orderNumber).head}<strong style="font-size: 22px; font-weight: 900; background: #000; color: #fff; padding: 0 8px; border-radius: 6px;">${splitDailySeq(order.orderNumber).seq}</strong></div>` : ''}
-            ${layout.showFulfillmentBadge !== false && !((order.fulfillmentType === 'delivery' || order.fulfillmentType === 'takeaway') && order.customerName && layout.showCustomer !== false) ? (order.fulfillmentType === 'delivery' ? `
-            <div style="font-size: 1.4em; font-weight: 900; margin: 8px 0 6px; text-align: center; line-height: 2;"><span style="background: #000; color: #fff; padding: 4px 14px; border-radius: 4px; display: inline-block; line-height: 1.4;">🛵 دليفري</span></div>` : order.fulfillmentType === 'takeaway' ? `
-            <div style="font-size: 1.4em; font-weight: 900; margin: 8px 0 6px; text-align: center; line-height: 2;"><span style="background: #000; color: #fff; padding: 4px 14px; border-radius: 4px; display: inline-block; line-height: 1.4;">🥡 تيك أوي</span></div>` : '') : ''}
-            ${(() => { let nm = ''; try { nm = (getCurrentUserCache() as any)?.name || ''; } catch {} const sd = layout.showDate !== false; const su = layout.showUser !== false && !!nm; if (!sd && !su) return ''; return `<div style="font-size: 1.15em; font-weight: 900; color: #333; margin: 2px 0;">${sd ? `<span class="order-date">${dateTimeString}</span>` : ''}${su ? `<span class="order-user"> — 👤 ${nm}</span>` : ''}</div>`; })()}
-            ${order.table?.number && layout.showTable !== false ? `
-              <div style="font-size: 1.15em; font-weight: 900; margin: 2px 0; text-align: center;">
-                ${t('orderPrint.table')}: <strong style="font-size: 1.3em;">${order.table.number}</strong>${tableSectionName ? `—(${tableSectionName})` : ''}
+            ${(() => {
+              const showNum = layout.showOrderNumber !== false;
+              const showRel = layout.showRelatedBill !== false;
+              const showNumLb = layout.showOrderNumberLabel !== undefined ? layout.showOrderNumberLabel === true : showNum;
+              const showRelLb = layout.showRelatedBillLabel !== undefined ? layout.showRelatedBillLabel === true : showRel;
+              const printNum = String(order.orderNumber || '').replace(/^#/, '').replace(/^(BILL|ORD|SES|INV)-[^-]+-/, '') || order.orderNumber || '';
+              const bn = billNum ? String(billNum).replace(/^#/, '').replace(/^(BILL|ORD|SES|INV)-[^-]+-/, '') : '';
+              if (!showNum && !(showRel && bn) && !showNumLb && !(showRelLb && bn)) return '';
+              return `<div class="info" style="display:flex;justify-content:space-between;align-items:center;gap:6px;font-weight:900;margin:2px 0;"><span>${(showNum || showNumLb) ? `<span class="order-number" style="font-weight:700;">${showNumLb ? `<span class="order-number-label">${t('orderPrint.orderNumber')}:</span> ` : ''}${showNum ? `<span class="order-number-value">${printNum}</span>` : ''}</span>` : ''}</span><span>${(showRel && bn) || (showRelLb && bn) ? `<span class="related-bill">${showRelLb ? `<span class="related-bill-label">${t('orderPrint.relatedBill')}:</span> ` : ''}${showRel && bn ? `<span class="related-bill-value">${bn}</span>` : ''}</span>` : ''}</span></div>`;
+            })()}
+            ${(() => {
+              const sd = layout.showDate !== false;
+              const st = layout.showTime !== false;
+              const sdLb = layout.showDateLabel !== undefined ? layout.showDateLabel === true : sd;
+              const stLb = layout.showTimeLabel !== undefined ? layout.showTimeLabel === true : st;
+              if (!sd && !st && !sdLb && !stLb) return '';
+              let ts = order.createdAt ? new Date(order.createdAt) : now;
+              if (isNaN(ts.getTime())) ts = now;
+              return `<div class="info" style="display:flex;justify-content:space-between;align-items:center;gap:6px;font-weight:900;font-size:1.15em;margin:2px 0;"><span>${(sd || sdLb) ? `<span class="order-date">${sdLb ? `<span class="order-date-label">${t('orderPrint.date')}:</span> ` : ''}${sd ? `<span class="order-date-value">${ts.toLocaleDateString(locale, { timeZone: organizationTimezone, year: 'numeric', month: '2-digit', day: '2-digit' })}</span>` : ''}</span>` : ''}</span><span>${(st || stLb) ? `<span class="order-time">${stLb ? `<span class="order-time-label">${t('orderPrint.time')}:</span> ` : ''}${st ? `<span class="order-time-value">${ts.toLocaleTimeString(locale, { timeZone: organizationTimezone, hour: '2-digit', minute: '2-digit', hour12: true })}</span>` : ''}</span>` : ''}</span></div>`;
+            })()}
+            ${(() => {
+              const showTag = layout.showFulfillmentBadge !== false;
+              const showTagLb = layout.showFulfillmentBadgeLabel !== undefined ? layout.showFulfillmentBadgeLabel === true : showTag;
+              let nm = ''; try { nm = (getCurrentUserCache() as any)?.name || ''; } catch {}
+              const showU = layout.showUser !== false && !!nm;
+              const showULb = layout.showUserLabel !== undefined ? layout.showUserLabel === true : showU;
+              if (!showTag && !showU && !showTagLb && !showULb) return '';
+              const tag = order.fulfillmentType === 'delivery' ? '🛵 دليفري' : order.fulfillmentType === 'takeaway' ? '🥡 تيك أوي' : '🍽️ صالة';
+              return `<div class="info" style="display:flex;justify-content:space-between;align-items:center;gap:6px;font-weight:900;font-size:1.15em;margin:2px 0;"><span>${(showTag || showTagLb) ? `<span class="fulfill-badge">${showTagLb ? `<span class="order-type-label">${t('orderPrint.fulfillmentType')}:</span> ` : ''}${showTag ? `<span class="order-type-value">${tag}</span>` : ''}</span>` : ''}</span><span>${(showU || showULb) ? `<span class="order-user">${showULb ? `<span class="order-user-label">${t('orderPrint.user')}:</span> ` : ''}${showU ? `<span class="order-user-value">👤 ${nm}</span>` : ''}</span>` : ''}</span></div>`;
+            })()}
+            ${order.fulfillmentType !== 'delivery' && order.fulfillmentType !== 'takeaway' && order.table?.number && layout.showTable !== false ? `
+              <div class="info" style="font-size: 1.15em; font-weight: 900; margin: 2px 0; text-align: center;">
+                ${t('orderPrint.table')}: <strong style="font-size: 1.3em;">${order.table.number}${(order.table as any)?.name && String((order.table as any).name) !== String(order.table.number) ? ` (${(order.table as any).name})` : ''}${tableSectionName ? ` — (${tableSectionName})` : ''}</strong>
               </div>
-            ` : ((() => {
-              const isFD = order.fulfillmentType === 'delivery' || order.fulfillmentType === 'takeaway';
+            ` : (() => {
               const nm = order.customerName || '';
               const ph = order.customerPhone || '';
-              if (!(nm || ph) || layout.showCustomer === false) return '';
-              const showN = !!nm && layout.showCustName !== false;
-              const showP = !!ph && layout.showPhone !== false;
-              if (!isFD) {
-                return `<div style="font-size: 1.15em; font-weight: 900; margin: 2px 0; text-align: center;">
-                ${t('orderPrint.customer')}: ${showN ? `<span class="cust-name">${nm}</span>` : ''}${showP ? `<span class="cust-phone">${showN ? ' — ' : ''}${ph}</span>` : ''}</div>`;
+              if (order.fulfillmentType === 'delivery') {
+                if (!(nm || ph) || layout.showCustomer === false) return '';
+                const showN = !!nm && layout.showCustName !== false;
+                const showP = !!ph && layout.showPhone !== false;
+                const showNLb = !!nm && (layout.showCustNameLabel !== undefined ? layout.showCustNameLabel === true : showN);
+                const showPLb = !!ph && (layout.showPhoneLabel !== undefined ? layout.showPhoneLabel === true : showP);
+                if (!showN && !showP && !showNLb && !showPLb) return '';
+                return `<div class="info" style="display:flex;justify-content:space-between;align-items:center;gap:6px;font-weight:900;font-size:1.15em;margin:2px 0;"><span>${(showN || showNLb) ? `${showNLb ? `<span class="order-custname-label">${t('orderPrint.customer')}:</span> ` : ''}${showN ? `<span class="cust-name">${nm}</span>` : ''}` : ''}</span><span>${(showP || showPLb) ? `${showPLb ? `<span class="order-phone-label">${t('orderPrint.customerPhone')}:</span> ` : ''}${showP ? `<span class="cust-phone">${ph}</span>` : ''}` : ''}</span></div>`;
               }
-              if (!showN && !showP) return '';
-              const word = order.fulfillmentType === 'delivery' ? '🛵 دليفري' : '🥡 تيك أوي';
-              return `<div style="font-size: 1.35em; font-weight: 900; margin: 2px 0; text-align: center;">
-                ${word}: ${showN ? `<span class="cust-name">${nm}</span>` : ''}${showP ? `<span class="cust-phone">${showN ? ' — ' : ''}${ph}</span>` : ''}</div>`;
-            })())}
+              if (!(nm || ph) || layout.showCustomer === false) return '';
+              const showN3 = layout.showCustName !== false;
+              const showN3Lb = layout.showCustNameLabel !== undefined ? layout.showCustNameLabel === true : showN3;
+              const showPL3 = !!ph && layout.showPhone !== false;
+              const showPL3Lb = !!ph && (layout.showPhoneLabel !== undefined ? layout.showPhoneLabel === true : showPL3);
+              return `<div class="info" style="font-size: 1.15em; font-weight: 900; margin: 2px 0; text-align: center;">${showN3Lb ? `<span class="order-custname-label">${t('orderPrint.customer')}:</span> ` : ''}${showN3 ? `<span class="cust-name">${nm}</span>` : ''}${(showPL3 || showPL3Lb) ? ` ${showPL3Lb ? `<span class="order-phone-label">${t('orderPrint.customerPhone')}:</span> ` : ''}${showPL3 ? `<span class="cust-phone">— ${ph}</span>` : ''}` : ''}</div>`;
+            })()}
+            ${(() => { const ad = order.fulfillmentType === 'delivery' ? (order as any).deliveryAddress : ''; if (!ad) return ''; const shA = layout.showAddress !== false; const shALb = layout.showAddressLabel !== undefined ? layout.showAddressLabel === true : shA; if (!shA && !shALb) return ''; return `<div class="info delivery-address" style="font-weight: 900; font-size: 1em;">📍 ${shALb ? `<span class="order-address-label">${t('orderPrint.customerAddress')}:</span> ` : ''}${shA ? `<span class="order-address-value">${ad}</span>` : ''}</div>`; })()}
           </div>
         </div>
 
@@ -342,22 +371,29 @@ const printAllSectionsInOnePage = (
             <tr>
               <th class="item-name">${t('orderPrint.item')}</th>
               <th class="item-qty">${t('orderPrint.quantity')}</th>
+              ${showPrice ? `<th class="item-price">${t('orderPrint.price', 'السعر')}</th>` : ''}
+              ${showTotal ? `<th class="item-total">${t('orderPrint.total', 'الإجمالي')}</th>` : ''}
             </tr>
           </thead>
           <tbody>
             ${items.map(item => {
               const v = (item as any).variant;
               const variantText = v && v !== 'عادي' ? ` (${v})` : '';
+              const lineTotal = (Number(item.price) || 0) * (Number(item.quantity) || 0);
               return `
               <tr>
                 <td class="item-name">${item.name}${variantText}${item.notes && layout.showItemNotes !== false ? `<br><small>(${item.notes})</small>` : ''}</td>
                 <td class="item-qty"><strong>${formatDecimal(item.quantity, language)}</strong></td>
+                ${showPrice ? `<td class="item-price">${formatDecimal(item.price, language)}</td>` : ''}
+                ${showTotal ? `<td class="item-total"><strong>${formatDecimal(lineTotal, language)}</strong></td>` : ''}
               </tr>
               ${item.addons && item.addons.length > 0 ?
                 item.addons.map(addon => `
                   <tr>
                     <td class="item-name" style="padding-${align}: 15px;">+ ${addon.name}</td>
                     <td class="item-qty"><strong>${formatDecimal(addon.quantity, language)}</strong></td>
+                    ${showPrice ? `<td class="item-price">${formatDecimal(addon.price, language)}</td>` : ''}
+                    ${showTotal ? `<td class="item-total">${formatDecimal((Number(addon.price) || 0) * (Number(addon.quantity) || 0), language)}</td>` : ''}
                   </tr>
                 `).join('') : ''
               }
@@ -379,6 +415,9 @@ const printAllSectionsInOnePage = (
           </div>
         ` : ''}
 
+        ${extra?.customFooter && layout.showThanks !== false ? `
+        <div class="thank-you">${extra.customFooter}</div>` : ''}
+
         <!-- توقيع المطور — ثابت دائماً وغير قابل للإخفاء -->
         <div class="dev-sign" style="margin-top:3px;padding-top:3px;font-size:1.15em;line-height:1.1;text-align:center;font-weight:bold;border-top:1px dashed #000;">
           <strong>${t('orderPrint.footer')}</strong>
@@ -395,6 +434,7 @@ const printAllSectionsInOnePage = (
 <title>${t('orderPrint.printButton')} #${getDisplayNumber(order.orderNumber)}</title>
 
 <style>${layoutCss(layout, 'order')}
+@import url('https://fonts.googleapis.com/css2?family=${printFontImport(printFont)}&display=swap');
 html {
   width: 100%;
   max-width: 100%;
@@ -410,7 +450,7 @@ html {
 /* ===== BODY ===== */
 body {
   direction: ${dir};
-  font-family: 'Arial', sans-serif;
+  font-family: '${printFont}', sans-serif;
   width: 100%;
   max-width: 100%;
   margin: 0 auto;
@@ -610,7 +650,7 @@ export const printOrder = async (
   printerName?: string,
   paperWidthMm?: number,
   copies: number = 1,
-  extra?: { logoUrl?: string; layout?: DocPrintLayout }
+  extra?: { logoUrl?: string; layout?: DocPrintLayout; printFont?: string; customFooter?: string; copyPrinters?: Array<string | undefined>; defaultPrinter?: string }
 ) => {
   // ⚡ إشعار فوري: الطباعة بدأت لحظة الضغط.
   try {
@@ -666,6 +706,7 @@ export const printOrder = async (
           printerName,
           paperWidthMm,
           copies,
+          copyPrinters: extra?.copyPrinters,
           printKey: `order:${(order as any)?._id || (order as any)?.orderNumber || ''}:${sectionId || 'all'}`,
         };
         let res: any = await api.printOrder(payload);
@@ -687,7 +728,7 @@ export const printOrder = async (
     return;
   }
   const savedPrinter = printerName ? null : await getCachedDevicePrinter();
-  const selectedPrinterName = printerName || savedPrinter?.data?.printerName || savedPrinter?.data?.name;
+  const selectedPrinterName = printerName || extra?.defaultPrinter || savedPrinter?.data?.printerName || savedPrinter?.data?.name;
   const sectionsToPrint = selectedSectionIds && selectedSectionIds.length > 1
     ? selectedSectionIds
     : [undefined];
@@ -703,7 +744,7 @@ export const printOrder = async (
       sectionId ? [sectionId] : selectedSectionIds,
       extra,
     );
-    return printThroughLocalBridge(printContent, selectedPrinterName, { cutPaper: true, paperWidthMm, copies });
+    return printThroughLocalBridge(printContent, selectedPrinterName, { cutPaper: true, paperWidthMm, copies, copyPrinters: extra?.copyPrinters });
   }));
 };
 

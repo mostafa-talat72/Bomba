@@ -55,7 +55,7 @@ const Shifts = () => {
 
   const handleCloseAsk = () => {
     if (!canManageShifts(user)) { palert(t('common.permissionDenied')); return; }
-    if (actualCash === '' || Number(actualCash) < 0) { palert('أدخل المبلغ الفعلي'); return; }
+    if (actualCash === '' || Number(actualCash) < 0) { palert(t('shifts.notifications.enterActualCash')); return; }
     setShowCloseConfirm(true);
   };
 
@@ -66,7 +66,7 @@ const Shifts = () => {
       const res: any = await api.closeShift({ actualCash: Number(actualCash), notes: notes || undefined });
       if (res?.success) {
         const d = res.data || {};
-        palert(`تم الإغلاق — المتوقع: ${fmtMoney(d.expectedCash)} | الفعلي: ${fmtMoney(d.actualCash)} | الفرق: ${fmtMoney(d.difference)}`, true);
+        palert(t('shifts.notifications.closed', { expected: fmtMoney(d.expectedCash), actual: fmtMoney(d.actualCash), difference: fmtMoney(d.difference) }), true);
         setActualCash(''); setNotes(''); load();
       } else palert(res?.message || 'failed');
     } catch (e: any) { palert(e?.message || 'failed'); }
@@ -75,37 +75,37 @@ const Shifts = () => {
 
   return (
     <div className="p-4 md:p-6 min-h-screen bg-gray-50 dark:bg-gray-900" dir={rtl ? 'rtl' : 'ltr'}>
-      <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">{t('nav.shifts')}</h1>
+      <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white mb-3 sm:mb-4">{t('nav.shifts')}</h1>
 
       {loading ? (
-        <p className="text-gray-400">جاري التحميل...</p>
+        <p className="text-gray-400">{t('shifts.loading')}</p>
       ) : current ? (
         <div className="bg-white dark:bg-gray-800 rounded-2xl shadow border border-green-200 dark:border-green-800 p-5 mb-4">
           <div className="flex items-center gap-2 mb-3">
             <span className="relative flex h-3 w-3"><span className="animate-ping absolute h-full w-full rounded-full bg-green-400 opacity-75" /><span className="relative rounded-full h-3 w-3 bg-green-500" /></span>
-            <h2 className="font-bold text-gray-900 dark:text-gray-100">وردية مفتوحة — {current.openedByName || ''}</h2>
+            <h2 className="font-bold text-gray-900 dark:text-gray-100">{t('shifts.openShiftTitle', { name: current.openedByName || '' })}</h2>
           </div>
-          <p className="text-sm text-gray-500 mb-3">فُتحت: {fmtDate(current.openedAt)} — نقدية الافتتاح: {fmtMoney(current.openingCash)}</p>
+          <p className="text-sm text-gray-500 mb-3">{t('shifts.openShiftInfo', { openedAt: fmtDate(current.openedAt), openingCash: fmtMoney(current.openingCash) })}</p>
           <div className="flex flex-col md:flex-row gap-2">
-            <input type="number" min={0} value={actualCash} onChange={(e) => setActualCash(e.target.value)} placeholder="المبلغ الفعلي في الدرج"
+            <input type="number" min={0} value={actualCash} onChange={(e) => setActualCash(e.target.value)} placeholder={t('shifts.form.actualCashPlaceholder')}
               className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" />
-            <input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="ملاحظات (اختياري)"
+            <input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder={t('shifts.form.notesPlaceholder')}
               className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" />
             <button onClick={handleCloseAsk} disabled={busy} className="px-5 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl font-bold disabled:opacity-50 flex items-center gap-2">
-              <Square className="h-4 w-4" /> إغلاق الوردية
+              <Square className="h-4 w-4" /> {t('shifts.closeShift')}
             </button>
           </div>
         </div>
       ) : (
         <div className="bg-white dark:bg-gray-800 rounded-2xl shadow border border-gray-200 dark:border-gray-700 p-5 mb-4">
-          <h2 className="font-bold text-gray-900 dark:text-gray-100 mb-3">لا توجد وردية مفتوحة</h2>
+          <h2 className="font-bold text-gray-900 dark:text-gray-100 mb-3">{t('shifts.noOpenShift')}</h2>
           <div className="flex flex-col md:flex-row gap-2">
-            <input type="number" min={0} value={openingCash} onChange={(e) => setOpeningCash(e.target.value)} placeholder="نقدية الافتتاح في الدرج"
+            <input type="number" min={0} value={openingCash} onChange={(e) => setOpeningCash(e.target.value)} placeholder={t('shifts.form.openingCashPlaceholder')}
               className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" />
-            <input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="ملاحظات (اختياري)"
+            <input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder={t('shifts.form.notesPlaceholder')}
               className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" />
             <button onClick={handleOpen} disabled={busy} className="px-5 py-2 bg-green-600 hover:bg-green-700 text-white rounded-xl font-bold disabled:opacity-50 flex items-center gap-2">
-              <Play className="h-4 w-4" /> فتح وردية
+              <Play className="h-4 w-4" /> {t('shifts.openShift')}
             </button>
           </div>
         </div>
@@ -114,22 +114,22 @@ const Shifts = () => {
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow border border-gray-200 dark:border-gray-700 overflow-hidden">
         <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-100 dark:border-gray-700">
           <History className="h-4 w-4 text-gray-500" />
-          <h2 className="font-bold text-gray-900 dark:text-gray-100">سجل الورديات</h2>
+          <h2 className="font-bold text-gray-900 dark:text-gray-100">{t('shifts.history')}</h2>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-gray-50 dark:bg-gray-700/50 text-gray-600 dark:text-gray-300">
               <tr>
-                <th className="px-4 py-2 text-start">الفترة</th>
-                <th className="px-4 py-2 text-start">الكاشير</th>
-                <th className="px-4 py-2 text-center">المتوقع</th>
-                <th className="px-4 py-2 text-center">الفعلي</th>
-                <th className="px-4 py-2 text-center">الفرق</th>
-                <th className="px-4 py-2 text-center">الحالة</th>
+                <th className="px-4 py-2 text-start">{t('shifts.table.period')}</th>
+                <th className="px-4 py-2 text-start">{t('shifts.table.cashier')}</th>
+                <th className="px-4 py-2 text-center">{t('shifts.table.expected')}</th>
+                <th className="px-4 py-2 text-center">{t('shifts.table.actual')}</th>
+                <th className="px-4 py-2 text-center">{t('shifts.table.difference')}</th>
+                <th className="px-4 py-2 text-center">{t('shifts.table.status')}</th>
               </tr>
             </thead>
             <tbody>
-              {history.length === 0 && <tr><td colSpan={6} className="px-4 py-6 text-center text-gray-400">لا توجد ورديات</td></tr>}
+              {history.length === 0 && <tr><td colSpan={6} className="px-4 py-6 text-center text-gray-400">{t('shifts.table.empty')}</td></tr>}
               {history.map((s: any) => (
                 <tr key={s._id || s.id} className="border-t border-gray-100 dark:border-gray-700">
                   <td className="px-4 py-2 text-xs text-gray-600 dark:text-gray-300">{fmtDate(s.openedAt)} → {s.closedAt ? fmtDate(s.closedAt) : '...'}</td>
@@ -141,7 +141,7 @@ const Shifts = () => {
                   </td>
                   <td className="px-4 py-2 text-center">
                     <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${s.status === 'open' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300'}`}>
-                      {s.status === 'open' ? 'مفتوحة' : 'مغلقة'}
+                      {s.status === 'open' ? t('shifts.status.open') : t('shifts.status.closed')}
                     </span>
                   </td>
                 </tr>
@@ -155,10 +155,10 @@ const Shifts = () => {
         isOpen={showCloseConfirm}
         onClose={() => setShowCloseConfirm(false)}
         onConfirm={handleClose}
-        title="إغلاق الوردية"
-        message="إغلاق الوردية الحالية؟ سيتم حساب الفرق نهائياً."
-        confirmText="إغلاق"
-        cancelText="تراجع"
+        title={t('shifts.closeConfirm.title')}
+        message={t('shifts.closeConfirm.message')}
+        confirmText={t('shifts.closeConfirm.confirm')}
+        cancelText={t('shifts.closeConfirm.cancel')}
         confirmColor="bg-red-600 hover:bg-red-700"
         loading={busy}
       />

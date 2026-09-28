@@ -43,53 +43,53 @@ router.post("/subscription/fawry-webhook", fawryWebhook);
 
 router
     .route("/")
-    .get(authorize("billing", "tables", "staff", "all"), getBills)
-    .post(authorize("billing", "tables", "staff", "all"), createBill);
+    .get(authorize("billing", "tables", "staff", "bills", "all"), getBills)
+    .post(authorize("billing", "tables", "staff", "bills", "all"), createBill);
 
 router
     .route("/:id")
-    .get(authorize("billing", "tables", "all"), getBill)
-    .put(authorize("billing", "tables", "all"), updateBill)
+    .get(authorize("billing", "tables", "bills", "all"), getBill)
+    .put(authorize("billing", "tables", "bills", "all", "canApplyManualDiscount"), updateBill)
     .delete(
-        authorize("canDeleteBill", "billing", "tables", "all"),
+        authorize("canDeleteBill", "billing", "tables", "bills", "all"),
         deleteBill
     );
 
 // Accounting repair is restricted to administrators.
 router.post(
     "/:id/recalculate",
-    authorize("billing", "tables", "all"),
+    authorize("billing", "tables", "bills", "all"),
     recalculateBillTotals
 );
 
-router.post("/:id/payment", authorize("billing", "tables", "all"), addPayment);
-router.put("/:id/payment", authorize("billing", "tables", "all"), addPayment);
-router.post("/:id/orders", authorize("billing", "tables", "all"), addOrderToBill);
-router.delete("/:id/orders/:orderId", authorize("billing", "tables", "all"), removeOrderFromBill);
-router.post("/:id/sessions", authorize("billing", "tables", "all"), addSessionToBill);
+router.post("/:id/payment", authorize("billing", "tables", "bills", "all"), addPayment);
+router.put("/:id/payment", authorize("billing", "tables", "bills", "all"), addPayment);
+router.post("/:id/orders", authorize("billing", "tables", "bills", "all"), addOrderToBill);
+router.delete("/:id/orders/:orderId", authorize("billing", "tables", "bills", "all"), removeOrderFromBill);
+router.post("/:id/sessions", authorize("billing", "tables", "bills", "all"), addSessionToBill);
 // إلغاء الفاتورة - للمدير فقط
 router.put("/:id/cancel", protect, adminOnly, cancelBill);
-router.get("/:id/items", authorize("billing", "tables", "all"), getBillItems);
+router.get("/:id/items", authorize("billing", "tables", "bills", "all"), getBillItems);
 router.post(
     "/:id/partial-payment",
-    authorize("billing", "tables", "all"),
+    authorize("billing", "tables", "bills", "all"),
     addPartialPayment
 );
 // Backend aggregated partial payment (NEW)
-router.get("/:id/aggregated-items", authorize("billing", "tables", "all"), getBillAggregatedItems);
-router.post("/:id/partial-payment-aggregated", authorize("billing", "tables", "all"), addPartialPaymentAggregated);
-router.put("/:id/items-aggregated", authorize("billing", "tables", "all"), updateBillAggregatedItems);
+router.get("/:id/aggregated-items", authorize("billing", "tables", "bills", "all"), getBillAggregatedItems);
+router.post("/:id/partial-payment-aggregated", authorize("billing", "tables", "bills", "all"), addPartialPaymentAggregated);
+router.put("/:id/items-aggregated", authorize("billing", "tables", "bills", "all"), updateBillAggregatedItems);
 // تنظيف دفعات الأصناف المحذوفة
-router.post("/:id/cleanup-payments", authorize("billing", "tables", "all"), cleanupBillPayments);
+router.post("/:id/cleanup-payments", authorize("billing", "tables", "bills", "all"), cleanupBillPayments);
 // دفع أصناف محددة من الفاتورة
-router.post("/:id/pay-items", authorize("billing", "tables", "all"), payForItems);
+router.post("/:id/pay-items", authorize("billing", "tables", "bills", "all"), payForItems);
 // دفع جزئي لجلسة محددة
-router.post("/:id/pay-session-partial", authorize("billing", "tables", "all"), paySessionPartial);
+router.post("/:id/pay-session-partial", authorize("billing", "tables", "bills", "all"), paySessionPartial);
 // تعديل دفعة جزئية لجلسة
-router.put("/:billId/session-payments/:sessionId/:paymentIndex", authorize("billing", "tables", "all"), async (req, res) => {
+router.put("/:billId/session-payments/:sessionId/:paymentIndex", authorize("billing", "tables", "bills", "all"), async (req, res) => {
   try {
     const { billId, sessionId, paymentIndex } = req.params;
-    const { amount, method, reference } = req.body;
+    const { amount, method, reference, drawer } = req.body;
     
     // التحقق من الصلاحية
     if (!req.user.hasPermission('canEditPartialPayment') && !req.user.hasPermission('all')) {
@@ -107,7 +107,7 @@ router.put("/:billId/session-payments/:sessionId/:paymentIndex", authorize("bill
       });
     }
     
-    if (!method || !['cash', 'card', 'transfer'].includes(method)) {
+    if (!method || !['cash', 'card', 'transfer', 'e_wallet'].includes(method)) {
       return res.status(400).json({
         success: false,
         message: 'طريقة الدفع غير صحيحة'
@@ -153,6 +153,9 @@ router.put("/:billId/session-payments/:sessionId/:paymentIndex", authorize("bill
     // تحديث الدفعة
     sessionPayment.payments[paymentIndex].amount = amount;
     sessionPayment.payments[paymentIndex].method = method;
+    if (drawer) {
+      sessionPayment.payments[paymentIndex].drawer = drawer;
+    }
     if (reference) {
       sessionPayment.payments[paymentIndex].reference = reference;
     }
@@ -197,10 +200,10 @@ router.put("/:billId/session-payments/:sessionId/:paymentIndex", authorize("bill
 });
 
 // تعديل دفعة جزئية للأصناف
-router.put("/:billId/item-payments/:itemPaymentId/:paymentIndex", authorize("billing", "tables", "all"), async (req, res) => {
+router.put("/:billId/item-payments/:itemPaymentId/:paymentIndex", authorize("billing", "tables", "bills", "all"), async (req, res) => {
   try {
     const { billId, itemPaymentId, paymentIndex } = req.params;
-    const { quantity, method, reference } = req.body;
+    const { quantity, method, reference, drawer } = req.body;
     
     // التحقق من الصلاحية
     if (!req.user.hasPermission('canEditPartialPayment') && !req.user.hasPermission('all')) {
@@ -226,7 +229,7 @@ router.put("/:billId/item-payments/:itemPaymentId/:paymentIndex", authorize("bil
       });
     }
     
-    if (!method || !['cash', 'card', 'transfer'].includes(method)) {
+    if (!method || !['cash', 'card', 'transfer', 'e_wallet'].includes(method)) {
       return res.status(400).json({
         success: false,
         message: 'طريقة الدفع غير صحيحة'
@@ -340,7 +343,10 @@ router.put("/:billId/item-payments/:itemPaymentId/:paymentIndex", authorize("bil
     }
     
     // تحديث الدفعة في paymentHistory
-    itemPayment.paymentHistory[paymentIndex].quantity = quantity;
+      if (drawer) {
+        itemPayment.paymentHistory[paymentIndex].drawer = drawer;
+      }
+      itemPayment.paymentHistory[paymentIndex].quantity = quantity;
     itemPayment.paymentHistory[paymentIndex].amount = newAmount;
     itemPayment.paymentHistory[paymentIndex].method = method;
     if (reference) {

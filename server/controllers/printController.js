@@ -37,6 +37,65 @@ function orderPrintersStably(detected) {
   return sorted;
 }
 
+// مرآة resolveFulfillmentFlag (العميل): إعداد النوع الخاص أولاً ثم العام — الفارغ يتبع الطاولات.
+function resolveFulfillmentFlag(printSettings, base, fulfillment, def = false) {
+  const sfx = fulfillment === 'takeaway' ? 'Takeaway' : fulfillment === 'delivery' ? 'Delivery' : '';
+  if (sfx) {
+    const v = printSettings?.[`${base}${sfx}`];
+    if (v !== undefined) return v === true;
+  }
+  const b = printSettings?.[base];
+  return b === undefined ? def : b === true;
+}
+// مرآة resolveDocCopyPrinters (العميل): طابعات النسخ — الفارغ = الافتراضي.
+function resolveDocCopyPrinters(printSettings, key, fallbackKey) {
+  const readList = (obj, k) => {
+    if (!obj) return undefined;
+    const v = (typeof obj.get === 'function') ? (() => { try { return obj.get(k); } catch { return undefined; } })() : obj[k];
+    if (!Array.isArray(v) || v.length === 0) return undefined;
+    return v.slice(0, 5).map((x) => String(x || ''));
+  };
+  const arr = readList(printSettings?.documentCopyPrinters, key)
+    ?? (fallbackKey ? readList(printSettings?.documentCopyPrinters, fallbackKey) : undefined);
+  if (arr) return arr;
+  const raw = printSettings?.documentCopies?.[key]
+    ?? (fallbackKey ? printSettings?.documentCopies?.[fallbackKey] : undefined)
+    ?? 1;
+  const n = Math.min(5, Math.max(1, Number(raw) || 1));
+  return Array(n).fill('');
+}
+
+// حل طابعات النسخ لكل قسم على حدة — الخادم
+function resolveSectionCopyPrinters(printSettings, fulfillment, docType) {
+  let mapKey = '';
+  
+  if (docType === 'bill' || docType === 'bill_takeaway' || docType === 'bill_delivery') {
+    mapKey = docType === 'bill_takeaway' ? 'sectionCopyPrinterMapTakeaway'
+      : docType === 'bill_delivery' ? 'sectionCopyPrinterMapDelivery'
+      : 'sectionCopyPrinterMap';
+  } else if (docType === 'consumptionReport') {
+    mapKey = 'sectionCopyPrinterMapConsumption';
+  } else if (fulfillment === 'takeaway') {
+    mapKey = 'sectionCopyPrinterMapTakeaway';
+  } else if (fulfillment === 'delivery') {
+    mapKey = 'sectionCopyPrinterMapDelivery';
+  } else {
+    mapKey = 'sectionCopyPrinterMap';
+  }
+  
+  const obj = printSettings?.[mapKey];
+  if (!obj) return {};
+  const result = {};
+  try {
+    const entries = typeof obj.get === 'function' ? obj.entries() : Object.entries(obj);
+    for (const [sectionId, printers] of entries) {
+      const arr = Array.isArray(printers) ? printers.slice(0, 5).map((x) => String(x || '')) : [];
+      result[String(sectionId)] = arr.filter(Boolean);
+    }
+  } catch {}
+  return result;
+}
+
 // دعم العربية لطابعة مستهدفة: من ملفها في printers (الافتراضي: مدعومة — السلوك الحالي).
 // القيمة false تعني: مسار بايتات CP1256 المباشر سيخرج حروفاً مفككة، فيُتخطى
 // لصالح المسار المصوَّر (وكيل HTML)، ومسار Windows-driver يبقى آمناً دائماً.
@@ -54,6 +113,18 @@ function resolvePrinterArabicSupport(printSettings, printerName) {
 }
 
 async function loadPrintSettings(organization, user) {
+  // الطازجة أولاً من قاعدة البيانات: لقطة الهاتف المرسلة قد تكون قديمة
+  // (تصميم حُفظ بعد تحميل الفواتير) — والمرسلة ملاذ فقط عند الفشل.
+  try {
+    const orgId = organization && typeof organization === 'object'
+      ? organization._id || organization.id
+      : organization;
+    if (orgId) {
+      const stored = await Organization.findOne(organizationFilter(orgId))
+        .select('printSettings devicePrinters');
+      if (stored) return resolvePrintSettingsForUser(user, stored);
+    }
+  } catch {}
   if (organization && typeof organization === 'object' && organization.printSettings) {
     return resolvePrintSettingsForUser(user, organization);
   }
@@ -130,7 +201,7 @@ class PrintController {
   async printBill(req, res) {
     try {
       const { bill, organization, language = 'ar', tableSectionName, drawerMode = 'bill',
-        html: relayHtml, printerName: relayPrinterName, paperWidthMm: relayPaperWidth, printKey: relayPrintKey, copies: relayCopies } = req.body;
+        html: relayHtml, printerName: relayPrinterName, paperWidthMm: relayPaperWidth, printKey: relayPrintKey, copies: relayCopies, copyPrinters: relayCopyPrinters } = req.body;
 
       if (!bill) {
         return res.status(400).json({ success: false, message: 'Bill data is required' });
@@ -156,7 +227,7 @@ class PrintController {
       const openDrawerSetting = drawerMode === 'payment'
         ? 'openCashDrawerOnPayment'
         : 'openCashDrawer';
-      const openDrawer = printSettings[openDrawerSetting] !== false;
+      const openDrawer = resolveFulfillmentFlag(printSettings, openDrawerSetting, bill?.fulfillmentType, true);
       // القص مفعّل افتراضياً (مثل الدرج) ما لم يُعطّل صراحة من الإعدادات.
       const autoCut = printSettings.autoCut !== false;
 
@@ -165,11 +236,24 @@ class PrintController {
       // (Chromium على الجهاز الرئيسي = نفس الشكل 100%). عند غياب الوكيل
       // نسقط على مسار RAW النصي أدناه.
       let relayError = null;
-      // نسخ الفاتورة حسب نوع الطلب (طاولات/تيك أوي/دليفري) — relayCopies أولاً ثم إعدادات السيرفر.
+      // نسخ الفاتورة حسب النوع + طابعة كل نسخة — المرسل أولاً ثم إعدادات السيرفر.
+      // الفارغ = طابعة المستند الافتراضية.
       const billFulfillKey = ['takeaway', 'delivery'].includes(bill?.fulfillmentType) ? `bill_${bill.fulfillmentType}` : 'bill';
-      const billCopiesResolved = Math.min(5, Math.max(1, Number(relayCopies
-        ?? printSettings?.documentCopies?.[billFulfillKey]
-        ?? printSettings?.documentCopies?.bill ?? 1)) || 1);
+      const profileNameOf = (id) => {
+        const list = printSettings?.printers;
+        const p = Array.isArray(list) ? list.find((x) => x && (x.id === id || x.printerName === id || x.name === id)) : null;
+        return p?.printerName || p?.name || undefined;
+      };
+      const billCopyNames = (Array.isArray(relayCopyPrinters) && relayCopyPrinters.length
+        ? relayCopyPrinters.slice(0, 5).map((x) => String(x || ''))
+        : (() => {
+          const ids = resolveDocCopyPrinters(printSettings, billFulfillKey, 'bill');
+          const n = Number(relayCopies) > 0
+            ? Math.min(5, Math.max(1, Number(relayCopies)))
+            : ids.length;
+          return Array.from({ length: n }, (_, i) => profileNameOf(ids[i]) || '');
+        })());
+      const billCopiesResolved = billCopyNames.length;
       if (typeof relayHtml === 'string' && relayHtml.length > 0) {
         const relay = await relayHtmlToLocalAgent({
           html: relayHtml,
@@ -179,6 +263,7 @@ class PrintController {
           paperWidthMm: relayPaperWidth,
           printKey: relayPrintKey,
           copies: billCopiesResolved,
+          copyPrinters: billCopyNames,
         });
         if (relay.ok) {
           if (relay.printerName) lastSuccessfulPrinterName = relay.printerName;
@@ -197,18 +282,25 @@ class PrintController {
       }
 
       const copies = billCopiesResolved;
-      const arabicSupport = resolvePrinterArabicSupport(printSettings, relayPrinterName);
-      const result = await printerService.printJob(printSettings, { content, openDrawer, autoCut, docName: `طباعة #${formatDisplayNumber(bill.billNumber)}`, copies, arabicSupport });
+      // RAW: كل نسخة مهمة منفصلة على طابعتها (الدرج في الأولى فقط)
+      let result = null;
+      for (let i = 0; i < billCopyNames.length; i++) {
+        const copyPrinter = billCopyNames[i] || relayPrinterName || printSettings.printerName;
+        const copyArabic = resolvePrinterArabicSupport(printSettings, copyPrinter);
+        result = await printerService.printJob({ ...printSettings, printerName: copyPrinter }, { content, openDrawer: i === 0 && openDrawer, autoCut, docName: `طباعة #${formatDisplayNumber(bill.billNumber)}`, copies: 1, arabicSupport: copyArabic });
+        if (!result || !result.success) break;
+      }
+      result = result || { success: false };
 
       if (result.success) {
         if (printSettings.printerName) lastSuccessfulPrinterName = printSettings.printerName;
         return res.json({
           success: true,
-          message: 'Bill printed successfully',
-          cashDrawerOpened: openDrawer,
-          relayError,
-          rawFallback: true,
-          copiesPrinted: result.copiesRequested || copies
+            message: 'Bill printed successfully',
+            cashDrawerOpened: openDrawer,
+            relayError,
+            rawFallback: true,
+            copiesPrinted: copies
         });
       } else {
         if (result.error === 'PRINTER_NO_ARABIC_SUPPORT') {
@@ -236,7 +328,7 @@ class PrintController {
   async printOrder(req, res) {
     try {
       const { order, organization, language = 'ar',
-        html: relayHtml, printerName: relayPrinterName, paperWidthMm: relayPaperWidth, printKey: relayPrintKey, copies: relayCopies } = req.body;
+        html: relayHtml, printerName: relayPrinterName, paperWidthMm: relayPaperWidth, printKey: relayPrintKey, copies: relayCopies, copyPrinters: relayCopyPrinters } = req.body;
 
       if (!order) {
         return res.status(400).json({ success: false, message: 'Order data is required' });
@@ -257,12 +349,22 @@ class PrintController {
 
       const content = await this.generateOrderContent(order, organization, language, printSettings, req?.user?.name || '');
 
-      // نسخ التحضير حسب نوع الطلب — relayCopies أولاً ثم إعدادات السيرفر.
+      // نسخ التحضير حسب النوع + طابعة كل نسخة — المرسل أولاً ثم إعدادات السيرفر.
       const orderFulfillment = order?.fulfillmentType;
       const orderPrepKey = orderFulfillment === 'takeaway' ? 'prep_takeaway' : orderFulfillment === 'delivery' ? 'prep_delivery' : 'prep';
-      const orderCopiesResolved = Math.min(5, Math.max(1, Number(relayCopies
-        ?? printSettings?.documentCopies?.[orderPrepKey]
-        ?? printSettings?.documentCopies?.prep ?? 1)) || 1);
+      const orderProfileNameOf = (id) => {
+        const list = printSettings?.printers;
+        const p = Array.isArray(list) ? list.find((x) => x && (x.id === id || x.printerName === id || x.name === id)) : null;
+        return p?.printerName || p?.name || undefined;
+      };
+      const orderCopyNames = (Array.isArray(relayCopyPrinters) && relayCopyPrinters.length
+        ? relayCopyPrinters.slice(0, 5).map((x) => String(x || ''))
+        : (() => {
+          const ids = resolveDocCopyPrinters(printSettings, orderPrepKey, 'prep');
+          const n = Number(relayCopies) > 0 ? Math.min(5, Math.max(1, Number(relayCopies))) : ids.length;
+          return Array.from({ length: n }, (_, i) => orderProfileNameOf(ids[i]) || '');
+        })());
+      const orderCopiesResolved = orderCopyNames.length;
       // نفس HTML المصمم للديسكتوب: ترحيل للوكيل المحلي أولاً (نفس الشكل 100%).
       if (typeof relayHtml === 'string' && relayHtml.length > 0) {
         const relay = await relayHtmlToLocalAgent({
@@ -273,6 +375,7 @@ class PrintController {
           paperWidthMm: relayPaperWidth,
           printKey: relayPrintKey,
           copies: orderCopiesResolved,
+          copyPrinters: orderCopyNames,
         });
         if (relay.ok) {
           if (relay.printerName) lastSuccessfulPrinterName = relay.printerName;
@@ -282,14 +385,20 @@ class PrintController {
         console.warn('Local agent relay failed, RAW fallback:', relay.message);
       }
 
-      // طباعة الطلب بدون فتح درج الكاشير (اتصال دافئ + تسلسل)
+      // طباعة الطلب بدون فتح درج الكاشير (اتصال دافئ + تسلسل) — كل نسخة على طابعتها
       const copies = orderCopiesResolved;
-      const arabicSupport = resolvePrinterArabicSupport(printSettings, relayPrinterName);
-      const result = await printerService.printJob(printSettings, { content, openDrawer: false, autoCut: printSettings.autoCut !== false, docName: `طباعة #${formatDisplayNumber(order.orderNumber)}`, copies, arabicSupport });
+      let result = null;
+      for (let i = 0; i < orderCopyNames.length; i++) {
+        const copyPrinter = orderCopyNames[i] || relayPrinterName || printSettings.printerName;
+        const copyArabic = resolvePrinterArabicSupport(printSettings, copyPrinter);
+        result = await printerService.printJob({ ...printSettings, printerName: copyPrinter }, { content, openDrawer: false, autoCut: printSettings.autoCut !== false, docName: `طباعة #${formatDisplayNumber(order.orderNumber)}`, copies: 1, arabicSupport: copyArabic });
+        if (!result || !result.success) break;
+      }
+      result = result || { success: false };
 
       if (result.success) {
         if (printSettings.printerName) lastSuccessfulPrinterName = printSettings.printerName;
-        return res.json({ success: true, message: 'Order printed successfully', rawFallback: true, copiesPrinted: result.copiesRequested || copies });
+        return res.json({ success: true, message: 'Order printed successfully', rawFallback: true, copiesPrinted: copies });
       } else {
         if (result.error === 'PRINTER_NO_ARABIC_SUPPORT') {
           return res.status(500).json({ success: false, message: 'PRINTER_NO_ARABIC_SUPPORT', error: result.error });
@@ -316,7 +425,7 @@ class PrintController {
   async printConsumptionReport(req, res) {
     try {
       const { reportData, organization, language = 'ar',
-        html: relayHtml, printerName: relayPrinterName, paperWidthMm: relayPaperWidth, printKey: relayPrintKey, copies: relayCopies } = req.body;
+        html: relayHtml, printerName: relayPrinterName, paperWidthMm: relayPaperWidth, printKey: relayPrintKey, copies: relayCopies, copyPrinters: relayCopyPrinters } = req.body;
 
       if (!reportData) {
         return res.status(400).json({ success: false, message: 'Report data is required' });
@@ -336,6 +445,20 @@ class PrintController {
 
       const content = await this.generateConsumptionReportContent(reportData, organization, language, printSettings);
 
+      // نسخ التقرير + طابعة كل نسخة — المرسل أولاً ثم إعدادات السيرفر.
+      const consProfileNameOf = (id) => {
+        const list = printSettings?.printers;
+        const p = Array.isArray(list) ? list.find((x) => x && (x.id === id || x.printerName === id || x.name === id)) : null;
+        return p?.printerName || p?.name || undefined;
+      };
+      const consCopyNames = (Array.isArray(relayCopyPrinters) && relayCopyPrinters.length
+        ? relayCopyPrinters.slice(0, 5).map((x) => String(x || ''))
+        : (() => {
+          const ids = resolveDocCopyPrinters(printSettings, 'consumptionReport');
+          const n = Number(relayCopies) > 0 ? Math.min(5, Math.max(1, Number(relayCopies))) : ids.length;
+          return Array.from({ length: n }, (_, i) => consProfileNameOf(ids[i]) || '');
+        })());
+      const copies = consCopyNames.length;
       // نفس HTML المصمم للديسكتوب: ترحيل للوكيل المحلي أولاً (نفس الشكل 100%).
       if (typeof relayHtml === 'string' && relayHtml.length > 0) {
         const relay = await relayHtmlToLocalAgent({
@@ -345,23 +468,30 @@ class PrintController {
           openDrawer: false,
           paperWidthMm: relayPaperWidth,
           printKey: relayPrintKey,
+          copies,
+          copyPrinters: consCopyNames,
         });
         if (relay.ok) {
           if (relay.printerName) lastSuccessfulPrinterName = relay.printerName;
           else if (printSettings.printerName) lastSuccessfulPrinterName = printSettings.printerName;
-          return res.json({ success: true, message: 'Report printed successfully', relayed: true, printerUsed: relay.printerName });
+          return res.json({ success: true, message: 'Report printed successfully', relayed: true, printerUsed: relay.printerName, copiesPrinted: relay.copiesPrinted || copies });
         }
         console.warn('Local agent relay failed, RAW fallback:', relay.message);
       }
 
-      // طباعة التقرير بدون فتح درج الكاشير (اتصال دافئ + تسلسل)
-      const copies = Math.min(5, Math.max(1, Number(relayCopies) || 1));
-      const arabicSupport = resolvePrinterArabicSupport(printSettings, relayPrinterName);
-      const result = await printerService.printJob(printSettings, { content, openDrawer: false, autoCut: printSettings.autoCut !== false, docName: 'تقرير الاستهلاك', copies, arabicSupport });
+      // طباعة التقرير بدون فتح درج الكاشير — كل نسخة على طابعتها
+      let result = null;
+      for (let i = 0; i < consCopyNames.length; i++) {
+        const copyPrinter = consCopyNames[i] || relayPrinterName || printSettings.printerName;
+        const copyArabic = resolvePrinterArabicSupport(printSettings, copyPrinter);
+        result = await printerService.printJob({ ...printSettings, printerName: copyPrinter }, { content, openDrawer: false, autoCut: printSettings.autoCut !== false, docName: 'تقرير الاستهلاك', copies: 1, arabicSupport: copyArabic });
+        if (!result || !result.success) break;
+      }
+      result = result || { success: false };
 
       if (result.success) {
         if (printSettings.printerName) lastSuccessfulPrinterName = printSettings.printerName;
-        return res.json({ success: true, message: 'Report printed successfully', rawFallback: true, copiesPrinted: result.copiesRequested || copies });
+        return res.json({ success: true, message: 'Report printed successfully', rawFallback: true, copiesPrinted: copies });
       } else {
         if (result.error === 'PRINTER_NO_ARABIC_SUPPORT') {
           return res.status(500).json({ success: false, message: 'PRINTER_NO_ARABIC_SUPPORT', error: result.error });
@@ -465,22 +595,26 @@ class PrintController {
     content += 'TOTALS\n';
     content += '-'.repeat(charsPerLine) + '\n';
     
-    // الخصومات
+    // الخصومات (ثابت المنشأة + يدوي الطلبات + الفاتورة)
     const totalFixedDiscount = (bill.orders || []).reduce((sum, order) => {
       return sum + (order?.fixedDiscount?.amount || 0);
     }, 0);
+    const totalOrderManualDiscount = (bill.orders || []).reduce((sum, order) => {
+      return sum + (Number(order?.discount) || 0);
+    }, 0);
     const billDiscount = Number(bill.discount) || 0;
-    const totalAllDiscounts = totalFixedDiscount + billDiscount;
+    const totalAllDiscounts = totalFixedDiscount + totalOrderManualDiscount + billDiscount;
     const subtotalBeforeDiscount = (bill.total || 0) + totalAllDiscounts;
-    if (totalAllDiscounts > 0) {
+    const showZero = printSettings?.printLayout?.bill?.showZeroRows === true;
+    if (totalAllDiscounts > 0 || showZero) {
       content += `Subtotal: ${subtotalBeforeDiscount}\n`;
       content += `Discount: -${totalAllDiscounts}\n`;
     }
-    if (bill.tax && bill.tax > 0) {
-      content += `Tax: ${bill.tax}\n`;
+    if ((bill.tax && bill.tax > 0) || showZero) {
+      content += `Tax: ${bill.tax || 0}\n`;
     }
-    if (bill.fulfillmentType !== 'takeaway' && Number(bill.deliveryInfo?.deliveryFee) > 0) {
-      content += `Delivery fee: ${bill.deliveryInfo.deliveryFee}\n`;
+    if ((bill.fulfillmentType !== 'takeaway' && Number(bill.deliveryInfo?.deliveryFee) > 0) || (showZero && bill.fulfillmentType === 'delivery')) {
+      content += `Delivery fee: ${bill.deliveryInfo?.deliveryFee || 0}\n`;
     }
     
     content += `TOTAL: ${bill.total || 0}\n`;
@@ -507,6 +641,9 @@ class PrintController {
 
     content += this.centerText(orgName, charsPerLine) + '\n';
     content += this.centerText(`Order ${bracketSeq(order.orderNumber)}`, charsPerLine) + '\n';
+    if (order.billNumber) {
+      content += this.centerText(`Invoice: ${String(order.billNumber).replace(/^(BILL|ORD|SES|INV)-[^-]+-/, '')}`, charsPerLine) + '\n';
+    }
     if (order.fulfillmentType === 'delivery') content += this.centerText('*** DELIVERY ***', charsPerLine) + '\n';
     else if (order.fulfillmentType === 'takeaway') content += this.centerText('*** TAKEAWAY ***', charsPerLine) + '\n';
     content += this.centerText(new Date(order.createdAt || new Date()).toLocaleString(language) + (printedBy ? ` - ${printedBy}` : ''), charsPerLine) + '\n';
@@ -521,8 +658,9 @@ class PrintController {
       order.items.filter(item => !item.isService || item.showInPrint !== false).forEach(item => {
         const v = item && typeof item.variant === 'string' ? item.variant.trim() : '';
         const variantText = v && v !== 'عادي' ? ` (${v})` : '';
+        const lineTotal = (Number(item.price) || 0) * (Number(item.quantity) || 0);
         content += `${item.name || ''}${variantText}\n`;
-        content += `Qty: ${item.quantity} | Price: ${item.price}\n`;
+        content += `Qty: ${item.quantity} | Price: ${item.price} | Total: ${lineTotal}\n`;
       });
     }
 
@@ -812,7 +950,7 @@ class PrintController {
   async autoDetectAndPrintBill(req, res) {
     try {
       const { bill, organization, language = 'ar', tableSectionName, drawerMode = 'bill',
-        html: relayHtml, printerName: relayPrinterName, paperWidthMm: relayPaperWidth, printKey: relayPrintKey, copies: relayCopies } = req.body;
+        html: relayHtml, printerName: relayPrinterName, paperWidthMm: relayPaperWidth, printKey: relayPrintKey, copies: relayCopies, copyPrinters: relayCopyPrinters } = req.body;
 
       if (!bill) {
         return res.status(400).json({ success: false, message: 'Bill data is required' });
@@ -840,7 +978,7 @@ class PrintController {
       const openDrawerSetting = drawerMode === 'payment'
         ? 'openCashDrawerOnPayment'
         : 'openCashDrawer';
-      const openDrawer = printSettings[openDrawerSetting] !== false;
+      const openDrawer = resolveFulfillmentFlag(printSettings, openDrawerSetting, bill?.fulfillmentType, true);
       const autoDetectedSettings = {
         printerType: 'usb',
         printerDevice: selectedPrinter.path,
@@ -917,7 +1055,7 @@ class PrintController {
   async autoDetectAndPrintOrder(req, res) {
     try {
       const { order, organization, language = 'ar',
-        html: relayHtml, printerName: relayPrinterName, paperWidthMm: relayPaperWidth, printKey: relayPrintKey, copies: relayCopies } = req.body;
+        html: relayHtml, printerName: relayPrinterName, paperWidthMm: relayPaperWidth, printKey: relayPrintKey, copies: relayCopies, copyPrinters: relayCopyPrinters } = req.body;
 
       if (!order) {
         return res.status(400).json({ success: false, message: 'Order data is required' });

@@ -146,7 +146,8 @@ export const updateOrganization = async (req, res) => {
             currency,
             timezone,
             printSettings,
-            fixedDiscount
+            fixedDiscount,
+            publicOrderAutoAccept
         } = req.body;
 
         // تحديث البيانات
@@ -188,6 +189,10 @@ export const updateOrganization = async (req, res) => {
                 ...fixedDiscount,
             };
             organization.markModified('fixedDiscount');
+        }
+
+        if (publicOrderAutoAccept !== undefined) {
+            organization.publicOrderAutoAccept = publicOrderAutoAccept === true;
         }
 
         await organization.save();

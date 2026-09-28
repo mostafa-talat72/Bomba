@@ -5,9 +5,29 @@ import { logAudit } from "../utils/auditHelper.js";
 
 const getOrgId = (req) => req.user.organization?._id || req.user.organization;
 const deviceIdOf = (req) => req.headers?.["x-instance-id"] || null;
+const userIdOf = (req) => req.user?._id || req.user?.id || null;
 
-// Sum payments inside [from, to] grouped by method (single aggregation).
-const summarizePayments = async (orgId, from, to) => {
+// وردية المستخدم (درجه الخاص): الحالية + القديمة قبل حقل user (تُنسب لفاتحها).
+const myShiftFilter = (req) => {
+    const me = userIdOf(req);
+    return {
+        organization: getOrgId(req),
+        $or: [{ user: me }, { user: { $exists: false }, openedBy: me }, { user: null, openedBy: me }],
+    };
+};
+
+// ترحيل صامت لمرة واحدة: سجل قديم بلا user يُنسب لفاتحه.
+const claimShift = async (shift, req) => {
+    if (shift && !shift.user) {
+        try { shift.user = userIdOf(req); await shift.save(); } catch {}
+    }
+    return shift;
+};
+
+const isManager = (req) => ["admin", "owner"].includes(req.user?.role);
+
+// Sum MY payments inside [from, to] grouped by method (single aggregation).
+const summarizePayments = async (orgId, from, to, userId) => {
     const rows = await Bill.aggregate([
         { $match: { organization: new mongoose.Types.ObjectId(orgId) } },
         { $unwind: "$payments" },
@@ -15,6 +35,7 @@ const summarizePayments = async (orgId, from, to) => {
             $match: {
                 "payments.timestamp": { $gte: new Date(from), $lte: new Date(to) },
                 "payments.amount": { $gt: 0 },
+                "payments.user": new mongoose.Types.ObjectId(userId),
             },
         },
         {
@@ -38,32 +59,38 @@ const summarizePayments = async (orgId, from, to) => {
     return { byMethod, paymentsCount, billsCount: billIds.size };
 };
 
-// @desc    Get current open shift (if any)
+// @desc    Get MY current open shift (if any)
 // @route   GET /api/shifts/current
 export const getCurrentShift = async (req, res) => {
     try {
-        const shift = await Shift.findOne({ organization: getOrgId(req), status: "open" })
+        let shift = await Shift.findOne({ ...myShiftFilter(req), status: "open" })
             .populate("openedBy", "name")
             .sort({ openedAt: -1 })
             .lean();
+        if (shift && !shift.user) {
+            const doc = await Shift.findById(shift._id);
+            await claimShift(doc, req);
+            shift = await Shift.findById(shift._id).populate("openedBy", "name").lean();
+        }
         res.json({ success: true, data: shift });
     } catch (error) {
         res.status(500).json({ success: false, message: "فشل جلب الوردية الحالية", error: error.message });
     }
 };
 
-// @desc    Open a new shift
+// @desc    Open MY new shift
 // @route   POST /api/shifts/open  { openingCash?, notes? }
 export const openShift = async (req, res) => {
     try {
         const orgId = getOrgId(req);
-        const existing = await Shift.findOne({ organization: orgId, status: "open" });
+        const existing = await Shift.findOne({ ...myShiftFilter(req), status: "open" });
         if (existing) {
-            return res.status(400).json({ success: false, message: "توجد وردية مفتوحة بالفعل — أغلقها أولاً" });
+            return res.status(400).json({ success: false, message: "لديك وردية مفتوحة بالفعل — أغلقها أولاً" });
         }
         const openingCash = Math.max(0, Number(req.body?.openingCash) || 0);
         const shift = await Shift.create({
             organization: orgId,
+            user: userIdOf(req),
             openedBy: req.user._id,
             openedByName: req.user.name || null,
             openingCash,
@@ -80,17 +107,18 @@ export const openShift = async (req, res) => {
     }
 };
 
-// @desc    Close the open shift (computes expected vs actual)
+// @desc    Close MY open shift (computes expected vs actual from MY payments)
 // @route   POST /api/shifts/close  { actualCash, notes? }
 export const closeShift = async (req, res) => {
     try {
         const orgId = getOrgId(req);
-        const shift = await Shift.findOne({ organization: orgId, status: "open" });
+        const shift = await Shift.findOne({ ...myShiftFilter(req), status: "open" });
         if (!shift) {
             return res.status(400).json({ success: false, message: "لا توجد وردية مفتوحة" });
         }
+        await claimShift(shift, req);
         const closedAt = new Date();
-        const { byMethod, paymentsCount, billsCount } = await summarizePayments(orgId, shift.openedAt, closedAt);
+        const { byMethod, paymentsCount, billsCount } = await summarizePayments(orgId, shift.openedAt, closedAt, userIdOf(req));
         const actualCash = Number(req.body?.actualCash);
         if (!Number.isFinite(actualCash) || actualCash < 0) {
             return res.status(400).json({ success: false, message: "المبلغ الفعلي غير صالح" });
@@ -122,13 +150,13 @@ export const closeShift = async (req, res) => {
     }
 };
 
-// @desc    Shift history (closed first)
+// @desc    Shift history — mine, or all for managers (closed first)
 // @route   GET /api/shifts?page=&limit=
 export const listShifts = async (req, res) => {
     try {
         const pageNum = Math.max(1, parseInt(req.query.page, 10) || 1);
         const limitNum = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 20));
-        const query = { organization: getOrgId(req) };
+        const query = isManager(req) ? { organization: getOrgId(req) } : myShiftFilter(req);
         const [total, shifts] = await Promise.all([
             Shift.countDocuments(query),
             Shift.find(query)

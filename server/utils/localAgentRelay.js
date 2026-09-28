@@ -16,6 +16,7 @@ export async function relayHtmlToLocalAgent({
   paperWidthMm = 80,
   printKey,
   copies = 1,
+  copyPrinters = [],
   timeoutMs = 45000,
 } = {}) {
   if (!html || typeof html !== 'string' || html.length === 0) {
@@ -25,7 +26,9 @@ export async function relayHtmlToLocalAgent({
   let lastPrinter = null;
   let lastDuplicate = false;
   // كل نسخة طلب منفصل للوكيل (ورقة مقصوصة منفردة) — الدرج في الأولى فقط.
+  // طابعة كل نسخة من copyPrinters — الفارغ = الطابعة الممررة.
   for (let i = 0; i < total; i++) {
+  const copyPrinter = (Array.isArray(copyPrinters) && copyPrinters[i]) || printerName;
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
@@ -34,7 +37,7 @@ export async function relayHtmlToLocalAgent({
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         html,
-        printerName,
+        printerName: copyPrinter,
         openDrawer: i === 0 ? openDrawer : false,
         paperWidthMm,
         printKey: total > 1 ? `${printKey || 'relay'}:copy${i + 1}` : printKey,

@@ -76,7 +76,7 @@ const PayrollManagement: React.FC = () => {
   // Helper functions to format currency with current language
   const currency = () => getCurrencySymbol(currentLanguage);
   const formatCurrency = (amount: number) => {
-    return `${amount.toFixed(2)} ${currency()}`;
+    return `${(Number(amount) || 0).toFixed(2)} ${currency()}`;
   };
 
   // Get locale based on current language
@@ -341,7 +341,7 @@ const PayrollManagement: React.FC = () => {
       dataIndex: ['summary', 'grossSalary'],
       key: 'grossSalary',
       render: (amount: number) => (
-        <span className="font-medium">{amount.toFixed(2)} {t('common.currency')}</span>
+        <span className="font-medium">{(Number(amount) || 0).toFixed(2)} {t('common.currency')}</span>
       )
     },
     {
@@ -349,7 +349,7 @@ const PayrollManagement: React.FC = () => {
       dataIndex: ['summary', 'totalDeductions'],
       key: 'totalDeductions',
       render: (amount: number) => (
-        <span className="text-red-600">-{amount.toFixed(2)} {t('common.currency')}</span>
+        <span className="text-red-600">-{(Number(amount) || 0).toFixed(2)} {t('common.currency')}</span>
       )
     },
     {
@@ -358,7 +358,7 @@ const PayrollManagement: React.FC = () => {
       key: 'netSalary',
       render: (amount: number) => (
         <span className="font-bold text-green-600 text-lg">
-          {amount.toFixed(2)} {t('common.currency')}
+          {(Number(amount) || 0).toFixed(2)} {t('common.currency')}
         </span>
       )
     },
@@ -772,7 +772,7 @@ const PayrollManagement: React.FC = () => {
                                         <span className="font-medium">{formatCurrency(adv.remainingToCarryforward)}</span>
                                       </div>
                                       <div className="text-gray-500 dark:text-gray-400 mt-1">
-                                        المبلغ الأصلي: {adv.originalAmount.toFixed(2)} | المخصوم: {adv.deductedThisMonth.toFixed(2)}
+                                        {t('payroll.payrollManagement.carryOriginal')}: {(Number(adv.originalAmount) || 0).toFixed(2)} | {t('payroll.payrollManagement.carryDeducted')}: {(Number(adv.deductedThisMonth) || 0).toFixed(2)}
                                       </div>
                                     </div>
                                   ))}
@@ -781,7 +781,7 @@ const PayrollManagement: React.FC = () => {
                               
                               {selectedPayroll.summary.carryforwardDetails.deductions && selectedPayroll.summary.carryforwardDetails.deductions.length > 0 && (
                                 <div>
-                                  <div className="font-medium text-sm mb-2">تفاصيل الخصومات المرحلة:</div>
+                                  <div className="font-medium text-sm mb-2">{t('payroll.payrollManagement.carryDeductionsTitle')}:</div>
                                   {selectedPayroll.summary.carryforwardDetails.deductions.map((ded: any, idx: number) => (
                                     <div key={idx} className="text-xs p-2 bg-gray-50 dark:bg-gray-800 rounded mb-1">
                                       <div className="flex justify-between">
@@ -789,7 +789,7 @@ const PayrollManagement: React.FC = () => {
                                         <span className="font-medium">{formatCurrency(ded.remainingToCarryforward)}</span>
                                       </div>
                                       <div className="text-gray-500 dark:text-gray-400 mt-1">
-                                        المبلغ الأصلي: {ded.originalAmount.toFixed(2)} | المخصوم: {ded.deductedThisMonth.toFixed(2)}
+                                        {t('payroll.payrollManagement.carryOriginal')}: {(Number(ded.originalAmount) || 0).toFixed(2)} | {t('payroll.payrollManagement.carryDeducted')}: {(Number(ded.deductedThisMonth) || 0).toFixed(2)}
                                       </div>
                                     </div>
                                   ))}
@@ -1032,7 +1032,7 @@ const PayrollManagement: React.FC = () => {
                                     <td className="border border-gray-300 dark:border-gray-600 px-2 py-1">
                                       {record.overtime > 0 ? (
                                         <span className="text-blue-600 dark:text-blue-400 font-medium">
-                                          {record.overtime.toFixed(1)}
+                                          {(Number(record.overtime) || 0).toFixed(1)}
                                         </span>
                                       ) : '-'}
                                     </td>

@@ -67,7 +67,7 @@ const OccupiedTablesWarningModal: React.FC<OccupiedTablesWarningModalProps> = ({
             {/* Occupied Tables Count */}
             <div className="p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-lg">
               <p className="text-sm font-semibold text-amber-900 dark:text-amber-300 mb-2">
-                {t('tables.occupiedCount', `${occupiedTablesCount} طاولة مشغولة`)}
+                {t('tables.occupiedCount', { count: occupiedTablesCount })}
               </p>
               {occupiedTablesNames.length > 0 && (
                 <div className="flex flex-wrap gap-2">

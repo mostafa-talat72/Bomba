@@ -247,6 +247,15 @@ body {
 	}
 }
 
+/* Tablets (641–1024px) render sm: layouts at full 16px root: every rem-based
+   size squeezes. A 15px intermediate step relieves the whole range, same
+   philosophy as the 14px phone scale above (px borders/targets untouched). */
+@media (min-width: 641px) and (max-width: 1024px) {
+	html {
+		font-size: 15px;
+	}
+}
+
 /* Touch device optimizations */
 @media (hover: none) and (pointer: coarse) {
 

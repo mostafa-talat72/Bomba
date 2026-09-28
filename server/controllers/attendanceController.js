@@ -5,6 +5,71 @@ import { createTombstone } from '../utils/tombstoneHelper.js';
 import { startOfMonth, endOfMonth, format, parseISO } from 'date-fns';
 import { getDateFnsLocale } from '../utils/localeHelper.js';
 
+// ── منطق حساب أجر اليوم — مصدر واحد تشترك فيه كل المسارات ──
+// (markAttendance / bulkMarkAttendance / updateAttendance)
+// القواعد: يومي = daily، بالساعة = hourly×regularHours، شهري = monthly/30،
+// نصف يوم = النصف، الإضافي = overtimeHours × overtimeHourlyRate.
+export function computeAttendancePay({ employee, status, checkInTime, checkOutTime, workHoursPerDay = 8 }) {
+  const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
+  let totalHours = 0;
+  let regularHours = 0;
+  let overtimeHours = 0;
+  let lateMinutes = 0;
+  let dailySalary = 0;
+  let overtimePay = 0;
+
+  if (checkInTime instanceof Date && !isNaN(checkInTime) && checkOutTime instanceof Date && !isNaN(checkOutTime)) {
+    let out = checkOutTime;
+    if (out <= checkInTime) out = new Date(checkOutTime.getTime() + 24 * 60 * 60 * 1000);
+    totalHours = Math.max(0, (out - checkInTime) / (1000 * 60 * 60));
+    regularHours = Math.min(totalHours, workHoursPerDay);
+    overtimeHours = Math.max(totalHours - workHoursPerDay, 0);
+    if (status === 'late') {
+      const expected = new Date(checkInTime);
+      expected.setHours(9, 0, 0, 0);
+      if (checkInTime > expected && checkInTime.getHours() < 12) {
+        lateMinutes = Math.round((checkInTime - expected) / (1000 * 60));
+      }
+    }
+  }
+
+  const empType = employee?.employment?.type;
+  const comp = employee?.compensation || {};
+  if (status === 'present' || status === 'late') {
+    if (empType === 'daily') dailySalary = num(comp.daily);
+    else if (empType === 'hourly') dailySalary = num(comp.hourly) * regularHours;
+    else if (empType === 'monthly') dailySalary = num(comp.monthly) / 30;
+  } else if (status === 'half_day') {
+    if (empType === 'daily') dailySalary = num(comp.daily) / 2;
+    else if (empType === 'monthly') dailySalary = num(comp.monthly) / 60;
+  }
+
+  if (overtimeHours > 0) overtimePay = overtimeHours * num(comp.overtimeHourlyRate);
+  return {
+    totalHours, regularHours, overtimeHours, lateMinutes,
+    dailySalary, overtimePay, totalPay: dailySalary + overtimePay,
+  };
+}
+
+export function toAttendanceDate(date, timeStr) {
+  if (!timeStr || typeof timeStr !== 'string') return null;
+  const d = date instanceof Date ? date : new Date(date);
+  if (isNaN(d)) return null;
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  const t = new Date(`${yyyy}-${mm}-${dd}T${timeStr}`);
+  return isNaN(t) ? null : t;
+}
+
+async function getWorkHoursPerDay(organizationId) {
+  try {
+    const s = await Settings.findOne({ category: 'payroll', organization: organizationId });
+    if (s && Number(s.settings?.workHoursPerDay) > 0) return Number(s.settings.workHoursPerDay);
+  } catch {}
+  return 8;
+}
+
 // Get attendance records
 export const getAttendance = async (req, res) => {
   try {
@@ -318,8 +383,8 @@ export const markAttendance = async (req, res) => {
       });
     }
     
-    await attendance.save();
-    
+await attendance.save();
+        
     res.json({
       success: true,
       message: 'تم تسجيل الحضور بنجاح',
@@ -339,44 +404,72 @@ export const markAttendance = async (req, res) => {
   }
 };
 
-// Bulk mark attendance
+// Bulk mark attendance — same shared pay logic as single marking
 export const bulkMarkAttendance = async (req, res) => {
   try {
     const { records } = req.body;
-    
+    if (!Array.isArray(records) || records.length === 0) {
+      return res.status(400).json({ success: false, error: 'لا توجد سجلات' });
+    }
+
     const results = [];
     const errors = [];
-    
+    const workHoursPerDay = await getWorkHoursPerDay(req.user.organization);
+
     for (const record of records) {
       try {
-        const attendance = await markAttendance({
-          body: record,
-          user: req.user
-        });
+        const { employeeId, date, checkIn, checkOut, status, reason, excused, notes } = record || {};
+        if (!employeeId || !date) throw new Error('employeeId والتاريخ مطلوبان');
+        const employee = await Employee.findOne({ _id: employeeId, organizationId: req.user.organization });
+        if (!employee) throw new Error('الموظف غير موجود');
+
+        const attendanceDate = new Date(date);
+        if (isNaN(attendanceDate)) throw new Error('التاريخ غير صالح');
+        const inTime = checkIn ? toAttendanceDate(attendanceDate, checkIn) : null;
+        const outTime = checkOut ? toAttendanceDate(attendanceDate, checkOut) : null;
+        const st = status || 'present';
+        const pay = computeAttendancePay({ employee, status: st, checkInTime: inTime, checkOutTime: outTime, workHoursPerDay });
+
+        let attendance = await Attendance.findOne({ employeeId, date: attendanceDate, organizationId: req.user.organization });
+        if (attendance) {
+          if (inTime) attendance.checkIn = inTime;
+          if (outTime) attendance.checkOut = outTime;
+          attendance.status = st;
+          if (reason !== undefined) attendance.reason = reason;
+          if (excused !== undefined) attendance.excused = excused;
+          if (notes !== undefined) attendance.notes = notes;
+          attendance.details = pay;
+          attendance.approvedBy = req.user._id;
+        } else {
+          const dayName = format(attendanceDate, 'EEEE', { locale: getDateFnsLocale(req.user) });
+          attendance = new Attendance({
+            employeeId, date: attendanceDate, day: dayName,
+            checkIn: inTime, checkOut: outTime, status: st,
+            reason, excused: excused || false, notes,
+            details: pay, approvedBy: req.user._id,
+            organizationId: req.user.organization,
+          });
+        }
+        await attendance.save();
         results.push(attendance);
       } catch (error) {
-        errors.push({
-          record,
-          error: error.message
-        });
+        errors.push({ record, error: error.message });
       }
     }
-    
+
     res.json({
+      success: true,
       message: `تم تسجيل ${results.length} سجل بنجاح`,
-      results,
-      errors
+      data: { results, errors },
     });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ success: false, error: error.message });
   }
 };
 
 // Update attendance
 export const updateAttendance = async (req, res) => {
   try {
-   
-    
     const { status, checkIn, checkOut, reason, notes } = req.body;
     
     
@@ -389,7 +482,7 @@ export const updateAttendance = async (req, res) => {
       const anyAttendance = await Attendance.findById(req.params.id);
       
       return res.status(404).json({ success: false, error: 'السجل غير موجود' });
-    }    
+    }
     // تحديث البيانات
     if (status) {
       attendance.status = status;
@@ -412,39 +505,18 @@ export const updateAttendance = async (req, res) => {
       attendance.markModified('notes');
     }
     
-    // إعادة حساب الساعات والمرتب
-    if (attendance.checkIn && attendance.checkOut) {
-      const checkInTime = new Date(`1970-01-01T${attendance.checkIn}`);
-      const checkOutTime = new Date(`1970-01-01T${attendance.checkOut}`);
-      
-      let hours = (checkOutTime - checkInTime) / (1000 * 60 * 60);
-      if (hours < 0) hours += 24;
-      
-      attendance.hours = hours;
-      
-      // حساب المرتب
+    console.log('[updateAttendance] normalized:', { normalizedIn, normalizedOut });
+    {
       const employee = await Employee.findById(attendance.employeeId);
-      if (employee) {
-        const dailySalary = employee.compensation?.baseSalary / 30 || 0;
-        const overtimeRate = employee.compensation?.overtimeRate || 1.5;
-        const standardHours = 8;
-        
-        if (hours > standardHours) {
-          attendance.overtime = hours - standardHours;
-          attendance.details = {
-            dailySalary: dailySalary,
-            overtimePay: (hours - standardHours) * (dailySalary / standardHours) * overtimeRate,
-            totalPay: dailySalary + ((hours - standardHours) * (dailySalary / standardHours) * overtimeRate)
-          };
-        } else {
-          attendance.overtime = 0;
-          attendance.details = {
-            dailySalary: dailySalary,
-            overtimePay: 0,
-            totalPay: dailySalary
-          };
-        }
-      }
+      const workHoursPerDay = await getWorkHoursPerDay(req.user.organization);
+      const pay = computeAttendancePay({
+        employee,
+        status: attendance.status,
+        checkInTime: attendance.checkIn instanceof Date ? attendance.checkIn : null,
+        checkOutTime: attendance.checkOut instanceof Date ? attendance.checkOut : null,
+        workHoursPerDay,
+      });
+      attendance.details = pay;
     }
     
     await attendance.save();

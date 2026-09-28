@@ -2,6 +2,25 @@ import { CURRENCY_SYMBOLS } from '../../shared/currencySymbols.js';
 import i18n from '../i18n/config';
 
 /**
+ * BCP-47 locale tag for native Date/Intl formatting from the app language.
+ * Replaces hardcoded 'ar-EG' so en/fr users get their own date/time locale.
+ */
+export const localeTag = (lang?: string): string => {
+    const l = (lang || i18n.language || 'ar').split('-')[0];
+    if (l === 'fr') return 'fr-FR';
+    if (l === 'en') return 'en-US';
+    return 'ar-EG';
+};
+
+/**
+ * Locale key for localeCompare from the app language.
+ */
+export const collationLocale = (lang?: string): string => {
+    const l = (lang || i18n.language || 'ar').split('-')[0];
+    return l === 'fr' ? 'fr' : l === 'en' ? 'en' : 'ar';
+};
+
+/**
  * تحويل الأرقام الإنجليزية إلى العربية
  */
 const convertToArabicNumbers = (str: string): string => {
@@ -132,4 +151,22 @@ export const formatCurrency = (
 export const formatQuantity = (value: number | string | null | undefined, unit: string = '', locale: string = 'ar'): string => {
     const formatted = formatDecimal(value, locale);
     return unit ? `${formatted} ${unit}` : formatted;
+};
+
+/**
+ * نص عدد الفواتير بصيغة الجمع الصحيحة حسب اللغة (فاتورة/فاتورتان/فواتير...).
+ */
+export const billsCountLabel = (count: number | undefined | null, locale: string = 'ar'): string => {
+    const n = Math.max(0, Math.floor(Number(count) || 0));
+    const l = (locale || 'ar').split('-')[0].toLowerCase();
+    const num = formatDecimal(n, l);
+    if (l === 'ar') {
+        if (n === 0) return 'لا فواتير';
+        if (n === 1) return 'فاتورة واحدة';
+        if (n === 2) return 'فاتورتان';
+        if (n <= 10) return `${num} فواتير`;
+        return `${num} فاتورة`;
+    }
+    if (l === 'fr') return `${num} ${n <= 1 ? 'facture' : 'factures'}`;
+    return `${num} ${n === 1 ? 'bill' : 'bills'}`;
 };

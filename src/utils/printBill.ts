@@ -1,18 +1,18 @@
 import { Bill, Order, Session, ItemPayment, SessionPayment } from '../services/api';
 import { aggregateItemsWithPayments, AggregatedItem } from './billAggregation';
-import { formatDecimal, getCurrencySymbol, getDisplayNumber, splitDailySeq } from './formatters';
-import QRCode from 'qrcode';
+import { formatDecimal, getCurrencySymbol, getDisplayNumber } from './formatters';
 import { api } from '../services/api';
 import { toast } from 'react-toastify';
 import { getLocaleFromLanguage } from './localeMapper';
 import type { TFunction } from 'i18next';
 import { getCachedDevicePrinter, openCashDrawerThroughAgent, printInBrowser, printThroughLocalBridge } from './localPrintBridge';
-import { resolveUserPrintSettings } from './resolvePrintSettings';
+import { resolveUserPrintSettings, resolveFulfillmentFlag, resolveDocCopyPrinters } from './resolvePrintSettings';
 import { getCurrentUserCache } from './currentUser';
 import { isMobileDevice } from './deviceDetect';
-import { getPrintFlagFresh } from './freshPrintSettings';
+import { getPrintFlagFresh, getFulfillmentFlagFresh } from './freshPrintSettings';
 import { canPayFullBill } from './permissionHelper';
-import { resolveDocLayout, brandHtml, layoutCss } from './printLayout';
+import { defaultDrawerForFulfillment } from './paymentDrawer';
+import { resolveDocLayout, brandHtml, layoutCss, printFontImport } from './printLayout';
 
 let cachedOrganizationResponse: { data: any; expiresAt: number } | null = null;
 const qrCodeCache = new Map<string, string>();
@@ -53,6 +53,12 @@ export const getCachedReceiptHTML = async (
     if (oldest) receiptHtmlCache.delete(oldest);
   }
   return html;
+};
+
+// تُستدعى عند حفظ إعدادات الطباعة (منشأة/طابعتي) حتى يُطبَّق الجديد فوراً بلا انتظار انتهاء الـ TTL.
+export const clearBillPrintCaches = (): void => {
+  cachedOrganizationResponse = null;
+  receiptHtmlCache.clear();
 };
 
 // ⚡ تسخين مسبق: يُستدعى عند فتح نافذة الدفع/الفاتورة في الخلفية،
@@ -114,11 +120,12 @@ const getSocialLinkForQR = (socialLinks: any): { link: string; platform: string 
   return null;
 };
 
-// Function to generate QR Code
+// Function to generate QR Code — qrcode loads on demand (not in main bundle)
 const generateQRCode = async (text: string): Promise<string> => {
   const cached = qrCodeCache.get(text);
   if (cached) return cached;
   try {
+    const { default: QRCode } = await import('qrcode');
     const qrCodeDataURL = await QRCode.toDataURL(text, {
       width: 150,
       margin: 2,
@@ -248,7 +255,7 @@ export const buildBillPrintHTML = async (
   const billLayout = resolveDocLayout((organizationData as any)?.printSettings, 'bill');
   const billLogo = (organizationData as any)?.logo as string | undefined;
   const printFont = (organizationData as any)?.printSettings?.printFont || 'Tajawal';
-  const fontImport = printFont === 'Cairo' ? 'Cairo:wght@400;700' : printFont === 'Amiri' ? 'Amiri:wght@400;700' : printFont === 'IBM Plex Sans Arabic' ? 'IBM+Plex+Sans+Arabic:wght@400;700' : 'Tajawal:wght@400;500;700;800;900';
+  const fontImport = printFontImport(printFont);
   const customFooter = (organizationData as any)?.printSettings?.customFooterBill as string | undefined;
   
   // Generate QR Code if organization data is available and printing QR is enabled
@@ -289,17 +296,25 @@ export const buildBillPrintHTML = async (
   const locale = getLocaleFromLanguage(language);
   
   // Format date - uses organization timezone
-  const formatDate = (dateString: string | Date) => {
+  // منفصلان: التاريخ يميناً والوقت يساراً — نفس المنطقة الزمنية للمنشأة
+  const formatDay = (dateString: string | Date) => {
     const date = new Date(dateString);
     const organizationTimezone = localStorage.getItem('organizationTimezone') || 'Africa/Cairo';
-    return date.toLocaleString(locale, {
+    return date.toLocaleDateString(locale, {
       timeZone: organizationTimezone,
       year: 'numeric',
       month: '2-digit',
       day: '2-digit',
+    });
+  };
+  const formatClock = (dateString: string | Date) => {
+    const date = new Date(dateString);
+    const organizationTimezone = localStorage.getItem('organizationTimezone') || 'Africa/Cairo';
+    return date.toLocaleTimeString(locale, {
+      timeZone: organizationTimezone,
       hour: '2-digit',
       minute: '2-digit',
-      hour12: true
+      hour12: true,
     });
   };
 
@@ -786,23 +801,42 @@ export const buildBillPrintHTML = async (
     <body>
       <div class="header">
         ${brandHtml(billLogo, billLayout, organizationName ? organizationName : t('billPrint.defaultEstablishment'))}
-        ${billLayout.showBillNumber !== false ? `<div class="title" style="font-weight: 700; font-size: 19px;">${splitDailySeq(bill.billNumber).head}<span style="font-size: 22px; font-weight: 900; background: #000; color: #fff; padding: 0 8px; border-radius: 6px;">${splitDailySeq(bill.billNumber).seq}</span></div>` : ''}
-        ${(() => { let nm = ''; try { nm = (getCurrentUserCache() as any)?.name || ''; } catch {} const sd = billLayout.showDate !== false; const su = billLayout.showUser !== false && !!nm; if (!sd && !su) return ''; return `<div class="info" style="font-weight: 900; font-size: 1.15em;">${sd ? `<span class="bill-date">${formatDate(bill.createdAt || new Date())}</span>` : ''}${su ? `<span class="bill-user"> — 👤 ${nm}</span>` : ''}</div>`; })()}
-        ${bill.table?.number && billLayout.showTable !== false ? `<div class="info" style="font-weight: 900; font-size: 1.25em; color: #000; margin: 8px 0;"><span style="background: #000; color: #fff; padding: 2px 8px; border-radius: 3px;">${t('billPrint.table')}</span> <strong style="font-size: 1.5em;">${bill.table.number}${tableSectionName ? ` — (${tableSectionName})` : ''}</strong></div>` : (() => {
-          const isFD = bill.fulfillmentType === 'delivery' || bill.fulfillmentType === 'takeaway';
+        ${(() => {
+          const showNum = billLayout.showBillNumber !== false;
+          const showTag = billLayout.showFulfillmentBadge !== false;
+          const showNumLb = billLayout.showBillNumberLabel !== undefined ? billLayout.showBillNumberLabel === true : showNum;
+          const showTagLb = billLayout.showFulfillmentBadgeLabel !== undefined ? billLayout.showFulfillmentBadgeLabel === true : showTag;
+          if (!showNum && !showTag && !showNumLb && !showTagLb) return '';
+          const fType = bill.fulfillmentType;
+          const tag = fType === 'delivery' ? '🛵 دليفري' : fType === 'takeaway' ? '🥡 تيك أوي' : '🍽️ صالة';
+          const printNum = String(bill.billNumber || '').replace(/^#/, '').replace(/^(BILL|ORD|SES|INV)-[^-]+-/, '') || bill.billNumber || '';
+          return `<div class="info" style="display:flex;justify-content:space-between;align-items:center;gap:6px;font-weight:900;margin:2px 0;"><span>${(showNum || showNumLb) ? `<span class="title" style="font-weight:700;">${showNumLb ? `<span class="bill-number-label">${t('billPrint.billNumber')}:</span> ` : ''}${showNum ? `<span class="bill-number-value">${printNum}</span>` : ''}</span>` : ''}</span><span>${(showTag || showTagLb) ? `<span class="fulfill-badge">${showTagLb ? `<span class="bill-type-label">${t('billPrint.fulfillmentType')}:</span> ` : ''}${showTag ? `<span class="bill-type-value">${tag}</span>` : ''}</span>` : ''}</span></div>`;
+        })()}
+        ${(() => {
+          const sd = billLayout.showDate !== false;
+          const st = billLayout.showTime !== false;
+          const sdLb = billLayout.showDateLabel !== undefined ? billLayout.showDateLabel === true : sd;
+          const stLb = billLayout.showTimeLabel !== undefined ? billLayout.showTimeLabel === true : st;
+          if (!sd && !st && !sdLb && !stLb) return '';
+          const stamp = bill.createdAt || new Date();
+          return `<div class="info" style="display:flex;justify-content:space-between;align-items:center;gap:6px;font-weight:900;font-size:1.15em;margin:2px 0;"><span>${(sd || sdLb) ? `<span class="bill-date">${sdLb ? `<span class="bill-date-label">${t('billPrint.date')}:</span> ` : ''}${sd ? `<span class="bill-date-value">${formatDay(stamp)}</span>` : ''}</span>` : ''}</span><span>${(st || stLb) ? `<span class="bill-time">${stLb ? `<span class="bill-time-label">${t('billPrint.time')}:</span> ` : ''}${st ? `<span class="bill-time-value">${formatClock(stamp)}</span>` : ''}</span>` : ''}</span></div>`;
+        })()}
+        ${(() => { let nm = ''; try { nm = (getCurrentUserCache() as any)?.name || ''; } catch {} const shU = billLayout.showUser !== false; const shULb = billLayout.showUserLabel !== undefined ? billLayout.showUserLabel === true : shU; if (!nm || (!shU && !shULb)) return ''; return `<div class="info" style="font-weight:900;font-size:1.15em;text-align:center;margin:2px 0;"><span class="bill-user">${shULb ? `<span class="bill-user-label">${t('billPrint.user')}:</span> ` : ''}${shU ? `<span class="bill-user-value">👤 ${nm}</span>` : ''}</span></div>`; })()}
+        ${bill.fulfillmentType !== 'delivery' && bill.fulfillmentType !== 'takeaway' && bill.table?.number && billLayout.showTable !== false ? `<div class="info" style="font-weight: 900; font-size: 1.25em; color: #000; margin: 8px 0;"><span style="background: #000; color: #fff; padding: 2px 8px; border-radius: 3px;">${t('billPrint.table')}</span> <strong style="font-size: 1.5em;">${bill.table.number}${(bill.table as any)?.name && String((bill.table as any).name) !== String(bill.table.number) ? ` (${(bill.table as any).name})` : ''}${tableSectionName ? ` — (${tableSectionName})` : ''}</strong></div>` : (() => {
           const nm = bill.customerName || bill.deliveryInfo?.customerName || '';
           const ph = bill.customerPhone || bill.deliveryInfo?.phone || '';
-          if (!(nm || ph) || billLayout.showCustomer === false) {
-            return (isFD && billLayout.showCustomer !== false) ? `<div class="info" style="font-weight: 900; font-size: 1.35em;">${bill.fulfillmentType === 'delivery' ? '🛵 دليفري' : '🥡 تيك أوي'}</div>` : '';
-          }
-          const showN = !!nm && billLayout.showCustName !== false;
-          const showP = !!ph && billLayout.showPhone !== false;
-          if (!isFD) return `<div class="info" style="font-weight: 900; font-size: 1.15em;">${t('billPrint.customer')}: ${showN ? `<span class="cust-name">${nm}</span>` : ''}</div>`;
-          if (!showN && !showP) return `<div class="info" style="font-weight: 900; font-size: 1.35em;">${bill.fulfillmentType === 'delivery' ? '🛵 دليفري' : '🥡 تيك أوي'}</div>`;
-          return `<div class="info" style="font-weight: 900; font-size: 1.35em;">${bill.fulfillmentType === 'delivery' ? '🛵 دليفري' : '🥡 تيك أوي'}: ${showN ? `<span class="cust-name">${nm}</span>` : ''}${showP ? `<span class="cust-phone">${showN ? ' — ' : ''}${ph}</span>` : ''}</div>`;
+          // هيكل الرأس: الدليفري فقط هنا (الطاولة خارجاً، والتيك أوي لا شيء)
+          if (bill.fulfillmentType !== 'delivery') return '';
+          if (!(nm || ph) || billLayout.showCustomer === false) return '';
+          const showN2 = !!nm && billLayout.showCustName !== false;
+          const showP2 = !!ph && billLayout.showPhone !== false;
+          const showN2Lb = !!nm && (billLayout.showCustNameLabel !== undefined ? billLayout.showCustNameLabel === true : showN2);
+          const showP2Lb = !!ph && (billLayout.showPhoneLabel !== undefined ? billLayout.showPhoneLabel === true : showP2);
+          if (!showN2 && !showP2 && !showN2Lb && !showP2Lb) return '';
+          return `<div class="info" style="display:flex;justify-content:space-between;align-items:center;gap:6px;font-weight:900;font-size:1.15em;margin:2px 0;"><span>${(showN2 || showN2Lb) ? `${showN2Lb ? `<span class="bill-custname-label">${t('billPrint.customer')}:</span> ` : ''}${showN2 ? `<span class="cust-name">${nm}</span>` : ''}` : ''}</span><span>${(showP2 || showP2Lb) ? `${showP2Lb ? `<span class="bill-phone-label">${t('billPrint.customerPhone')}:</span> ` : ''}${showP2 ? `<span class="cust-phone">${ph}</span>` : ''}` : ''}</span></div>`;
         })()}
-        ${(bill.customerPhone || bill.deliveryInfo?.phone) && billLayout.showPhone !== false && billLayout.showCustomer !== false && bill.fulfillmentType !== 'delivery' && bill.fulfillmentType !== 'takeaway' ? `<div class="info" style="font-weight: 900; font-size: 1.15em;">${t('billPrint.phone')}: <span class="cust-phone">${bill.customerPhone || bill.deliveryInfo?.phone}</span></div>` : ''}
-        ${bill.fulfillmentType === 'delivery' && bill.deliveryInfo?.address && billLayout.showAddress !== false ? `<div class="info delivery-address" style="font-weight: 900; font-size: 1em;">📍 ${bill.deliveryInfo.address}</div>` : ''}
+        ${(() => { const ph2 = bill.customerPhone || bill.deliveryInfo?.phone; if (!ph2) return ''; const shP3 = billLayout.showPhone !== false && billLayout.showCustomer !== false && bill.fulfillmentType !== 'delivery' && bill.fulfillmentType !== 'takeaway' && !bill.table?.number; const shP3Lb = billLayout.showPhoneLabel !== undefined ? billLayout.showPhoneLabel === true : shP3; if (!shP3 && !shP3Lb) return ''; return `<div class="info" style="font-weight: 900; font-size: 1.15em;">${shP3Lb ? `<span class="bill-phone-label">${t('billPrint.phone')}:</span> ` : ''}${shP3 ? `<span class="cust-phone">${ph2}</span>` : ''}</div>`; })()}
+        ${(() => { const ad = bill.fulfillmentType === 'delivery' ? bill.deliveryInfo?.address : ''; if (!ad) return ''; const shA = billLayout.showAddress !== false; const shALb = billLayout.showAddressLabel !== undefined ? billLayout.showAddressLabel === true : shA; if (!shA && !shALb) return ''; return `<div class="info delivery-address" style="font-weight: 900; font-size: 1em;">📍 ${shALb ? `<span class="bill-address-label">${t('billPrint.customerAddress')}:</span> ` : ''}${shA ? `<span class="bill-address-value">${ad}</span>` : ''}</div>`; })()}
       </div>
 
       ${bill.orders && bill.orders.length > 0 ? generateOrderItemsTable(bill.orders, bill.itemPayments, bill.status, bill.paid, bill.total, billLayout.showPaidCol !== false, billLayout.showPriceCol === true, billLayout.showSectionTitle !== false) : ''}
@@ -819,8 +853,12 @@ export const buildBillPrintHTML = async (
           const totalFixedDiscount = (bill.orders || []).reduce((sum: number, order: any) => {
             return sum + (order?.fixedDiscount?.amount || 0);
           }, 0);
+          // الخصم اليدوي على كل طلب (order.discount) — كان مفقوداً فيسبب اختفاء/نقص سطر الخصم
+          const totalOrderManualDiscount = (bill.orders || []).reduce((sum: number, order: any) => {
+            return sum + (Number(order?.discount) || 0);
+          }, 0);
           const billDiscount = Number(bill.discount) || 0;
-          const totalAllDiscounts = totalFixedDiscount + billDiscount;
+          const totalAllDiscounts = totalFixedDiscount + totalOrderManualDiscount + billDiscount;
           // السعر قبل الخصم = الإجمالي + كل الخصومات
           const subtotalBeforeDiscount = (bill.total || 0) + totalAllDiscounts;
           if (totalAllDiscounts <= 0 && billLayout.showZeroRows !== true) return '';
@@ -836,8 +874,14 @@ export const buildBillPrintHTML = async (
         <tr class="delivery-fee"><th>${t('billPrint.deliveryFee', 'رسوم التوصيل')}</th><td>${formatNumber(bill.deliveryInfo.deliveryFee)} ${currencySymbol}</td></tr>
         ` : ''}
         <tr class="grand-total"><th>${t('billPrint.total')}</th><td>${formatNumber(bill.total || 0)} ${currencySymbol}</td></tr>
-        <tr class="paid"><th>${t('billPrint.paid')}</th><td>${formatNumber(bill.paid || 0)} ${currencySymbol}</td></tr>
-        <tr class="remaining"><th>${t('billPrint.remaining')}</th><td>${formatNumber(bill.remaining || 0)} ${currencySymbol}</td></tr>
+        ${(() => {
+          const paidIsZero = !((bill.paid || 0) > 0);
+          const remIsZero = !((bill.remaining || 0) > 0);
+          const hideBoth = billLayout.hideBothWhenEitherZero === true && (paidIsZero || remIsZero);
+          const showPaid = !hideBoth && (!paidIsZero || billLayout.hidePaidWhenZero !== true);
+          const showRem = !hideBoth && (!remIsZero || billLayout.hideRemainingWhenZero !== true);
+          return `${showPaid ? `<tr class="paid"><th>${t('billPrint.paid')}</th><td>${formatNumber(bill.paid || 0)} ${currencySymbol}</td></tr>` : ''}${showRem ? `<tr class="remaining"><th>${t('billPrint.remaining')}</th><td>${formatNumber(bill.remaining || 0)} ${currencySymbol}</td></tr>` : ''}`;
+        })()}
         </tbody>
       </table>
       ` : ''}
@@ -885,7 +929,8 @@ export const printBill = async (
   if (billId && (billForPrint as any)?.status !== 'paid') {
     try {
       const me: any = getCurrentUserCache();
-      const payOnPrint = await getPrintFlagFresh(me, 'printMarksPaid');
+      const billFulfillment = (billForPrint as any)?.fulfillmentType as string | undefined;
+      const payOnPrint = await getFulfillmentFlagFresh(me, 'printMarksPaid', billFulfillment, false);
       if (payOnPrint && canPayFullBill(me)) {
         const b: any = billForPrint;
         const hasActive = Array.isArray(b.sessions) && b.sessions.some((s: any) => (typeof s === 'object' ? s?.status : null) === 'active');
@@ -894,6 +939,7 @@ export const printBill = async (
           const payRes: any = await api.updatePayment(billId, {
             paid: (Number(b.paid) || 0) + remaining, remaining: 0, status: 'paid',
             paymentAmount: remaining, method: 'cash', reference: '',
+            drawer: defaultDrawerForFulfillment(billFulfillment),
           } as any).catch(() => null);
           // فقط التأكيد من السيرفر يُعتمد — لا دفع متفائل حتى لا يُطبع إيصال مدفوع لفاتورة غير مدفوعة.
           if (payRes?.success && payRes.data) {
@@ -915,7 +961,8 @@ export const printBill = async (
     if (typeof window !== 'undefined' && (window as any).showNotification) (window as any).showNotification(startingMsg, 'info');
   } catch {}
   const hasOrderDetails = Array.isArray((bill as any).orders)
-    && (bill as any).orders.every((order: any) => order && Array.isArray(order.items));
+    && (bill as any).orders.length > 0
+    && (bill as any).orders.every((order: any) => order && typeof order === 'object' && Array.isArray(order.items));
   const organizationFromBill = billForPrint.organization
     && typeof billForPrint.organization === 'object'
     && (billForPrint.organization as any).printSettings
@@ -931,12 +978,13 @@ export const printBill = async (
         ? cachedOrganizationResponse.data?.printSettings
         : undefined);
     const instantOverride = resolveUserPrintSettings(getCurrentUserCache());
-    const effectiveInstant = instantOverride ? { ...syncSettings, ...instantOverride } : syncSettings;
+    // صارم مثل السيرفر: طابعتي المفعلة تحل محل المنشأة بالكامل (بدون دمج)
+    const effectiveInstant = instantOverride || syncSettings;
     if (effectiveInstant) {
       const instantSetting = effectiveDrawerMode === 'payment' ? 'openCashDrawerOnPayment' : 'openCashDrawer';
-      if (effectiveInstant[instantSetting] !== false) {
+      if (resolveFulfillmentFlag(effectiveInstant, instantSetting, (billForPrint as any)?.fulfillmentType, true)) {
         const instantProfile = effectiveInstant.printers?.find((item: any) => item.id === effectiveInstant.documentPrinterMap?.bill);
-        void openCashDrawerThroughAgent(printerName || instantProfile?.printerName, printKey).catch(() => {});
+        void openCashDrawerThroughAgent(printerName || instantProfile?.printerName || (effectiveInstant as any)?.printerName, printKey).catch(() => {});
       }
     }
   }
@@ -981,10 +1029,23 @@ export const printBill = async (
               ? (full as any).organization.printSettings
               : undefined;
             const mine = resolveUserPrintSettings(getCurrentUserCache());
-            const ps = mine ? { ...orgPs, ...mine } : orgPs;
+            // صارم: طابعتي أولاً كاملةً، ثم المنشأة — مثل السيرفر
+            const ps = mine || orgPs;
             if (!ps) return undefined;
             const fk = ['takeaway', 'delivery'].includes((full as any)?.fulfillmentType) ? `bill_${(full as any).fulfillmentType}` : 'bill';
-            return Math.min(5, Math.max(1, Number(ps?.documentCopies?.[fk] ?? ps?.documentCopies?.bill ?? 1) || 1));
+            return resolveDocCopyPrinters(ps, fk, 'bill').length;
+          } catch { return undefined; }
+        })(),
+        copyPrinters: (() => {
+          try {
+            const orgPs = (full as any)?.organization && typeof (full as any).organization === 'object'
+              ? (full as any).organization.printSettings
+              : undefined;
+            const mine = resolveUserPrintSettings(getCurrentUserCache());
+            const ps = mine || orgPs;
+            if (!ps) return undefined;
+            const fk = ['takeaway', 'delivery'].includes((full as any)?.fulfillmentType) ? `bill_${(full as any).fulfillmentType}` : 'bill';
+            return resolveDocCopyPrinters(ps, fk, 'bill').map((id) => (id ? (ps as any)?.printers?.find((p: any) => p.id === id)?.printerName : undefined));
           } catch { return undefined; }
         })(),
       };
@@ -1016,16 +1077,16 @@ export const printBill = async (
       return false;
     }
   }
-  const settingsPromise = organizationFromBill
-    ? Promise.resolve(organizationFromBill)
-    : cachedOrganizationResponse && cachedOrganizationResponse.expiresAt > Date.now()
+  // الإعدادات الطازجة أولاً (كاش 10 ثوانٍ): لقطة الفاتورة قد تكون قديمة
+  // (قائمة فواتير محملة قبل حفظ التصميم) فلا تُستخدم إلا كملاذ عند فشل الجلب.
+  const settingsPromise = cachedOrganizationResponse && cachedOrganizationResponse.expiresAt > Date.now()
       ? Promise.resolve({ success: true, data: cachedOrganizationResponse.data })
       : api.getOrganization().then((response) => {
         if (response.success && response.data) {
           cachedOrganizationResponse = { data: response.data, expiresAt: Date.now() + 10000 };
         }
         return response;
-      }).catch(() => null);
+      }).catch(() => organizationFromBill);
   const [fullBillResponse, savedPrinter, settingsResponse] = await Promise.all([
     billId && !hasOrderDetails ? api.getBill(billId) : Promise.resolve(null),
     printerName ? Promise.resolve(null) : getCachedDevicePrinter(),
@@ -1036,15 +1097,18 @@ export const printBill = async (
   }
   const orgPrintSettings = settingsResponse?.success === true ? settingsResponse.data?.printSettings : undefined;
   const mainOverride = resolveUserPrintSettings(getCurrentUserCache());
-  const printSettings = mainOverride ? { ...orgPrintSettings, ...mainOverride } : orgPrintSettings;
+  // صارم مثل السيرفر وباقي المسارات: طابعتي المفعلة هي الأساس الكامل، والمنشأة احتياطي فقط
+  const printSettings = mainOverride || orgPrintSettings;
   const fulfillKey = ['takeaway', 'delivery'].includes((billForPrint as any)?.fulfillmentType) ? `bill_${(billForPrint as any).fulfillmentType}` : 'bill';
   const billPrinterId = printSettings?.documentPrinterMap?.[fulfillKey] || printSettings?.documentPrinterMap?.bill;
   const billProfile = printSettings?.printers?.find((item: any) => item.id === billPrinterId);
-  const selectedPrinterName = printerName || billProfile?.printerName || savedPrinter?.data?.printerName || savedPrinter?.data?.name;
+  const selectedPrinterName = printerName || billProfile?.printerName || printSettings?.printerName || savedPrinter?.data?.printerName || savedPrinter?.data?.name;
   const paperWidthMm = billProfile?.paperWidthMm || 80;
-  const billCopies = Math.min(5, Math.max(1, Number(printSettings?.documentCopies?.[fulfillKey] ?? printSettings?.documentCopies?.bill ?? 1) || 1));
+  const billCopyIds = resolveDocCopyPrinters(printSettings, fulfillKey, 'bill');
+  const billCopies = billCopyIds.length;
+  const billCopyPrinters = billCopyIds.map((id) => (id ? printSettings?.printers?.find((p: any) => p.id === id)?.printerName : undefined));
   const settingName = drawerMode === 'payment' ? 'openCashDrawerOnPayment' : 'openCashDrawer';
-  const openDrawer = printSettings?.[settingName] !== false;
+  const openDrawer = resolveFulfillmentFlag(printSettings, settingName, (billForPrint as any)?.fulfillmentType, true);
   if (openDrawer) {
     void openCashDrawerThroughAgent(
       selectedPrinterName,
@@ -1060,6 +1124,7 @@ export const printBill = async (
   const bridgePrinted = await printThroughLocalBridge(receiptHTML, selectedPrinterName, {
     paperWidthMm,
     copies: billCopies,
+    copyPrinters: billCopyPrinters,
     openDrawer: false,
     drawerMode: effectiveDrawerMode,
     organization: settingsResponse?.data,

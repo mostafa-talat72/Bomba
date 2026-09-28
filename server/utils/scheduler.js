@@ -1174,6 +1174,23 @@ export const initializeScheduler = () => {
     });
     Logger.info("✅ Reservation expiration scheduled: every hour");
 
+    // Auto-cancel stale customer (QR) order requests older than 20 min — every 5 min.
+    // Hard-deletes them like manual rejection (never bill-linked, no inventory taken).
+    try {
+        const sweepFn = async () => {
+            try {
+                const { sweepExpiredCustomerRequests } = await import("../controllers/orderController.js");
+                const io = global.__socketIO || null;
+                await sweepExpiredCustomerRequests(io);
+            } catch (e) {
+                Logger.warn("customerRequestSweep failed:", e.message);
+            }
+        };
+        setTimeout(sweepFn, 60 * 1000); // catch-up 1 min after boot
+        cron.schedule("*/5 * * * *", sweepFn, { scheduled: true, timezone: "UTC" });
+        Logger.info("✅ Customer request auto-cancel scheduled: every 5 minutes");
+    } catch {}
+
     // Archive stock movements older than 30 days — every 4 hours + catch-up 5 min after boot.
     // Idempotent: re-runs never duplicate (each movement lives in exactly one place).
     try {

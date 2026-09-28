@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+﻿import React, { useState } from 'react';
 import { Search } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import PrintDesigner from './PrintDesigner';
@@ -6,6 +6,7 @@ import PrintDesigner from './PrintDesigner';
 export interface DetectedPrinter {
   name: string;
   path?: string;
+  port?: string;
   driver?: string;
 }
 
@@ -26,6 +27,9 @@ export interface PrinterSettingsFormProps {
   onTestPrinter: (printer: { path?: string; name?: string }) => void;
   logoUrl?: string;
   orgName?: string;
+  // Ø¥Ø®ÙØ§Ø¡ Ù…ÙØ§ØªÙŠØ­ Ø§Ù„Ø·Ø¨Ø§Ø¹Ø© Ø§Ù„Ù…Ø²Ø¯ÙˆØ¬Ø© (ØªØ¨ÙˆÙŠØ¨ "Ø·Ø§Ø¨Ø¹ØªÙŠ" ÙŠØ¹Ø±Ø¶Ù‡Ø§ Ù…Ù†ÙØµÙ„Ø© Ø£Ø¹Ù„Ø§Ù‡) â€” Ù„Ù„Ù…Ù†Ø´Ø£Ø© ØªØ¸Ù‡Ø± Ø¯Ø§Ø®Ù„ Ø§Ù„Ø£ØªÙ…ØªØ©
+  showPrintBoth?: boolean;
+  saveNote?: string;
 }
 
 const PrinterSettingsForm: React.FC<PrinterSettingsFormProps> = ({
@@ -39,6 +43,8 @@ const PrinterSettingsForm: React.FC<PrinterSettingsFormProps> = ({
   onTestPrinter,
   logoUrl,
   orgName,
+  showPrintBoth = true,
+  saveNote,
 }) => {
   const { t } = useTranslation();
   const organization = { printSettings: settings };
@@ -57,25 +63,97 @@ const PrinterSettingsForm: React.FC<PrinterSettingsFormProps> = ({
 
   const patch = (extra: Record<string, any>) => setOrganization((prev: any) => ({ ...prev, printSettings: { ...prev.printSettings, ...extra } }));
 
-  // قراءة آمنة لخرائط التوجيه (كائن عادي من API أو Map من Mongoose مباشرة)
-  const getMapVal = (obj: any, key: string): string => {
+  // â€”â€” Ø£ØªÙ…ØªØ© Ù„ÙƒÙ„ Ù†ÙˆØ¹ Ø·Ù„Ø¨: Ù†ÙØ³ Ø§Ù„ØªØ­ÙƒÙ…Ø§ØªØŒ ÙƒÙ„ Ù†ÙˆØ¹ Ø¨Ø¥Ø¹Ø¯Ø§Ø¯Ø§ØªÙ‡ (Ø§Ù„ÙØ§Ø±Øº ÙŠØªØ¨Ø¹ Ø§Ù„Ø·Ø§ÙˆÙ„Ø§Øª)
+  const getAuto = (base: string, sfx: '' | 'Takeaway' | 'Delivery'): any => {
+    if (!sfx) return (organization.printSettings as any)?.[base];
+    const v = (organization.printSettings as any)?.[`${base}${sfx}`];
+    return v !== undefined ? v : (organization.printSettings as any)?.[base];
+  };
+  const isAutoInherited = (base: string, sfx: '' | 'Takeaway' | 'Delivery'): boolean =>
+    !!sfx && (organization.printSettings as any)?.[`${base}${sfx}`] === undefined;
+  const setAuto = (base: string, sfx: '' | 'Takeaway' | 'Delivery', v: any) =>
+    patch({ [`${base}${sfx}`]: v });
+  const FollowBadge = () => (
+    <span className="ms-2 inline-block rounded-full bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 px-1.5 py-0.5 text-[10px] font-bold">{t('settings.organization.printSettings.routingFollowTables')}</span>
+  );
+  const AutoToggle = ({ base, sfx, titleKey, descKey, def }: { base: string; sfx: '' | 'Takeaway' | 'Delivery'; titleKey: string; descKey: string; def: boolean }) => {
+    const raw = getAuto(base, sfx);
+    const checked = raw === undefined ? def : raw === true;
+    return (
+      <div className="flex items-center justify-between py-1">
+        <div>
+          <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100">
+            {t(`settings.organization.printSettings.${titleKey}` as any)}
+            {isAutoInherited(base, sfx) && <FollowBadge />}
+          </h4>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{t(`settings.organization.printSettings.${descKey}` as any)}</p>
+        </div>
+        <label className="relative inline-flex items-center cursor-pointer flex-shrink-0">
+          <input type="checkbox" checked={checked} onChange={(e) => setAuto(base, sfx, e.target.checked)} className="sr-only peer" />
+          <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-orange-300 dark:peer-focus:ring-orange-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-orange-600"></div>
+        </label>
+      </div>
+    );
+  };
+  const autoGroups: Array<{ f: string; sfx: '' | 'Takeaway' | 'Delivery'; title: string; desc: string }> = [
+    { f: 'dine_in', sfx: '', title: t('settings.organization.printSettings.autoGroupDineInTitle'), desc: t('settings.organization.printSettings.autoGroupDineInDesc') },
+    { f: 'takeaway', sfx: 'Takeaway', title: t('settings.organization.printSettings.autoGroupTakeawayTitle'), desc: t('settings.organization.printSettings.autoGroupTakeawayDesc') },
+    { f: 'delivery', sfx: 'Delivery', title: t('settings.organization.printSettings.autoGroupDeliveryTitle'), desc: t('settings.organization.printSettings.autoGroupDeliveryDesc') },
+  ];
+
+  // Ù‚Ø±Ø§Ø¡Ø© Ø¢Ù…Ù†Ø© Ù„Ø®Ø±Ø§Ø¦Ø· Ø§Ù„ØªÙˆØ¬ÙŠÙ‡ (ÙƒØ§Ø¦Ù† Ø¹Ø§Ø¯ÙŠ Ù…Ù† API Ø£Ùˆ Map Ù…Ù† Mongoose Ù…Ø¨Ø§Ø´Ø±Ø©)
+  // ØªØ¯Ø¹Ù… string (Ù„Ù„Ø·Ø§Ø¨Ø¹Ø§Øª) Ùˆ string[] (Ù„Ù†Ø³Ø® Ø§Ù„Ø£Ù‚Ø³Ø§Ù…)
+  const getMapVal = (obj: any, key: string): string | string[] => {
     if (!obj) return '';
     if (typeof obj.get === 'function') {
-      try { const v = obj.get(key); return v === undefined || v === null ? '' : String(v); } catch { return ''; }
+      try { const v = obj.get(key); return v === undefined || v === null ? '' : v; } catch { return ''; }
     }
     const v = obj[key];
-    return v === undefined || v === null ? '' : String(v);
+    return v === undefined || v === null ? '' : v;
   };
-  const setMapVal = (mapKey: string, sectionId: string, value: string) =>
+  const setMapVal = (mapKey: string, sectionId: string, value: string | string[]) =>
     setOrganization((prev: any) => {
       const cur = (prev.printSettings as any)?.[mapKey];
       const plain = cur && typeof cur === 'object' && typeof cur.get === 'function'
         ? Object.fromEntries(cur.entries())
         : { ...(cur || {}) };
-      if (!value) delete plain[sectionId];
+      if (!value || (Array.isArray(value) && value.length === 0) || value === '') delete plain[sectionId];
       else plain[sectionId] = value;
       return { ...prev, printSettings: { ...prev.printSettings, [mapKey]: plain } };
     });
+
+  // â€”â€” Ù†Ø³Ø® Ø§Ù„Ù…Ø³ØªÙ†Ø¯Ø§Øª ÙˆØ·Ø§Ø¨Ø¹Ø© ÙƒÙ„ Ù†Ø³Ø®Ø© (ØªØ¨ÙˆÙŠØ¨ Ø§Ù„ØªÙˆØ¬ÙŠÙ‡): Ø§Ù„Ù…ØµÙÙˆÙØ© Ù‡ÙŠ Ø§Ù„Ù…Ø±Ø¬Ø¹ØŒ ÙˆØ§Ù„Ø¹Ø¯Ø¯ Ø§Ù„Ù‚Ø¯ÙŠÙ… Ø§Ø­ØªÙŠØ§Ø·ÙŠ
+  const getCopyList = (key: string, legacyFallback?: string): string[] => {
+    const maps = (organization.printSettings as any)?.documentCopyPrinters;
+    const raw = maps && typeof maps.get === 'function'
+      ? (() => { try { return maps.get(key); } catch { return undefined; } })()
+      : maps?.[key];
+    if (Array.isArray(raw) && raw.length) return raw.slice(0, 5).map((x) => String(x || ''));
+    const copiesObj = (organization.printSettings as any)?.documentCopies;
+    const getNum = (k: string) => copiesObj && typeof copiesObj.get === 'function'
+      ? (() => { try { return copiesObj.get(k); } catch { return undefined; } })()
+      : copiesObj?.[k];
+    const n = Math.min(5, Math.max(1, Number(getNum(key) ?? (legacyFallback ? getNum(legacyFallback) : undefined) ?? 1) || 1));
+    return Array(n).fill('');
+  };
+  const setCopyList = (key: string, list: string[]) =>
+    setOrganization((prev: any) => ({
+      ...prev,
+      printSettings: {
+        ...prev.printSettings,
+        documentCopyPrinters: { ...((prev.printSettings as any)?.documentCopyPrinters || {}), [key]: list },
+      },
+    }));
+  const setCopyCount = (key: string, n: number) => {
+    const cur = getCopyList(key);
+    const count = Math.min(5, Math.max(1, Number(n) || 1));
+    setCopyList(key, Array.from({ length: count }, (_, i) => cur[i] || ''));
+  };
+  const docDefaultPrinterName = (docKey: string): string => {
+    const pid = (organization.printSettings as any)?.documentPrinterMap?.[docKey] || '';
+    if (!pid) return '';
+    return (organization.printSettings?.printers || []).find((p: any) => p.id === pid)?.name || '';
+  };
 
   return (
     <div className="space-y-4">
@@ -128,7 +206,7 @@ const PrinterSettingsForm: React.FC<PrinterSettingsFormProps> = ({
                 >
                   {detectingPrinters ? (
                     <>
-                      <span className="animate-spin">⟳</span>
+                      <span className="animate-spin">âŸ³</span>
                       {t('settings.organization.printSettings.detecting')}
                     </>
                   ) : (
@@ -157,7 +235,7 @@ const PrinterSettingsForm: React.FC<PrinterSettingsFormProps> = ({
                       >
                         <div>
                           <div className="font-medium text-sm text-gray-900 dark:text-gray-100">{printer.name}</div>
-                          <div className="text-xs text-gray-500 dark:text-gray-400">{printer.path} {printer.driver && `(${printer.driver})`}</div>
+                          <div className="text-xs text-gray-500 dark:text-gray-400">{printer.port || printer.path} {printer.driver && `(${printer.driver})`}</div>
                         </div>
                         <button type="button" onClick={(e) => { e.stopPropagation(); testPrinter(printer); }} className="px-2 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700">
                           {t('settings.organization.printSettings.test')}
@@ -169,8 +247,15 @@ const PrinterSettingsForm: React.FC<PrinterSettingsFormProps> = ({
               )}
 
               <div className="mt-4 rounded-xl border border-orange-200 dark:border-gray-600 bg-white/60 dark:bg-gray-800/40 p-4">
-                <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">{t('settings.organization.printSettings.multiTitle')}</h4>
+<h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">{t('settings.organization.printSettings.multiTitle')}</h4>
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{t('settings.organization.printSettings.multiDesc')}</p>
+                <label className="mt-3 flex items-center gap-2 text-xs text-gray-600 dark:text-gray-300">{t('settings.organization.printSettings.defaultPrinter')}
+                  <select value={organization.printSettings?.printerName || ''} onChange={(e) => patch({ printerName: e.target.value })} className="flex-1 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 p-1.5">
+                    <option value="">{t('settings.organization.printSettings.none')}</option>
+                    {(organization.printSettings?.printers || []).map((printer: any) => <option key={printer.id} value={printer.printerName || printer.name}>{printer.name}</option>)}
+                  </select>
+                </label>
+                <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1">{t('settings.organization.printSettings.defaultPrinterDesc')}</p>
                 <div className="mt-3 space-y-2">
                   {(organization.printSettings?.printers || []).map((printer: any) => (
                     <div key={printer.id} className="flex items-center justify-between rounded-lg bg-gray-50 dark:bg-gray-700 p-2">
@@ -192,52 +277,6 @@ const PrinterSettingsForm: React.FC<PrinterSettingsFormProps> = ({
                     );
                   })}
                 </div>
-
-                <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {([
-                    ['bill', t('settings.organization.printSettings.docBill')],
-                    ['bill_takeaway', t('settings.organization.printSettings.docBillTakeaway')],
-                    ['bill_delivery', t('settings.organization.printSettings.docBillDelivery')],
-                    ['consumptionReport', t('settings.organization.printSettings.docConsumptionReport')],
-                    ['dailyReport', t('settings.organization.printSettings.docDailyReport')],
-                  ] as [string, string][]).map(([key, label]) => (
-                    <div key={key} className="rounded-lg border border-gray-200 dark:border-gray-700 p-2">
-                      <label className="text-xs text-gray-600 dark:text-gray-300">{label}
-                        <select value={organization.printSettings?.documentPrinterMap?.[key] || ''} onChange={e => setOrganization((prev: any) => ({ ...prev, printSettings: { ...prev.printSettings, documentPrinterMap: { ...(prev.printSettings?.documentPrinterMap || {}), [key]: e.target.value } } }))} className="mt-1 w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 p-2">
-                          <option value="">{t('settings.organization.printSettings.defaultPrinter')}</option>
-                          {(organization.printSettings?.printers || []).map((printer: any) => <option key={printer.id} value={printer.id}>{printer.name}</option>)}
-                        </select>
-                      </label>
-                      {key !== 'dailyReport' && (
-                        <label className="mt-2 flex items-center gap-2 text-xs text-gray-600 dark:text-gray-300">{t('settings.organization.printSettings.copiesLabel')}
-                          <input type="number" min={1} max={5} step={1} value={organization.printSettings?.documentCopies?.[key] ?? 1} onChange={e => setOrganization((prev: any) => ({ ...prev, printSettings: { ...prev.printSettings, documentCopies: { ...(prev.printSettings?.documentCopies || {}), [key]: Math.min(5, Math.max(1, Number(e.target.value) || 1)) } } }))} className="w-16 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 p-1.5" />
-                        </label>
-                      )}
-                    </div>
-                  ))}
-                </div>
-
-                <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-2">
-                  {([
-                    ['prep', t('settings.organization.printSettings.prepCopiesGeneral'), false],
-                    ['prep_takeaway', t('settings.organization.printSettings.prepCopiesTakeaway'), true],
-                    ['prep_delivery', t('settings.organization.printSettings.prepCopiesDelivery'), true],
-                  ] as [string, string, boolean][]).map(([key, label, follows]) => {
-                    const copiesObj = organization.printSettings?.documentCopies;
-                    const raw = copiesObj && typeof copiesObj.get === 'function' ? copiesObj.get(key) : copiesObj?.[key];
-                    const base = copiesObj && typeof copiesObj.get === 'function' ? copiesObj.get('prep') : copiesObj?.prep;
-                    const shown = raw ?? (follows ? base : undefined) ?? 1;
-                    const isFollowing = follows && (raw === undefined || raw === null);
-                    return (
-                      <label key={key} className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-300">{label}
-                        {isFollowing && (
-                          <span className="rounded-full bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 px-1.5 py-0.5 text-[10px] font-bold">{t('settings.organization.printSettings.prepFollowsTables')}</span>
-                        )}
-                        <input type="number" min={1} max={5} step={1} value={shown} onChange={e => setOrganization((prev: any) => ({ ...prev, printSettings: { ...prev.printSettings, documentCopies: { ...(prev.printSettings?.documentCopies || {}), [key]: Math.min(5, Math.max(1, Number(e.target.value) || 1)) } } }))} className="w-16 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 p-1.5" />
-                      </label>
-                    );
-                  })}
-                </div>
               </div>
             </div>
           )}
@@ -246,6 +285,28 @@ const PrinterSettingsForm: React.FC<PrinterSettingsFormProps> = ({
 
       {subTab === 'routing' && (
         <div className="space-y-4">
+          <div className="rounded-xl border border-orange-200 dark:border-gray-600 bg-white/60 dark:bg-gray-800/40 p-4">
+            <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">{t('settings.organization.printSettings.docRoutingTitle')}</h4>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{t('settings.organization.printSettings.docRoutingDesc')}</p>
+            <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {([
+                ['bill', t('settings.organization.printSettings.docBill')],
+                ['bill_takeaway', t('settings.organization.printSettings.docBillTakeaway')],
+                ['bill_delivery', t('settings.organization.printSettings.docBillDelivery')],
+                ['consumptionReport', t('settings.organization.printSettings.docConsumptionReport')],
+                ['dailyReport', t('settings.organization.printSettings.docDailyReport')],
+              ] as [string, string][]).map(([key, label]) => (
+                <div key={key} className="rounded-lg border border-gray-200 dark:border-gray-700 p-2">
+                  <label className="text-xs text-gray-600 dark:text-gray-300">{label}
+                    <select value={organization.printSettings?.documentPrinterMap?.[key] || ''} onChange={e => setOrganization((prev: any) => ({ ...prev, printSettings: { ...prev.printSettings, documentPrinterMap: { ...(prev.printSettings?.documentPrinterMap || {}), [key]: e.target.value } } }))} className="mt-1 w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 p-2">
+                      <option value="">{t('settings.organization.printSettings.defaultPrinter')}</option>
+                      {(organization.printSettings?.printers || []).map((printer: any) => <option key={printer.id} value={printer.id}>{printer.name}</option>)}
+                    </select>
+                  </label>
+                </div>
+              ))}
+            </div>
+          </div>
           {organization.printSettings?.printerType === 'network' && (
             <div className="grid grid-cols-2 gap-4">
               <div>
@@ -262,7 +323,7 @@ const PrinterSettingsForm: React.FC<PrinterSettingsFormProps> = ({
           )}
 
           {menuSections.length > 0 && (
-            <div className="space-y-3">
+            <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
               {([
                 ['sectionPrinterMap', t('settings.organization.printSettings.routingDineInTitle'), t('settings.organization.printSettings.routingDineInDesc'), t('settings.organization.printSettings.defaultSection'), false],
                 ['sectionPrinterMapTakeaway', t('settings.organization.printSettings.routingTakeawayTitle'), t('settings.organization.printSettings.routingTakeawayDesc'), t('settings.organization.printSettings.routingFollowTables'), true],
@@ -280,31 +341,167 @@ const PrinterSettingsForm: React.FC<PrinterSettingsFormProps> = ({
                           {(organization.printSettings?.printers || []).map((printer: any) => <option key={printer.id} value={printer.id}>{printer.name}</option>)}
                         </select>
                       </label>;
-                    })}
-                  </div>
-                  {isFollow && (
+                      })}
+                      </div>
+                   {isFollow && (
                     <p className="mt-2 text-[11px] text-gray-500 dark:text-gray-400">{t('settings.organization.printSettings.routingEmptyHint')}</p>
                   )}
                 </div>
               ))}
             </div>
           )}
-        </div>
-      )}
+              <div className="rounded-xl border border-orange-200 dark:border-gray-600 bg-white/60 dark:bg-gray-800/40 p-4">
+            <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">{t('settings.organization.printSettings.copiesRoutingTitle')}</h4>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{t('settings.organization.printSettings.copiesRoutingDesc')}</p>
+            <div className="mt-3 space-y-3 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+              {([
+                ['bill', t('settings.organization.printSettings.docBill'), 'doc', 'bill'],
+                ['bill_takeaway', t('settings.organization.printSettings.docBillTakeaway'), 'doc', 'bill_takeaway'],
+                ['bill_delivery', t('settings.organization.printSettings.docBillDelivery'), 'doc', 'bill_delivery'],
+                ['prep', t('settings.organization.printSettings.prepCopiesGeneral'), 'sections', 'prep'],
+                ['prep_takeaway', t('settings.organization.printSettings.prepCopiesTakeaway'), 'sections', 'prep_takeaway'],
+                ['prep_delivery', t('settings.organization.printSettings.prepCopiesDelivery'), 'sections', 'prep_delivery'],
+                ['consumptionReport', t('settings.organization.printSettings.docConsumptionReport'), 'doc', 'consumptionReport'],
+] as [string, string, 'doc' | 'sections', string][]).map(([key, label, mode, docType]) => {
+                // التحضير: نسخ لكل قسم — الفواتير والتقارير: قائمة نسخ مسطحة (مستند واحد)
+                const flatList = getCopyList(key);
+
+                return (
+                  <div key={key} className="rounded-lg border border-gray-200 dark:border-gray-700 p-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs font-bold text-gray-700 dark:text-gray-200">{label}</span>
+                    </div>
+
+                    {(mode === 'sections') ? (
+                    <div className="mt-2 space-y-2">
+                    {menuSections.map(section => {
+                      const sectionId = String(section._id || section.id);
+                      const sectionName = section.name;
+                      const sectionCopyKey = docType === 'prep' ? 'sectionCopyPrinterMap'
+                        : docType === 'prep_takeaway' ? 'sectionCopyPrinterMapTakeaway'
+                        : docType === 'prep_delivery' ? 'sectionCopyPrinterMapDelivery'
+                        : docType === 'bill' ? 'sectionCopyPrinterMapBill'
+                        : docType === 'bill_takeaway' ? 'sectionCopyPrinterMapBillTakeaway'
+                        : docType === 'bill_delivery' ? 'sectionCopyPrinterMapBillDelivery'
+                        : docType === 'consumptionReport' ? 'sectionCopyPrinterMapConsumption'
+                        : 'sectionCopyPrinterMap';
+                      const sectionPrinters = (organization.printSettings as any)?.[sectionCopyKey]?.[sectionId] || [];
+                      const globalList = getCopyList(key);
+                      const printers = (sectionPrinters.length > 0 ? sectionPrinters : getCopyList(key)).slice(0, 5);
+
+                      return (
+                        <div key={sectionId} className="rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 p-2">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-xs font-bold text-blue-800 dark:text-blue-200">{sectionName}</span>
+                            <span className="text-xs text-blue-600 dark:text-blue-400">{t('settings.organization.printSettings.copiesCount', { count: printers.length })}</span>
+                          </div>
+                          <div className="space-y-1">
+                            {printers.map((pid, i) => (
+                              <label key={`${sectionId}-${i}`} className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-300">
+                                <span>{sectionName} - {t('settings.organization.printSettings.copySlot')} {i + 1}</span>
+                                {printers.length > 1 ? (
+                                  <select value={pid} onChange={(e) => {
+                                    const mapKey = docType === 'prep' ? 'sectionCopyPrinterMap'
+                                      : docType === 'prep_takeaway' ? 'sectionCopyPrinterMapTakeaway'
+                                      : docType === 'prep_delivery' ? 'sectionCopyPrinterMapDelivery'
+                                      : docType === 'bill' ? 'sectionCopyPrinterMapBill'
+                                      : docType === 'bill_takeaway' ? 'sectionCopyPrinterMapBillTakeaway'
+                                      : docType === 'bill_delivery' ? 'sectionCopyPrinterMapBillDelivery'
+                                      : docType === 'consumptionReport' ? 'sectionCopyPrinterMapConsumption'
+                                      : 'sectionCopyPrinterMap';
+                                    const current = (organization.printSettings as any)?.[mapKey]?.[sectionId] || [];
+                                    const updated = [...current];
+                                    updated[i] = e.target.value;
+                                    setMapVal(mapKey, sectionId, updated);
+                                  }} className="ml-auto rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 p-1.5">
+                                    <option value="">{t('settings.organization.printSettings.copyFollowSections')}</option>
+                                    {(organization.printSettings?.printers || []).map((printer: any) => <option key={printer.id} value={printer.id}>{printer.name}</option>)}
+                                  </select>
+                                ) : (
+                                  <span className="ml-auto text-xs text-gray-400 dark:text-gray-500">{t('settings.organization.printSettings.copyFollowsSection')}</span>
+                                )}
+                                {printers.length > 1 && (
+                                  <button type="button" className="text-xs text-red-600 dark:text-red-400 hover:underline ml-1" onClick={() => {
+                                    const mapKey = docType === 'prep' ? 'sectionCopyPrinterMap'
+                                      : docType === 'prep_takeaway' ? 'sectionCopyPrinterMapTakeaway'
+                                      : docType === 'prep_delivery' ? 'sectionCopyPrinterMapDelivery'
+                                      : docType === 'bill' ? 'sectionCopyPrinterMapBill'
+                                      : docType === 'bill_takeaway' ? 'sectionCopyPrinterMapBillTakeaway'
+                                      : docType === 'bill_delivery' ? 'sectionCopyPrinterMapBillDelivery'
+                                      : docType === 'consumptionReport' ? 'sectionCopyPrinterMapConsumption'
+                                      : 'sectionCopyPrinterMap';
+                                    const current = (organization.printSettings as any)?.[mapKey]?.[sectionId] || [];
+                                    const updated = current.filter((_, idx) => idx !== i);
+                                    setMapVal(mapKey, sectionId, updated);
+                                  }}>
+                                    {t('settings.organization.printSettings.removeCopy')}
+                                  </button>
+                                )}
+                              </label>
+                            ))}
+                            {printers.length < 5 && (
+                              <button type="button" className="text-xs text-blue-600 dark:text-blue-400 hover:underline" onClick={() => {
+                                const mapKey = docType === 'prep' ? 'sectionCopyPrinterMap'
+                                  : docType === 'prep_takeaway' ? 'sectionCopyPrinterMapTakeaway'
+                                  : docType === 'prep_delivery' ? 'sectionCopyPrinterMapDelivery'
+                                  : docType === 'bill' ? 'sectionCopyPrinterMapBill'
+                                  : docType === 'bill_takeaway' ? 'sectionCopyPrinterMapBillTakeaway'
+                                  : docType === 'bill_delivery' ? 'sectionCopyPrinterMapBillDelivery'
+                                  : docType === 'consumptionReport' ? 'sectionCopyPrinterMapConsumption'
+                                  : 'sectionCopyPrinterMap';
+                                const current = (organization.printSettings as any)?.[mapKey]?.[sectionId] || [];
+                                const updated = [...current, ''];
+                                setMapVal(mapKey, sectionId, updated);
+                              }}>
+                                {t('settings.organization.printSettings.addCopy')}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                     })}
+                     </div>
+                     ) : (
+                     <div className="mt-2 space-y-1.5">
+                       {flatList.map((pid, i) => {
+                         const docName = docDefaultPrinterName(key);
+                         return (
+                           <label key={i} className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-300">
+                             <span>{t('settings.organization.printSettings.copySlot')} {i + 1}</span>
+                             {flatList.length > 1 ? (
+                               <select value={pid} onChange={(e) => setCopyList(key, flatList.map((v, j) => (j === i ? e.target.value : v)))} className="ml-auto rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 p-1.5">
+                                 <option value="">{`${t('settings.organization.printSettings.copyFollowDoc')}${docName ? ` (${docName})` : ''}`}</option>
+                                 {(organization.printSettings?.printers || []).map((printer: any) => <option key={printer.id} value={printer.id}>{printer.name}</option>)}
+                               </select>
+                             ) : (
+                               <span className="ml-auto text-xs text-gray-400 dark:text-gray-500">{`${t('settings.organization.printSettings.copyFollowDoc')}${docName ? ` (${docName})` : ''}`}</span>
+                             )}
+                             {flatList.length > 1 && (
+                               <button type="button" className="text-xs text-red-600 dark:text-red-400 hover:underline ml-1" onClick={() => setCopyList(key, flatList.filter((_, j) => j !== i))}>
+                                 {t('settings.organization.printSettings.removeCopy')}
+                               </button>
+                             )}
+                           </label>
+                         );
+                       })}
+                       {flatList.length < 5 && (
+                         <button type="button" className="text-xs text-blue-600 dark:text-blue-400 hover:underline" onClick={() => setCopyCount(key, flatList.length + 1)}>
+                           {t('settings.organization.printSettings.addCopy')}
+                         </button>
+                       )}
+                     </div>
+                     )}
+                   </div>
+                 );
+               })}
+             </div>
+               </div>
+         </div>
+       )}
 
       {subTab === 'automation' && (
         <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100">{t('settings.organization.printSettings.openCashDrawer')}</h4>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{t('settings.organization.printSettings.openCashDrawerDesc')}</p>
-            </div>
-            <label className="relative inline-flex items-center cursor-pointer">
-              <input type="checkbox" checked={organization.printSettings?.openCashDrawer ?? true} onChange={(e) => patch({ openCashDrawer: e.target.checked })} className="sr-only peer" />
-              <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-orange-300 dark:peer-focus:ring-orange-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-orange-600"></div>
-            </label>
-          </div>
-
+          {/* Ø¹Ø§Ù… Ø¨Ù„Ø§ Ø³ÙŠØ§Ù‚ Ù†ÙˆØ¹ Ø·Ù„Ø¨: Ø§Ø®ØªØµØ§Ø± Ù„ÙˆØ­Ø© Ø§Ù„Ù…ÙØ§ØªÙŠØ­ */}
           <div className="flex items-center justify-between">
             <div>
               <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100">{t('settings.organization.printSettings.drawerShortcut')}</h4>
@@ -316,120 +513,91 @@ const PrinterSettingsForm: React.FC<PrinterSettingsFormProps> = ({
             </label>
           </div>
 
-          <div className="flex items-center justify-between">
-            <div>
-              <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100">{t('settings.organization.printSettings.openCashDrawerOnPayment')}</h4>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{t('settings.organization.printSettings.openCashDrawerOnPaymentDesc')}</p>
-            </div>
-            <label className="relative inline-flex items-center cursor-pointer">
-              <input type="checkbox" checked={organization.printSettings?.openCashDrawerOnPayment ?? true} onChange={(e) => patch({ openCashDrawerOnPayment: e.target.checked })} className="sr-only peer" />
-              <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-orange-300 dark:peer-focus:ring-orange-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-orange-600"></div>
-            </label>
-          </div>
-
-          <div className="mt-4 rounded-xl border border-orange-200 dark:border-gray-700 p-4">
-            <h4 className="text-base font-semibold text-gray-900 dark:text-gray-100">{t('settings.organization.printSettings.defaultOrderPrintSections')}</h4>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{t('settings.organization.printSettings.defaultOrderPrintSectionsDesc')}</p>
-            <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {menuSections.map(section => {
-                const sectionId = String(section._id || section.id);
-                const selected = organization.printSettings?.defaultOrderPrintSections?.includes(sectionId) === true;
-                return (
-                  <label key={sectionId} className="flex items-center gap-2 rounded-lg border border-gray-200 dark:border-gray-700 p-2 cursor-pointer">
-                    <input type="checkbox" checked={selected} onChange={() => setOrganization((prev: any) => {
-                      const current = prev.printSettings?.defaultOrderPrintSections || [];
-                      const next = selected ? current.filter((id: string) => id !== sectionId) : [...current, sectionId];
-                      return { ...prev, printSettings: { ...prev.printSettings, defaultOrderPrintSections: next } };
-                    })} />
-                    <span className="text-sm text-gray-800 dark:text-gray-200">{section.name}</span>
-                  </label>
-                );
-              })}
-            </div>
-            <label className="mt-4 flex items-center gap-2 text-sm text-gray-700 dark:text-gray-200 cursor-pointer">
-              <input type="checkbox" checked={organization.printSettings?.autoPrintOrderSections ?? false} onChange={e => patch({ autoPrintOrderSections: e.target.checked })} />
-              {t('settings.organization.printSettings.autoPrintOrderSections')}
-            </label>
-          </div>
-
-          <div className="flex items-center justify-between">
-            <div>
-              <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100">{t('settings.organization.printSettings.promptOrderPrintSections')}</h4>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{t('settings.organization.printSettings.promptOrderPrintSectionsDesc')}</p>
-            </div>
-            <label className="relative inline-flex items-center cursor-pointer">
-              <input type="checkbox" checked={organization.printSettings?.promptOrderPrintSections ?? false} onChange={(e) => patch({ promptOrderPrintSections: e.target.checked })} className="sr-only peer" />
-              <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-orange-300 dark:peer-focus:ring-orange-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-orange-600"></div>
-            </label>
-          </div>
-
-          <div className="flex items-center justify-between">
-            <div>
-              <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100">{t('settings.organization.printSettings.autoPrintOnPayment')}</h4>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{t('settings.organization.printSettings.autoPrintOnPaymentDesc')}</p>
-            </div>
-            <label className="relative inline-flex items-center cursor-pointer">
-              <input type="checkbox" checked={organization.printSettings?.autoPrintOnPayment ?? false} onChange={(e) => patch({ autoPrintOnPayment: e.target.checked })} className="sr-only peer" />
-              <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-orange-300 dark:peer-focus:ring-orange-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-orange-600"></div>
-            </label>
-          </div>
-
-          <div className="flex items-center justify-between">
-            <div>
-              <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100">{t('settings.organization.printSettings.printMarksPaid')}</h4>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{t('settings.organization.printSettings.printMarksPaidDesc')}</p>
-            </div>
-            <label className="relative inline-flex items-center cursor-pointer">
-              <input type="checkbox" checked={organization.printSettings?.printMarksPaid ?? false} onChange={(e) => patch({ printMarksPaid: e.target.checked })} className="sr-only peer" />
-              <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-orange-300 dark:peer-focus:ring-orange-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-orange-600"></div>
-            </label>
-          </div>
-
-          <div className="mt-4 rounded-xl border border-orange-200 dark:border-gray-700 p-4">
-            <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">{t('settings.organization.printSettings.autoTriggersTitle')}</h4>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{t('settings.organization.printSettings.autoTriggersDesc')}</p>
-
-            <div className="mt-3 flex items-center justify-between">
-              <div>
-                <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100">{t('settings.organization.printSettings.autoPrintOnBillCreate')}</h4>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{t('settings.organization.printSettings.autoPrintOnBillCreateDesc')}</p>
+          {autoGroups.length > 0 && (
+          <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+          {autoGroups.map((g) => (
+            <div key={g.f} className="rounded-xl border border-orange-200 dark:border-gray-700 p-4">
+              <h4 className="text-base font-semibold text-gray-900 dark:text-gray-100">{g.title}</h4>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{g.desc}</p>
+              <div className="mt-2">
+                <AutoToggle base="openCashDrawer" sfx={g.sfx} titleKey="openCashDrawer" descKey="openCashDrawerDesc" def />
+                <AutoToggle base="openCashDrawerOnPayment" sfx={g.sfx} titleKey="openCashDrawerOnPayment" descKey="openCashDrawerOnPaymentDesc" def />
+                <AutoToggle base="autoPrintOnPayment" sfx={g.sfx} titleKey="autoPrintOnPayment" descKey="autoPrintOnPaymentDesc" def={false} />
+                <AutoToggle base="printMarksPaid" sfx={g.sfx} titleKey="printMarksPaid" descKey="printMarksPaidDesc" def={false} />
+                <AutoToggle base="promptOrderPrintSections" sfx={g.sfx} titleKey="promptOrderPrintSections" descKey="promptOrderPrintSectionsDesc" def={false} />
               </div>
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input type="checkbox" checked={organization.printSettings?.autoPrintOnBillCreate ?? false} onChange={(e) => patch({ autoPrintOnBillCreate: e.target.checked })} className="sr-only peer" />
-                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-orange-300 dark:peer-focus:ring-orange-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-orange-600"></div>
-              </label>
-            </div>
-
-            <div className="mt-3 flex items-center justify-between">
-              <div>
-                <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100">{t('settings.organization.printSettings.autoPrintOnOrderCreate')}</h4>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{t('settings.organization.printSettings.autoPrintOnOrderCreateDesc')}</p>
+              <div className="mt-3">
+                <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                  {t('settings.organization.printSettings.defaultOrderPrintSections')}
+                  {g.sfx && isAutoInherited('defaultOrderPrintSections', g.sfx) && <FollowBadge />}
+                </div>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{t('settings.organization.printSettings.defaultOrderPrintSectionsDesc')}</p>
+                <div className="mt-2 grid grid-cols-1 2xl:grid-cols-2 gap-2">
+                  {menuSections.map(section => {
+                    const sectionId = String(section._id || section.id);
+                    const effList = ((getAuto('defaultOrderPrintSections', g.sfx) || []) as string[]).map(String);
+                    const selected = effList.includes(sectionId);
+                    return (
+                      <label key={sectionId} className="flex items-center gap-2 rounded-lg border border-gray-200 dark:border-gray-700 p-2 cursor-pointer">
+                        <input type="checkbox" checked={selected} onChange={() => {
+                          const next = selected ? effList.filter((id: string) => id !== sectionId) : [...effList, sectionId];
+                          setAuto('defaultOrderPrintSections', g.sfx, next);
+                        }} />
+                        <span className="text-sm text-gray-800 dark:text-gray-200">{section.name}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+                <label className="mt-3 flex items-center gap-2 text-sm text-gray-700 dark:text-gray-200 cursor-pointer">
+                  <input type="checkbox" checked={(getAuto('autoPrintOrderSections', g.sfx) ?? false) === true} onChange={e => setAuto('autoPrintOrderSections', g.sfx, e.target.checked)} />
+                  {t('settings.organization.printSettings.autoPrintOrderSections')}
+                  {g.sfx && isAutoInherited('autoPrintOrderSections', g.sfx) && <FollowBadge />}
+                </label>
               </div>
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input type="checkbox" checked={organization.printSettings?.autoPrintOnOrderCreate ?? false} onChange={(e) => patch({ autoPrintOnOrderCreate: e.target.checked })} className="sr-only peer" />
-                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-orange-300 dark:peer-focus:ring-orange-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-orange-600"></div>
-              </label>
             </div>
-
-            <div className="mt-3 flex items-center justify-between">
-              <div>
-                <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100">{t('settings.organization.printSettings.autoPrintOnOrderUpdate')}</h4>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{t('settings.organization.printSettings.autoPrintOnOrderUpdateDesc')}</p>
-              </div>
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input type="checkbox" checked={organization.printSettings?.autoPrintOnOrderUpdate ?? false} onChange={(e) => patch({ autoPrintOnOrderUpdate: e.target.checked })} className="sr-only peer" />
-                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-orange-300 dark:peer-focus:ring-orange-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-orange-600"></div>
-              </label>
-            </div>
+          ))}
           </div>
+          )}
+
+          {showPrintBoth !== false && (
+            <div className="mt-4 rounded-xl border border-orange-200 dark:border-gray-700 p-4">
+              <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">{t('settings.organization.printSettings.doublePrintTitle')}</h4>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{t('settings.organization.printSettings.doublePrintDesc')}</p>
+              <div className="mt-3 flex items-center justify-between">
+                <div>
+                  <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100">{t('settings.organization.printSettings.printBothDelivery')}</h4>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{t('settings.organization.printSettings.printBothDeliveryDesc')}</p>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input type="checkbox" checked={organization.printSettings?.printBothDelivery ?? false} onChange={(e) => patch({ printBothDelivery: e.target.checked })} className="sr-only peer" />
+                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-orange-300 dark:peer-focus:ring-orange-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-orange-600"></div>
+                </label>
+              </div>
+              <div className="mt-3 flex items-center justify-between">
+                <div>
+                  <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100">{t('settings.organization.printSettings.printBothTakeaway')}</h4>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{t('settings.organization.printSettings.printBothTakeawayDesc')}</p>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input type="checkbox" checked={organization.printSettings?.printBothTakeaway ?? false} onChange={(e) => patch({ printBothTakeaway: e.target.checked })} className="sr-only peer" />
+                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-orange-300 dark:peer-focus:ring-orange-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-orange-600"></div>
+                </label>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
       {subTab === 'designer' && (
-        <PrintDesigner settings={settings} onPatch={onPatch} logoUrl={logoUrl} orgName={orgName} />
+        <PrintDesigner settings={settings} onPatch={onPatch} logoUrl={logoUrl} orgName={orgName} saveNote={saveNote} />
       )}
     </div>
   );
 };
 
 export default PrinterSettingsForm;
+
+
+
+
+

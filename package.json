@@ -12,7 +12,7 @@
     "nodejs",
     "mongodb"
   ],
-  "author": "Bomba Team",
+  "author": "MTE Team",
   "license": "MIT",
   "scripts": {
     "dev": "concurrently \"npm run server:dev\" \"npm run client:dev\"",

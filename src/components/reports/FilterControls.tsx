@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { Filter } from 'lucide-react';
 
 interface FilterControlsProps {
@@ -28,6 +29,7 @@ const FilterControls: React.FC<FilterControlsProps> = ({
   onCustomYearChange,
   dateRangeLabel
 }) => {
+  const { t } = useTranslation();
   // Render month options in Arabic
   const renderMonthOptions = () => {
     return Array.from({ length: 12 }, (_, i) => {
@@ -59,17 +61,17 @@ const FilterControls: React.FC<FilterControlsProps> = ({
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
       <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
         <Filter className="w-5 h-5 text-orange-500" />
-        <span>تصفية النتائج</span>
+        <span>{t('filterControls.title')}</span>
       </h2>
       
       <div className="space-y-4">
         {/* Filter type tabs */}
         <div className="flex flex-wrap gap-2 border-b border-gray-200 dark:border-gray-700 pb-2">
           {[
-            { value: 'period', label: 'فترات زمنية' },
-            { value: 'daily', label: 'يوم محدد' },
-            { value: 'monthly', label: 'شهري' },
-            { value: 'yearly', label: 'سنوي' }
+            { value: 'period', label: t('filterControls.tabPeriod') },
+            { value: 'daily', label: t('filterControls.tabDaily') },
+            { value: 'monthly', label: t('filterControls.tabMonthly') },
+            { value: 'yearly', label: t('filterControls.tabYearly') }
           ].map((tab) => (
             <button
               key={tab.value}
@@ -90,11 +92,11 @@ const FilterControls: React.FC<FilterControlsProps> = ({
           {filterType === 'period' && (
             <div className="flex flex-wrap gap-2">
               {[
-                { value: 'today', label: 'اليوم' },
-                { value: 'yesterday', label: 'أمس' },
-                { value: 'last7', label: 'آخر 7 أيام' },
-                { value: 'thisMonth', label: 'هذا الشهر' },
-                { value: 'thisYear', label: 'هذه السنة' }
+                { value: 'today', label: t('filterControls.periodToday') },
+                { value: 'yesterday', label: t('filterControls.periodYesterday') },
+                { value: 'last7', label: t('filterControls.periodLast7') },
+                { value: 'thisMonth', label: t('filterControls.periodThisMonth') },
+                { value: 'thisYear', label: t('filterControls.periodThisYear') }
               ].map((period) => (
                 <button
                   key={period.value}
@@ -114,7 +116,7 @@ const FilterControls: React.FC<FilterControlsProps> = ({
           {filterType === 'daily' && (
             <div className="space-y-2">
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                اختر تاريخ
+                {t('filterControls.selectDate')}
               </label>
               <input
                 type="date"
@@ -129,7 +131,7 @@ const FilterControls: React.FC<FilterControlsProps> = ({
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  الشهر
+                  {t('filterControls.month')}
                 </label>
                 <select
                   value={customMonth.split('-')[1]}
@@ -144,7 +146,7 @@ const FilterControls: React.FC<FilterControlsProps> = ({
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  السنة
+                  {t('filterControls.year')}
                 </label>
                 <select
                   value={customMonth.split('-')[0]}
@@ -162,7 +164,7 @@ const FilterControls: React.FC<FilterControlsProps> = ({
           {filterType === 'yearly' && (
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                السنة
+                {t('filterControls.year')}
               </label>
               <select
                 value={customYear}
@@ -177,7 +179,7 @@ const FilterControls: React.FC<FilterControlsProps> = ({
 
         {/* Selected date range */}
         <div className="mt-2 text-sm text-gray-600 dark:text-gray-400">
-          <span className="font-medium">النطاق الزمني:</span> {dateRangeLabel}
+          <span className="font-medium">{t('filterControls.dateRange', { dateRangeLabel })}</span>
         </div>
       </div>
     </div>

@@ -113,7 +113,7 @@ const ManagementModal: React.FC<{
                       {/* #8 Drag & Drop table chips (desktop) / tap actions (touch) */}
                       <div className="flex flex-wrap gap-1.5 sm:gap-2 flex-1">
                         {sectionTables.length === 0 && (
-                          <span className="text-sm sm:text-base text-gray-400 italic">اسحب الطاولات هنا</span>
+                          <span className="text-sm sm:text-base text-gray-400 italic">{t('tables.managementDropHint')}</span>
                         )}
                         {sectionTables.map(table => {
                           const tid = table._id || (table as any).id;
@@ -158,7 +158,7 @@ const ManagementModal: React.FC<{
           {draggedId && (
             <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-indigo-600 text-white px-4 py-2 rounded-full shadow-xl text-lg font-medium z-50 flex items-center gap-2 pointer-events-none">
               <Layers className="h-4 w-4" />
-              اسحب فوق طاولة أخرى لتبديل الترتيب
+              {t('tables.managementReorderHint')}
             </div>
           )}
         </div>

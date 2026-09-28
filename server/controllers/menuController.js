@@ -1,6 +1,8 @@
 import { getOrganizationId, organizationFilter } from '../utils/organization.js';
+import mongoose from "mongoose";
 import MenuItem from "../models/MenuItem.js";
 import MenuCategory from "../models/MenuCategory.js";
+import MenuSection from "../models/MenuSection.js";
 import { writeToAtlas } from "../utils/atlasWrite.js";
 import { createTombstone, createTombstones } from "../utils/tombstoneHelper.js";
 import Logger from "../middleware/logger.js";
@@ -949,7 +951,44 @@ export const mergeMenuItems = async (req, res) => {
     } catch (error) {
         return res.status(500).json({
             success: false,
-            message: "خطأ في دمج عناصر القائمة",
+            message: "حدث خطأ أثناء دمج العناصر",
+            error: error.message,
+        });
+    }
+};
+
+// @desc    Public menu for QR customers — NO AUTH. Scoped by explicit organization id.
+// Only active records; item cost/internal fields are never selected.
+// @route   GET /api/menu/public/full?organization=<id>
+export const getPublicMenu = async (req, res) => {
+    try {
+        const orgId = String(req.query.organization || '').trim();
+        if (!orgId || !mongoose.Types.ObjectId.isValid(orgId)) {
+            return res.status(400).json({ success: false, message: 'معرف المنشأة غير صحيح' });
+        }
+        const organization = new mongoose.Types.ObjectId(orgId);
+        const activeFilter = { organization, isActive: { $ne: false } };
+        const [items, sections, categories] = await Promise.all([
+            MenuItem.find(activeFilter)
+                .select('name description price variants category isAvailable isPopular preparationTime image sortOrder')
+                .populate({ path: 'category', select: 'name section sortOrder' })
+                .sort({ sortOrder: 1 })
+                .lean(),
+            MenuSection.find(activeFilter)
+                .select('name description sortOrder')
+                .sort({ sortOrder: 1 })
+                .lean(),
+            MenuCategory.find(activeFilter)
+                .select('name section sortOrder')
+                .populate({ path: 'section', select: 'name' })
+                .sort({ sortOrder: 1 })
+                .lean(),
+        ]);
+        return res.json({ success: true, data: { items, sections, categories } });
+    } catch (error) {
+        return res.status(500).json({
+            success: false,
+            message: 'خطأ في جلب المنيو',
             error: error.message,
         });
     }

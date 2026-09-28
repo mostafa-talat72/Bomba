@@ -26,7 +26,7 @@ export const PERMISSION_GROUPS: PermissionGroupDef[] = [
     icon: 'layout',
     permissionIds: [
       'dashboard', 'playstation', 'computer', 'tables', 'takeaway', 'delivery',
-      'cafe', 'billing', 'menu', 'kitchenDisplay', 'reports', 'consumption',
+      'cafe', 'billing', 'bills', 'customers', 'menu', 'kitchenDisplay', 'reports', 'consumption',
       'soldItems', 'inventory', 'warehouse', 'costs', 'payroll', 'users',
       'settings', 'shifts', 'auditLog', 'syncStatus', 'notifications', 'subscription',
     ],
@@ -35,7 +35,7 @@ export const PERMISSION_GROUPS: PermissionGroupDef[] = [
     id: 'orders',
     titleKey: 'users.permissionGroups.orders',
     icon: 'cart',
-    permissionIds: ['canAddOrder', 'canEditOrder', 'canDeleteOrder', 'canEditItemPrice'],
+    permissionIds: ['canAddOrder', 'canEditOrder', 'canDeleteOrder', 'canEditItemPrice', 'canCreateTakeaway', 'canCreateDelivery', 'canEditTakeaway', 'canEditDelivery'],
   },
   {
     id: 'bills',
@@ -43,7 +43,12 @@ export const PERMISSION_GROUPS: PermissionGroupDef[] = [
     icon: 'receipt',
     permissionIds: [
       'canPayFullBill', 'canPartialPayment', 'canEditPartialPayment',
-      'canDeleteBill', 'view_all_bills', 'viewCustomerContacts',
+      'canDeleteBill', 'canEditBill', 'view_all_bills', 'viewCustomerContacts',
+      'canPayFullTakeaway', 'canPayPartialTakeaway',
+      'canPayFullDelivery', 'canPayPartialDelivery',
+      'canApplyManualDiscount',
+      'canMoveOrderTableToTable', 'canMoveBillTableToTable',
+      'canMoveBillTakeawayToTable', 'canMoveBillDeliveryToTable',
     ],
   },
   {
@@ -106,19 +111,25 @@ export const PERMISSION_GROUPS: PermissionGroupDef[] = [
     id: 'payroll',
     titleKey: 'users.permissionGroups.payroll',
     icon: 'payroll',
-    permissionIds: ['canAddEmployee', 'canEditEmployee', 'canDeleteEmployee', 'canApproveAdvance'],
+    permissionIds: ['canAddEmployee', 'canEditEmployee', 'canDeleteEmployee', 'canApproveAdvance', 'canAddManualDeduction'],
   },
   {
     id: 'kitchen',
     titleKey: 'users.permissionGroups.kitchen',
     icon: 'chef',
-    permissionIds: ['canUpdateOrderStatus'],
+    permissionIds: ['canUpdateOrderStatus', 'canReviewCustomerOrders'],
   },
   {
     id: 'extras',
     titleKey: 'users.permissionGroups.extras',
     icon: 'tools',
-    permissionIds: ['canDeleteNotification', 'canExportReports'],
+    permissionIds: ['canDeleteNotification', 'canExportReports', 'canEditDateFilters'],
+  },
+  {
+    id: 'customers',
+    titleKey: 'users.permissionGroups.customers',
+    icon: 'users',
+    permissionIds: ['canAddCustomer', 'canEditCustomer', 'canDeleteCustomer'],
   },
 ];
 

@@ -333,6 +333,8 @@ export const login = async (req, res) => {
                     organizationName: organizationData?.name,
                     phone: user.phone,
                     address: user.address,
+                    maxDateRangeDays: user.maxDateRangeDays ?? null,
+                    preferences: user.preferences || {},
                 },
                 token,
                 refreshToken,
@@ -481,6 +483,8 @@ export const getMe = async (req, res) => {
                     status: user.status,
                     phone: user.phone,
                     address: user.address,
+                    maxDateRangeDays: user.maxDateRangeDays ?? null,
+                    preferences: user.preferences || {},
                 },
             },
         });

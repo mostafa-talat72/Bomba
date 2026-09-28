@@ -1,6 +1,7 @@
 import { TFunction } from 'i18next';
 import { getLocaleFromLanguage } from './localeMapper';
 import { formatDecimal } from './formatters';
+import { paymentMethodLabel } from './paymentMethod';
 
 export const getDeviceTypeText = (deviceType: string, t: TFunction): string => {
   if (deviceType === 'playstation') return t('billView.playstation');
@@ -15,10 +16,7 @@ export const getSessionStatusText = (status: string, t: TFunction): string => {
 };
 
 export const getPaymentMethodText = (method: string, t: TFunction): string => {
-  if (method === 'cash') return t('billView.cash');
-  if (method === 'card') return t('billView.card');
-  if (method === 'transfer') return t('billView.transfer');
-  return method;
+  return paymentMethodLabel(method, t);
 };
 
 export const formatDuration = (hours: number, minutes: number, t: TFunction): string => {

@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import appIcon from '../assets/app-icon.png';
 import {
   Home,
   Truck,
   Gamepad2,
   Monitor,
-  ShoppingCart,
   BarChart3,
   Package,
   Wallet,
@@ -30,6 +30,7 @@ import {
   Table as TableIcon,
   PanelLeftClose,
   PanelLeftOpen,
+  Receipt,
   RefreshCw,
   Maximize2,
   Minimize2,
@@ -208,6 +209,8 @@ const Layout = () => {
     { name: t('nav.tables', 'الطاولات'), href: '/tables', icon: TableIcon, permissions: ['tables', 'cafe', 'billing'], badgePreparing: preparingOrders, badgeReady: readyOrders },
     { name: 'تيك أوي', href: '/takeaway', icon: Package2, permissions: ['tables', 'cafe', 'billing', 'takeaway'] },
     { name: 'دليفري', href: '/delivery', icon: Truck, permissions: ['tables', 'cafe', 'billing', 'delivery'] },
+    { name: t('nav.bills', 'الفواتير'), href: '/bills', icon: Receipt, permissions: ['bills'] },
+    { name: t('nav.customers', 'العملاء'), href: '/customers', icon: Users, permissions: ['customers'] },
     {
       name: t('nav.devices'),
       icon: Server,
@@ -356,7 +359,7 @@ const Layout = () => {
         {/* Sidebar Header */}
         <div className="flex items-center justify-between h-16 px-3 bg-orange-600 dark:bg-orange-700 text-white flex-shrink-0">
           <div className={"flex items-center min-w-0 " + (sidebarCollapsed ? "justify-center w-full" : "")}>
-            <ShoppingCart className={"h-6 w-6 sm:h-7 sm:w-7 flex-shrink-0 " + (sidebarCollapsed ? "" : (isRTL ? "mr-2" : "ml-2"))} />
+            <img src={appIcon} alt="MTE Systems" className={"h-11 w-11 sm:h-12 sm:w-12 rounded-xl shadow flex-shrink-0 object-contain " + (sidebarCollapsed ? "" : (isRTL ? "mr-2" : "ml-2"))} />
             {!sidebarCollapsed && <h1 className="text-lg sm:text-xl font-bold truncate ms-2">MTE Systems</h1>}
           </div>
           <div className="flex items-center gap-1 flex-shrink-0">

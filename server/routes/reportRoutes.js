@@ -9,6 +9,7 @@ import {
     getRecentActivity,
     exportReportToExcel,
     exportReportToPDF,
+    getPaymentsByMethod,
 } from "../controllers/reportController.js";
 import { protect, authorize } from "../middleware/auth.js";
 import Bill from "../models/Bill.js";
@@ -61,6 +62,7 @@ router.get("/financial", getFinancialReport);
 // @route   GET /api/reports/consumption
 // @access  Private (Reports permission)
 router.get("/consumption", getConsumptionReport);
+router.get("/payments-by-method", getPaymentsByMethod);
 
 // @desc    Get sold items report (hierarchical: section -> category -> item)
 // @route   GET /api/reports/sold-items

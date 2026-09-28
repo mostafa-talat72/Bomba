@@ -16,7 +16,7 @@ const deliveryCustomerSchema = new mongoose.Schema(
         phone: { type: String, required: true, trim: true },
         customerName: { type: String, default: null, trim: true },
         address: { type: String, default: null, trim: true },
-        orderCount: { type: Number, default: 1, min: 1 },
+        orderCount: { type: Number, default: 1, min: 0 },
         organization: {
             type: mongoose.Schema.Types.ObjectId,
             ref: "Organization",

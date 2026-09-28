@@ -40,6 +40,7 @@ async function createUser(userData: {
   permissions: string[];
   businessName?: string;
   businessType?: string;
+  maxDateRangeDays?: number | null;
 }): Promise<ApiResponse<User>> {
   const endpoint = userData.role === 'owner' ? '/auth/register' : '/users';
   const response = await apiClient.request<User>(endpoint, {

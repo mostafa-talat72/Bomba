@@ -222,10 +222,59 @@ export const canApproveAdvance = (user: UserPermissions | null): boolean => {
 };
 
 /**
+ * Check if user can add manual deductions for employees
+ */
+export const canAddManualDeduction = (user: UserPermissions | null): boolean => {
+  return hasPermission(user, 'canAddManualDeduction');
+};
+
+/**
+ * Check if user can apply manual discounts on orders/bills (POS)
+ */
+export const canApplyManualDiscount = (user: UserPermissions | null): boolean => {
+  return hasPermission(user, 'canApplyManualDiscount');
+};
+
+/**
+ * Check if user can move an order from one table to another
+ */
+export const canMoveOrderTableToTable = (user: UserPermissions | null): boolean => {
+  return hasPermission(user, 'canMoveOrderTableToTable');
+};
+
+/**
+ * Check if user can move a bill from one table to another
+ */
+export const canMoveBillTableToTable = (user: UserPermissions | null): boolean => {
+  return hasPermission(user, 'canMoveBillTableToTable');
+};
+
+/**
+ * Check if user can move a takeaway bill to a table
+ */
+export const canMoveBillTakeawayToTable = (user: UserPermissions | null): boolean => {
+  return hasPermission(user, 'canMoveBillTakeawayToTable');
+};
+
+/**
+ * Check if user can move a delivery bill to a table
+ */
+export const canMoveBillDeliveryToTable = (user: UserPermissions | null): boolean => {
+  return hasPermission(user, 'canMoveBillDeliveryToTable');
+};
+
+/**
  * Check if user can change order status on the kitchen display
  */
 export const canUpdateOrderStatus = (user: UserPermissions | null): boolean => {
   return hasPermission(user, 'canUpdateOrderStatus');
+};
+
+/**
+ * Check if user can review customer (QR) order requests — accept/reject/edit pending
+ */
+export const canReviewCustomerOrders = (user: UserPermissions | null): boolean => {
+  return hasPermission(user, 'canReviewCustomerOrders');
 };
 
 /**
@@ -241,6 +290,141 @@ export const canDeleteNotification = (user: UserPermissions | null): boolean => 
 export const canExportReports = (user: UserPermissions | null): boolean => {
   return hasPermission(user, 'canExportReports');
 };
+
+/**
+ * Check if user can create a new takeaway order
+ */
+export const canCreateTakeaway = (user: UserPermissions | null): boolean => {
+  return hasPermission(user, 'canCreateTakeaway');
+};
+
+/**
+ * Check if user can create a new delivery order
+ */
+export const canCreateDelivery = (user: UserPermissions | null): boolean => {
+  return hasPermission(user, 'canCreateDelivery');
+};
+
+/**
+ * Check if user can edit a takeaway bill (items / move)
+ */
+export const canEditTakeaway = (user: UserPermissions | null): boolean => {
+  return hasPermission(user, 'canEditTakeaway');
+};
+
+/**
+ * Check if user can edit a delivery bill (items / move)
+ */
+export const canEditDelivery = (user: UserPermissions | null): boolean => {
+  return hasPermission(user, 'canEditDelivery');
+};
+
+/**
+ * Check if user can edit bills from the Bills page (items / move)
+ */
+export const canEditBill = (user: UserPermissions | null): boolean => {
+  return hasPermission(user, 'canEditBill');
+};
+
+/**
+ * Customers page: view / add / edit / delete.
+ */
+export const canViewCustomers = (user: UserPermissions | null): boolean => {
+  return hasPermission(user, 'customers');
+};
+
+export const canAddCustomer = (user: UserPermissions | null): boolean => {
+  return hasPermission(user, 'canAddCustomer');
+};
+
+export const canEditCustomer = (user: UserPermissions | null): boolean => {
+  return hasPermission(user, 'canEditCustomer');
+};
+
+export const canDeleteCustomer = (user: UserPermissions | null): boolean => {
+  return hasPermission(user, 'canDeleteCustomer');
+};
+
+/**
+ * Takeaway / delivery scoped payments: full vs partial.
+ */
+export const canPayFullTakeaway = (user: UserPermissions | null): boolean => {
+  return hasPermission(user, 'canPayFullTakeaway');
+};
+
+export const canPayPartialTakeaway = (user: UserPermissions | null): boolean => {
+  return hasPermission(user, 'canPayPartialTakeaway');
+};
+
+export const canPayFullDelivery = (user: UserPermissions | null): boolean => {
+  return hasPermission(user, 'canPayFullDelivery');
+};
+
+export const canPayPartialDelivery = (user: UserPermissions | null): boolean => {
+  return hasPermission(user, 'canPayPartialDelivery');
+};
+
+/**
+ * Check if user can open the Bills page
+ */
+export const canViewBills = (user: UserPermissions | null): boolean => {
+  return hasPermission(user, 'bills');
+};
+
+/**
+ * Organization owner check (role owner or matches organization.owner id).
+ * Mirrors the inline logic previously used by Reports/Consumption pages.
+ */
+export const isOrganizationOwner = (user: any): boolean => {
+  if (!user) return false;
+  if (user.role === 'owner') return true;
+  try {
+    const owner = user.organization?.owner;
+    const ownerId = typeof owner === 'object' && owner !== null
+      ? String((owner as any)._id || (owner as any).id || owner)
+      : String(owner || '');
+    const uid = String(user._id || user.id || '');
+    return !!ownerId && !!uid && ownerId === uid;
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * Check if user can edit date/time filters (Bills / Reports / Consumption).
+ * Admins/'all' pass via hasPermission; organization owners always pass.
+ */
+export const canEditDateFilters = (user: UserPermissions | null): boolean => {
+  return hasPermission(user, 'canEditDateFilters') || isOrganizationOwner(user);
+};
+
+const DAY_MS = 86400000;
+
+/**
+ * Max selectable date-range length in days for this user.
+ * null = unlimited (admins, 'all', owners, and users without an explicit limit).
+ */
+export function getMaxDateRangeDays(user: any): number | null {
+  if (!user) return null;
+  if (user.role === 'admin' || user.role === 'owner') return null;
+  if (Array.isArray(user.permissions) && user.permissions.includes('all')) return null;
+  if (isOrganizationOwner(user)) return null;
+  const v = Number((user as any).maxDateRangeDays);
+  if (!Number.isFinite(v) || v <= 0) return null;
+  return Math.floor(v);
+}
+
+/**
+ * Is [start, end] within the user's allowed day limit?
+ */
+export function isDateRangeAllowed(start: Date, end: Date, user: any): boolean {
+  const maxDays = getMaxDateRangeDays(user);
+  if (maxDays == null) return true;
+  const s = start instanceof Date ? start.getTime() : new Date(start).getTime();
+  const e = end instanceof Date ? end.getTime() : new Date(end).getTime();
+  if (!Number.isFinite(s) || !Number.isFinite(e) || e < s) return false;
+  return e - s <= maxDays * DAY_MS;
+}
 
 /**
  * Check if user has any of the specified permissions

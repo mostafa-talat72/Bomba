@@ -121,7 +121,8 @@ export const createUser = async (req, res) => {
             hireDate,
             salary,
             notes,
-            status
+            status,
+            maxDateRangeDays
         } = req.body;
 
         // Check if user already exists
@@ -184,6 +185,9 @@ export const createUser = async (req, res) => {
             salary,
             notes,
             status: status || "active",
+            maxDateRangeDays: maxDateRangeDays !== undefined && maxDateRangeDays !== null && maxDateRangeDays !== ""
+                ? Math.max(0, Math.floor(Number(maxDateRangeDays)))
+                : null,
             organization: getOrganizationId(req.user),
         });
 
@@ -234,7 +238,8 @@ export const updateUser = async (req, res) => {
             position,
             hireDate,
             salary,
-            notes
+            notes,
+            maxDateRangeDays
         } = req.body;
 
         const user = await User.findById(req.params.id);
@@ -391,6 +396,11 @@ export const updateUser = async (req, res) => {
         if (hireDate !== undefined) user.hireDate = hireDate ? new Date(hireDate) : null;
         if (salary !== undefined) user.salary = salary;
         if (notes !== undefined) user.notes = notes;
+        if (maxDateRangeDays !== undefined) {
+            user.maxDateRangeDays = (maxDateRangeDays === null || maxDateRangeDays === "")
+                ? null
+                : Math.max(0, Math.floor(Number(maxDateRangeDays)));
+        }
 
         await user.save();
 
@@ -844,8 +854,18 @@ const USER_PRINT_SETTINGS_KEYS = [
     "printMarksPaid", "printFont", "customFooterBill", "customFooterOrder", "customFooterConsumption",
     "promptOrderPrintSections", "defaultOrderPrintSections",
     "autoPrintOrderSections", "printers",
+    "openCashDrawerTakeaway", "openCashDrawerDelivery",
+    "openCashDrawerOnPaymentTakeaway", "openCashDrawerOnPaymentDelivery",
+    "autoPrintOnPaymentTakeaway", "autoPrintOnPaymentDelivery",
+    "printMarksPaidTakeaway", "printMarksPaidDelivery",
+    "promptOrderPrintSectionsTakeaway", "promptOrderPrintSectionsDelivery",
+    "defaultOrderPrintSectionsTakeaway", "defaultOrderPrintSectionsDelivery",
+    "autoPrintOrderSectionsTakeaway", "autoPrintOrderSectionsDelivery",
     "sectionPrinterMap", "sectionPrinterMapTakeaway", "sectionPrinterMapDelivery",
-    "documentPrinterMap", "documentCopies", "printLayout",
+    "documentPrinterMap", "documentCopies", "documentCopyPrinters", "printLayout",
+    "sectionCopyPrinterMap", "sectionCopyPrinterMapTakeaway", "sectionCopyPrinterMapDelivery",
+    "sectionCopyPrinterMapBill", "sectionCopyPrinterMapBillTakeaway", "sectionCopyPrinterMapBillDelivery",
+    "sectionCopyPrinterMapConsumption",
     "printBothDelivery", "printBothTakeaway",
     "charactersPerLine", "printHeader", "printFooter", "autoCut", "printQRCode",
 ];
@@ -870,6 +890,7 @@ function sanitizeUserPrintSettings(input) {
                 printerName: String(p.printerName || p.name || p.id),
                 printerPath: p.printerPath ? String(p.printerPath) : "",
                 paperWidthMm: Math.min(150, Math.max(30, Number(p.paperWidthMm) || 80)),
+                arabicSupport: p.arabicSupport !== false,
             }));
     }
     return out;

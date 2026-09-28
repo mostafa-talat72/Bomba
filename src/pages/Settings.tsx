@@ -7,6 +7,7 @@ import { Settings as SettingsIcon, Save, Bell, BellRing, User, Lock, Eye, EyeOff
 import { useApp } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
 import { clearFreshPrintSettingsCache } from '../utils/freshPrintSettings';
+import { clearBillPrintCaches } from '../utils/printBill';
 import { getInstanceId, clearInstanceIdCache } from '../utils/instanceId';
 import { useTranslation } from 'react-i18next';
 import { useLanguage } from '../context/LanguageContext';
@@ -111,12 +112,34 @@ interface OrganizationData {
     promptOrderPrintSections?: boolean;
     defaultOrderPrintSections?: string[];
     autoPrintOrderSections?: boolean;
+    openCashDrawerTakeaway?: boolean;
+    openCashDrawerDelivery?: boolean;
+    openCashDrawerOnPaymentTakeaway?: boolean;
+    openCashDrawerOnPaymentDelivery?: boolean;
+    autoPrintOnPaymentTakeaway?: boolean;
+    autoPrintOnPaymentDelivery?: boolean;
+    printMarksPaidTakeaway?: boolean;
+    printMarksPaidDelivery?: boolean;
+    promptOrderPrintSectionsTakeaway?: boolean;
+    promptOrderPrintSectionsDelivery?: boolean;
+    defaultOrderPrintSectionsTakeaway?: string[];
+    defaultOrderPrintSectionsDelivery?: string[];
+    autoPrintOrderSectionsTakeaway?: boolean;
+    autoPrintOrderSectionsDelivery?: boolean;
     printers?: Array<{ id: string; name: string; printerName: string; printerPath?: string; paperWidthMm?: number }>;
     sectionPrinterMap?: Record<string, string>;
     sectionPrinterMapTakeaway?: Record<string, string>;
     sectionPrinterMapDelivery?: Record<string, string>;
+    sectionCopyPrinterMap?: Record<string, string[]>;
+    sectionCopyPrinterMapTakeaway?: Record<string, string[]>;
+    sectionCopyPrinterMapDelivery?: Record<string, string[]>;
+    sectionCopyPrinterMapBill?: Record<string, string[]>;
+    sectionCopyPrinterMapBillTakeaway?: Record<string, string[]>;
+    sectionCopyPrinterMapBillDelivery?: Record<string, string[]>;
+    sectionCopyPrinterMapConsumption?: Record<string, string[]>;
     documentPrinterMap?: Record<string, string>;
     documentCopies?: Record<string, number>;
+    documentCopyPrinters?: Record<string, string[]>;
     printerType?: string;
     printerDevice?: string;
     printerIP?: string;
@@ -307,6 +330,8 @@ const MyPrintTabContent: FC<MyPrintTabProps> = ({
                                 });
                               }}
                               onTestPrinter={onTestPrinter}
+                              showPrintBoth={false}
+                              saveNote={t('settings.organization.printSettings.designerSaveNoteMy')}
                             />
                           </div>
 
@@ -792,11 +817,20 @@ const Settings: FC = () => {
       sunday: { open: '09:00', close: '22:00', closed: false, is24Hours: false },
     },
     logo: '',
-    printSettings: {
+printSettings: {
       printQRCode: true,
         promptOrderPrintSections: false,
       printers: [],
       sectionPrinterMap: {},
+      sectionPrinterMapTakeaway: {},
+      sectionPrinterMapDelivery: {},
+      sectionCopyPrinterMap: {},
+      sectionCopyPrinterMapTakeaway: {},
+      sectionCopyPrinterMapDelivery: {},
+      sectionCopyPrinterMapBill: {},
+      sectionCopyPrinterMapBillTakeaway: {},
+      sectionCopyPrinterMapBillDelivery: {},
+      sectionCopyPrinterMapConsumption: {},
       documentPrinterMap: {},
     },
   });
@@ -1487,8 +1521,9 @@ const Settings: FC = () => {
               ? { ...prev, organization: { ...prev.organization, ...fresh.data, printSettings: fresh.data.printSettings ?? (prev.organization as any).printSettings } }
               : prev);
           }
-        } catch {}
+} catch {}
         clearFreshPrintSettingsCache();
+        try { clearBillPrintCaches(); } catch {}
 
         showAlertMessage(t('settings.organization.success'));
         
@@ -1683,7 +1718,18 @@ const Settings: FC = () => {
         useCustomPrintSettings: myPrint.useCustom,
         printSettings: myPrint.settings,
       });
-      if (ok) showAlertMessage(t('settings.myPrint.saved'), 'success');
+      if (ok) {
+        // الجذر نفسه في حفظ المنشأة: حدّث لقطة المستخدم فوراً (الكاش يتزامن عبر AuthContext)
+        // + امسح كاش الإعدادات الطازجة — وإلا استمرت الطباعة بالتصميم القديم حتى إعادة الدخول.
+        try {
+          setUser((prev: any) => (prev
+            ? { ...prev, useCustomPrintSettings: myPrint.useCustom, printSettings: myPrint.settings }
+            : prev));
+        } catch {}
+        clearFreshPrintSettingsCache();
+        try { clearBillPrintCaches(); } catch {}
+        showAlertMessage(t('settings.myPrint.saved'), 'success');
+      }
     } finally {
       setMyPrintSaving(false);
     }
@@ -1893,13 +1939,13 @@ const Settings: FC = () => {
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-4 sm:py-8" dir={isRTL ? 'rtl' : 'ltr'}>
       <div className="w-full px-3 sm:px-6 lg:px-8">
         {/* Header */}
-          <div className="flex items-center justify-between flex-wrap gap-2">
-            <div className="flex items-center flex-wrap gap-x-2 min-w-0">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+            <div className="flex flex-col gap-0.5 min-w-0">
               <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100 flex items-center">
               <SettingsIcon className={`h-5 w-5 sm:h-6 sm:w-6 text-orange-600 dark:text-orange-400 ${isRTL ? 'ml-2' : 'mr-2'}`} />
               {t('settings.title')}
             </h1>
-              <p className={`text-xs sm:text-base text-gray-600 dark:text-gray-300 ${isRTL ? 'mr-2 sm:mr-4' : 'ml-2 sm:ml-4'}`}>{t('settings.subtitle')}</p>
+              <p className="text-xs sm:text-base text-gray-600 dark:text-gray-300">{t('settings.subtitle')}</p>
             </div>
       </div>
 
@@ -2306,7 +2352,7 @@ const Settings: FC = () => {
                           value={organization.phone}
                           onChange={(e) => setOrganization({ ...organization, phone: e.target.value })}
                           className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                          placeholder="{t('settings.organization.phonePlaceholder')}"
+                          placeholder={t('settings.organization.phonePlaceholder')}
                         />
                       </div>
                       <div>
@@ -2319,7 +2365,7 @@ const Settings: FC = () => {
                           value={organization.email}
                           onChange={(e) => setOrganization({ ...organization, email: e.target.value })}
                           className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                          placeholder="{t('settings.organization.emailPlaceholder')}"
+                          placeholder={t('settings.organization.emailPlaceholder')}
                         />
                       </div>
                       <div>
@@ -2332,7 +2378,7 @@ const Settings: FC = () => {
                           value={organization.website}
                           onChange={(e) => setOrganization({ ...organization, website: e.target.value })}
                           className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                          placeholder="https://example.com"
+                          placeholder={t('settings.organization.websitePlaceholder')}
                         />
                       </div>
                       <div className="md:col-span-2">
@@ -2345,7 +2391,7 @@ const Settings: FC = () => {
                           value={organization.address}
                           onChange={(e) => setOrganization({ ...organization, address: e.target.value })}
                           className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                          placeholder="{t('settings.organization.addressPlaceholder')}"
+                          placeholder={t('settings.organization.addressPlaceholder')}
                         />
                       </div>
                       <div className="md:col-span-2">
@@ -2357,7 +2403,7 @@ const Settings: FC = () => {
                           onChange={(e) => setOrganization({ ...organization, description: e.target.value })}
                           rows={3}
                           className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                          placeholder="{t('settings.organization.descriptionPlaceholder')}"
+                          placeholder={t('settings.organization.descriptionPlaceholder')}
                         />
                       </div>
                       <div className="md:col-span-2">
@@ -2481,6 +2527,8 @@ const Settings: FC = () => {
                       onTestPrinter={testPrinter}
                       logoUrl={(organization as any)?.logo}
                       orgName={organization?.name}
+                      showPrintBoth
+                      saveNote={t('settings.organization.printSettings.designerSaveNoteOrg')}
                     />
 
                   </div>
@@ -2557,9 +2605,9 @@ const Settings: FC = () => {
                           </label>
                           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                             {[
-                              { key: 'tables', label: t('tables') || 'الطاولات', icon: '🪑' },
-                              { key: 'takeaway', label: t('takeaway') || 'تيك أوي', icon: '🥤' },
-                              { key: 'delivery', label: t('delivery') || 'الدليفري', icon: '🛵' },
+                              { key: 'tables', label: t('nav.tables'), icon: '🪑' },
+                              { key: 'takeaway', label: t('nav.takeaway'), icon: '🥤' },
+                              { key: 'delivery', label: t('nav.delivery'), icon: '🛵' },
                             ].map(({ key, label, icon }) => (
                               <div key={key} className="flex items-center gap-2 bg-white dark:bg-gray-800 rounded-lg p-3 border border-gray-200 dark:border-gray-600">
                                 <span className="text-lg">{icon}</span>
@@ -2593,6 +2641,35 @@ const Settings: FC = () => {
                         </div>
                       </div>
                     )}
+
+                    {/* طلبات العملاء (QR) — مراجعة أم قبول تلقائي */}
+                    <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg mb-6">
+                      <h4 className="text-md font-medium text-gray-900 dark:text-gray-100 mb-4 scroll-mt-24">
+                        {t('settings.organization.customerOrders.title')}
+                      </h4>
+                      <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">
+                        {t('settings.organization.customerOrders.desc')}
+                      </p>
+                      <label className="flex items-center justify-between gap-3 cursor-pointer">
+                        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                          {t('settings.organization.customerOrders.autoAccept')}
+                        </span>
+                        <input
+                          type="checkbox"
+                          checked={(organization as any).publicOrderAutoAccept === true}
+                          onChange={(e) => setOrganization((prev: any) => ({
+                            ...prev,
+                            publicOrderAutoAccept: e.target.checked,
+                          }))}
+                          className="h-5 w-5 accent-orange-600"
+                        />
+                      </label>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                        {(organization as any).publicOrderAutoAccept === true
+                          ? t('settings.organization.customerOrders.autoAcceptOn')
+                          : t('settings.organization.customerOrders.autoAcceptOff')}
+                      </p>
+                    </div>
                   </div>
 
                   {/* Social Links */}
@@ -2925,7 +3002,8 @@ const Settings: FC = () => {
                   {organizationPermissions.isOwner && (
                     <div className="bg-yellow-50 dark:bg-yellow-900/20 p-4 rounded-lg mb-6">
 <h4 id="org-sec-perms" className="text-md font-medium text-gray-900 dark:text-gray-100 mb-4 flex items-center scroll-mt-24">
-                      </h4>
+                          {t('settings.organization.permissions.title')}
+                        </h4>
                       
                       {/* Enable/Disable Permission */}
                       <div className="flex items-center justify-between mb-4">
@@ -3150,8 +3228,13 @@ const Settings: FC = () => {
                             // Changes are now applied immediately without reload
                           } else if (!orgSuccess) {
                             showAlertMessage(t('settings.organization.errors.saveOrgFailed'), 'error');
-                          } else {
-                            showAlertMessage(t('settings.organization.errors.savePayrollWarning'), 'warning');
+} else {
+                            console.error('Payroll save failed:', payrollResponse.status, payrollData);
+                            const parts = [payrollData?.message, payrollData?.error].filter(Boolean);
+                            const detail = parts.length
+                              ? ` — ${parts.join(' | ')}`
+                              : ` (HTTP ${payrollResponse.status})`;
+                            showAlertMessage(`${t('settings.organization.errors.savePayrollWarning')}${detail}`, 'warning');
                           }
                         } catch (error) {
                           console.error('Error saving settings:', error);

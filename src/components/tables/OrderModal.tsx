@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { ShoppingCart, Search, X, Printer, CheckCircle, ChefHat, Table as TableIcon } from 'lucide-react';
+import { ShoppingCart, Search, X, Printer, CheckCircle, Table as TableIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useLanguage } from '../../context/LanguageContext';
 import type { MenuItem, MenuSection, MenuCategory, Order } from '../../services/api';
@@ -23,7 +23,7 @@ export interface OrderModalProps {
   updateItemNotes: (id: string, notes: string, variant?: string | null) => void;
   removeItemFromOrder: (id: string, variant?: string | null) => void;
   calculateTotal: () => number;
-  onSave: () => void; onSaveAndPrint: () => void; onSaveAndSend: () => void; onClose: () => void;
+  onSaveAndPrint: () => void; onSaveAndSend: () => void; onClose: () => void;
   loading: boolean; isEdit: boolean;
   canEditPrice?: boolean;
   onEditPrice?: (index: number, item: LocalOrderItem) => void;
@@ -32,6 +32,10 @@ export interface OrderModalProps {
   // الخصم اليدوي لكل طلب
   manualDiscount?: number;
   setManualDiscount?: (v: number) => void;
+  manualDiscountType?: 'amount' | 'percent';
+  setManualDiscountType?: (v: 'amount' | 'percent') => void;
+  // إظهار حقل الخصم اليدوي — يُمرر من الصفحة حسب صلاحية canApplyManualDiscount
+  canApplyDiscount?: boolean;
 }
 
 
@@ -39,12 +43,28 @@ const OrderModal: React.FC<OrderModalProps> = ({
   table, orderItems, setOrderItems, orderNotes, setOrderNotes, menuSections, menuCategories, menuItems,
   expandedSections, expandedCategories, toggleSection, toggleCategory, getCategoriesForSection,
   getItemsForCategory, addItemToOrder, updateItemQuantity, updateItemNotes, removeItemFromOrder,
-  calculateTotal, onSave, onSaveAndPrint, onSaveAndSend, onClose, loading, isEdit,
-  canEditPrice, onEditPrice, estimatedDiscount = 0, manualDiscount = 0, setManualDiscount,
+  calculateTotal, onSaveAndPrint, onSaveAndSend, onClose, loading, isEdit,
+  canEditPrice, onEditPrice, estimatedDiscount = 0, manualDiscount = 0, setManualDiscount, manualDiscountType = 'percent', setManualDiscountType, canApplyDiscount = false,
 }) => {
   const { t, i18n } = useTranslation();
   const { isRTL } = useLanguage();
   const [searchQuery, setSearchQuery] = useState('');
+  // نص النسبة المحلي: يفصل العرض عن القيمة المحسوبة ليسمح بالكتابة الحرة
+  // (مسح، كسور، أرقام جزئية) دون أن يعيد الـ render الكتابة فوق ما يُكتب.
+  const [pctText, setPctText] = useState<string | null>(null);
+  useEffect(() => { setPctText(null); }, [manualDiscountType]);
+  // لو الإجمالي تغيّر (إضافة صنف) والنسبة مكتوبة — أعد حساب المبلغ من نفس النسبة
+  const totalForPct = calculateTotal();
+  useEffect(() => {
+    if (manualDiscountType !== 'percent') return;
+    if (pctText == null || pctText === '') return;
+    const raw = parseFloat(pctText);
+    if (!Number.isFinite(raw)) return;
+    const pct = Math.min(100, Math.max(0, raw));
+    const expect = Math.round((totalForPct * pct) / 100);
+    if (expect !== manualDiscount) setManualDiscount?.(expect);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [totalForPct]);
   // Mobile: tabbed view (menu | order) instead of 4 squeezed columns.
   const [mobileTab, setMobileTab] = useState<'menu' | 'order'>('menu');
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -174,11 +194,18 @@ const OrderModal: React.FC<OrderModalProps> = ({
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
             {orderItems.length > 0 && (
-              <div className="bg-white/15 rounded-xl px-2.5 py-1 sm:px-3 sm:py-1.5 ring-1 ring-white/25 text-center">
-                <p className="text-sm sm:text-base text-orange-100 leading-none">الإجمالي</p>
-                <p className="text-base sm:text-lg font-bold text-white">{fmt(calculateTotal())}</p>
-                {(estimatedDiscount > 0 || manualDiscount > 0) && (
-                  <p className="text-[10px] text-purple-200 leading-none mt-0.5">خصم: -{fmt(estimatedDiscount + manualDiscount)} → {fmt(calculateTotal() - estimatedDiscount - manualDiscount)}</p>
+              <div className="bg-white/15 rounded-xl px-2.5 py-1 sm:px-3 sm:py-1.5 ring-1 ring-white/25 text-center min-w-[230px] sm:min-w-[280px]">
+                {(estimatedDiscount > 0 || manualDiscount > 0) ? (
+                  <div className="flex items-center justify-center gap-2 sm:gap-3">
+                    <span className="text-base sm:text-lg font-bold text-white/85 line-through whitespace-nowrap">{fmt(calculateTotal())}</span>
+                    <span className="text-base sm:text-lg font-bold text-yellow-200 whitespace-nowrap">{t('cafe.orderModal.discount', { amount: fmt(estimatedDiscount + manualDiscount) })}</span>
+                    <span className="text-base sm:text-lg font-bold text-white whitespace-nowrap">{t('cafe.orderModal.net', { amount: fmt(calculateTotal() - estimatedDiscount - manualDiscount) })}</span>
+                  </div>
+                ) : (
+                  <>
+                    <p className="text-sm sm:text-base text-orange-100 leading-none">{t('cafe.orderModal.totalTitle')}</p>
+                    <p className="text-base sm:text-lg font-bold text-white">{fmt(calculateTotal())}</p>
+                  </>
                 )}
               </div>
             )}
@@ -195,14 +222,14 @@ const OrderModal: React.FC<OrderModalProps> = ({
             onClick={() => setMobileTab('menu')}
             className={`py-2 rounded-lg text-sm font-bold transition-all ${mobileTab === 'menu' ? 'bg-white dark:bg-gray-700 text-orange-600 dark:text-orange-400 shadow' : 'text-gray-500 dark:text-gray-400'}`}
           >
-            الأصناف
+            {t('cafe.orderModal.menuTab')}
           </button>
           <button
             type="button"
             onClick={() => setMobileTab('order')}
             className={`py-2 rounded-lg text-sm font-bold transition-all flex items-center justify-center gap-1.5 ${mobileTab === 'order' ? 'bg-white dark:bg-gray-700 text-green-700 dark:text-green-400 shadow' : 'text-gray-500 dark:text-gray-400'}`}
           >
-            الطلب
+            {t('cafe.orderModal.orderTab')}
             {orderItems.length > 0 && (
               <span className="min-w-[20px] h-5 px-1 bg-green-500 text-white text-xs font-bold rounded-full flex items-center justify-center leading-none">{orderItems.length}</span>
             )}
@@ -216,7 +243,7 @@ const OrderModal: React.FC<OrderModalProps> = ({
           {!searchQuery.trim() && (
             <div className="w-24 lg:w-28 flex-shrink-0 hidden lg:flex flex-col border-l border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
               <div className="px-2 py-2 border-b border-gray-100 dark:border-gray-700 flex-shrink-0">
-                <p className="text-base font-semibold text-gray-400 dark:text-gray-500 text-center">الأقسام</p>
+                <p className="text-base font-semibold text-gray-400 dark:text-gray-500 text-center">{t('cafe.orderModal.sections')}</p>
               </div>
               <div className="flex-1 overflow-y-auto py-1.5 px-1.5 space-y-1">
                 {activeSections.map(sec => {
@@ -238,12 +265,12 @@ const OrderModal: React.FC<OrderModalProps> = ({
           {!searchQuery.trim() && activeSectionCategories.length > 1 && (
             <div className="w-24 lg:w-28 flex-shrink-0 hidden lg:flex flex-col border-l border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
               <div className="px-2 py-2 border-b border-gray-100 dark:border-gray-700 flex-shrink-0">
-                <p className="text-base font-semibold text-gray-400 dark:text-gray-500 text-center">الفئات</p>
+                <p className="text-base font-semibold text-gray-400 dark:text-gray-500 text-center">{t('cafe.orderModal.categories')}</p>
               </div>
               <div className="flex-1 overflow-y-auto py-1.5 px-1.5 space-y-1">
                 <button onClick={() => setActiveCategoryId('all')}
                   className={`w-full px-2 py-2 rounded-lg text-base font-medium transition-all text-right ${activeCategoryId === 'all' ? 'bg-gray-800 dark:bg-gray-200 text-white dark:text-gray-900 shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'}`}>
-                  الكل
+                  {t('cafe.orderModal.all')}
                 </button>
                 {activeSectionCategories.map(cat => {
                   const catId = cat._id || cat.id;
@@ -285,7 +312,7 @@ const OrderModal: React.FC<OrderModalProps> = ({
                   <div className="flex gap-1.5 overflow-x-auto pb-0.5">
                     <button onClick={() => setActiveCategoryId('all')}
                       className={`flex-shrink-0 px-3 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-all ${activeCategoryId === 'all' ? 'bg-gray-800 dark:bg-gray-200 text-white dark:text-gray-900 shadow' : 'bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-700'}`}>
-                      الكل
+                      {t('cafe.orderModal.all')}
                     </button>
                     {activeSectionCategories.map(cat => {
                       const catId = cat._id || cat.id;
@@ -327,10 +354,10 @@ const OrderModal: React.FC<OrderModalProps> = ({
             <div className="px-2 py-1 border-b border-gray-100 dark:border-gray-700 flex-shrink-0 flex items-center justify-between">
               <p className="text-base font-semibold text-gray-400 dark:text-gray-500">
                 {searchQuery
-                  ? 'نتائج البحث'
+                  ? t('cafe.orderModal.searchResults')
                   : (activeSectionCategories.find(c => (c._id || c.id) === activeCategoryId)?.name
                     || activeSections.find(s => s.id === activeSectionId)?.name
-                    || 'الأصناف')}
+                    || t('cafe.orderModal.itemsFallback'))}
               </p>
               {displayedItems.length > 0 && <span className="text-base text-gray-400">{displayedItems.length}</span>}
             </div>
@@ -338,7 +365,7 @@ const OrderModal: React.FC<OrderModalProps> = ({
               {displayedItems.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-full text-gray-300 dark:text-gray-600 select-none">
                   <Search className="h-8 w-8 mb-2 opacity-30" />
-                  <p className="text-base">{searchQuery ? t('cafe.orderModal.noResults') : 'اختر قسماً'}</p>
+                  <p className="text-base">{searchQuery ? t('cafe.orderModal.noResults') : t('cafe.orderModal.chooseSection')}</p>
                 </div>
               ) : (
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-1">
@@ -358,21 +385,17 @@ const OrderModal: React.FC<OrderModalProps> = ({
           </div>
 
           {/* Col 4: Order — أوسع */}
-          <div className={`w-full lg:w-64 xl:w-72 flex-shrink-0 flex-col border-r border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 ${mobileTab === 'order' ? 'flex flex-1 min-h-0' : 'hidden'} lg:flex`}>
-            <div className="px-3 py-2 border-b border-gray-100 dark:border-gray-700 flex-shrink-0 flex items-center justify-between">
-              <div className="flex items-center gap-1.5">
-                <div className="w-1 h-4 bg-gradient-to-b from-green-400 to-emerald-500 rounded-full"></div>
-                <span className="font-bold text-gray-800 dark:text-gray-100 text-base">{t('cafe.orderModal.orders')}</span>
-                {orderItems.length > 0 && (
-                  <span className="min-w-[18px] h-[18px] px-1 bg-green-100 dark:bg-green-900/50 text-green-700 dark:text-green-300 text-base font-bold rounded-full flex items-center justify-center leading-none">{orderItems.length}</span>
-                )}
+          <div className={`w-full lg:w-80 xl:w-96 flex-shrink-0 flex-col border-r border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 ${mobileTab === 'order' ? 'flex flex-1 min-h-0' : 'hidden'} lg:flex`}>
+            <div className="px-3 py-2 border-b border-gray-100 dark:border-gray-700 flex-shrink-0">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <div className="w-1 h-4 bg-gradient-to-b from-green-400 to-emerald-500 rounded-full"></div>
+                  <span className="font-bold text-gray-800 dark:text-gray-100 text-base">{t('cafe.orderModal.orders')}</span>
+                  {orderItems.length > 0 && (
+                    <span className="min-w-[18px] h-[18px] px-1 bg-green-100 dark:bg-green-900/50 text-green-700 dark:text-green-300 text-base font-bold rounded-full flex items-center justify-center leading-none">{orderItems.length}</span>
+                  )}
+                </div>
               </div>
-              <span className="text-base font-bold text-orange-600 dark:text-orange-400">{fmt(calculateTotal())}</span>
-              {(estimatedDiscount > 0 || manualDiscount > 0) && (
-                <span className="text-[10px] text-purple-600 dark:text-purple-400 font-bold">
-                  خصم: -{fmt(estimatedDiscount + manualDiscount)} → {fmt(calculateTotal() - estimatedDiscount - manualDiscount)}
-                </span>
-              )}
             </div>
 
             <div ref={scrollContainerRef} className="flex-1 overflow-y-auto px-2 py-2 space-y-1.5 min-h-0">
@@ -391,6 +414,7 @@ const OrderModal: React.FC<OrderModalProps> = ({
                     isExpanded={!!expandedNotes[compositeKey]}
                     onMinus={() => setOrderItems(prev => { const cp=[...prev]; const it=cp[idx]; if(!it) return prev; const q=it.quantity-1; if(q<=0) cp.splice(idx,1); else cp[idx]={...it, quantity:q}; return cp; })}
                     onPlus={() => setOrderItems(prev => { const cp=[...prev]; const it=cp[idx]; if(!it) return prev; cp[idx]={...it, quantity:it.quantity+1}; return cp; })}
+                    onQuantityChange={v => setOrderItems(prev => { const cp=[...prev]; if(cp[idx]) cp[idx]={...cp[idx], quantity:v}; return cp; })}
                     onRemove={() => setOrderItems(prev => prev.filter((_, i) => i !== idx))}
                     onToggleNote={() => setExpandedNotes(p => ({ ...p, [compositeKey]: !p[compositeKey] }))}
                     onNoteChange={v => setOrderItems(prev => { const cp=[...prev]; if(cp[idx]) cp[idx]={...cp[idx], notes:v}; return cp; })}
@@ -410,45 +434,69 @@ const OrderModal: React.FC<OrderModalProps> = ({
                 className="w-full text-base border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1.5 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 placeholder-gray-400 resize-none focus:ring-1 focus:ring-orange-400 outline-none" />
             </div>
 
-            {setManualDiscount && (
+            {setManualDiscount && canApplyDiscount && (
               <div className="px-2 pb-1 flex-shrink-0">
                 <label className="text-sm font-semibold text-gray-500 dark:text-gray-400 block mb-1">
                   {t('billing.discountPercentageLabel', 'الخصم اليدوي')}
                 </label>
                 <div className="flex items-center gap-1.5">
+                  {manualDiscountType === 'percent' ? (
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    dir="ltr"
+                    value={pctText ?? (manualDiscount > 0 && calculateTotal() > 0 ? ((manualDiscount / calculateTotal()) * 100).toFixed(1).replace(/\.0$/, '') : '')}
+                    onChange={e => {
+                      const text = e.target.value.replace(/[^0-9.]/g, '');
+                      // اسمح بنقطة واحدة فقط
+                      const parts = text.split('.');
+                      const clean = parts.length > 2 ? parts[0] + '.' + parts.slice(1).join('') : text;
+                      setPctText(clean);
+                      const raw = parseFloat(clean);
+                      if (!Number.isFinite(raw)) { setManualDiscount(0); return; }
+                      const pct = Math.min(100, Math.max(0, raw));
+                      const total = calculateTotal() || 0;
+                      setManualDiscount(Math.round((total * pct) / 100));
+                    }}
+                    onBlur={() => setPctText(null)}
+                    placeholder="0%"
+                    className="flex-1 text-base border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1.5 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:ring-1 focus:ring-orange-400 outline-none"
+                  />
+                  ) : (
                   <input
                     type="number"
                     min="0"
                     step="1"
                     value={manualDiscount || ''}
                     onChange={e => {
-                      const v = parseFloat(e.target.value) || 0;
-                      setManualDiscount(Math.max(0, v));
+                      const raw = parseFloat(e.target.value) || 0;
+                      setManualDiscount(Math.max(0, raw));
                     }}
                     placeholder="0"
                     className="flex-1 text-base border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1.5 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:ring-1 focus:ring-orange-400 outline-none"
                   />
-                  <span className="text-sm text-gray-500 dark:text-gray-400 font-bold">ج.م</span>
+                  )}
+                  {setManualDiscountType && (
+                    <button
+                      type="button"
+                      onClick={() => { setPctText(null); setManualDiscountType(manualDiscountType === 'amount' ? 'percent' : 'amount'); }}
+                      className={`px-2 py-1 text-xs font-bold rounded-lg border transition-colors ${manualDiscountType === 'percent' ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 border-purple-300' : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-600'}`}
+                      title={manualDiscountType === 'amount' ? t('cafe.orderModal.toPercentTitle') : t('cafe.orderModal.toAmountTitle')}
+                    >
+                      {manualDiscountType === 'percent' ? '%' : t('cafe.orderModal.currency')}
+                    </button>
+                  )}
                 </div>
-                {manualDiscount > 0 && (
-                  <div className="mt-1 text-[10px] text-purple-600 dark:text-purple-400 font-bold">
-                   خصم: -{fmt(manualDiscount)} → {fmt(calculateTotal() - manualDiscount - estimatedDiscount)}
-                  </div>
-                )}
               </div>
             )}
 
             <div className="px-2 pb-3 flex-shrink-0 space-y-1.5">
-              <button onClick={onSaveAndSend} disabled={loading || orderItems.length === 0}
-                className="w-full py-2.5 bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white font-bold text-base rounded-xl flex items-center justify-center gap-1.5 shadow-sm transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed">
-                {loading
-                  ? <><svg className="animate-spin h-3.5 w-3.5" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>{t('cafe.orderModal.saving')}</>
-                  : <><ChefHat className="h-3.5 w-3.5" />{t('cafe.orderModal.saveAndSend')}</>}
-              </button>
               <div className="flex gap-1.5">
-                <button onClick={onSave} disabled={loading || orderItems.length === 0}
+                <button onClick={onSaveAndSend} disabled={loading || orderItems.length === 0}
                   className="flex-1 py-2 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 hover:bg-gray-50 text-gray-600 dark:text-gray-300 font-medium text-base rounded-lg flex items-center justify-center gap-1 transition-all disabled:opacity-50">
-                  <CheckCircle className="h-3 w-3 text-green-500" />{t('cafe.orderModal.save')}
+                  {loading
+                    ? <><svg className="animate-spin h-3 w-3" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>{t('cafe.orderModal.saving')}</>
+                    : <><CheckCircle className="h-3 w-3 text-green-500" />{t('cafe.orderModal.save')}</>}
                 </button>
                 <button onClick={onSaveAndPrint} disabled={loading || orderItems.length === 0}
                   className="flex-1 py-2 border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 text-blue-600 dark:text-blue-400 font-medium text-base rounded-lg flex items-center justify-center gap-1 transition-all disabled:opacity-50">

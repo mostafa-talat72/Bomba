@@ -3,6 +3,9 @@ import { X, Receipt, CheckCircle, Plus, Minus } from 'lucide-react';
 import { Bill } from '../services/api';
 import { formatCurrency, formatDecimal } from '../utils/formatters';
 import { aggregateItemsWithPayments } from '../utils/billAggregation';
+import { paymentMethodLabel, paymentMethodIcon, PAYMENT_METHODS, type PaymentMethod } from '../utils/paymentMethod';
+import { drawerLabel, type CashDrawer } from '../utils/paymentDrawer';
+import { DrawerSelect } from './ui/DrawerSelect';
 import ModalPortal from './ModalPortal';
 import ConfirmModal from './ConfirmModal';
 import { useTranslation } from 'react-i18next';
@@ -11,8 +14,9 @@ interface PartialPaymentModalProps {
   isOpen: boolean;
   onClose: () => void;
   bill: Bill | null;
-  onPaymentSubmit: (items: Array<{ itemId: string; quantity: number }>, paymentMethod: 'cash' | 'card' | 'transfer') => Promise<void>;
+  onPaymentSubmit: (items: Array<{ itemId: string; quantity: number }>, paymentMethod: PaymentMethod, drawer?: CashDrawer) => Promise<void>;
   isProcessing: boolean;
+  initialDrawer?: CashDrawer;
 }
 
 const PartialPaymentModal: React.FC<PartialPaymentModalProps> = ({
@@ -20,11 +24,13 @@ const PartialPaymentModal: React.FC<PartialPaymentModalProps> = ({
   onClose,
   bill,
   onPaymentSubmit,
-  isProcessing
+  isProcessing,
+  initialDrawer = 'safe'
 }) => {
   const { t, i18n } = useTranslation();
   const [selectedItems, setSelectedItems] = useState<{ [key: string]: number }>({});
-  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'card' | 'transfer'>('cash');
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash');
+  const [paymentDrawer, setPaymentDrawer] = useState<CashDrawer>(initialDrawer);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
 
   // إعادة تعيين العناصر المحددة عند فتح النافذة أو تغيير الفاتورة
@@ -110,7 +116,7 @@ const PartialPaymentModal: React.FC<PartialPaymentModalProps> = ({
       }
     });
 
-    await onPaymentSubmit(itemsToPay, paymentMethod);
+    await onPaymentSubmit(itemsToPay, paymentMethod, paymentDrawer);
     setShowConfirmModal(false);
   };
 
@@ -268,40 +274,24 @@ const PartialPaymentModal: React.FC<PartialPaymentModalProps> = ({
           {availableItems.length > 0 && (
             <div className="mb-4 sm:mb-6">
               <h4 className="font-medium text-base sm:text-lg text-gray-900 dark:text-gray-100 mb-3 sm:mb-4">{t('billing.paymentMethodLabel')}</h4>
-              <div className="grid grid-cols-3 gap-2 sm:gap-3">
-                <button
-                  onClick={() => setPaymentMethod('cash')}
-                  className={`p-2 sm:p-3 border-2 rounded-lg text-center transition-colors duration-200 ${
-                    paymentMethod === 'cash' 
-                      ? 'border-orange-500 bg-orange-50 dark:bg-orange-900 text-orange-700 dark:text-orange-300' 
-                      : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300'
-                  }`}
-                >
-                  <div className="text-2xl mb-1">💵</div>
-                  <div className="text-sm font-medium">{t('billing.paymentMethodCash')}</div>
-                </button>
-                <button
-                  onClick={() => setPaymentMethod('card')}
-                  className={`p-2 sm:p-3 border-2 rounded-lg text-center transition-colors duration-200 ${
-                    paymentMethod === 'card' 
-                      ? 'border-orange-500 bg-orange-50 dark:bg-orange-900 text-orange-700 dark:text-orange-300' 
-                      : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300'
-                  }`}
-                >
-                  <div className="text-2xl mb-1">💳</div>
-                  <div className="text-sm font-medium">{t('billing.paymentMethodCard')}</div>
-                </button>
-                <button
-                  onClick={() => setPaymentMethod('transfer')}
-                  className={`p-2 sm:p-3 border-2 rounded-lg text-center transition-colors duration-200 ${
-                    paymentMethod === 'transfer' 
-                      ? 'border-orange-500 bg-orange-50 dark:bg-orange-900 text-orange-700 dark:text-orange-300' 
-                      : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300'
-                  }`}
-                >
-                  <div className="text-2xl mb-1">📱</div>
-                  <div className="text-sm font-medium">{t('billing.paymentMethodTransfer')}</div>
-                </button>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
+                {PAYMENT_METHODS.map(m => (
+                  <button
+                    key={m}
+                    onClick={() => setPaymentMethod(m)}
+                    className={`p-2 sm:p-3 border-2 rounded-lg text-center transition-colors duration-200 ${
+                      paymentMethod === m
+                        ? 'border-orange-500 bg-orange-50 dark:bg-orange-900 text-orange-700 dark:text-orange-300'
+                        : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300'
+                    }`}
+                  >
+                    <div className="text-2xl mb-1">{paymentMethodIcon(m)}</div>
+                    <div className="text-sm font-medium">{paymentMethodLabel(m, t)}</div>
+                  </button>
+                ))}
+              </div>
+              <div className="mt-2">
+                <DrawerSelect value={paymentDrawer} onChange={setPaymentDrawer} className="w-full" showLabels={true} />
               </div>
             </div>
           )}
@@ -383,11 +373,11 @@ const PartialPaymentModal: React.FC<PartialPaymentModalProps> = ({
         onClose={() => !isProcessing && setShowConfirmModal(false)}
         onConfirm={confirmPayment}
         title={t('billing.partialPaymentModal.confirmTitle')}
-        message={t('billing.partialPaymentModal.confirmMessage', {
+        message={`${t('billing.partialPaymentModal.confirmMessage', {
           count: Object.values(selectedItems).filter(q => q > 0).length,
           amount: formatCurrency(totalAmount, i18n.language),
-          method: t(`billing.paymentMethod${paymentMethod.charAt(0).toUpperCase() + paymentMethod.slice(1)}`)
-        })}
+          method: paymentMethodLabel(paymentMethod, t)
+        })} · ${drawerLabel(paymentDrawer, t)}`}
         confirmText={isProcessing ? t('billing.partialPaymentModal.processing') : t('billing.partialPaymentModal.confirmButton')}
         cancelText={t('common.cancel')}
         confirmColor="bg-green-600 hover:bg-green-700"

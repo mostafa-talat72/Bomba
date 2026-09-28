@@ -46,13 +46,20 @@ export default defineConfig({
     exclude: ['lucide-react'],
   },
   build: {
-    chunkSizeWarningLimit: 500,
+    chunkSizeWarningLimit: 1000,
     cssCodeSplit: true,
     rollupOptions: {
-      output: {
-        manualChunks(id) {
-          if (id.includes('node_modules')) return 'vendor';
-        },
+      // درس مستفاد: التقسيم اليدوي للمكتبات (manualChunks) كسر بدء التطبيق
+      // (دائرة vendor-react ↔ vendor العام أعطت "useState of undefined").
+      // التقسيم التلقائي يدمج الدوائر بأمان. نمنع أي دائرة تمس مدار React.
+      onwarn(warning, warn) {
+        if (
+          warning.code === 'CIRCULAR_DEPENDENCY' &&
+          /node_modules[\\/](react|react-dom|react-router-dom|scheduler|react-i18next|i18next|use-sync-external-store)\b/.test(warning.message)
+        ) {
+          throw new Error(`React-orbit circular dependency blocked: ${warning.message}`);
+        }
+        warn(warning);
       },
     },
   },

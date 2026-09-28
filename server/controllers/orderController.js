@@ -33,6 +33,18 @@ import {
 const visibleBillsCache = new Map(); // orgKey -> { ids, at }
 const VISIBLE_BILLS_TTL_MS = 15000;
 
+// ── الخصم اليدوي يتطلب صلاحية مستقلة (canApplyManualDiscount أو all) ──
+function canApplyManualDiscount(user) {
+    try {
+        if (user && typeof user.hasPermission === 'function') return user.hasPermission('canApplyManualDiscount') === true;
+        const perms = user?.permissions || [];
+        return perms.includes('all') || perms.includes('canApplyManualDiscount');
+    } catch { return false; }
+}
+function discountForbidden(res) {
+    return res.status(403).json({ success: false, message: 'ليس لديك صلاحية تطبيق خصم يدوي' });
+}
+
 // Response cache for the unpaged GET /api/orders (the dashboard/kitchen poll,
 // which fetched ~3380 docs in 1-2s every few seconds). TTL 8s absorbs the
 // repeated identical polls; socket pushes keep the UI fresh in between.
@@ -1000,6 +1012,11 @@ export const createOrder = async (req, res) => {
             }
         } catch { /* ignore — discount is optional */ }
 
+        // إنشاء طلب بخصم يتطلب صلاحية الخصم اليدوي
+        if (Number(req.body.discount) > 0 && !canApplyManualDiscount(req.user)) {
+            return discountForbidden(res);
+        }
+
         // Create order
         const orderData = {
             ...req.body,
@@ -1143,18 +1160,22 @@ export const createOrder = async (req, res) => {
                 const billDoc = await Bill.findById(billToUse);
                 if (billDoc) billToUseNumber = billDoc.billNumber || null;
                 if (billDoc) {
-                    if (!billDoc.orders.some((orderId) => String(orderId) === String(order._id))) {
-                        billDoc.orders.push(order._id);
-                    }
-                    await billDoc.calculateSubtotal();
-                    await billDoc.save();
-                    realtimeBill = await Bill.findById(billDoc._id)
+                    // Atomic push to avoid race when 2 orders created for same table simultaneously
+                    await Bill.updateOne({ _id: billDoc._id }, { $addToSet: { orders: order._id } });
+                    const updatedBill = await Bill.findById(billDoc._id);
+                    await updatedBill.calculateSubtotal();
+                    await updatedBill.save();
+                    realtimeBill = await Bill.findById(updatedBill._id)
                         .populate('orders')
                         .populate({
                             path: 'sessions',
                             populate: { path: 'deviceId', select: 'type hourlyRate playstationRates' },
                         })
                         .populate('table');
+                    // Emit bill update immediately so table window shows order inside bill without waiting for poll
+                    if (realtimeBill && req.io) {
+                        try { req.io.notifyBillUpdate("updated", realtimeBill, getOrganizationId(req.user), { silent: true }); } catch {}
+                    }
                 }
             } catch (billError) {
                 Logger.error('خطأ في إضافة الطلب للفاتورة:', billError);
@@ -1301,12 +1322,451 @@ export const createOrder = async (req, res) => {
     }
 };
 
+// @desc    Public customer order from QR menu — NO AUTH (rate-limited at route).
+// Strict validation: org + table must match, items must exist/be available in
+// that org, prices ALWAYS computed server-side (client price ignored).
+// @route   POST /api/orders/public
+// @access  Public
+export const createPublicOrder = async (req, res) => {
+    try {
+        const { organization, table, customerName, items, notes } = req.body || {};
+
+        if (!organization || !mongoose.Types.ObjectId.isValid(organization)) {
+            return res.status(400).json({ success: false, message: 'معرف المنشأة غير صحيح' });
+        }
+        const orgId = new mongoose.Types.ObjectId(organization);
+        const orgDoc = await Organization.findById(orgId).select('_id fixedDiscount publicOrderAutoAccept').lean();
+        if (!orgDoc) {
+            return res.status(404).json({ success: false, message: 'المنشأة غير موجودة' });
+        }
+        if (!table || !mongoose.Types.ObjectId.isValid(table)) {
+            return res.status(400).json({ success: false, message: 'رقم الطاولة غير صحيح' });
+        }
+        const tableDoc = await Table.findOne({ _id: table, organization: orgId }).select('_id number status');
+        if (!tableDoc) {
+            return res.status(404).json({ success: false, message: 'الطاولة غير موجودة في هذه المنشأة' });
+        }
+        const cleanName = String(customerName || '').trim();
+        if (cleanName.length < 2 || cleanName.length > 50) {
+            return res.status(400).json({ success: false, message: 'اسم العميل مطلوب (2-50 حرف)' });
+        }
+        if (!Array.isArray(items) || items.length === 0 || items.length > 20) {
+            return res.status(400).json({ success: false, message: 'الطلب يجب أن يحتوي على 1-20 صنف' });
+        }
+
+        // Validate items + resolve server-side prices (variant-aware, like createOrder)
+        const menuIds = [...new Set(items.map((i) => String(i?.menuItem || '')))].filter((id) => mongoose.Types.ObjectId.isValid(id));
+        if (menuIds.length !== items.length) {
+            return res.status(400).json({ success: false, message: 'أحد الأصناف غير صالح' });
+        }
+        const menuDocs = await MenuItem.find({ _id: { $in: menuIds }, organization: orgId }).lean();
+        const menuMap = new Map(menuDocs.map((m) => [String(m._id), m]));
+        const processedItems = [];
+        let subtotal = 0;
+        for (const it of items) {
+            const menuItem = menuMap.get(String(it.menuItem));
+            if (!menuItem) {
+                return res.status(400).json({ success: false, message: 'صنف غير موجود في هذه المنشأة' });
+            }
+            if (menuItem.isAvailable === false) {
+                return res.status(400).json({ success: false, message: `الصنف غير متاح حالياً: ${menuItem.name}` });
+            }
+            const qty = Math.floor(Number(it.quantity));
+            if (!Number.isFinite(qty) || qty < 1 || qty > 20) {
+                return res.status(400).json({ success: false, message: 'الكمية يجب أن تكون بين 1 و 20' });
+            }
+            const itemNotes = String(it.notes || '').slice(0, 200);
+            let effVariant = null;
+            let effPrice = Number(menuItem.price) || 0;
+            if (Array.isArray(menuItem.variants) && menuItem.variants.length > 0) {
+                if (it.variant) {
+                    const m = menuItem.variants.find((v) => v.size === it.variant);
+                    if (!m) {
+                        return res.status(400).json({ success: false, message: `الحجم غير متاح للصنف: ${menuItem.name}` });
+                    }
+                    effVariant = m.size;
+                    effPrice = Number(m.price) || 0;
+                } else {
+                    effVariant = menuItem.variants[0].size;
+                    effPrice = Number(menuItem.variants[0].price) || 0;
+                }
+            }
+            const itemTotal = effPrice * qty;
+            subtotal += itemTotal;
+            processedItems.push({
+                menuItem: menuItem._id,
+                name: menuItem.name,
+                price: effPrice,
+                variant: effVariant,
+                quantity: qty,
+                notes: itemNotes || null,
+                itemTotal,
+            });
+        }
+
+        // Fixed discount (tables section) — same rule as staff dine-in orders.
+        // NOTE: applied at ACCEPT time for approval-mode requests (recomputed there).
+        const computeFixedDiscount = () => {
+            let pct = 0;
+            let cap = 0;
+            let amount = 0;
+            try {
+                const fd = orgDoc.fixedDiscount;
+                if (fd && fd.enabled) {
+                    const sectionPct = Number(fd.sections?.tables) || 0;
+                    pct = sectionPct > 0 ? sectionPct : Number(fd.percentage) || 0;
+                    cap = Number(fd.maxCap) || 0;
+                    amount = Math.round((subtotal * pct) / 100);
+                    if (cap > 0 && amount > cap) amount = cap;
+                }
+            } catch { /* ignore — discount is optional */ }
+            return { pct, cap, amount };
+        };
+
+        // وضع القبول التلقائي (من إعدادات المنشأة) = المسار الطبيعي الكامل فوراً.
+        // الافتراضي = طلب معلق بانتظار مراجعة العاملين (بلا فاتورة/مخزون/مطبخ).
+        const autoAccept = orgDoc.publicOrderAutoAccept === true;
+
+        if (!autoAccept) {
+            const orderData = {
+                table,
+                customerName: cleanName,
+                items: processedItems,
+                subtotal,
+                discount: 0,
+                fixedDiscount: { percentage: 0, amount: 0, maxCap: 0 },
+                finalAmount: subtotal,
+                notes: String(notes || '').slice(0, 500) || null,
+                organization: orgId,
+                createdBy: null,
+                status: 'awaiting_approval',
+                fulfillmentType: 'dine_in',
+            };
+            const order = await Order.create(orderData);
+
+            // تنبيه لحظي للعاملين (inbox) — بلا مطبخ وبلا صف جرس (لا مستخدم مسجل)
+            if (req.io) {
+                try {
+                    const orgStr = String(orgId);
+                    const payload = order.toObject ? order.toObject() : order;
+                    req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('customer-order-request', {
+                        order: payload,
+                        table: { _id: table, number: tableDoc.number },
+                    });
+                } catch (emitErr) { Logger.error('Emit customer-order-request failed', emitErr); }
+            }
+
+            return res.status(201).json({
+                success: true,
+                message: 'تم إرسال طلبك للمراجعة',
+                data: order,
+            });
+        }
+
+        const { pct: fixedDiscountPercentage, cap: fixedDiscountMaxCap, amount: fixedDiscountAmount } = computeFixedDiscount();
+
+        const orderData = {
+            table,
+            customerName: cleanName,
+            items: processedItems,
+            subtotal,
+            discount: 0,
+            fixedDiscount: {
+                percentage: fixedDiscountPercentage,
+                amount: fixedDiscountAmount,
+                maxCap: fixedDiscountMaxCap,
+            },
+            finalAmount: subtotal - fixedDiscountAmount,
+            notes: String(notes || '').slice(0, 500) || null,
+            organization: orgId,
+            createdBy: null,
+            status: 'pending',
+            fulfillmentType: 'dine_in',
+        };
+        const order = await Order.create(orderData);
+
+        // Link to table bill: reuse open draft bill or create one
+        let billToUse = null;
+        const existingBill = await Bill.findOne({
+            table, organization: orgId, status: { $in: ['draft', 'partial', 'overdue'] },
+        }).sort({ createdAt: -1 });
+        if (existingBill) {
+            billToUse = existingBill._id;
+            await Bill.updateOne({ _id: existingBill._id }, { $addToSet: { orders: order._id } });
+        } else {
+            const billData = {
+                table,
+                customerName: cleanName,
+                fulfillmentType: 'dine_in',
+                orders: [order._id],
+                sessions: [],
+                subtotal: 0, total: 0, discount: 0, tax: 0, paid: 0, remaining: 0,
+                status: 'draft', paymentMethod: 'cash', billType: 'cafe',
+                createdBy: null, organization: orgId,
+            };
+            let newBill = null;
+            for (let attempt = 0; attempt < 10; attempt++) {
+                try { newBill = await Bill.create(billData); break; }
+                catch (billErr) { if (billErr.code !== 11000 || attempt === 9) throw billErr; }
+            }
+            billToUse = newBill._id;
+        }
+        order.bill = billToUse;
+        await order.save();
+        // Update bill totals after linking
+        try {
+            const billDoc = await Bill.findById(billToUse);
+            if (billDoc) {
+                await billDoc.calculateSubtotal();
+                await billDoc.save();
+                if (req.io) {
+                    try { req.io.notifyBillUpdate("updated", billDoc, orgId, { silent: true }); } catch {}
+                }
+            }
+        } catch {}
+        try {
+            tableDoc.status = 'occupied';
+            await tableDoc.save();
+        } catch {}
+
+        // Deduct inventory (order saved anyway on failure)
+        try { await deductInventoryForOrder(order, null, null); } catch (deductErr) {
+            Logger.error('deductInventoryForOrder failed (public order saved anyway)', deductErr);
+        }
+
+        // Real-time: kitchen sees the ticket instantly
+        if (req.io) {
+            try {
+                const orgStr = String(orgId);
+                const payload = order.toObject ? order.toObject() : order;
+                req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('order:created', payload);
+                req.io.notifyOrderUpdate('created', payload, orgId);
+                req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('table:statusChanged', { tableId: table, status: 'occupied' });
+            } catch (emitErr) { Logger.error('Emit public order:created failed', emitErr); }
+        }
+
+        return res.status(201).json({
+            success: true,
+            message: 'تم إرسال الطلب بنجاح',
+            data: order,
+        });
+    } catch (error) {
+        if (error.name === 'ValidationError') {
+            const errors = Object.values(error.errors).map((e) => e.message);
+            return res.status(400).json({ success: false, message: 'بيانات الطلب غير صحيحة', errors });
+        }
+        return res.status(500).json({ success: false, message: 'خطأ في إنشاء الطلب', error: error.message });
+    }
+};
+
+// @desc    Accept a pending customer (QR) order — links to unpaid bill or creates one
+// @route   POST /api/orders/:id/accept
+// @access  Private (canReviewCustomerOrders)
+export const acceptCustomerOrder = async (req, res) => {
+    try {
+        const order = await Order.findOne({
+            _id: req.params.id,
+            ...organizationFilter(req.user),
+        });
+        if (!order) {
+            return res.status(404).json({ success: false, message: 'الطلب غير موجود' });
+        }
+        if (order.status !== 'awaiting_approval') {
+            return res.status(400).json({ success: false, message: 'هذا الطلب ليس معلقاً للمراجعة' });
+        }
+        const orgId = getOrganizationId(req.user);
+        const tableId = order.table;
+        if (!tableId) {
+            return res.status(400).json({ success: false, message: 'الطلب بلا طاولة' });
+        }
+
+        // الخصم الثابت يُطبق لحظة القبول حسب إعدادات المنشأة الحالية
+        try {
+            const orgDoc = await Organization.findById(orgId).select('fixedDiscount').lean();
+            const fd = orgDoc?.fixedDiscount;
+            if (fd && fd.enabled) {
+                const sectionPct = Number(fd.sections?.tables) || 0;
+                const pct = sectionPct > 0 ? sectionPct : Number(fd.percentage) || 0;
+                const cap = Number(fd.maxCap) || 0;
+                let amount = Math.round((Number(order.subtotal) || 0) * pct / 100);
+                if (cap > 0 && amount > cap) amount = cap;
+                order.fixedDiscount = { percentage: pct, amount, maxCap: cap };
+                order.finalAmount = (Number(order.subtotal) || 0) - amount;
+            }
+        } catch { /* ignore — discount is optional */ }
+
+        // البحث عن فاتورة غير مدفوعة لحظة القبول أو إنشاء جديدة (كإضافة طلب عادي)
+        let billToUse = null;
+        const tableDoc = await Table.findOne({ _id: tableId, organization: orgId }).select('_id number status');
+        const existingBill = await Bill.findOne({
+            table: tableId, organization: orgId, status: { $in: ['draft', 'partial', 'overdue'] },
+        }).sort({ createdAt: -1 });
+        if (existingBill) {
+            billToUse = existingBill._id;
+            await Bill.updateOne({ _id: existingBill._id }, { $addToSet: { orders: order._id } });
+        } else {
+            const billData = {
+                table: tableId,
+                customerName: order.customerName || `طاولة ${tableDoc?.number || ''}`,
+                fulfillmentType: 'dine_in',
+                orders: [order._id],
+                sessions: [],
+                subtotal: 0, total: 0, discount: 0, tax: 0, paid: 0, remaining: 0,
+                status: 'draft', paymentMethod: 'cash', billType: 'cafe',
+                createdBy: req.user._id, organization: orgId,
+            };
+            let newBill = null;
+            for (let attempt = 0; attempt < 10; attempt++) {
+                try { newBill = await Bill.create(billData); break; }
+                catch (billErr) { if (billErr.code !== 11000 || attempt === 9) throw billErr; }
+            }
+            billToUse = newBill._id;
+        }
+
+        order.bill = billToUse;
+        order.status = 'pending';
+        order.createdBy = req.user._id;
+        await order.save();
+
+        // إعادة حساب إجماليات الفاتورة بعد الربط
+        let realtimeBill = null;
+        try {
+            realtimeBill = await Bill.findById(billToUse);
+            if (realtimeBill) {
+                await realtimeBill.calculateSubtotal();
+                await realtimeBill.save();
+            }
+        } catch {}
+
+        try {
+            if (tableDoc) { tableDoc.status = 'occupied'; await tableDoc.save(); }
+        } catch {}
+
+        // خصم المخزون (القبول = بدء التنفيذ الفعلي)
+        try {
+            const billDoc = realtimeBill || await Bill.findById(billToUse).select('billNumber');
+            await deductInventoryForOrder(order, req.user._id, billDoc?.billNumber || null);
+        } catch (deductErr) {
+            Logger.error('deductInventoryForOrder failed (accepted order saved anyway)', deductErr);
+        }
+
+        // بث لحظي + صف إشعار باسم القابل
+        const payload = order.toObject ? order.toObject() : order;
+        if (req.io) {
+            try {
+                const orgStr = String(orgId);
+                req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('order:created', payload);
+                req.io.notifyOrderUpdate('created', payload, orgId);
+                if (realtimeBill) {
+                    try { req.io.notifyBillUpdate('updated', realtimeBill, orgId, { silent: true }); } catch {}
+                }
+                req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('table:statusChanged', { tableId, status: 'occupied' });
+            } catch (emitErr) { Logger.error('Emit accept order failed', emitErr); }
+        }
+        try {
+            const userLanguage = req.user.preferences?.language || 'ar';
+            const NotificationServiceMod = await import('../services/notificationService.js');
+            const NotificationService = NotificationServiceMod.default || NotificationServiceMod;
+            await NotificationService.createOrderNotification('created', order, req.user._id, userLanguage, { userId: req.user._id });
+        } catch {}
+
+        return res.status(200).json({ success: true, message: 'تم قبول الطلب', data: payload });
+    } catch (error) {
+        return res.status(500).json({ success: false, message: 'خطأ في قبول الطلب', error: error.message });
+    }
+};
+
+// @desc    Reject a pending customer (QR) order — hard delete (nothing was linked)
+// @route   POST /api/orders/:id/reject
+// @access  Private (canReviewCustomerOrders)
+export const rejectCustomerOrder = async (req, res) => {
+    try {
+        const order = await Order.findOne({
+            _id: req.params.id,
+            ...organizationFilter(req.user),
+        });
+        if (!order) {
+            return res.status(404).json({ success: false, message: 'الطلب غير موجود' });
+        }
+        if (order.status !== 'awaiting_approval') {
+            return res.status(400).json({ success: false, message: 'هذا الطلب ليس معلقاً للمراجعة' });
+        }
+        const orgId = getOrganizationId(req.user);
+        const orderId = order._id;
+        const orderNumber = order.orderNumber;
+        try { await createTombstone('orders', orderId, orgId, req.user._id); } catch {}
+        await Order.deleteOne({ _id: orderId });
+        if (req.io) {
+            try {
+                const orgStr = String(orgId);
+                req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('order:deleted', { _id: orderId, orderNumber });
+                req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('order-update', { type: 'deleted', order: { _id: orderId, orderNumber } });
+            } catch {}
+        }
+        return res.json({ success: true, message: 'تم رفض الطلب وحذفه' });
+    } catch (error) {
+        return res.status(500).json({ success: false, message: 'خطأ في رفض الطلب', error: error.message });
+    }
+};
+
+// @desc    Public status of a customer order (for the customer screen polling)
+// @route   GET /api/orders/public/:id?organization=<id>
+// @access  Public — minimal fields only
+export const getPublicOrderStatus = async (req, res) => {
+    try {
+        const orgId = String(req.query.organization || '').trim();
+        if (!orgId || !mongoose.Types.ObjectId.isValid(orgId)) {
+            return res.status(400).json({ success: false, message: 'معرف المنشأة غير صحيح' });
+        }
+        const order = await Order.findOne({
+            _id: req.params.id,
+            organization: new mongoose.Types.ObjectId(orgId),
+        }).select('_id orderNumber status createdAt').lean();
+        if (!order) {
+            return res.status(404).json({ success: false, gone: true, message: 'الطلب غير موجود' });
+        }
+        return res.json({
+            success: true,
+            data: { _id: order._id, orderNumber: order.orderNumber, status: order.status, createdAt: order.createdAt },
+        });
+    } catch (error) {
+        return res.status(500).json({ success: false, message: 'خطأ في جلب حالة الطلب', error: error.message });
+    }
+};
+
+// Sweep expired approval requests (older than 20 min) — hard delete like rejection
+export const sweepExpiredCustomerRequests = async (io) => {
+    try {
+        const cutoff = new Date(Date.now() - 20 * 60 * 1000);
+        const expired = await Order.find({ status: 'awaiting_approval', createdAt: { $lt: cutoff } })
+            .select('_id orderNumber organization')
+            .limit(200)
+            .lean();
+        for (const o of expired) {
+            try {
+                try { await createTombstone('orders', o._id, o.organization, null); } catch {}
+                await Order.deleteOne({ _id: o._id });
+                if (io && o.organization) {
+                    const orgStr = String(o.organization);
+                    io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('order:deleted', { _id: o._id, orderNumber: o.orderNumber });
+                    io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('order-update', { type: 'deleted', order: { _id: o._id, orderNumber: o.orderNumber } });
+                }
+            } catch {}
+        }
+        if (expired.length > 0) Logger.info(`🧹 Auto-cancelled ${expired.length} expired customer order requests`);
+        return expired.length;
+    } catch (error) {
+        Logger.error('sweepExpiredCustomerRequests failed', error);
+        return 0;
+    }
+};
+
 // @desc    Update order
 // @route   PUT /api/orders/:id
 // @access  Private
 export const updateOrder = async (req, res) => {
     try {
-        const { status, notes, preparedBy, deliveredBy, items } = req.body;
+        const { status, notes, preparedBy, deliveredBy, items, discount } = req.body;
 
         // Check if the ID is a valid MongoDB ObjectId
         const mongoose = await import("mongoose");
@@ -1322,6 +1782,20 @@ export const updateOrder = async (req, res) => {
                 success: false,
                 message: "الطلب غير موجود",
             });
+        }
+
+        // الطلبات المعلقة للمراجعة لا يعدلها إلا من معه صلاحية المراجعة
+        if (order.status === 'awaiting_approval') {
+            const perms = req.user?.permissions || [];
+            const canReview = typeof req.user?.hasPermission === 'function'
+                ? req.user.hasPermission('canReviewCustomerOrders')
+                : perms.includes('canReviewCustomerOrders') || perms.includes('all');
+            if (!canReview) {
+                return res.status(403).json({
+                    success: false,
+                    message: 'تعديل الطلبات المعلقة يتطلب صلاحية مراجعة طلبات العملاء',
+                });
+            }
         }
 
         // إذا تم تحديث العناصر، تحقق من المخزون (إلا إذا كان الحالة draft)
@@ -1419,6 +1893,15 @@ export const updateOrder = async (req, res) => {
         }
 
         if (notes !== undefined) order.notes = notes;
+
+        if (discount !== undefined) {
+            const __dNew = Math.max(0, Math.round(Number(discount) || 0));
+            const __dOld = Number(order.discount) || 0;
+            if (__dNew !== __dOld && (__dNew > 0 || __dOld > 0) && !canApplyManualDiscount(req.user)) {
+                return discountForbidden(res);
+            }
+            order.discount = __dNew;
+        }
 
         // تحديث أصناف الطلب بالكامل (إضافة/تعديل/حذف)
         if (Array.isArray(items)) {
@@ -1624,6 +2107,11 @@ export const updateOrder = async (req, res) => {
                 const totalCost = await calculateOrderTotalCost(currentItems);
                 order.totalCost = totalCost;
             }
+        }
+
+        // إذا تغير الخصم فقط بدون أصناف، أعد حساب الصافي
+        if (discount !== undefined && !Array.isArray(items)) {
+            order.finalAmount = (order.subtotal || 0) - (order.fixedDiscount?.amount || 0) - (order.discount || 0);
         }
 
         const oldOrderDataForInventory = (items && Array.isArray(items) && items.length > 0) ? { _id: order._id, orderNumber: order.orderNumber, items: oldOrderItems } : null;
@@ -2569,9 +3057,20 @@ export const updateOrderStatus = async (req, res) => {
             });
         }
 
-        // تحقق قبل السماح بتغيير الحالة إلى delivered
-        if (status === "delivered") {
-            // السماح بالتوصيل طالما الطلب في حالة ready
+        // تحقق من صحة الانتقال: الحالات النهائية لا تُبعث من جديد يدوياً
+        const TERMINAL_STATUSES = ['delivered', 'cancelled'];
+        const VALID_STATUSES = ['draft', 'confirmed', 'pending', 'preparing', 'ready', 'delivered', 'cancelled'];
+        if (!VALID_STATUSES.includes(status)) {
+            return res.status(400).json({
+                success: false,
+                message: 'حالة الطلب غير صالحة',
+            });
+        }
+        if (TERMINAL_STATUSES.includes(order.status) && order.status !== status) {
+            return res.status(400).json({
+                success: false,
+                message: 'لا يمكن تغيير حالة طلب منتهي أو ملغي',
+            });
         }
 
         const updateData = { status };
@@ -2662,7 +3161,6 @@ export const updateOrderStatus = async (req, res) => {
                 const orgId = getOrganizationId(req.user);
                 const orgStr = String(orgId);
                 req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('order:updated', updatedOrder);
-                req.io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit('order:created', updatedOrder);
                 req.io.notifyOrderUpdate("status-changed", updatedOrder, getOrganizationId(req.user));
                 req.io.notifyOrderUpdate("updated", updatedOrder, getOrganizationId(req.user));
             } catch (socketError) {
@@ -2782,10 +3280,12 @@ export const updateOrderItemPrepared = async (req, res) => {
         // تحديث العدد الجاهز مع التأكد من عدم تجاوز الكمية المطلوبة
         order.items[itemIndex].preparedCount = newPreparedCount;
 
-        // تحديث isReady و wasEverReady تلقائياً
+        // تحديث isReady و wasEverReady تلقائياً — والخفض يلغي الجاهزية
         if (newPreparedCount >= order.items[itemIndex].quantity) {
             order.items[itemIndex].isReady = true;
             order.items[itemIndex].wasEverReady = true;
+        } else {
+            order.items[itemIndex].isReady = false;
         }
 
         // التحقق من حالة الطلب الكلية وتحديثها إذا لزم الأمر
@@ -2798,6 +3298,9 @@ export const updateOrderItemPrepared = async (req, res) => {
             order.status = "ready";
             order.preparedAt = new Date();
             order.preparedBy = req.user._id;
+        } else if (!allItemsReady && order.status === "ready") {
+            // خفض التحضير بعد الجاهزية — إرجاع الحالة لتعكس الواقع
+            order.status = anyItemsPrepared ? "preparing" : "pending";
         } else if (anyItemsPrepared && order.status === "pending") {
             order.status = "preparing";
             if (!order.preparedBy) {

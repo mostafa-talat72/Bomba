@@ -37,7 +37,7 @@ router
 router
     .route("/:id")
     .get(authorize("billing", "tables", "staff", "all"), getBill)
-    .put(authorize("billing", "tables", "staff", "all"), updateBill)
+    .put(authorize("billing", "tables", "staff", "all", "canApplyManualDiscount"), updateBill)
     .delete(
         authorize("canDeleteBill", "billing", "tables", "staff", "all"),
         deleteBill

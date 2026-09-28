@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Card, Tabs, Tag, Statistic, Row, Col, Empty, Spin, Button, DatePicker, InputNumber, Modal, message, Form, Input, Select, Table, ConfigProvider } from 'antd';
 import LocalizedTimePicker from '../common/LocalizedTimePicker';
 import { User, DollarSign, AlertCircle, ArrowLeft, Wallet, TrendingUp, Calendar, Plus, Minus, Edit, Trash2, Download, MessageCircle, Phone, Briefcase } from 'lucide-react';
@@ -15,7 +15,7 @@ import EmployeePDFDocument from './EmployeePDFDocument';
 import { numberOnlyInputProps } from '../../utils/inputHelpers';
 import { useTranslation } from 'react-i18next';
 import { useApp } from '../../context/AppContext';
-import { canEditEmployee } from '../../utils/permissionHelper';
+import { canEditEmployee, canAddManualDeduction } from '../../utils/permissionHelper';
 import { useLanguage } from '../../context/LanguageContext';
 import { useOrganization } from '../../context/OrganizationContext';
 import './EmployeeProfile.css';
@@ -37,6 +37,11 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
   // حراسة الصلاحيات: كل عمليات الإضافة/التعديل/الحذف داخل ملف الموظف تتطلب canEditEmployee
   const requireEditPerm = () => {
     if (!canEditEmployee(user)) { message.error(t('common.permissionDenied')); return false; }
+    return true;
+  };
+  // صلاحية الخصومات اليدوية
+  const requireDeductionPerm = () => {
+    if (!canAddManualDeduction(user)) { message.error(t('common.permissionDenied')); return false; }
     return true;
   };
   const { currentLanguage, isRTL } = useLanguage();
@@ -100,6 +105,25 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
   const [timeMode, setTimeMode] = useState<'same' | 'different' | 'groups'>('same');
   const [dayTimes, setDayTimes] = useState<any[]>([]);
   const [timeGroups, setTimeGroups] = useState<any[]>([]);
+  // نافذة اختيار الأيام: مفتوحة/مغلقة — تُغلق فوراً عند الضغط خارجها
+  const [datesPickerOpen, setDatesPickerOpen] = useState(false);
+  const datesPickerWrapRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!attendanceModalVisible) setDatesPickerOpen(false);
+  }, [attendanceModalVisible]);
+  // إغلاق مؤكد عند أي ضغطة خارج اللوحة — يعمل مهما كان مكان رسم النافذة
+  useEffect(() => {
+    if (!datesPickerOpen) return;
+    const onDown = (e: MouseEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (!t || typeof t.closest !== 'function') return;
+      if (t.closest('.attendance-days-picker-dropdown')) return;
+      if (datesPickerWrapRef.current?.contains(t)) return;
+      setDatesPickerOpen(false);
+    };
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [datesPickerOpen]);
   
   // Advance and Deduction forms
   const [advanceForm] = Form.useForm();
@@ -471,8 +495,8 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
     editForm.setFieldsValue({
       date: dayjs(record.date),
       status: record.status,
-      checkIn: record.checkIn ? dayjs(record.checkIn, 'HH:mm') : null,
-      checkOut: record.checkOut ? dayjs(record.checkOut, 'HH:mm') : null,
+      checkIn: record.checkIn ? dayjs(record.checkIn) : null,
+      checkOut: record.checkOut ? dayjs(record.checkOut) : null,
       reason: record.reason,
       notes: record.notes
     });
@@ -482,7 +506,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
   const handleUpdateAttendance = async (values: any) => {
     if (!requireEditPerm()) return;
     try {
-      await api.put(`/payroll/attendance/${editingAttendance._id}`, {
+      const res = await api.put(`/payroll/attendance/${editingAttendance._id}`, {
         status: values.status,
         checkIn: values.checkIn ? values.checkIn.format('HH:mm') : null,
         checkOut: values.checkOut ? values.checkOut.format('HH:mm') : null,
@@ -495,7 +519,8 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
       editForm.resetFields();
       fetchEmployeeData();
     } catch (error: any) {
-      message.error(error.response?.data?.error || t('payroll.employeeProfile.messages.updateAttendanceError'));
+      const msg = error.response?.data?.error || error.response?.data?.message || error.message || t('payroll.employeeProfile.messages.updateAttendanceError');
+      message.error(msg);
     }
   };
 
@@ -579,7 +604,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
   };
 
   const handleUpdateDeduction = async (values: any) => {
-    if (!requireEditPerm()) return;
+    if (!requireDeductionPerm()) return;
     try {
       await api.put(`/payroll/deductions/${editingDeduction._id}`, {
         amount: values.amount,
@@ -598,7 +623,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
   };
 
   const handleDeleteDeduction = async (id: string) => {
-    if (!requireEditPerm()) return;
+    if (!requireDeductionPerm()) return;
     Modal.confirm({
       title: t('payroll.employeeProfile.confirmDelete.title'),
       content: t('payroll.employeeProfile.confirmDelete.deduction'),
@@ -669,6 +694,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
 
   // Attendance handlers
   const handleDatesChange = (dates: any) => {
+    attendanceForm.setFieldsValue({ dates });
     if (!dates || dates.length === 0) {
       setDayTimes([]);
       return;
@@ -848,7 +874,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
 
   // Deduction handlers
   const handleSubmitDeduction = async (values: any) => {
-    if (!requireEditPerm()) return;
+    if (!requireDeductionPerm()) return;
     try {
    
       const deductionDate = values.date || dayjs();
@@ -2376,6 +2402,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
             name="dates"
             rules={[{ required: true, message: t('payroll.attendanceManagement.messages.daysRequired') }]}
           >
+            <div ref={datesPickerWrapRef}>
             <DatePicker
               multiple
               style={{ width: '100%' }}
@@ -2384,7 +2411,11 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
               placeholder={t('payroll.attendanceManagement.selectDaysPlaceholder')}
               onChange={handleDatesChange}
               size="large"
+              open={datesPickerOpen}
+              onOpenChange={setDatesPickerOpen}
+              popupClassName="attendance-days-picker-dropdown"
             />
+            </div>
           </Form.Item>
 
           <Form.Item

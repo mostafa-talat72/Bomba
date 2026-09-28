@@ -139,9 +139,10 @@ export const updateAdvanceStatus = async (req, res) => {
       }
       
       advance.approvalDate = approvalDateObj;
-    } else {
+    } else if (status === 'approved') {
       advance.approvalDate = new Date();
     }
+    // المرفوضة لا تحمل تاريخ موافقة — تركه فارغاً أدق للتدقيق
     
     advance.status = status;
     advance.approvedBy = req.user._id;

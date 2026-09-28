@@ -127,7 +127,7 @@ const ToastManager: React.FC<ToastManagerProps> = ({ children }) => {
     <ToastContext.Provider value={{ showToast }}>
       {children}
       <ToastContainer
-        position="bottom-right"
+        position="bottom-left"
         autoClose={5000}
         hideProgressBar={false}
         newestOnTop={false}

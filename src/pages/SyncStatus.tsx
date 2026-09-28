@@ -79,11 +79,11 @@ const SyncStatus = () => {
 
   return (
     <div className="p-4 md:p-6 min-h-screen bg-gray-50 dark:bg-gray-900" dir={rtl ? 'rtl' : 'ltr'}>
-      <div className="flex items-center justify-between mb-6 flex-wrap gap-2">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{t('nav.syncStatus')}</h1>
-        <div className="flex items-center gap-2">
-          <button onClick={handleTimeSync} disabled={timeBusy} className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl text-sm font-medium">
-            <Clock className="h-4 w-4" />
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 sm:mb-6 gap-2">
+        <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white">{t('nav.syncStatus')}</h1>
+        <div className="flex items-center flex-wrap gap-2 w-full sm:w-auto">
+          <button onClick={handleTimeSync} disabled={timeBusy} className="flex flex-1 sm:flex-none items-center justify-center gap-1.5 px-3 sm:px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl text-xs sm:text-sm font-bold">
+            <Clock className="h-4 w-4 flex-shrink-0" />
             {timeBusy ? '...' : 'مزامنة الوقت تلقائياً'}
           </button>
           <button
@@ -99,12 +99,12 @@ const SyncStatus = () => {
               }
             }}
             disabled={timeBusy}
-            className={`flex items-center gap-2 px-4 py-2 disabled:opacity-50 text-white rounded-xl text-sm font-medium ${data?.lan?.timeSource ? 'bg-amber-600 hover:bg-amber-700' : 'bg-gray-600 hover:bg-gray-700'}`}
+            className={`flex flex-1 sm:flex-none items-center justify-center gap-1.5 px-3 sm:px-4 py-2 disabled:opacity-50 text-white rounded-xl text-xs sm:text-sm font-bold ${data?.lan?.timeSource ? 'bg-amber-600 hover:bg-amber-700' : 'bg-gray-600 hover:bg-gray-700'}`}
           >
             📌 {data?.lan?.timeSource ? 'مرجع الوقت (إلغاء التثبيت)' : 'اجعل هذا الجهاز مرجع الوقت'}
           </button>
-          <button onClick={() => { setLoading(true); fetchOverview(); }} className="flex items-center gap-2 px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-xl text-sm font-medium">
-            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+          <button onClick={() => { setLoading(true); fetchOverview(); }} className="flex flex-1 sm:flex-none items-center justify-center gap-1.5 px-3 sm:px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-xl text-xs sm:text-sm font-bold">
+            <RefreshCw className={`h-4 w-4 flex-shrink-0 ${loading ? 'animate-spin' : ''}`} />
             {loading ? '...' : t('common.refresh') || 'تحديث'}
           </button>
         </div>

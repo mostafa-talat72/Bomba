@@ -475,10 +475,13 @@ export const getFinancialReport = async (req, res) => {
             organization: organizationId,
         });
 
-        const [previousBillRevenue, totalOrders, totalSessions] = await Promise.all([
+        const paymentsByMethodPromise = getPaymentsByMethodData(organizationId, startDate, endDate);
+
+        const [previousBillRevenue, totalOrders, totalSessions, paymentsByMethod] = await Promise.all([
             previousBillRevenuePromise,
             totalOrdersPromise,
             totalSessionsPromise,
+            paymentsByMethodPromise,
         ]);
 
         const previousTotal = previousBillRevenue[0]?.totalPaid || 0;
@@ -502,6 +505,7 @@ export const getFinancialReport = async (req, res) => {
                 revenueGrowth,
                 totalTransactions,
             },
+            paymentsByMethod,
             revenue: {
                 totalRevenue,
                 totalPaid,
@@ -523,6 +527,27 @@ export const getFinancialReport = async (req, res) => {
         res.status(500).json({
             success: false,
             message: "خطأ في جلب التقرير المالي",
+            error: error.message,
+        });
+    }
+};
+
+// @desc    Get payments grouped by method within a date range
+// @route   GET /api/reports/payments-by-method
+// @access  Private
+export const getPaymentsByMethod = async (req, res) => {
+    try {
+        const { startDate, endDate } = getDateRange(req.query);
+        const organizationId = getOrganizationId(req.user);
+        const data = await getPaymentsByMethodData(organizationId, startDate, endDate);
+        res.json({
+            success: true,
+            data: { ...data, startDate, endDate },
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: "خطأ في جلب المدفوعات حسب النوع",
             error: error.message,
         });
     }
@@ -818,12 +843,23 @@ export const getConsumptionReport = async (req, res) => {
 
                 if (!itemsBySection[sectionName]) itemsBySection[sectionName] = [];
 
+                // Menu category (فئة المنيو) for category-level grouping on the client.
+                // Falls back to null — the client then groups under the section itself.
+                let menuCategoryName = null;
+                if (menuId) {
+                    const menuItem = menuItemById.get(menuId);
+                    if (menuItem?.category && typeof menuItem.category === "object" && menuItem.category !== null) {
+                        if (menuItem.category.name) menuCategoryName = menuItem.category.name;
+                    }
+                }
+
                 const hit = rowByKey.get(`${sectionName}||${key}`);
                 const existingItem = hit ? itemsBySection[hit.section]?.[hit.index] : undefined;
                 if (existingItem && existingItem.key === key) {
                     existingItem.quantity += itemQuantity;
                     existingItem.total += itemPrice * itemQuantity;
                     existingItem.price = existingItem.total / existingItem.quantity;
+                    if (!existingItem.menuCategory && menuCategoryName) existingItem.menuCategory = menuCategoryName;
                 } else {
                     const variantText = normalizedVariant && normalizedVariant !== "default" && normalizedVariant !== "عادي"
                         ? ` (${normalizedVariant})`
@@ -835,6 +871,7 @@ export const getConsumptionReport = async (req, res) => {
                         quantity: itemQuantity,
                         total: itemPrice * itemQuantity,
                         category: sectionName,
+                        menuCategory: menuCategoryName,
                         key,
                     });
                     rowByKey.set(`${sectionName}||${key}`, { section: sectionName, index: itemsBySection[sectionName].length - 1 });
@@ -1572,6 +1609,143 @@ const getFinancialReportData = async (organization, startDate, endDate) => {
             revenueGrowth: revenueGrowth,
         },
     };
+};
+
+// طرق الدفع النقدية الحقيقية — أي قيمة أخرى (adjustment/mixed) تُجمّع تحت other
+const PAYMENT_MONEY_METHODS = ["cash", "card", "transfer", "e_wallet"];
+
+// الأدراج الخمسة — أي قيمة ناقصة/قديمة تُحسب على الخزينة
+const PAYMENT_DRAWERS = ["cashier", "hall", "takeaway", "delivery", "safe"];
+
+// إجماليات المدفوعات حسب النوع والدرج داخل فترة: الدفعات الكاملة (payments)
+// + الدفعات الجزئية (paymentHistory) — مصدران منفصلان بلا ازدواج.
+const getPaymentsByMethodData = async (organizationId, startDate, endDate) => {
+    const [agg] = await Bill.aggregate([
+        {
+            $match: {
+                organization: organizationId,
+                // أي دفعة داخل الفترة تعني حفظ الفاتورة وقتها أو بعدها — فلتر موسّع آمن
+                updatedAt: { $gte: startDate },
+            },
+        },
+        {
+            $facet: {
+                full: [
+                    { $project: { _p: "$payments" } },
+                    { $unwind: "$_p" },
+                    {
+                        $match: {
+                            "_p.timestamp": { $gte: startDate, $lte: endDate },
+                        },
+                    },
+                    {
+                        $group: {
+                            _id: {
+                                m: {
+                                    $cond: [
+                                        { $in: ["$_p.method", PAYMENT_MONEY_METHODS] },
+                                        "$_p.method",
+                                        "other",
+                                    ],
+                                },
+                                d: {
+                                    $cond: [
+                                        { $in: ["$_p.drawer", PAYMENT_DRAWERS] },
+                                        "$_p.drawer",
+                                        "safe",
+                                    ],
+                                },
+                            },
+                            total: { $sum: "$_p.amount" },
+                            count: { $sum: 1 },
+                        },
+                    },
+                ],
+                partial: [
+                    { $project: { _h: "$paymentHistory" } },
+                    { $unwind: "$_h" },
+                    {
+                        $match: {
+                            "_h.timestamp": { $gte: startDate, $lte: endDate },
+                        },
+                    },
+                    {
+                        $group: {
+                            _id: {
+                                m: {
+                                    $cond: [
+                                        { $in: ["$_h.method", PAYMENT_MONEY_METHODS] },
+                                        "$_h.method",
+                                        "other",
+                                    ],
+                                },
+                                d: {
+                                    $cond: [
+                                        { $in: ["$_h.drawer", PAYMENT_DRAWERS] },
+                                        "$_h.drawer",
+                                        "safe",
+                                    ],
+                                },
+                            },
+                            total: { $sum: "$_h.amount" },
+                            count: { $sum: 1 },
+                        },
+                    },
+                ],
+            },
+        },
+    ]);
+
+    const methods = {
+        cash: { total: 0, count: 0 },
+        card: { total: 0, count: 0 },
+        transfer: { total: 0, count: 0 },
+        e_wallet: { total: 0, count: 0 },
+        other: { total: 0, count: 0 },
+    };
+    const drawers = {
+        cashier: { total: 0, count: 0 },
+        hall: { total: 0, count: 0 },
+        takeaway: { total: 0, count: 0 },
+        delivery: { total: 0, count: 0 },
+        safe: { total: 0, count: 0 },
+    };
+    let total = 0;
+    let count = 0;
+    for (const bucket of [...((agg && agg.full) || []), ...((agg && agg.partial) || [])]) {
+        const mKey = PAYMENT_MONEY_METHODS.includes(bucket._id && bucket._id.m) ? bucket._id.m : "other";
+        const dKey = PAYMENT_DRAWERS.includes(bucket._id && bucket._id.d) ? bucket._id.d : "safe";
+        const t = Number(bucket.total) || 0;
+        const c = Number(bucket.count) || 0;
+        methods[mKey].total += t;
+        methods[mKey].count += c;
+        drawers[dKey].total += t;
+        drawers[dKey].count += c;
+        total += t;
+        count += c;
+    }
+    // رسوم التوصيل: مجموع deliveryFee لفواتير الدليفري المنشأة داخل الفترة.
+    const [df] = await Bill.aggregate([
+        {
+            $match: {
+                organization: organizationId,
+                fulfillmentType: "delivery",
+                createdAt: { $gte: startDate, $lte: endDate },
+            },
+        },
+        {
+            $group: {
+                _id: null,
+                total: { $sum: "$deliveryInfo.deliveryFee" },
+                count: { $sum: 1 },
+            },
+        },
+    ]);
+    const deliveryFees = {
+        total: Number(df?.total) || 0,
+        count: Number(df?.count) || 0,
+    };
+    return { methods, drawers, deliveryFees, total, count };
 };
 
 const getInventoryReportData = async (organization) => {

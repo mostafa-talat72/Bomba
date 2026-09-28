@@ -70,6 +70,15 @@ export function sameObjectId(left, right) {
 export function resolvePrintSettings(organization, fallback = {}) {
     const source = organization && typeof organization === 'object' ? organization : {};
     const settings = { ...(source.printSettings || {}), ...fallback };
+    // خرائط Mongoose (Map) لا تدعم القراءة بالأقواس downstream — حوّلها لكائنات عادية.
+    for (const k of ["documentCopies", "documentCopyPrinters", "sectionPrinterMap", "sectionPrinterMapTakeaway", "sectionPrinterMapDelivery", "documentPrinterMap", "sectionCopyPrinterMap", "sectionCopyPrinterMapTakeaway", "sectionCopyPrinterMapDelivery", "sectionCopyPrinterMapBill", "sectionCopyPrinterMapBillTakeaway", "sectionCopyPrinterMapBillDelivery", "sectionCopyPrinterMapConsumption"]) {
+        const v = settings[k];
+        if (v && typeof v === 'object' && Object.getPrototypeOf(v) !== Object.prototype && typeof v.get === 'function') {
+            try {
+                settings[k] = typeof v.toObject === 'function' ? v.toObject() : Object.fromEntries(v.entries ? v.entries() : v);
+            } catch { settings[k] = {}; }
+        }
+    }
     const preferredPrinter = Array.isArray(source.devicePrinters)
         ? [...source.devicePrinters]
             .filter((entry) => entry && (entry.printerPath || entry.printerName))
@@ -242,7 +251,10 @@ export function installMixedIdentifierQueryCompatibility() {
     const originalExec = queryPrototype.exec;
     queryPrototype.exec = function (...args) {
         const filter = this.getFilter?.();
-        if (filter && typeof filter === "object") {
+        const options = (typeof this.getOptions === "function" ? this.getOptions() : null) || this.options || {};
+        // MongoDB يرفض $expr وحتى $or في مرشح الـ upsert (لا يستطيع اشتقاق
+        // المستند الجديد منه) — اترك مرشح الـ upsert كما كتبه المتصل تماماً.
+        if (filter && typeof filter === "object" && !options.upsert) {
             this.setQuery(transformMixedIdentifierFilter(filter));
         }
 

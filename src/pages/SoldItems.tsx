@@ -393,7 +393,7 @@ const SoldItems: React.FC = () => {
             {/* Toggle Money Visibility Button */}
             <button
               onClick={() => setShowMoney(!showMoney)}
-              className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg font-medium transition-all text-sm sm:text-base ${
+              className={`flex flex-1 sm:flex-none items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-lg font-medium transition-all text-sm sm:text-base ${
                 showMoney
                   ? 'bg-green-500 hover:bg-green-600 text-white'
                   : 'bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300'

@@ -51,6 +51,7 @@ const [formData, setFormData] = useState({
     position: '',
     hireDate: '',
     salary: '',
+    maxDays: '',
     notes: '',
   });
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -156,12 +157,36 @@ const [formData, setFormData] = useState({
     { id: 'canEditEmployee', name: t('users.permissions.canEditEmployee'), description: t('users.permissions.canEditEmployeeDesc') },
     { id: 'canDeleteEmployee', name: t('users.permissions.canDeleteEmployee'), description: t('users.permissions.canDeleteEmployeeDesc') },
     { id: 'canApproveAdvance', name: t('users.permissions.canApproveAdvance'), description: t('users.permissions.canApproveAdvanceDesc') },
+    { id: 'canAddManualDeduction', name: t('users.permissions.canAddManualDeduction'), description: t('users.permissions.canAddManualDeductionDesc') },
+    { id: 'canApplyManualDiscount', name: t('users.permissions.canApplyManualDiscount'), description: t('users.permissions.canApplyManualDiscountDesc') },
+    { id: 'canMoveOrderTableToTable', name: t('users.permissions.canMoveOrderTableToTable'), description: t('users.permissions.canMoveOrderTableToTableDesc') },
+    { id: 'canMoveBillTableToTable', name: t('users.permissions.canMoveBillTableToTable'), description: t('users.permissions.canMoveBillTableToTableDesc') },
+    { id: 'canMoveBillTakeawayToTable', name: t('users.permissions.canMoveBillTakeawayToTable'), description: t('users.permissions.canMoveBillTakeawayToTableDesc') },
+    { id: 'canMoveBillDeliveryToTable', name: t('users.permissions.canMoveBillDeliveryToTable'), description: t('users.permissions.canMoveBillDeliveryToTableDesc') },
     // Kitchen display actions
     { id: 'canUpdateOrderStatus', name: t('users.permissions.canUpdateOrderStatus'), description: t('users.permissions.canUpdateOrderStatusDesc') },
+    // Customer QR order review
+    { id: 'canReviewCustomerOrders', name: t('users.permissions.canReviewCustomerOrders'), description: t('users.permissions.canReviewCustomerOrdersDesc') },
     // Notifications actions
     { id: 'canDeleteNotification', name: t('users.permissions.canDeleteNotification'), description: t('users.permissions.canDeleteNotificationDesc') },
     // Reports actions
     { id: 'canExportReports', name: t('users.permissions.canExportReports'), description: t('users.permissions.canExportReportsDesc') },
+    // Bills page + creation + date filters
+    { id: 'bills', name: t('users.permissions.bills'), description: t('users.permissions.billsDesc') },
+    { id: 'canCreateTakeaway', name: t('users.permissions.canCreateTakeaway'), description: t('users.permissions.canCreateTakeawayDesc') },
+    { id: 'canCreateDelivery', name: t('users.permissions.canCreateDelivery'), description: t('users.permissions.canCreateDeliveryDesc') },
+    { id: 'canEditDateFilters', name: t('users.permissions.canEditDateFilters'), description: t('users.permissions.canEditDateFiltersDesc') },
+    { id: 'canEditTakeaway', name: t('users.permissions.canEditTakeaway'), description: t('users.permissions.canEditTakeawayDesc') },
+    { id: 'canEditDelivery', name: t('users.permissions.canEditDelivery'), description: t('users.permissions.canEditDeliveryDesc') },
+    { id: 'canEditBill', name: t('users.permissions.canEditBill'), description: t('users.permissions.canEditBillDesc') },
+    { id: 'customers', name: t('users.permissions.customers'), description: t('users.permissions.customersDesc') },
+    { id: 'canAddCustomer', name: t('users.permissions.canAddCustomer'), description: t('users.permissions.canAddCustomerDesc') },
+    { id: 'canEditCustomer', name: t('users.permissions.canEditCustomer'), description: t('users.permissions.canEditCustomerDesc') },
+    { id: 'canDeleteCustomer', name: t('users.permissions.canDeleteCustomer'), description: t('users.permissions.canDeleteCustomerDesc') },
+    { id: 'canPayFullTakeaway', name: t('users.permissions.canPayFullTakeaway'), description: t('users.permissions.canPayFullTakeawayDesc') },
+    { id: 'canPayPartialTakeaway', name: t('users.permissions.canPayPartialTakeaway'), description: t('users.permissions.canPayPartialTakeawayDesc') },
+    { id: 'canPayFullDelivery', name: t('users.permissions.canPayFullDelivery'), description: t('users.permissions.canPayFullDeliveryDesc') },
+    { id: 'canPayPartialDelivery', name: t('users.permissions.canPayPartialDelivery'), description: t('users.permissions.canPayPartialDeliveryDesc') },
   ];
 
   const businessTypes = [
@@ -353,6 +378,7 @@ const [formData, setFormData] = useState({
       position: '',
       hireDate: '',
       salary: '',
+      maxDays: '',
       notes: '',
     });
   };
@@ -401,6 +427,7 @@ const [formData, setFormData] = useState({
         position?: string;
         hireDate?: string;
         salary?: number;
+        maxDateRangeDays?: number | null;
         notes?: string;
       } = {
         name: formData.name,
@@ -415,6 +442,7 @@ const [formData, setFormData] = useState({
         position: formData.position,
         hireDate: formData.hireDate,
         salary: formData.salary ? parseFloat(formData.salary) : undefined,
+        maxDateRangeDays: formData.maxDays === '' ? null : Math.max(0, Math.floor(Number(formData.maxDays) || 0)),
         notes: formData.notes,
       };
 
@@ -448,7 +476,7 @@ const [formData, setFormData] = useState({
         }
       }
 
-      resetForm();
+      // ملحوظة: لا نمسح النموذج هنا — النجاح يمسحه بنفسه، والخطأ يُبقي البيانات ليصححها المستخدم
       setSelectedUser(null);
       setSelectedUserId(null);
       await loadUsers();
@@ -481,6 +509,7 @@ const [formData, setFormData] = useState({
       position: u.position || '',
       hireDate: u.hireDate ? new Date(u.hireDate).toISOString().split('T')[0] : '',
       salary: u.salary ? u.salary.toString() : '',
+      maxDays: (u as any).maxDateRangeDays != null ? String((u as any).maxDateRangeDays) : '',
       notes: u.notes || '',
     });
     setSelectedUser(user);
@@ -648,13 +677,13 @@ const [formData, setFormData] = useState({
               <UsersIcon className="h-6 w-6 sm:h-8 sm:w-8 text-white" />
             </div>
             <div className="min-w-0">
-              <h1 className="text-xl sm:text-2xl sm:text-3xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+              <h1 className="text-xl sm:text-3xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
                 {t('users.title')}
               </h1>
               <p className="text-xs sm:text-base text-gray-600 dark:text-gray-400 mt-0.5 sm:mt-1">{t('users.subtitle')}</p>
             </div>
           </div>
-          <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto">
+          <div className="flex items-center flex-wrap gap-2 sm:gap-3 w-full sm:w-auto">
             <button
               onClick={loadUsers}
               disabled={loading}
@@ -666,7 +695,7 @@ const [formData, setFormData] = useState({
             </button>
 
             {/* Quick Actions */}
-            <div className="hidden md:flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 border-2 border-blue-200 dark:border-blue-800 rounded-xl">
+            <div className="hidden sm:flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 border-2 border-blue-200 dark:border-blue-800 rounded-xl">
               <Crown className="w-4 h-4 text-blue-600 dark:text-blue-400" />
               <span className="text-sm font-bold text-blue-900 dark:text-blue-200">
                 {t('users.advancedManagement')}

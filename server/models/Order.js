@@ -119,7 +119,7 @@ const orderSchema = new mongoose.Schema(
         items: [orderItemSchema],
         status: {
             type: String,
-            enum: ["draft", "confirmed", "pending", "preparing", "ready", "delivered", "cancelled"], // confirmed: يخصم المخزون لكن لا يظهر في المطبخ
+            enum: ["draft", "confirmed", "pending", "preparing", "ready", "delivered", "cancelled", "awaiting_approval"], // confirmed: يخصم المخزون لكن لا يظهر في المطبخ — awaiting_approval: طلب عميل معلق بانتظار المراجعة
             default: "pending",
         },
         subtotal: {
@@ -177,7 +177,8 @@ const orderSchema = new mongoose.Schema(
         createdBy: {
             type: mongoose.Schema.Types.ObjectId,
             ref: "User",
-            required: true,
+            required: false,
+            default: null,
         },
         updatedBy: {
             type: mongoose.Schema.Types.ObjectId,

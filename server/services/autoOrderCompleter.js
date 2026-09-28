@@ -64,7 +64,8 @@ export const runAutoOrderCompleteOnce = async (io) => {
 
         if (io && typeof io.notifyOrderUpdate === "function") {
             try {
-                io.notifyOrderUpdate("item-delivered", result, result.organization);
+                // إتمام تلقائي بواسطة النظام: مزامنة بلا توست وبلا صف إشعار
+                io.notifyOrderUpdate("item-delivered", result, result.organization, { silent: true });
             } catch (err) {
                 Logger.error("[AutoComplete] Socket notify failed", err);
             }

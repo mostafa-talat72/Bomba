@@ -175,10 +175,20 @@ async function getConsumptionReport(filter: { startDate: string; endDate: string
 }
 
 
+async function getPaymentsByMethod(filter: { startDate: string; endDate: string }): Promise<ApiResponse<any>> {
+  const searchParams = new URLSearchParams();
+  if (filter.startDate) searchParams.append('startDate', filter.startDate);
+  if (filter.endDate) searchParams.append('endDate', filter.endDate);
+
+  return apiClient.request(`/reports/payments-by-method?${searchParams.toString()}`);
+}
+
+
 export const reportsApi = {
   getDashboardStats,
   getSalesReport,
   getConsumptionReport,
+  getPaymentsByMethod,
   getInventoryReport,
   getFinancialReport,
   exportReportToExcel,

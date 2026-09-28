@@ -46,18 +46,19 @@ class PrinterDetectionService {
   async detectWindowsPrinters() {
     try {
       const fakeNames = ['Microsoft Print to PDF','Microsoft XPS','OneNote','Fax','PDF24','Adobe PDF','Google Cloud'];
-      const command = `powershell "Get-Printer | Where-Object { $_.Type -eq 'Local' -and $_.PrinterStatus -eq 'Normal' -and -not $_.WorkOffline } | Select-Object Name, DriverName, PortName, PrinterStatus | ConvertTo-Json"`;
-      const { stdout } = await execPromise(command);
+      const command = `powershell -NoProfile -Command "[Console]::OutputEncoding=[Text.Encoding]::UTF8; Get-Printer | Where-Object { $_.Type -eq 'Local' -and $_.PrinterStatus -eq 'Normal' -and -not $_.WorkOffline } | Select-Object Name, DriverName, PortName, PrinterStatus | ConvertTo-Json"`;
+      const { stdout } = await execPromise(command, { encoding: 'utf8', maxBuffer: 1024 * 1024 * 10 });
       if (!stdout || stdout.trim() === '') return [];
       const printersData = JSON.parse(stdout);
       const printers = Array.isArray(printersData) ? printersData : [printersData];
       return printers
         .filter(p => !fakeNames.some(fake => (p.Name||'').includes(fake)))
         .map(printer => ({
+          // المعرّف الحقيقي للطباعة على ويندوز هو الاسم — البورت للعرض فقط
           name: printer.Name,
           driver: printer.DriverName,
           port: printer.PortName,
-          path: printer.PortName,
+          path: printer.Name,
           type: 'usb',
           status: printer.PrinterStatus
         }));

@@ -131,6 +131,7 @@ const OrganizationSchema = new mongoose.Schema({
         printerDevice: { type: String, default: '' }, // معرف الجهاز للطابعة
         printerIP: { type: String, default: '' }, // عنوان IP للطابعة الشبكية
         printerPort: { type: Number, default: 9100 }, // منفذ الطابعة الشبكية
+        printerName: { type: String, default: '' }, // الطابعة الافتراضية (تُستخدم عند عدم توجيه المستند لطابعة)
         openCashDrawer: { type: Boolean, default: true }, // فتح درج الكاشير عند طباعة الفواتير
         openCashDrawerOnPayment: { type: Boolean, default: true }, // فتح درج الكاشير عند الدفع الكامل
         openCashDrawerShortcut: { type: Boolean, default: true }, // فتح درج الكاشير باختصار F12
@@ -146,6 +147,21 @@ const OrganizationSchema = new mongoose.Schema({
         promptOrderPrintSections: { type: Boolean, default: false }, // اختيار أقسام الطلب قبل الطباعة
         defaultOrderPrintSections: { type: [String], default: [] }, // الأقسام الافتراضية للطباعة
         autoPrintOrderSections: { type: Boolean, default: false }, // الطباعة المباشرة بالأقسام الافتراضية
+        // —— أتمتة لكل نوع طلب (الفارغ يتبع إعداد الطاولات العام أعلاه)
+        openCashDrawerTakeaway: { type: Boolean, default: true },
+        openCashDrawerDelivery: { type: Boolean, default: true },
+        openCashDrawerOnPaymentTakeaway: { type: Boolean, default: true },
+        openCashDrawerOnPaymentDelivery: { type: Boolean, default: true },
+        autoPrintOnPaymentTakeaway: { type: Boolean, default: true },
+        autoPrintOnPaymentDelivery: { type: Boolean, default: true },
+        printMarksPaidTakeaway: { type: Boolean, default: false },
+        printMarksPaidDelivery: { type: Boolean, default: false },
+        promptOrderPrintSectionsTakeaway: { type: Boolean, default: false },
+        promptOrderPrintSectionsDelivery: { type: Boolean, default: false },
+        defaultOrderPrintSectionsTakeaway: { type: [String], default: [] },
+        defaultOrderPrintSectionsDelivery: { type: [String], default: [] },
+        autoPrintOrderSectionsTakeaway: { type: Boolean, default: false },
+        autoPrintOrderSectionsDelivery: { type: Boolean, default: false },
         printers: [{
             id: { type: String, required: true },
             name: { type: String, required: true },
@@ -159,6 +175,16 @@ const OrganizationSchema = new mongoose.Schema({
         sectionPrinterMapDelivery: { type: Map, of: String, default: {} },
         documentPrinterMap: { type: Map, of: String, default: {} },
         documentCopies: { type: Map, of: Number, default: {} },
+        // طابعة كل نسخة: لكل مستند مصفوفة بمعرفات الطابعات (الفارغ = طابعة المستند/التوجيه)
+        documentCopyPrinters: { type: Map, of: [String], default: {} },
+        // نسخ كل قسم على حدة: لكل قسم مصفوفة بمعرفات طابعات نسخه (الفارغ = بلا نسخ إضافية)
+        sectionCopyPrinterMap: { type: Map, of: [String], default: {} },
+        sectionCopyPrinterMapTakeaway: { type: Map, of: [String], default: {} },
+        sectionCopyPrinterMapDelivery: { type: Map, of: [String], default: {} },
+        sectionCopyPrinterMapBill: { type: Map, of: [String], default: {} },
+        sectionCopyPrinterMapBillTakeaway: { type: Map, of: [String], default: {} },
+        sectionCopyPrinterMapBillDelivery: { type: Map, of: [String], default: {} },
+        sectionCopyPrinterMapConsumption: { type: Map, of: [String], default: {} },
         printLayout: { type: mongoose.Schema.Types.Mixed, default: {} },
         printBothDelivery: { type: Boolean, default: false },
         printBothTakeaway: { type: Boolean, default: false },
@@ -182,6 +208,9 @@ const OrganizationSchema = new mongoose.Schema({
             delivery: { type: Number, default: 0, min: 0, max: 100 },
         },
     },
+
+    // طلبات العملاء من QR: قبول تلقائي أم مراجعة إجبارية (الافتراضي = مراجعة)
+    publicOrderAutoAccept: { type: Boolean, default: false },
 
     // تخزين معرفات الطابعات لكل جهاز/مستخدم (منفصل عن printSettings)
     devicePrinters: [{

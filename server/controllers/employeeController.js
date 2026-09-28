@@ -119,18 +119,26 @@ export const updateEmployee = async (req, res) => {
       });
     }
     
-    // تحديث البيانات
-    Object.assign(employee, req.body);
+    // تحديث البيانات — دمج employment بدل الاستبدال حتى لا تضيع الحقول
+    // (إنهاء الخدمة يرسل {status} فقط؛ الاستبدال كان يمسح type/department/position)
+    if (req.body && typeof req.body === 'object' && req.body.employment && typeof req.body.employment === 'object') {
+      const { employment, ...rest } = req.body;
+      Object.assign(employee, rest);
+      employee.employment = { ...(employee.employment?.toObject ? employee.employment.toObject() : employee.employment), ...employment };
+      employee.markModified('employment');
+    } else {
+      Object.assign(employee, req.body);
+    }
     
     // إعادة حساب الإجازات المتبقية
     if (employee.leaves) {
       if (employee.leaves.annual) {
-        employee.leaves.annual.remaining = 
-          employee.leaves.annual.total - employee.leaves.annual.used;
+        employee.leaves.annual.remaining =
+          (Number(employee.leaves.annual.total) || 0) - (Number(employee.leaves.annual.used) || 0);
       }
       if (employee.leaves.sick) {
-        employee.leaves.sick.remaining = 
-          employee.leaves.sick.total - employee.leaves.sick.used;
+        employee.leaves.sick.remaining =
+          (Number(employee.leaves.sick.total) || 0) - (Number(employee.leaves.sick.used) || 0);
       }
     }
     

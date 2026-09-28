@@ -228,6 +228,14 @@ async function deleteDeliveryZone(id: string): Promise<ApiResponse<any>> {
 }
 
 
+async function updateDeliveryZone(id: string, data: { name: string; fee: number }): Promise<ApiResponse<any>> {
+  return apiClient.request(`/delivery-zones/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
+}
+
+
 export const settingsApi = {
   getSettings,
   updateSettings,
@@ -253,5 +261,6 @@ export const settingsApi = {
   saveBackupSettings,
   getDeliveryZones,
   createDeliveryZone,
+  updateDeliveryZone,
   deleteDeliveryZone,
 };
