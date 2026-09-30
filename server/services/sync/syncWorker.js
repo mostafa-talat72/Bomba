@@ -4,6 +4,7 @@ import dualDatabaseManager from "../../config/dualDatabaseManager.js";
 import syncQueueManager from "./syncQueueManager.js";
 import { rehydrateDocument, rehydrateFilter } from "../../utils/bsonRehydrate.js";
 import { depopulateDocForSync, depopulateSyncPayload } from "../../utils/syncSanitize.js";
+import { isViableReplacementDoc, missingRequiredFields } from "../../utils/syncReplaceGuard.js";
 
 /**
  * SyncWorker
@@ -383,8 +384,16 @@ class SyncWorker {
             // first (may yield 24-hex strings), then rehydrate casts to ObjectId.
             operation.data.forEach((doc) => depopulateDocForSync(collName, doc));
             operation.data.forEach((doc) => rehydrateDocument(collName, doc));
+            // حارس المسح: مستند ناقص لا يستبدل السليم أبداً (يُرفض بصوت عالٍ).
+            const viable = operation.data.filter((doc) => {
+                if (isViableReplacementDoc(collName, doc)) return true;
+                Logger.error(
+                    `🛑 Sync REFUSED replaceOne for ${collName}:${doc?._id} — missing required fields [${(missingRequiredFields(collName, doc) || []).join(", ")}]; wiping a healthy doc is worse than skipping`
+                );
+                return false;
+            });
             // For arrays, insert each document with upsert
-            const bulkOps = operation.data.map((doc) => ({
+            const bulkOps = viable.map((doc) => ({
                 replaceOne: {
                     filter: { _id: doc._id },
                     replacement: doc,
@@ -408,6 +417,14 @@ class SyncWorker {
             // Depopulate BEFORE rehydrate (see array branch above).
             depopulateDocForSync(collection.collectionName, operation.data);
             rehydrateDocument(collection.collectionName, operation.data);
+            // حارس المسح: مستند ناقص لا يستبدل السليم أبداً — يُسقط بصوت عالٍ
+            // (إعادة المحاولة لن تصلح حمولة فاسدة بنيوياً).
+            if (!isViableReplacementDoc(collection.collectionName, operation.data)) {
+                Logger.error(
+                    `🛑 Sync REFUSED replaceOne for ${collection.collectionName}:${operation.data?._id} — missing required fields [${(missingRequiredFields(collection.collectionName, operation.data) || []).join(", ")}]; wiping a healthy doc is worse than skipping`
+                );
+                return;
+            }
             // For single document, use replaceOne with upsert
             const result = await collection.replaceOne(
                 { _id: operation.data._id },

@@ -7,6 +7,7 @@
 
 import mongoose from 'mongoose';
 import Logger from '../middleware/logger.js';
+import { isViableReplacementDoc, missingRequiredFields } from '../../utils/syncReplaceGuard.js';
 
 class SimpleBidirectionalSync {
     constructor(localConnection, atlasConnection) {
@@ -77,6 +78,10 @@ class SimpleBidirectionalSync {
 
                 case 'update':
                     if (fullDocument) {
+                        if (!isViableReplacementDoc(ns.coll, fullDocument)) {
+                            Logger.error(`🛑 SimpleBidirectionalSync REFUSED replaceOne for ${ns.coll}:${documentKey._id} — missing required fields [${(missingRequiredFields(ns.coll, fullDocument) || []).join(", ")}]`);
+                            break;
+                        }
                         await localCollection.replaceOne(
                             { _id: documentKey._id },
                             fullDocument,
@@ -93,6 +98,10 @@ class SimpleBidirectionalSync {
 
                 case 'replace':
                     if (fullDocument) {
+                        if (!isViableReplacementDoc(ns.coll, fullDocument)) {
+                            Logger.error(`🛑 SimpleBidirectionalSync REFUSED replaceOne for ${ns.coll}:${documentKey._id} — missing required fields [${(missingRequiredFields(ns.coll, fullDocument) || []).join(", ")}]`);
+                            break;
+                        }
                         await localCollection.replaceOne(
                             { _id: documentKey._id },
                             fullDocument,

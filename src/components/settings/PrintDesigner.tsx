@@ -296,6 +296,7 @@ function sampleConsumptionHtml(
   t: any, data: PreviewData, printFont: string = 'Tajawal', customFooterText: string = ''
 ): string {
   const dir = lang === 'ar' ? 'rtl' : 'ltr';
+  const effFont = (layout as any)?.printFont || printFont || 'Tajawal';
   const cat = sampleText(lang, 'المشويات', 'Grill');
   const items = (data.items ?? defaultItems(lang)).filter((r) => r.name.trim() !== '');
   const rows = (items.length > 0 ? items : defaultItems(lang)).map((r) => ({
@@ -320,8 +321,8 @@ function sampleConsumptionHtml(
   return `<!DOCTYPE html>
 <html dir="${dir}" lang="${lang}">
 <head><meta charset="UTF-8"><title>${t('consumptionReport.print.title')}</title>
-<style>${printFont !== 'Tajawal' ? `@import url('https://fonts.googleapis.com/css2?family=${printFontImport(printFont)}&display=swap');` : ''}${layoutCss(layout, 'consumption')}
-*{font-family:'${printFont}',sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact;box-sizing:border-box;}
+<style>${effFont !== 'Tajawal' ? `@import url('https://fonts.googleapis.com/css2?family=${printFontImport(effFont)}&display=swap');` : ''}${layoutCss(layout, 'consumption')}
+*{font-family:'${effFont}',sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact;box-sizing:border-box;}
 body{margin:0;padding:0;font-size:11px;color:#000;font-weight:600;width:100%;max-width:100%;text-align:center;direction:${dir};}
 .header{text-align:center;margin-bottom:8px;font-weight:900;border-bottom:2px dashed #000;padding-bottom:6px;}
 .org-name{font-size:1.5em;font-weight:900;margin-bottom:6px;}
@@ -361,13 +362,23 @@ ${layout.showThanks !== false ? `<div class="thank-you">${customFooterText || t(
 const PrintDesigner: React.FC<PrintDesignerProps> = ({ settings, onPatch, logoUrl, orgName, saveNote }) => {
   const { t } = useTranslation();
   const [doc, setDoc] = useState<DesignerDoc>('bill');
-  const [draft, setDraft] = useState<DocPrintLayout>(() => resolveDocLayout(settings, 'bill'));
-  const [dirty, setDirty] = useState(false);
+  // مسودة مستقلة لكل مستند + علم تعديل مستقل — التنقل بين التبويبات
+  // لا يخلط التصاميم أبداً (كل ورقة مختصة بتصميمها فقط).
+  const [drafts, setDrafts] = useState<Record<DesignerDoc, DocPrintLayout>>(() => ({
+    bill: resolveDocLayout(settings, 'bill'),
+    order: resolveDocLayout(settings, 'order'),
+    consumption: resolveDocLayout(settings, 'consumption'),
+  }));
+  const [dirtyDocs, setDirtyDocs] = useState<Record<DesignerDoc, boolean>>({ bill: false, order: false, consumption: false });
+  const touchedDocs = useRef<Record<DesignerDoc, boolean>>({ bill: false, order: false, consumption: false });
+  const draft = drafts[doc];
+  const dirty = dirtyDocs[doc] === true;
   const [previewLang, setPreviewLang] = useState<'ar' | 'en'>('ar');
   const [fulfillment, setFulfillment] = useState<DesignerFulfillment>('dine_in');
   const [paperWidth, setPaperWidth] = useState<number>(80);
   const widthTouched = useRef(false);
-  const [printFont, setPrintFontState] = useState<string>(settings?.printFont || 'Tajawal');
+  // نوع الخط لكل مستند على حدة (من المسودة، والعام القديم كاحتياطي للترحيل فقط)
+  const effPrintFont = draft.printFont || (settings as any)?.printFont || 'Tajawal';
   const [footers, setFooters] = useState<Record<DesignerDoc, string>>({
     bill: settings?.customFooterBill || '',
     order: settings?.customFooterOrder || '',
@@ -398,12 +409,18 @@ const PrintDesigner: React.FC<PrintDesignerProps> = ({ settings, onPatch, logoUr
   }), [tableNo, custName, custPhone, address, customItems]);
 
   useEffect(() => {
-    // وصول الإعدادات متأخراً (تحميل غير متزامن): حدّث المسودة والقيم
-    // فقط إن لم يحرر المستخدم شيئاً — حتى لا تضيع تعديلاته ولا تُبنى
-    // المعاينة على قيم افتراضية قديمة.
-    if (dirty) return;
-    setDraft(resolveDocLayout(settings, doc));
-    setPrintFontState(settings?.printFont || 'Tajawal');
+    // وصول الإعدادات متأخراً (تحميل غير متزامن): حدّث مسودة كل مستند
+    // فقط إن لم يحررها المستخدم — حتى لا تضيع تعديلاته ولا تُبنى
+    // المعاينة على قيم افتراضية قديمة. كل ورقة مستقلة عن الأخرى.
+    setDrafts((prev) => {
+      const next = { ...prev };
+      (['bill', 'order', 'consumption'] as DesignerDoc[]).forEach((d) => {
+        if (!touchedDocs.current[d]) next[d] = resolveDocLayout(settings, d);
+      });
+      return next;
+    });
+    const anyTouched = touchedDocs.current.bill || touchedDocs.current.order || touchedDocs.current.consumption;
+    if (anyTouched) return;
     setFooters({
       bill: settings?.customFooterBill || '',
       order: settings?.customFooterOrder || '',
@@ -420,8 +437,7 @@ const PrintDesigner: React.FC<PrintDesignerProps> = ({ settings, onPatch, logoUr
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [JSON.stringify({
-    pl: (settings as any)?.printLayout?.[doc] ?? null,
-    pf: (settings as any)?.printFont ?? null,
+    pl: (settings as any)?.printLayout ?? null,
     cfb: (settings as any)?.customFooterBill ?? null,
     cfo: (settings as any)?.customFooterOrder ?? null,
     cfc: (settings as any)?.customFooterConsumption ?? null,
@@ -472,7 +488,7 @@ const PrintDesigner: React.FC<PrintDesignerProps> = ({ settings, onPatch, logoUr
           let out = '';
           if (doc === 'bill') {
             out = await buildBillPrintHTML(
-              sampleBill(previewLang, draft, effOrgName, previewLogo, printFont, footers.bill, ft as any, previewData, fulfillment, previewPhone, printQRCode) as any,
+              sampleBill(previewLang, draft, effOrgName, previewLogo, effPrintFont, footers.bill, ft as any, previewData, fulfillment, previewPhone, printQRCode) as any,
               effOrgName,
               previewLang,
               ft as any
@@ -486,10 +502,10 @@ const PrintDesigner: React.FC<PrintDesignerProps> = ({ settings, onPatch, logoUr
               s.order, s.menuSections, s.menuItemsMap,
               effOrgName, previewLang, ft as any,
               sampleText(previewLang, 'القسم الأول', 'Section A'), undefined,
-              { logoUrl: previewLogo, layout: draft, printFont, customFooter: footers.order }
+              { logoUrl: previewLogo, layout: draft, printFont: effPrintFont, customFooter: footers.order }
             );
           } else {
-            out = sampleConsumptionHtml(previewLang, draft, effOrgName, previewLogo, ft as any, previewData, printFont, footers.consumption);
+            out = sampleConsumptionHtml(previewLang, draft, effOrgName, previewLogo, ft as any, previewData, effPrintFont, footers.consumption);
           }
           if (buildId.current === id) setHtml(out || '');
         } catch (e) {
@@ -501,13 +517,17 @@ const PrintDesigner: React.FC<PrintDesignerProps> = ({ settings, onPatch, logoUr
       })();
     }, 250);
     return () => clearTimeout(timer);
-  }, [doc, draft, previewLang, fulfillment, paperWidth, effOrgName, previewLogo, previewPhone, printFont, footers, previewData]);
+  }, [doc, draft, previewLang, fulfillment, paperWidth, effOrgName, previewLogo, previewPhone, effPrintFont, footers, previewData]);
 
   const setL = (patch: Partial<DocPrintLayout>) => {
-    setDraft((d) => ({ ...d, ...patch }));
-    setDirty(true);
+    touchedDocs.current[doc] = true;
+    setDirtyDocs((prev) => ({ ...prev, [doc]: true }));
+    setDrafts((prev) => ({ ...prev, [doc]: { ...prev[doc], ...patch } }));
   };
-  const markRootDirty = () => setDirty(true);
+  const markRootDirty = () => {
+    touchedDocs.current[doc] = true;
+    setDirtyDocs((prev) => ({ ...prev, [doc]: true }));
+  };
 
   const handleTestPrint = async () => {
     if (!html) return;
@@ -528,7 +548,6 @@ const PrintDesigner: React.FC<PrintDesignerProps> = ({ settings, onPatch, logoUr
     const footerKey = doc === 'bill' ? 'customFooterBill' : doc === 'order' ? 'customFooterOrder' : 'customFooterConsumption';
     onPatch({
       printLayout: { ...((settings as any)?.printLayout || {}), [doc]: { ...draft } },
-      printFont,
       autoCut,
       charactersPerLine: charsPerLine,
       printHeader,
@@ -536,11 +555,12 @@ const PrintDesigner: React.FC<PrintDesignerProps> = ({ settings, onPatch, logoUr
       printQRCode,
       [footerKey]: footers[doc],
     });
-    setDirty(false);
+    setDirtyDocs((prev) => ({ ...prev, [doc]: false }));
   };
   const handleReset = () => {
-    setDraft({ ...DEFAULT_DOC_LAYOUT });
-    setDirty(true);
+    touchedDocs.current[doc] = true;
+    setDirtyDocs((prev) => ({ ...prev, [doc]: true }));
+    setDrafts((prev) => ({ ...prev, [doc]: { ...DEFAULT_DOC_LAYOUT } }));
   };
 
   const updateItem = (idx: number, patch: Partial<PreviewItem>) => {
@@ -690,7 +710,7 @@ const PrintDesigner: React.FC<PrintDesignerProps> = ({ settings, onPatch, logoUr
           <Group title={P('designerGroupFonts', 'الخطوط')}>
             <label className="flex items-center justify-between gap-2 py-1 text-xs text-gray-700 dark:text-gray-200">
               <span>{P('designerPrintFont', 'نوع الخط')}</span>
-              <select value={printFont} onChange={(e) => { setPrintFontState(e.target.value); markRootDirty(); }} className="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 p-1.5 text-xs">
+              <select value={effPrintFont} onChange={(e) => { setL({ printFont: e.target.value }); }} className="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 p-1.5 text-xs">
                 {FONT_OPTIONS.map((f) => <option key={f} value={f}>{f}</option>)}
               </select>
             </label>

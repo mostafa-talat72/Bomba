@@ -1442,6 +1442,29 @@
     "orderNotes": "ملاحظات الطلب (اختياري)",
     "placeOrder": "تأكيد الطلب",
     "orderSuccess": "تم إرسال الطلب بنجاح!",
+    "orderSuccessWithNumber": "تم استلام طلبك رقم {{number}} ✅",
+    "orderFailed": "فشل إرسال الطلب، حاول مجدداً",
+    "sending": "جارٍ الإرسال…",
+    "customerNamePlaceholder": "اسمك (مطلوب)",
+    "customerNameRequired": "من فضلك اكتب اسمك أولاً",
+    "itemUnavailable": "الصنف غير متاح حالياً",
+    "variantLabel": "اختر الحجم",
+    "itemNotePlaceholder": "ملاحظة لهذا الصنف (اختياري)",
+    "showInCustomerMenu": "إظهار في منيو العميل (QR)",
+    "public": {
+      "loadError": "تعذر تحميل المنيو",
+      "retryHint": "تأكد من اتصالك بنفس شبكة المطعم ثم أعد المحاولة",
+      "tableRequired": "رابط الطاولة ناقص — امسح الكود من جديد",
+      "retry": "إعادة المحاولة",
+      "tableLabel": "طاولة",
+      "invalidLink": "رابط المنيو غير صالح — امسح كود QR الخاص بالطاولة"
+    },
+    "request": {
+      "pending": "طلبك قيد المراجعة من طاقم المطعم…",
+      "accepted": "تم قبول طلبك وهو قيد التجهيز 🎉",
+      "rejected": "لم يتم قبول الطلب",
+      "orderAgain": "اطلب مجدداً"
+    },
     "required": "*",
     "fieldRequired": "هذا الحقل مطلوب",
     "units": {
@@ -4643,7 +4666,19 @@
       "endedSuccess": "تم إنهاء الجلسة على {{deviceName}} بنجاح",
       "createError": "فشل في إنشاء الجلسة",
       "updateError": "فشل في تحديث الجلسة",
-      "endError": "فشل في إنهاء الجلسة"
+      "endError": "فشل في إنهاء الجلسة",
+      "linked": "تم ربط الجلسة",
+      "unlinked": "تم فك ربط الجلسة",
+      "transferred": "تم نقل الجلسة",
+      "timesUpdated": "تم تحديث أوقات الجلسة",
+      "startTimeUpdated": "تم تحديث وقت بدء الجلسة",
+      "periodUpdated": "تم تحديث الفترة",
+      "costError": "فشل حساب تكلفة الجلسة",
+      "linkError": "فشل ربط الجلسة",
+      "unlinkError": "فشل فك ربط الجلسة",
+      "transferError": "فشل نقل الجلسة",
+      "timeUpdateError": "فشل تحديث وقت الجلسة",
+      "periodError": "فشل تحديث الفترة"
     },
     "order": {
       "created": "تم إنشاء طلب جديد: {{orderNumber}}",
@@ -4687,12 +4722,125 @@
       "updateError": "فشل في تحديث الفاتورة",
       "cancelError": "فشل في إلغاء الفاتورة",
       "paymentError": "فشل في إضافة الدفعة",
-      "partialPaymentError": "فشل في تسجيل الدفع الجزئي"
+      "partialPaymentError": "فشل في تسجيل الدفع الجزئي",
+      "deleted": "تم حذف الفاتورة"
     },
     "paymentMethods": {
       "cash": "نقداً",
       "card": "بطاقة",
-      "online": "إلكتروني"
+      "online": "إلكتروني",
+      "transfer": "تحويل",
+      "e_wallet": "محفظة إلكترونية"
+    },
+    "common": {
+      "mobile": "جوال"
+    },
+    "cost": {
+      "added": "تمت إضافة المصروف",
+      "updated": "تم تحديث المصروف",
+      "deleted": "تم حذف المصروف",
+      "addError": "فشل إضافة المصروف",
+      "updateError": "فشل تحديث المصروف",
+      "deleteError": "فشل حذف المصروف"
+    },
+    "device": {
+      "added": "تمت إضافة الجهاز",
+      "updated": "تم تحديث الجهاز",
+      "deleted": "تم حذف الجهاز",
+      "statusUpdated": "تم تحديث حالة الجهاز",
+      "addError": "فشل إضافة الجهاز",
+      "updateError": "فشل تحديث الجهاز",
+      "deleteError": "فشل حذف الجهاز",
+      "statusError": "فشل تحديث حالة الجهاز"
+    },
+    "menu": {
+      "itemAdded": "تمت إضافة الصنف",
+      "itemUpdated": "تم تحديث الصنف",
+      "itemDeleted": "تم حذف الصنف",
+      "itemsMerged": "تم دمج الأصناف",
+      "itemAddError": "فشل إضافة الصنف",
+      "itemUpdateError": "فشل تحديث الصنف",
+      "itemDeleteError": "فشل حذف الصنف",
+      "mergeError": "فشل دمج الأصناف"
+    },
+    "menuCategory": {
+      "added": "تمت إضافة الفئة",
+      "updated": "تم تحديث الفئة",
+      "deleted": "تم حذف الفئة",
+      "addError": "فشل إضافة الفئة",
+      "updateError": "فشل تحديث الفئة",
+      "deleteError": "فشل حذف الفئة"
+    },
+    "menuSection": {
+      "added": "تمت إضافة القسم",
+      "updated": "تم تحديث القسم",
+      "deleted": "تم حذف القسم",
+      "addError": "فشل إضافة القسم",
+      "updateError": "فشل تحديث القسم",
+      "deleteError": "فشل حذف القسم"
+    },
+    "table": {
+      "added": "تمت إضافة الطاولة",
+      "updated": "تم تحديث الطاولة",
+      "deleted": "تم حذف الطاولة",
+      "addError": "فشل إضافة الطاولة",
+      "updateError": "فشل تحديث الطاولة",
+      "deleteError": "فشل حذف الطاولة",
+      "statusError": "فشل تحديث حالة الطاولة"
+    },
+    "tableSection": {
+      "added": "تمت إضافة قسم الطاولات",
+      "updated": "تم تحديث قسم الطاولات",
+      "deleted": "تم حذف قسم الطاولات",
+      "addError": "فشل إضافة قسم الطاولات",
+      "updateError": "فشل تحديث قسم الطاولات",
+      "deleteError": "فشل حذف قسم الطاولات"
+    },
+    "user": {
+      "added": "تمت إضافة المستخدم",
+      "updated": "تم تحديث المستخدم",
+      "deleted": "تم حذف المستخدم",
+      "addError": "فشل إضافة المستخدم",
+      "updateError": "فشل تحديث المستخدم",
+      "deleteError": "فشل حذف المستخدم",
+      "deleteForbidden": "لا يمكن حذف هذا المستخدم",
+      "notFound": "المستخدم غير موجود",
+      "sessionExpired": "انتهت الجلسة، يرجى تسجيل الدخول مجدداً"
+    },
+    "notification": {
+      "created": "تم إنشاء الإشعار",
+      "broadcasted": "تم بث الإشعار",
+      "sentToRole": "تم الإرسال إلى الدور: {{role}}",
+      "sentToPermission": "تم الإرسال إلى الصلاحية: {{permission}}",
+      "createError": "فشل إنشاء الإشعار",
+      "sendError": "فشل إرسال الإشعار"
+    },
+    "report": {
+      "exported": "تم تصدير التقرير",
+      "sent": "تم إرسال التقرير",
+      "settingsUpdated": "تم تحديث إعدادات التقارير",
+      "exportError": "فشل تصدير التقرير",
+      "sendError": "فشل إرسال التقرير",
+      "settingsFetchError": "فشل جلب إعدادات التقارير",
+      "settingsUpdateError": "فشل تحديث إعدادات التقارير"
+    },
+    "profile": {
+      "updated": "تم تحديث الملف الشخصي",
+      "passwordChanged": "تم تغيير كلمة المرور",
+      "updateError": "فشل تحديث الملف الشخصي",
+      "passwordError": "فشل تغيير كلمة المرور"
+    },
+    "settings": {
+      "generalSaved": "تم حفظ الإعدادات العامة",
+      "notificationsSaved": "تم حفظ إعدادات الإشعارات",
+      "notificationsSavedLocal": "تم الحفظ محلياً — تعذر المزامنة مع السيرفر",
+      "printSaveError": "فشل حفظ إعدادات الطباعة",
+      "generalSaveError": "فشل حفظ الإعدادات العامة",
+      "notificationsSaveError": "فشل حفظ إعدادات الإشعارات"
+    },
+    "payroll": {
+      "permissionsUpdated": "تم تحديث صلاحيات المرتبات",
+      "permissionsError": "فشل تحديث صلاحيات المرتبات"
     }
   },
   "notificationCenter": {
@@ -4926,7 +5074,11 @@
       "from": "من",
       "to": "إلى",
       "startDate": "تاريخ البداية",
-      "endDate": "تاريخ النهاية"
+      "endDate": "تاريخ النهاية",
+      "startTime": "وقت البدء",
+      "endTime": "وقت الانتهاء",
+      "startTimePlaceholder": "وقت البدء",
+      "endTimePlaceholder": "وقت الانتهاء"
     },
     "sort": {
       "byName": "ترتيب حسب الاسم",
@@ -4946,7 +5098,12 @@
       "totalItems": "إجمالي الأصناف",
       "totalQuantity": "إجمالي الكمية",
       "totalRevenue": "إجمالي الإيرادات"
-    }
+    },
+    "orderNumber": "رقم الطلب",
+    "takeaway": "تيك أوي",
+    "delivery": "دليفري",
+    "dineIn": "صالة",
+    "customerPhone": "هاتف العميل"
   },
   "serverConnection": {
     "title": "الاتصال بالسيرفر",
@@ -5221,6 +5378,8 @@
       "failed": "فشل إنشاء الرمز",
       "copied": "تم النسخ",
       "copy": "نسخ",
+      "print": "طباعة",
+      "pdf": "PDF",
       "action": "رمز QR"
     }
   },

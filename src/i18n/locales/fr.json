@@ -1431,6 +1431,29 @@
     "orderNotes": "Notes de commande (optionnel)",
     "placeOrder": "Confirmer",
     "orderSuccess": "Commande envoyée avec succès!",
+    "orderSuccessWithNumber": "Commande n°{{number}} reçue ✅",
+    "orderFailed": "Échec de l'envoi, réessayez",
+    "sending": "Envoi…",
+    "customerNamePlaceholder": "Votre nom (requis)",
+    "customerNameRequired": "Veuillez d'abord entrer votre nom",
+    "itemUnavailable": "Article actuellement indisponible",
+    "variantLabel": "Choisir la taille",
+    "itemNotePlaceholder": "Note pour cet article (facultatif)",
+    "showInCustomerMenu": "Afficher dans le menu client (QR)",
+    "public": {
+      "loadError": "Impossible de charger le menu",
+      "retryHint": "Assurez-vous d'être sur le Wi-Fi du restaurant, puis réessayez",
+      "tableRequired": "Lien de table incomplet — rescanez le code",
+      "retry": "Réessayer",
+      "tableLabel": "Table",
+      "invalidLink": "Lien de menu invalide — rescanez le QR de la table"
+    },
+    "request": {
+      "pending": "Votre commande est en cours de vérification…",
+      "accepted": "Votre commande a été acceptée et est en préparation 🎉",
+      "rejected": "Commande refusée",
+      "orderAgain": "Commander à nouveau"
+    },
     "required": "*",
     "fieldRequired": "Ce champ est obligatoire",
     "units": {
@@ -4507,7 +4530,19 @@
       "endedSuccess": "La session sur {{deviceName}} a été terminée avec succès",
       "createError": "Échec de la création de la session",
       "updateError": "Échec de la mise à jour de la session",
-      "endError": "Échec de la fin de la session"
+      "endError": "Échec de la fin de la session",
+      "linked": "Session liée",
+      "unlinked": "Session déliée",
+      "transferred": "Session transférée",
+      "timesUpdated": "Horaires mis à jour",
+      "startTimeUpdated": "Heure de début mise à jour",
+      "periodUpdated": "Période mise à jour",
+      "costError": "Échec du calcul du coût",
+      "linkError": "Échec de la liaison",
+      "unlinkError": "Échec de la séparation",
+      "transferError": "Échec du transfert",
+      "timeUpdateError": "Échec de la mise à jour",
+      "periodError": "Échec de la mise à jour"
     },
     "order": {
       "created": "Une nouvelle commande a été créée : {{orderNumber}}",
@@ -4551,12 +4586,125 @@
       "updateError": "Échec de la mise à jour de la facture",
       "cancelError": "Échec de l'annulation de la facture",
       "paymentError": "Échec de l'ajout du lot",
-      "partialPaymentError": "Échec de l'enregistrement du paiement partiel"
+      "partialPaymentError": "Échec de l'enregistrement du paiement partiel",
+      "deleted": "Facture supprimée"
     },
     "paymentMethods": {
       "cash": "en espèces",
       "card": "carte",
-      "online": "électronique"
+      "online": "électronique",
+      "transfer": "Virement",
+      "e_wallet": "Portefeuille électronique"
+    },
+    "common": {
+      "mobile": "mobile"
+    },
+    "cost": {
+      "added": "Dépense ajoutée",
+      "updated": "Dépense mise à jour",
+      "deleted": "Dépense supprimée",
+      "addError": "Échec de l'ajout de la dépense",
+      "updateError": "Échec de la mise à jour",
+      "deleteError": "Échec de la suppression"
+    },
+    "device": {
+      "added": "Appareil ajouté",
+      "updated": "Appareil mis à jour",
+      "deleted": "Appareil supprimé",
+      "statusUpdated": "Statut mis à jour",
+      "addError": "Échec de l'ajout",
+      "updateError": "Échec de la mise à jour",
+      "deleteError": "Échec de la suppression",
+      "statusError": "Échec de la mise à jour du statut"
+    },
+    "menu": {
+      "itemAdded": "Article ajouté",
+      "itemUpdated": "Article mis à jour",
+      "itemDeleted": "Article supprimé",
+      "itemsMerged": "Articles fusionnés",
+      "itemDeleteError": "Échec de la suppression",
+      "mergeError": "Échec de la fusion",
+      "itemAddError": "Échec de l'ajout",
+      "itemUpdateError": "Échec de la mise à jour"
+    },
+    "menuCategory": {
+      "added": "Catégorie ajoutée",
+      "updated": "Catégorie mise à jour",
+      "deleted": "Catégorie supprimée",
+      "addError": "Échec de l'ajout",
+      "updateError": "Échec de la mise à jour",
+      "deleteError": "Échec de la suppression"
+    },
+    "menuSection": {
+      "added": "Section ajoutée",
+      "updated": "Section mise à jour",
+      "deleted": "Section supprimée",
+      "addError": "Échec de l'ajout",
+      "updateError": "Échec de la mise à jour",
+      "deleteError": "Échec de la suppression"
+    },
+    "table": {
+      "added": "Table ajoutée",
+      "updated": "Table mise à jour",
+      "deleted": "Table supprimée",
+      "addError": "Échec de l'ajout",
+      "updateError": "Échec de la mise à jour",
+      "deleteError": "Échec de la suppression",
+      "statusError": "Échec de la mise à jour du statut"
+    },
+    "tableSection": {
+      "added": "Zone ajoutée",
+      "updated": "Zone mise à jour",
+      "deleted": "Zone supprimée",
+      "addError": "Échec de l'ajout",
+      "updateError": "Échec de la mise à jour",
+      "deleteError": "Échec de la suppression"
+    },
+    "user": {
+      "added": "Utilisateur ajouté",
+      "updated": "Utilisateur mis à jour",
+      "deleted": "Utilisateur supprimé",
+      "addError": "Échec de l'ajout",
+      "updateError": "Échec de la mise à jour",
+      "deleteError": "Échec de la suppression",
+      "deleteForbidden": "Cet utilisateur ne peut pas être supprimé",
+      "notFound": "Utilisateur introuvable",
+      "sessionExpired": "Session expirée, veuillez vous reconnecter"
+    },
+    "notification": {
+      "created": "Notification créée",
+      "broadcasted": "Notification diffusée",
+      "sentToRole": "Envoyé au rôle : {{role}}",
+      "sentToPermission": "Envoyé à l'autorisation : {{permission}}",
+      "createError": "Échec de la création",
+      "sendError": "Échec de l'envoi"
+    },
+    "report": {
+      "exported": "Rapport exporté",
+      "sent": "Rapport envoyé",
+      "settingsUpdated": "Paramètres mis à jour",
+      "exportError": "Échec de l'exportation",
+      "sendError": "Échec de l'envoi",
+      "settingsFetchError": "Échec du chargement",
+      "settingsUpdateError": "Échec de la mise à jour"
+    },
+    "profile": {
+      "updated": "Profil mis à jour",
+      "passwordChanged": "Mot de passe modifié",
+      "updateError": "Échec de la mise à jour",
+      "passwordError": "Échec du changement de mot de passe"
+    },
+    "settings": {
+      "generalSaved": "Paramètres enregistrés",
+      "notificationsSaved": "Notifications enregistrées",
+      "notificationsSavedLocal": "Enregistré localement — synchro serveur impossible",
+      "printSaveError": "Échec de l'enregistrement",
+      "generalSaveError": "Échec de l'enregistrement",
+      "notificationsSaveError": "Échec de l'enregistrement"
+    },
+    "payroll": {
+      "permissionsUpdated": "Autorisations mises à jour",
+      "permissionsError": "Échec de la mise à jour"
     }
   },
   "notificationCenter": {
@@ -4790,7 +4938,11 @@
       "from": "De",
       "to": "À",
       "startDate": "Date de Début",
-      "endDate": "Date de Fin"
+      "endDate": "Date de Fin",
+      "startTime": "Heure de début",
+      "endTime": "Heure de fin",
+      "startTimePlaceholder": "Heure de début",
+      "endTimePlaceholder": "Heure de fin"
     },
     "sort": {
       "byName": "Trier par Nom",
@@ -4810,7 +4962,12 @@
       "totalItems": "Total des Articles",
       "totalQuantity": "Quantité Totale",
       "totalRevenue": "Revenus Totaux"
-    }
+    },
+    "orderNumber": "N° de commande",
+    "takeaway": "À emporter",
+    "delivery": "Livraison",
+    "dineIn": "Sur place",
+    "customerPhone": "Téléphone du client"
   },
   "auditLogPage": {
     "allEvents": "Tous les événements",
@@ -5009,6 +5166,8 @@
       "failed": "Échec de génération du code",
       "copied": "Copié",
       "copy": "Copier",
+      "print": "Imprimer",
+      "pdf": "PDF",
       "action": "QR code"
     }
   },

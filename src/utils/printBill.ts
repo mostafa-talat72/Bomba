@@ -151,6 +151,24 @@ export const buildBillPrintHTML = async (
   t: TFunction = ((key: string) => key) as TFunction,
   tableSectionName?: string
 ): Promise<string> => {
+  // شفاء لحظي للطباعة (مرآة شفاء القراءة في getBill): الإجمالي المخزن قد يفتقد
+  // رسوم التوصيل (سُجّل قبل إضافتها) — اعرض المجموع الصحيح دون مساس بالتخزين.
+  // يُطبَّق فقط عندما يكون الفرق بحجم الرسوم تقريباً (لا يمس فاتورة سليمة أبداً).
+  if (bill && (bill as any).fulfillmentType !== 'takeaway') {
+    const __fee = Number((bill as any).deliveryInfo?.deliveryFee) || 0;
+    const __hasActive = Array.isArray((bill as any).sessions) && (bill as any).sessions.some((s: any) => (typeof s === 'object' ? s?.status : null) === 'active');
+    if (__fee > 0 && !__hasActive) {
+      const __oOnly = Array.isArray((bill as any).orders) ? (bill as any).orders.reduce((sum: number, o: any) => sum + (Number(o?.finalAmount) || Number(o?.totalAmount) || 0), 0) : 0;
+      const __sOnly = Array.isArray((bill as any).sessions) ? (bill as any).sessions.reduce((sum: number, s: any) => sum + (Number(s?.finalCost) || Number(s?.totalCost) || 0), 0) : 0;
+      const __pct = Number((bill as any).discountPercentage) || 0;
+      const __disc = __pct > 0 ? Math.round(((__oOnly + __sOnly + __fee) * __pct) / 100) : (Number((bill as any).discount) || 0);
+      const __healed = Math.max(0, __oOnly + __sOnly + __fee + (Number((bill as any).tax) || 0) - __disc);
+      const __stored = Number((bill as any).total) || 0;
+      if (__healed - __stored >= __fee - 1) {
+        bill = { ...(bill as any), subtotal: __oOnly + __sOnly + __fee, total: __healed, discount: __pct > 0 ? __disc : (bill as any).discount, remaining: Math.max(0, __healed - (Number((bill as any).paid) || 0)) } as any;
+      }
+    }
+  }
   // Get establishment name from bill data or use fallback
   let organizationName = fallbackOrganizationName || t('billPrint.defaultEstablishment') || 'Cafe Management System';
   let organizationData: any = null;
@@ -254,7 +272,7 @@ export const buildBillPrintHTML = async (
   // تنسيق الورقة (شعار/خطوط/إظهار) — افتراضي آمن عند غياب الإعدادات
   const billLayout = resolveDocLayout((organizationData as any)?.printSettings, 'bill');
   const billLogo = (organizationData as any)?.logo as string | undefined;
-  const printFont = (organizationData as any)?.printSettings?.printFont || 'Tajawal';
+  const printFont = billLayout.printFont || (organizationData as any)?.printSettings?.printFont || 'Tajawal';
   const fontImport = printFontImport(printFont);
   const customFooter = (organizationData as any)?.printSettings?.customFooterBill as string | undefined;
   
@@ -808,8 +826,8 @@ export const buildBillPrintHTML = async (
           const showTagLb = billLayout.showFulfillmentBadgeLabel !== undefined ? billLayout.showFulfillmentBadgeLabel === true : showTag;
           if (!showNum && !showTag && !showNumLb && !showTagLb) return '';
           const fType = bill.fulfillmentType;
-          const tag = fType === 'delivery' ? '🛵 دليفري' : fType === 'takeaway' ? '🥡 تيك أوي' : '🍽️ صالة';
-          const printNum = String(bill.billNumber || '').replace(/^#/, '').replace(/^(BILL|ORD|SES|INV)-[^-]+-/, '') || bill.billNumber || '';
+          const tag = fType === 'delivery' ? 'دليفري' : fType === 'takeaway' ? 'تيك أوي' : 'صالة';
+          const printNum = String(bill.billNumber || '').replace(/^#/, '').replace(/^.*-/, '') || bill.billNumber || '';
           return `<div class="info" style="display:flex;justify-content:space-between;align-items:center;gap:6px;font-weight:900;margin:2px 0;"><span>${(showNum || showNumLb) ? `<span class="title" style="font-weight:700;">${showNumLb ? `<span class="bill-number-label">${t('billPrint.billNumber')}:</span> ` : ''}${showNum ? `<span class="bill-number-value">${printNum}</span>` : ''}</span>` : ''}</span><span>${(showTag || showTagLb) ? `<span class="fulfill-badge">${showTagLb ? `<span class="bill-type-label">${t('billPrint.fulfillmentType')}:</span> ` : ''}${showTag ? `<span class="bill-type-value">${tag}</span>` : ''}</span>` : ''}</span></div>`;
         })()}
         ${(() => {
@@ -821,7 +839,7 @@ export const buildBillPrintHTML = async (
           const stamp = bill.createdAt || new Date();
           return `<div class="info" style="display:flex;justify-content:space-between;align-items:center;gap:6px;font-weight:900;font-size:1.15em;margin:2px 0;"><span>${(sd || sdLb) ? `<span class="bill-date">${sdLb ? `<span class="bill-date-label">${t('billPrint.date')}:</span> ` : ''}${sd ? `<span class="bill-date-value">${formatDay(stamp)}</span>` : ''}</span>` : ''}</span><span>${(st || stLb) ? `<span class="bill-time">${stLb ? `<span class="bill-time-label">${t('billPrint.time')}:</span> ` : ''}${st ? `<span class="bill-time-value">${formatClock(stamp)}</span>` : ''}</span>` : ''}</span></div>`;
         })()}
-        ${(() => { let nm = ''; try { nm = (getCurrentUserCache() as any)?.name || ''; } catch {} const shU = billLayout.showUser !== false; const shULb = billLayout.showUserLabel !== undefined ? billLayout.showUserLabel === true : shU; if (!nm || (!shU && !shULb)) return ''; return `<div class="info" style="font-weight:900;font-size:1.15em;text-align:center;margin:2px 0;"><span class="bill-user">${shULb ? `<span class="bill-user-label">${t('billPrint.user')}:</span> ` : ''}${shU ? `<span class="bill-user-value">👤 ${nm}</span>` : ''}</span></div>`; })()}
+        ${(() => { let nm = ''; try { nm = (getCurrentUserCache() as any)?.name || ''; } catch {} const shU = billLayout.showUser !== false; const shULb = billLayout.showUserLabel !== undefined ? billLayout.showUserLabel === true : shU; if (!nm || (!shU && !shULb)) return ''; return `<div class="info" style="font-weight:900;font-size:1.15em;text-align:center;margin:2px 0;"><span class="bill-user">${shULb ? `<span class="bill-user-label">${t('billPrint.user')}:</span> ` : ''}${shU ? `<span class="bill-user-value">${nm}</span>` : ''}</span></div>`; })()}
         ${bill.fulfillmentType !== 'delivery' && bill.fulfillmentType !== 'takeaway' && bill.table?.number && billLayout.showTable !== false ? `<div class="info" style="font-weight: 900; font-size: 1.25em; color: #000; margin: 8px 0;"><span style="background: #000; color: #fff; padding: 2px 8px; border-radius: 3px;">${t('billPrint.table')}</span> <strong style="font-size: 1.5em;">${bill.table.number}${(bill.table as any)?.name && String((bill.table as any).name) !== String(bill.table.number) ? ` (${(bill.table as any).name})` : ''}${tableSectionName ? ` — (${tableSectionName})` : ''}</strong></div>` : (() => {
           const nm = bill.customerName || bill.deliveryInfo?.customerName || '';
           const ph = bill.customerPhone || bill.deliveryInfo?.phone || '';

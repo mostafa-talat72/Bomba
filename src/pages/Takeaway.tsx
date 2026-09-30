@@ -265,6 +265,10 @@ const Takeaway = () => {
   // دمج فواتير التيك أوي لحظياً (إنشاء/تحديث/حذف) دون إعادة الصفحات
   useEffect(() => {
     let socket: Socket | null = null;
+    let onCreated: ((b: any) => void) | undefined;
+    let onUpdated: ((b: any) => void) | undefined;
+    let onDeleted: ((b: any) => void) | undefined;
+    let onBillUpdate: ((evt: any) => void) | undefined;
     try {
       const socketUrl = API_BASE_URL.replace(/\/api\/?$/, '');
       socket = io(socketUrl, {
@@ -282,8 +286,8 @@ const Takeaway = () => {
         if (f === 'all' || searching) return true;
         return !['paid', 'cancelled'].includes(b.status);
       };
-      socket.on('bill:created', (b: any) => { try { if (matches(b)) feedRef.current?.prepend(b); } catch {} });
-      socket.on('bill:updated', (b: any) => {
+      onCreated = (b: any) => { try { if (matches(b)) feedRef.current?.prepend(b); } catch {} };
+      onUpdated = (b: any) => {
         try {
           if (!b) return;
           const id = String(b._id || b.id || '');
@@ -291,15 +295,44 @@ const Takeaway = () => {
           if (matches(b)) feedRef.current?.upsert(b);
           else feedRef.current?.remove(id);
         } catch {}
-      });
-      socket.on('bill:deleted', (b: any) => {
+      };
+      onDeleted = (b: any) => {
         try {
           const id = String(b?._id || b?.id || b || '');
           if (id) feedRef.current?.remove(id);
         } catch {}
-      });
+      };
+      onBillUpdate = (evt: any) => {
+        try {
+          if (!evt) return;
+          if (evt.type === 'created') onCreated(evt.bill);
+          else if (evt.type === 'deleted') onDeleted(evt.bill);
+          else onUpdated(evt.bill);
+        } catch {}
+      };
+      socket.on('bill:created', onCreated);
+      socket.on('bill:updated', onUpdated);
+      socket.on('bill:deleted', onDeleted);
+      socket.on('bill-update', onBillUpdate);
     } catch {}
-    return () => { try { socket?.disconnect(); } catch {} };
+    return () => {
+      try {
+        if (onCreated) socket?.off('bill:created', onCreated);
+        if (onUpdated) socket?.off('bill:updated', onUpdated);
+        if (onDeleted) socket?.off('bill:deleted', onDeleted);
+        if (onBillUpdate) socket?.off('bill-update', onBillUpdate);
+        socket?.disconnect();
+      } catch {}
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // احتياطي: تحديث الصفحة الأولى كل 30ث (انقطاع سوكت/فوات مكتوم)
+  useEffect(() => {
+    const id = setInterval(() => {
+      try { feedRef.current?.refreshFirstPage(); } catch {}
+    }, 30000);
+    return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

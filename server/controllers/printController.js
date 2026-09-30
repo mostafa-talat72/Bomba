@@ -7,19 +7,18 @@ import { resolvePrintSettingsForUser } from '../utils/organization.js';
 import { organizationFilter, resolvePrintSettings } from '../utils/organization.js';
 import Logger from "../middleware/logger.js";
 
-// عرض الرقم الكامل دائماً شاملاً التاريخ — مع الترقيم اليومي (001 كل يوم)
-// إخفاء التاريخ يجعل الرقم مكرراً وغامضاً عبر الأيام.
-// (BILL-C90835-260915-001 يظهر كاملاً في العرض/الطباعة). التخزين لا يتغير أبداً.
+// اسم مهمة الطباعة في قائمة ويندوز فقط (لا يُطبع على الورق) — يبقى كاملاً شاملاً
+// التاريخ حتى لا تتكرر الأسماء في القائمة مع الترقيم اليومي. التخزين لا يتغير أبداً.
 function formatDisplayNumber(num) {
   return num == null ? '' : String(num);
 }
 
-// الرقم الكامل مع تمييز التسلسل اليومي (BILL-C90835-260915-002 → BILL-C90835-260915-[002])
-// للإيصال النصي حيث لا توجد خطوط — الأقواس هي التمييز.
+// الرقم التسلسلي فقط في الإيصال النصي (BILL-C90835-260915-002 → 002) — حسب طلب المستخدم.
+// ملاحظة: التسلسل يومي (001 كل يوم) فقد يتكرر الرقم عبر الأيام المختلفة.
 function bracketSeq(num) {
   const s = String(num ?? '').replace(/^#/, '');
   const m = s.match(/^(.*-)(\d+)$/);
-  return m ? `${m[1]}[${m[2]}]` : s;
+  return m ? m[2] : s.replace(/^.*-/, '');
 }
 
 // آخر طابعة نجحت فعلاً — تُفضّل في الاختيار التالي لثبات الطابعة بين المهام
@@ -641,8 +640,9 @@ class PrintController {
 
     content += this.centerText(orgName, charsPerLine) + '\n';
     content += this.centerText(`Order ${bracketSeq(order.orderNumber)}`, charsPerLine) + '\n';
-    if (order.billNumber) {
-      content += this.centerText(`Invoice: ${String(order.billNumber).replace(/^(BILL|ORD|SES|INV)-[^-]+-/, '')}`, charsPerLine) + '\n';
+    const __obn = order.billNumber || (order.bill && typeof order.bill === 'object' ? order.bill.billNumber : null);
+    if (__obn) {
+      content += this.centerText(`Invoice: ${String(__obn).replace(/^.*-/, '')}`, charsPerLine) + '\n';
     }
     if (order.fulfillmentType === 'delivery') content += this.centerText('*** DELIVERY ***', charsPerLine) + '\n';
     else if (order.fulfillmentType === 'takeaway') content += this.centerText('*** TAKEAWAY ***', charsPerLine) + '\n';

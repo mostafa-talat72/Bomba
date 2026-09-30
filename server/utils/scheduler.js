@@ -1,6 +1,6 @@
 import cron from "node-cron";
 import Logger from "../middleware/logger.js";
-import { createDatabaseBackup } from "./backup.js";
+import { createDatabaseBackup, checkBackupHealth, runAutoRestoreIfEmpty } from "./backup.js";
 import {
     sendDailyReport,
     sendLowStockAlert,
@@ -1248,6 +1248,34 @@ export const initializeScheduler = () => {
         }
     });
     Logger.info("✅ Database backup scheduled: every hour");
+
+    // Stale backup check every 6 hours
+    cron.schedule("0 */6 * * *", async () => {
+        try {
+            const health = await checkBackupHealth();
+            if (health.stale) {
+                Logger.error(`🚨 BACKUP ALERT: ${health.reason} — last backup: ${health.lastBackup || 'none'}, age: ${health.lastBackupAge || '?'}h`);
+            } else {
+                Logger.info(`✅ Backup health OK: last=${health.lastBackup}, age=${health.lastBackupAge}h, verified=${health.verified}`);
+            }
+        } catch (error) {
+            Logger.error("Backup health check failed", { error: error.message });
+        }
+    });
+    Logger.info("✅ Backup health check scheduled: every 6 hours");
+
+    // Auto-restore on startup if DB is empty (after sync has had time to complete)
+    setTimeout(async () => {
+        try {
+            const result = await runAutoRestoreIfEmpty();
+            if (result.restored) {
+                Logger.info(`✅ Auto-restore completed: ${result.documents} documents from ${result.fileName}`);
+            }
+        } catch (error) {
+            Logger.error("Auto-restore check failed", { error: error.message });
+        }
+    }, 60000);
+    Logger.info("✅ Auto-restore on startup: enabled (60s delay)");
 
     // Clean expired notifications daily at 3 AM
     cron.schedule("0 3 * * *", async () => {

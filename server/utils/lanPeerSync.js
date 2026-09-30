@@ -17,6 +17,7 @@
 import mongoose from "mongoose";
 import lanMeshDiscovery from "./lanDiscovery.js";
 import Logger from "../middleware/logger.js";
+import { isViableReplacementDoc, missingRequiredFields } from "./syncReplaceGuard.js";
 
 export const LAN_PUSH_TIMEOUT_MS = 2000;
 const CATCH_UP_PAGE_SIZE = 500;
@@ -308,6 +309,20 @@ export async function applyReceivedDoc(collectionName, doc, operation) {
             if (incomingTime < existingTime) return { applied: "skipped-stale" };
         }
     } catch {}
+
+    // حارس المسح: مستند ناقص لمستند غير موجود = إنشاء ناقص — ارفض بصوت عالٍ
+    // بدل زرع نسخة ممسوحة. (الموجود يُحدَّث دمجًا بأمان كالسابق.)
+    try {
+        const exists = await collection.findOne({ _id: toApply._id }, { projection: { _id: 1 } });
+        if (!exists && !isViableReplacementDoc(collectionName, toApply)) {
+            Logger.error(
+                `🛑 LanMesh REFUSED upsert-create for ${collectionName}:${toApply._id} — missing required fields [${(missingRequiredFields(collectionName, toApply) || []).join(", ")}]`
+            );
+            return { applied: "skipped-sparse", doc: { _id: toApply._id } };
+        }
+    } catch (guardErr) {
+        Logger.warn(`[LanMesh] viability check failed (proceeding): ${guardErr.message}`);
+    }
 
     const { _id, ...rest } = toApply;
     await collection.updateOne({ _id }, { $set: { _id, ...rest } }, { upsert: true });

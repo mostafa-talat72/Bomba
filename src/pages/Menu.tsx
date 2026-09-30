@@ -463,6 +463,26 @@ const Menu: React.FC = () => {
 		}
 	};
 
+	// إظهار/إخفاء في منيو العميل (QR) — قسم/فئة/صنف
+	const toggleCustomerVisibility = async (kind: 'section' | 'category' | 'item', id: string, current: boolean | undefined) => {
+		if (!canEditMenuItem(user)) { showNotification(t('common.permissionDenied'), 'error'); return; }
+		try {
+			const next = !(current !== false);
+			if (kind === 'section') {
+				await updateMenuSection(id, { showInCustomerMenu: next } as any);
+				await loadMenuSections();
+			} else if (kind === 'category') {
+				await updateMenuCategory(id, { showInCustomerMenu: next } as any);
+				await loadMenuCategories();
+			} else {
+				await updateMenuItem(id, { showInCustomerMenu: next } as any);
+				await loadMenuItems();
+			}
+		} catch {
+			showNotification(t('menu.notifications.saveError'), 'error');
+		}
+	};
+
 	// Merge Handlers
 	const getItemCategoryId = (item: MenuItem) => {
 		const cat: any = item?.category;
@@ -1010,6 +1030,15 @@ const Menu: React.FC = () => {
 											<Edit className="h-4 w-4" />
 										</button>
 										<button
+											onClick={() => toggleCustomerVisibility('section', section.id, (section as any).showInCustomerMenu)}
+											className="p-2 rounded-lg hover:bg-white/10 text-white/80 hover:text-white transition-colors"
+											title={t('menu.showInCustomerMenu')}
+										>
+											{(section as any).showInCustomerMenu !== false
+												? <Eye className="h-4 w-4" />
+												: <EyeOff className="h-4 w-4 text-white/40" />}
+										</button>
+										<button
 											onClick={() => setShowDeleteModal({ show: true, id: section.id, type: 'section' })}
 											className="p-2 rounded-lg hover:bg-red-500/30 text-white/80 hover:text-white transition-colors"
 											title={t('common.delete')}
@@ -1064,6 +1093,15 @@ const Menu: React.FC = () => {
 																title={t('common.edit')}
 															>
 																<Edit className="h-3.5 w-3.5" />
+															</button>
+															<button
+																onClick={() => toggleCustomerVisibility('category', category.id, (category as any).showInCustomerMenu)}
+																className="p-1.5 rounded-lg hover:bg-teal-100 dark:hover:bg-teal-900/30 text-teal-600 dark:text-teal-400 transition-colors"
+																title={t('menu.showInCustomerMenu')}
+															>
+																{(category as any).showInCustomerMenu !== false
+																	? <Eye className="h-3.5 w-3.5" />
+																	: <EyeOff className="h-3.5 w-3.5 opacity-50" />}
 															</button>
 															<button
 																onClick={() => setShowDeleteModal({ show: true, id: category.id, type: 'category' })}
@@ -1159,6 +1197,15 @@ const Menu: React.FC = () => {
 																			title={t('common.edit')}
 																		>
 																			<Edit className="h-3.5 w-3.5" />
+																		</button>
+																		<button
+																			onClick={() => toggleCustomerVisibility('item', item.id, (item as any).showInCustomerMenu)}
+																			className="p-1.5 rounded-lg hover:bg-teal-100 dark:hover:bg-teal-900/30 text-teal-600 dark:text-teal-400 transition-colors"
+																			title={t('menu.showInCustomerMenu')}
+																		>
+																			{(item as any).showInCustomerMenu !== false
+																				? <Eye className="h-3.5 w-3.5" />
+																				: <EyeOff className="h-3.5 w-3.5 opacity-50" />}
 																		</button>
 																		<button
 																			onClick={() => handleDuplicateItem(item)}

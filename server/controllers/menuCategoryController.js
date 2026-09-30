@@ -151,7 +151,7 @@ export const createMenuCategory = async (req, res) => {
 export const updateMenuCategory = async (req, res) => {
     try {
         const { id } = req.params;
-        const { name, description, section, sortOrder, isActive } = req.body;
+        const { name, description, section, sortOrder, isActive, showInCustomerMenu } = req.body;
 
         const updateData = {
             updatedBy: req.user.id,
@@ -162,6 +162,7 @@ export const updateMenuCategory = async (req, res) => {
         if (section !== undefined) updateData.section = section;
         if (sortOrder !== undefined) updateData.sortOrder = sortOrder;
         if (isActive !== undefined) updateData.isActive = isActive;
+        if (showInCustomerMenu !== undefined) updateData.showInCustomerMenu = !!showInCustomerMenu;
 
         const category = await MenuCategory.findOneAndUpdate(
             { _id: id, ...organizationFilter(req.user) },
@@ -187,6 +188,7 @@ export const updateMenuCategory = async (req, res) => {
             section: category.section,
             sortOrder: category.sortOrder,
             isActive: category.isActive,
+            showInCustomerMenu: category.showInCustomerMenu !== false,
             updatedAt: category.updatedAt,
         };
 

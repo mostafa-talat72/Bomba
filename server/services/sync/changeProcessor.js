@@ -4,6 +4,7 @@ import syncConfig from '../../config/syncConfig.js';
 import DeviceValidator from '../validation/deviceValidator.js';
 import BillValidator from '../validation/billValidator.js';
 import { rehydrateDocument } from '../../utils/bsonRehydrate.js';
+import { isViableReplacementDoc, missingRequiredFields } from '../../utils/syncReplaceGuard.js';
 
 /**
  * Change Processor
@@ -1287,6 +1288,12 @@ class ChangeProcessor {
             // (documentKey._id comes from the live change stream as native
             // BSON, so the filter needs no conversion.)
             rehydrateDocument(collectionName, sanitizedDocument);
+
+            // حارس المسح: مستند ناقص لا يستبدل السليم أبداً
+            if (!isViableReplacementDoc(collectionName, sanitizedDocument)) {
+                Logger.error(`🛑 ChangeProcessor REFUSED replaceOne for ${collectionName}:${documentId} — missing required fields [${(missingRequiredFields(collectionName, sanitizedDocument) || []).join(", ")}]`);
+                return { success: false, error: `Refused unsafe replaceOne for ${collectionName} (missing required fields)` };
+            }
 
             // Bypass sync middleware when applying
             await this.bypassMiddleware(async () => {

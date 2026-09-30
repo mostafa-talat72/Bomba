@@ -139,25 +139,37 @@ export const getCustomersDirectory = async (req, res) => {
             };
         });
 
-        // ملخص عام (كل العملاء — تجميع واحد بلا تجميع هواتف).
-        const [customerCount, billAgg] = await Promise.all([
+        // ملخص عام: نفس نطاق الصفوف — فواتير العملاء المسجلين فقط (كل السجل لا الصفحة).
+        // (كان يحسب كل فاتورة بها أي هاتف — صالة/تيك أوي غير مسجلين — فلا يطابق مجموع الصفوف)
+        const [customerCount, allDocs] = await Promise.all([
             DeliveryCustomer.countDocuments(orgFilter),
-            Bill.aggregate([
+            DeliveryCustomer.find(orgFilter).select("phoneDigits phone").lean(),
+        ]);
+        const allVariantSet = new Set();
+        for (const d of allDocs) {
+            for (const v of fullVariantsOf(canonicalPhone(d.phoneDigits || d.phone))) allVariantSet.add(v);
+        }
+        const allVariants = Array.from(allVariantSet);
+        let sumOrders = 0, sumRevenue = 0;
+        if (allVariants.length > 0) {
+            const sumAgg = await Bill.aggregate([
                 {
                     $match: {
                         ...orgFilter,
                         status: { $ne: "cancelled" },
                         $or: [
-                            { customerPhone: { $exists: true, $ne: "" } },
-                            { "deliveryInfo.phone": { $exists: true, $ne: "" } },
+                            { customerPhone: { $in: allVariants } },
+                            { "deliveryInfo.phone": { $in: allVariants } },
                         ],
                     },
                 },
                 { $group: { _id: null, orders: { $sum: 1 }, revenue: { $sum: "$total" } } },
-            ]),
-        ]);
-        const orders = Number(billAgg?.[0]?.orders) || 0;
-        const revenue = Math.round((Number(billAgg?.[0]?.revenue) || 0) * 100) / 100;
+            ]);
+            sumOrders = Number(sumAgg?.[0]?.orders) || 0;
+            sumRevenue = Math.round((Number(sumAgg?.[0]?.revenue) || 0) * 100) / 100;
+        }
+        const orders = sumOrders;
+        const revenue = sumRevenue;
 
         res.json({
             success: true,

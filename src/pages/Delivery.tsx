@@ -395,6 +395,15 @@ const Delivery = () => {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // احتياطي: تحديث الصفحة الأولى كل 30ث (انقطاع سوكت/فوات مكتوم)
+  useEffect(() => {
+    const id = setInterval(() => {
+      try { feedRef.current?.refreshFirstPage(); } catch {}
+    }, 30000);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [loyal, setLoyal] = useState<any | null>(null);
   const [billToEdit, setBillToEdit] = useState<any | null>(null);
   // خيار الطباعة المزدوجة (تحضير + فاتورة) الخاص بالدليفري من إعدادات الطباعة

@@ -1,4 +1,5 @@
 import Logger from '../../middleware/logger.js';
+import { isViableReplacementDoc, missingRequiredFields } from '../../utils/syncReplaceGuard.js';
 
 /**
  * Bidirectional Initial Sync Service
@@ -203,6 +204,10 @@ class BidirectionalInitialSync {
                 
                 for (const doc of docsToUpdate) {
                     try {
+                        if (!isViableReplacementDoc(collectionName, doc)) {
+                            Logger.error(`🛑 BidirectionalInitialSync REFUSED replaceOne for ${collectionName}:${doc._id} — missing required fields [${(missingRequiredFields(collectionName, doc) || []).join(", ")}]`);
+                            continue;
+                        }
                         const result = await localCollection.replaceOne({ _id: doc._id }, doc);
                         if (result.modifiedCount > 0) {
                             updated++;
@@ -311,6 +316,10 @@ class BidirectionalInitialSync {
                 
                 for (const doc of docsToUpdate) {
                     try {
+                        if (!isViableReplacementDoc(collectionName, doc)) {
+                            Logger.error(`🛑 BidirectionalInitialSync REFUSED replaceOne for ${collectionName}:${doc._id} — missing required fields [${(missingRequiredFields(collectionName, doc) || []).join(", ")}]`);
+                            continue;
+                        }
                         const result = await atlasCollection.replaceOne({ _id: doc._id }, doc);
                         if (result.modifiedCount > 0) {
                             updated++;

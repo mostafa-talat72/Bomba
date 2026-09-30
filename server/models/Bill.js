@@ -1012,6 +1012,12 @@ billSchema.pre("save", function (next) {
         }
     }
 
+    // قاعدة صارمة خارج أي تخطٍ (كل الأنواع والمسارات): مدفوع == الإجمالي
+    // والمتبقي صفر → مدفوعة بالكامل، حتى لو أرسل المتصل حالة خاطئة
+    if (this.status !== "cancelled" && (this.remaining || 0) <= 0.01 && (this.paid || 0) > 0) {
+        this.status = "paid";
+    }
+
     next();
 });
 
@@ -1972,9 +1978,13 @@ async function updateTableStatus(tableId) {
 }
 
 // Post-save hook to update table status when bill is created or updated
+// + auto-deliver linked orders when the bill becomes fully paid
 billSchema.post("save", async function (doc) {
     if (doc.table) {
         await updateTableStatus(doc.table);
+    }
+    if (doc && doc.status === "paid") {
+        await markBillOrdersDelivered(doc).catch(() => {});
     }
 });
 
@@ -1983,7 +1993,59 @@ billSchema.post("findOneAndUpdate", async function (doc) {
     if (doc && doc.table) {
         await updateTableStatus(doc.table);
     }
+    if (doc && doc.status === "paid") {
+        await markBillOrdersDelivered(doc).catch(() => {});
+    }
 });
+
+// الفاتورة اندفعت بالكامل → كل الطلبات المرتبطة بها تُعتبر مُسلَّمة تلقائيًا
+// (يمنع تعليق طلبات مدفوعة في شاشة المطبخ للأبد)
+export async function markBillOrdersDelivered(billDoc) {
+    try {
+        const billId = billDoc._id;
+        if (!billId) return;
+        const Order = mongoose.model("Order");
+        const linkedIds = Array.isArray(billDoc.orders)
+            ? billDoc.orders.map((o) => (o && o._id ? o._id : o)).filter(Boolean)
+            : [];
+        const orConds = [{ bill: billId }];
+        if (linkedIds.length > 0) orConds.push({ _id: { $in: linkedIds } });
+        // تحميل كامل (بلا select) — المستند الجزئي يفشل في validation عند الحفظ
+        const pending = await Order.find({
+            $or: orConds,
+            status: { $ne: "delivered" },
+        });
+        if (pending.length === 0) return;
+        Logger.info(`[AutoDeliver] Bill ${billDoc.billNumber || billDoc._id} paid → delivering ${pending.length} linked order(s)`);
+        const now = new Date();
+        for (const o of pending) {
+            let changed = false;
+            for (const it of o.items || []) {
+                const q = Number(it.quantity) || 0;
+                if ((Number(it.preparedCount) || 0) < q) { it.preparedCount = q; changed = true; }
+                if ((Number(it.deliveredCount) || 0) < q) { it.deliveredCount = q; changed = true; }
+            }
+            o.status = "delivered";
+            o.deliveredTime = o.deliveredTime || now;
+            changed = true;
+            if (changed) await o.save();
+        }
+        // بث لحظي لشاشة المطبخ (عبر المرجع العام — لا يوجد req هنا)
+        try {
+            const io = global.__socketIO || null;
+            const orgStr = String(billDoc.organization || billDoc.organization?._id || "");
+            if (io && orgStr) {
+                for (const o of pending) {
+                    const payload = o.toObject ? o.toObject() : o;
+                    io.to(`org:${orgStr}`).to(`org-${orgStr}`).emit("order:updated", payload);
+                }
+            }
+        } catch {}
+    } catch (e) {
+        // لا تكسر حفظ الفاتورة أبدًا — لكن سجّل للتشخيص
+        try { Logger.error("[AutoDeliver] failed:", e?.message || e); } catch {}
+    }
+}
 
 // Post-findOneAndDelete hook to update table status when bill is deleted (Requirement 2.5)
 billSchema.post("findOneAndDelete", async function (doc) {

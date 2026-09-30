@@ -8,6 +8,7 @@ import { getDeviceId } from "../../utils/deviceIdentity.js";
 import lanDiscovery from "./lanDiscovery.js";
 import { EJSON } from "bson";
 import { rehydrateDocument, rehydrateFilter } from "../../utils/bsonRehydrate.js";
+import { isViableReplacementDoc, missingRequiredFields } from "../../utils/syncReplaceGuard.js";
 
 let originTrackerInstance = null;
 let conflictResolverInstance = null;
@@ -558,6 +559,11 @@ class LanSyncService {
             rehydrateDocument(collectionName, toInsert);
             // Ensure _id is ObjectId if it looks like one
             try { if (typeof toInsert._id === 'string' && /^[a-f0-9]{24}$/i.test(toInsert._id)) toInsert._id = new mongoose.Types.ObjectId(toInsert._id); } catch {}
+            // حارس المسح: مستند ناقص لا يُزرع كنسخة ممسوحة
+            if (!isViableReplacementDoc(collectionName, toInsert)) {
+                Logger.error(`🛑 LanSync REFUSED insert for ${collectionName}:${toInsert._id} — missing required fields [${(missingRequiredFields(collectionName, toInsert) || []).join(", ")}]`);
+                return;
+            }
             await collection.replaceOne({ _id: toInsert._id }, toInsert, { upsert: true });
             Logger.info(`[LanSync] Applied insert ${collectionName}:${data._id}`);
 
@@ -692,6 +698,12 @@ class LanSyncService {
                     const existingTime = new Date(existing.updatedAt || 0).getTime();
                     const incomingTime = new Date(doc.updatedAt || 0).getTime();
                     if (incomingTime <= existingTime) continue;
+                }
+
+                // حارس المسح: مستند ناقص لا يستبدل السليم أبداً
+                if (!isViableReplacementDoc(collection, doc)) {
+                    Logger.error(`🛑 LanSync initial REFUSED replaceOne for ${collection}:${doc._id} — missing required fields [${(missingRequiredFields(collection, doc) || []).join(", ")}]`);
+                    continue;
                 }
 
                 await coll.replaceOne({ _id: doc._id }, doc, { upsert: true });

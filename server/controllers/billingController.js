@@ -4370,6 +4370,16 @@ export const updateBillAggregatedItems = async (req, res) => {
                 allOldItems.push({ menuItem: it.menuItem, name: it.name, price: it.price, quantity: it.quantity, variant: it.variant || null });
             });
         });
+        // خريطة الأسعار المخزنة (صنف+حجم) — تمنع إعادة التسعير الوهمي عند تعديل
+        // بلا تغيير ممن لا يملك صلاحية تعديل السعر (يُستخدم سعر الفاتورة لا المنيو)
+        const storedPriceByKey = new Map();
+        for (const it of allOldItems) {
+            const mid = String((it.menuItem && (it.menuItem._id || it.menuItem)) || '');
+            const key = `${mid}::${it.variant || ''}`;
+            if (mid && !storedPriceByKey.has(key) && Number.isFinite(Number(it.price))) {
+                storedPriceByKey.set(key, Number(it.price));
+            }
+        }
 
         // Process final items: resolve menuItem details, validate, build processedItems
         const processedItems = [];
@@ -4417,9 +4427,15 @@ export const updateBillAggregatedItems = async (req, res) => {
                     return res.status(400).json({ success: false, message: `الصنف غير متاح: ${mi.name}` });
                 }
                 let price = mi.price || 0;
-                if (raw.price !== undefined && raw.price !== null && raw.price !== '' && req.user.hasPermission('canEditItemPrice')) {
+                const canSetPrice = typeof req.user?.hasPermission === 'function' && req.user.hasPermission('canEditItemPrice');
+                if (raw.price !== undefined && raw.price !== null && raw.price !== '' && canSetPrice) {
                     const cp = Number(raw.price);
                     if (!isNaN(cp) && cp >= 0) price = cp;
+                } else {
+                    // بلا صلاحية سعر: صنف موجود أصلاً → سعره المخزن (لا سعر المنيو الحالي)؛
+                    // صنف جديد فعلاً → سعر المنيو
+                    const stored = storedPriceByKey.get(`${raw.menuItem}::${raw.variant || ''}`);
+                    if (stored !== undefined) price = stored;
                 }
                 const itemTotal = price * qty;
                 subtotal += itemTotal;

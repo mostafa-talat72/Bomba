@@ -70,6 +70,10 @@ const menuItemSchema = new mongoose.Schema(
             type: Boolean,
             default: true,
         },
+        showInCustomerMenu: {
+            type: Boolean,
+            default: true,
+        },
         isPopular: {
             type: Boolean,
             default: false,

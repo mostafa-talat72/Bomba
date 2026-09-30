@@ -132,7 +132,7 @@ export const createMenuSection = async (req, res) => {
 export const updateMenuSection = async (req, res) => {
     try {
         const { id } = req.params;
-        const { name, description, sortOrder, isActive } = req.body;
+        const { name, description, sortOrder, isActive, showInCustomerMenu } = req.body;
 
         const updateData = {
             updatedBy: req.user.id,
@@ -142,6 +142,7 @@ export const updateMenuSection = async (req, res) => {
         if (description !== undefined) updateData.description = description?.trim() || null;
         if (sortOrder !== undefined) updateData.sortOrder = sortOrder;
         if (isActive !== undefined) updateData.isActive = isActive;
+        if (showInCustomerMenu !== undefined) updateData.showInCustomerMenu = !!showInCustomerMenu;
 
         const section = await MenuSection.findOneAndUpdate(
             { _id: id, ...organizationFilter(req.user) },
@@ -166,6 +167,7 @@ export const updateMenuSection = async (req, res) => {
             description: section.description,
             sortOrder: section.sortOrder,
             isActive: section.isActive,
+            showInCustomerMenu: section.showInCustomerMenu !== false,
             updatedAt: section.updatedAt,
         };
 

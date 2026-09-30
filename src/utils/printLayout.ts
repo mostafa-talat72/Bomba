@@ -85,6 +85,7 @@ export interface DocPrintLayout {
   showCustNameLabel?: boolean; fontCustNameLabel?: number;
   showPhoneLabel?: boolean; fontPhoneLabel?: number;
   showAddressLabel?: boolean; fontAddressLabel?: number;
+  printFont?: string; // عائلة الخط — لكل مستند على حدة (Tajawal/Cairo/Amiri/IBM Plex Sans Arabic)
   showSectionTotal?: boolean; // التحضير: إظهار إجمالي القسم
   // ملاحظة: توقيع المطور (.dev-sign) مقفل دائماً — لا يخضع لأي إظهار/تنسيق
   showZeroRows?: boolean; // الفاتورة: إظهار الخصم/الضريبة/التوصيل حتى لو صفر

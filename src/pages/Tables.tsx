@@ -158,6 +158,9 @@ const Tables: React.FC = () => {
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash');
   // درج الدفع — افتراضي الصالة لسياق الطاولات، قابل للتغيير وقت الدفع
   const [paymentDrawer, setPaymentDrawer] = useState<CashDrawer>('hall');
+  // ذاكرة لكل فاتورة: تغيير الطريقة/الدرج على فاتورة لا يمس باقي الفواتير
+  const [billPayPrefs, setBillPayPrefs] = useState<Record<string, { method: PaymentMethod; drawer: CashDrawer }>>({});
+  const billPayKey = (b: Bill | null | undefined) => b ? String((b as any)._id || (b as any).id || '') : '';
   const [orderDiscount, setOrderDiscount] = useState<number>(0);
   const [orderDiscountType, setOrderDiscountType] = useState<'amount' | 'percent'>('percent');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -2159,7 +2162,12 @@ const loadInitialData = async () => {
       groups.set(printerId, [...(groups.get(printerId) || []), sectionId]);
     });
     const mountedOrder = (() => {
-      if ((order as any).billNumber) return order;
+      const direct = (order as any).billNumber || ((order as any)?.bill && typeof (order as any).bill === 'object' ? (order as any).bill.billNumber : null);
+      if (direct) return (order as any).billNumber ? order : { ...order, billNumber: direct };
+      const bref = (order as any).bill;
+      const bid = bref && typeof bref === 'object' ? (bref._id || bref.id) : bref;
+      const byId = bid ? (bills || []).find((b: any) => String(b._id || b.id) === String(bid)) : null;
+      if ((byId as any)?.billNumber) return { ...order, billNumber: (byId as any).billNumber };
       const parent = (bills || []).find((b: any) => {
         const ords = (b.orders || []) as any[];
         return ords.some((o: any) => String(o._id || o.id) === String((order as any)._id || (order as any).id));
@@ -2266,12 +2274,27 @@ const loadInitialData = async () => {
 
 
   // ── Billing functions ─────────────────────────────────────────────────────
+  // تغيير الطريقة/الدرج يُحفظ للفاتورة المحددة فقط ولا يمس باقي الفواتير
+  const handlePaymentMethodChange = (m: PaymentMethod) => {
+    setPaymentMethod(m);
+    const k = billPayKey(selectedBill);
+    if (k) setBillPayPrefs(prev => ({ ...prev, [k]: { method: m, drawer: prev[k]?.drawer ?? paymentDrawer } }));
+  };
+  const handlePaymentDrawerChange = (d: CashDrawer) => {
+    setPaymentDrawer(d);
+    const k = billPayKey(selectedBill);
+    if (k) setBillPayPrefs(prev => ({ ...prev, [k]: { method: prev[k]?.method ?? paymentMethod, drawer: d } }));
+  };
   const handlePaymentClick = async (bill: Bill) => {
     void repairBill(bill, String((bill.table as any)?._id || (bill.table as any)?.id || bill.table || ''));
     // افتح المودال فوراً بالبيانات الموجودة
     setSelectedBill(bill);
     setPaymentAmount(bill.remaining?.toString() || '0');
-    setPaymentMethod('cash'); setPaymentReference('');
+    // استرجع اختيار هذه الفاتورة فقط (أو الافتراضي أول مرة) — ولا تمس باقي الفواتير
+    const saved = billPayPrefs[billPayKey(bill)];
+    setPaymentMethod(saved?.method || 'cash');
+    setPaymentDrawer(saved?.drawer || defaultDrawerForFulfillment((bill as any).fulfillmentType || 'dine_in'));
+    setPaymentReference('');
     setShowPaymentModal(true);
     // ⚡ سخّن الإيصال في الخلفية: عند الضغط على دفع/طباعة يكون جاهزاً.
     try { preloadBillReceipt(bill, user?.organizationName, i18n.language, t, getTableSectionName(bill.table)); } catch {}
@@ -2626,6 +2649,9 @@ const loadInitialData = async () => {
 
   const handlePartialPayment = async (bill: Bill) => {
     if (!canPartialPayment(user)) { showNotification(t('common.permissionDenied'), 'error'); return; }
+    const saved = billPayPrefs[billPayKey(bill)];
+    setPaymentMethod(saved?.method || 'cash');
+    setPaymentDrawer(saved?.drawer || defaultDrawerForFulfillment((bill as any).fulfillmentType || 'dine_in'));
     setSelectedBill(bill); setShowPartialPaymentModal(true);
   };
 
@@ -3281,12 +3307,12 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
               return (
                 <button key={sectionKey}
                   onClick={() => { scrollToTop(); setActiveSectionFilter(sectionKey); }}
-                  className={"flex-shrink-0 w-20 sm:w-24 h-20 sm:h-24 flex flex-col items-center justify-center gap-1 rounded-xl border-2 text-xs sm:text-sm font-bold transition-all " + (isActive
+                  className={"flex-shrink-0 w-20 sm:w-24 h-20 sm:h-24 flex flex-col items-center justify-center gap-1 rounded-xl border-2 text-xs sm:text-sm font-bold transition-all overflow-hidden " + (isActive
                     ? 'bg-blue-600 border-blue-700 text-white shadow-md scale-[1.02]'
                     : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:border-blue-400 hover:shadow-sm')}>
-                  <span className="text-xl sm:text-2xl leading-none">🪑</span>
-                  <span className="truncate max-w-full px-1 text-[11px] sm:text-xs leading-tight">{sec.name}</span>
-                  <span className={"text-[10px] px-1.5 py-0.5 rounded-full font-bold " + (isActive ? 'bg-white/25 text-white' : occ > 0 ? 'bg-red-100 dark:bg-gray-700 text-red-600 dark:text-red-300' : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400')}>
+                  <span className="text-xl sm:text-2xl leading-none flex-shrink-0">🪑</span>
+                  <span className="truncate max-w-full px-1 text-[11px] sm:text-xs leading-tight flex-shrink-0">{sec.name}</span>
+                  <span className={"text-[10px] px-1.5 py-0.5 rounded-full font-bold flex-shrink-0 whitespace-nowrap " + (isActive ? 'bg-white/25 text-white' : occ > 0 ? 'bg-red-100 dark:bg-gray-700 text-red-600 dark:text-red-300' : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400')}>
                     {occ > 0 ? t('tables.sectionBusy', { count: occ }) : t('tables.sectionTables', { count: cnt })}
                   </span>
                 </button>
@@ -4381,8 +4407,8 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
         selectedBill={liveSelectedBill || selectedBill}
         user={user}
         paymentAmount={paymentAmount} setPaymentAmount={setPaymentAmount}
-        paymentMethod={paymentMethod} setPaymentMethod={setPaymentMethod}
-        paymentDrawer={paymentDrawer} setPaymentDrawer={setPaymentDrawer}
+        paymentMethod={paymentMethod} setPaymentMethod={handlePaymentMethodChange}
+        paymentDrawer={paymentDrawer} setPaymentDrawer={handlePaymentDrawerChange}
         paymentReference={paymentReference} setPaymentReference={setPaymentReference}
         isProcessingPayment={isProcessingPayment}
         handlePaymentSubmit={handlePaymentSubmit}

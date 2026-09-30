@@ -11,6 +11,10 @@ import {
     saveBackupDir,
     ensureBackupDir,
     getLastBackupStatus,
+    getSecondaryBackupDir,
+    saveSecondaryBackupDir,
+    checkBackupHealth,
+    getBackupCatalog,
 } from "../utils/backup.js";
 
 // @desc    Create database backup
@@ -252,6 +256,69 @@ export const downloadBackup = async (req, res) => {
         res.status(500).json({
             success: false,
             message: "فشل تنزيل النسخة الاحتياطية",
+            error: error.message,
+        });
+    }
+};
+
+// @desc    Get backup health status
+// @route   GET /api/backup/health
+// @access  Private (Admin only)
+export const getBackupHealth = async (req, res) => {
+    try {
+        const health = await checkBackupHealth();
+        res.json({ success: true, data: health });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: "فشل في فحص صحة النسخ الاحتياطية",
+            error: error.message,
+        });
+    }
+};
+
+// @desc    Get backup catalog
+// @route   GET /api/backup/catalog
+// @access  Private (Admin only)
+export const getBackupCatalogEndpoint = async (req, res) => {
+    try {
+        const result = await getBackupCatalog();
+        res.json(result);
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: "فشل في جلب كتالوج النسخ الاحتياطية",
+            error: error.message,
+        });
+    }
+};
+
+// @desc    Save secondary backup directory
+// @route   PUT /api/backup/settings/secondary
+// @access  Private (Admin only)
+export const saveSecondaryBackupSettings = async (req, res) => {
+    try {
+        const dir = await saveSecondaryBackupDir(req.body?.dir);
+        res.json({ success: true, message: "تم حفظ مسار النسخ الاحتياطي الثانوي", data: { dir } });
+    } catch (error) {
+        res.status(400).json({
+            success: false,
+            message: error.message || "فشل في حفظ مسار النسخ الاحتياطي الثانوي",
+        });
+    }
+};
+
+// @desc    Get secondary backup directory
+// @route   GET /api/backup/settings/secondary
+// @access  Private (Admin only)
+export const getSecondaryBackupSettings = async (req, res) => {
+    try {
+        const dir = await getSecondaryBackupDir();
+        res.json({ success: true, data: { dir } });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: "فشل في جلب مسار النسخ الاحتياطي الثانوي",
             error: error.message,
         });
     }

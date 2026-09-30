@@ -61,6 +61,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
                         currentPath.startsWith('/verify-email') ||
                         currentPath.startsWith('/reset-password') ||
                         currentPath.startsWith('/email-actions') ||
+                        currentPath === '/menu-view' ||
                         isBillView;
     return !isPublicPage;
   };
@@ -206,6 +207,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       const isResetPassword = path.startsWith('/reset-password');
       const isRegister = path === '/register';
       const isEmailActions = path.startsWith('/email-actions');
+      const isMenuView = path === '/menu-view';
       const isLogin = path === '/login';
 
       if (isLogin) {
@@ -217,7 +219,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         return;
       }
 
-      if (!token && !isVerifyEmail && !isBillView && !isResetPassword && !isRegister && !isEmailActions) {
+      if (!token && !isVerifyEmail && !isBillView && !isResetPassword && !isRegister && !isEmailActions && !isMenuView) {
         setUser(null);
         setIsAuthenticated(false);
         const actions = getDataActionsRef();
@@ -258,7 +260,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             const currentPath = window.location.pathname;
             const isBillView = /^\/bill\/[a-fA-F0-9]{24}$/.test(currentPath);
 
-            if (!isBillView) {
+            if (!isBillView && currentPath !== '/menu-view') {
               if (response.message?.includes('صلاحية الجلسة') || response.message?.includes('session')) {
                 showNotification(t('auth.sessionExpired'), 'error');
               }
@@ -279,7 +281,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         const currentPath = window.location.pathname;
         const isBillView = /^\/bill\/[a-fA-F0-9]{24}$/.test(currentPath);
 
-        if (!isBillView) {
+        if (!isBillView && currentPath !== '/menu-view') {
           showNotification(t('auth.sessionExpired'), 'error');
           navigate('/login', { replace: true });
         }

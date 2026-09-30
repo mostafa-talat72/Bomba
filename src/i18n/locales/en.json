@@ -1452,6 +1452,29 @@
     "orderNotes": "Order notes (optional)",
     "placeOrder": "Place Order",
     "orderSuccess": "Order placed successfully!",
+    "orderSuccessWithNumber": "Order #{{number}} received ✅",
+    "orderFailed": "Failed to send order, try again",
+    "sending": "Sending…",
+    "customerNamePlaceholder": "Your name (required)",
+    "customerNameRequired": "Please enter your name first",
+    "itemUnavailable": "Item currently unavailable",
+    "variantLabel": "Choose size",
+    "itemNotePlaceholder": "Note for this item (optional)",
+    "showInCustomerMenu": "Show in customer menu (QR)",
+    "public": {
+      "loadError": "Could not load menu",
+      "retryHint": "Make sure you're on the restaurant's Wi-Fi, then retry",
+      "tableRequired": "Table link incomplete — scan the code again",
+      "retry": "Retry",
+      "tableLabel": "Table",
+      "invalidLink": "Invalid menu link — scan the table's QR code"
+    },
+    "request": {
+      "pending": "Your order is being reviewed by staff…",
+      "accepted": "Your order was accepted and is being prepared 🎉",
+      "rejected": "Order was not accepted",
+      "orderAgain": "Order again"
+    },
     "required": "*",
     "fieldRequired": "This field is required",
     "units": {
@@ -4652,7 +4675,19 @@
       "endedSuccess": "The session on {{deviceName}} was terminated successfully",
       "createError": "Failed to create session",
       "updateError": "Failed to update session",
-      "endError": "Failed to terminate session"
+      "endError": "Failed to terminate session",
+      "linked": "Session linked",
+      "unlinked": "Session unlinked",
+      "transferred": "Session transferred",
+      "timesUpdated": "Session times updated",
+      "startTimeUpdated": "Session start time updated",
+      "periodUpdated": "Period updated",
+      "costError": "Failed to calculate session cost",
+      "linkError": "Failed to link session",
+      "unlinkError": "Failed to unlink session",
+      "transferError": "Failed to transfer session",
+      "timeUpdateError": "Failed to update session time",
+      "periodError": "Failed to update period"
     },
     "order": {
       "created": "A new order has been created: {{orderNumber}}",
@@ -4696,12 +4731,125 @@
       "updateError": "Failed to update invoice",
       "cancelError": "Failed to cancel invoice",
       "paymentError": "Failed to add batch",
-      "partialPaymentError": "Failed to register partial payment"
+      "partialPaymentError": "Failed to register partial payment",
+      "deleted": "Bill deleted"
     },
     "paymentMethods": {
       "cash": "in cash",
       "card": "card",
-      "online": "electronic"
+      "online": "electronic",
+      "transfer": "Transfer",
+      "e_wallet": "E-wallet"
+    },
+    "common": {
+      "mobile": "mobile"
+    },
+    "cost": {
+      "added": "Cost added",
+      "updated": "Cost updated",
+      "deleted": "Cost deleted",
+      "addError": "Failed to add cost",
+      "updateError": "Failed to update cost",
+      "deleteError": "Failed to delete cost"
+    },
+    "device": {
+      "added": "Device added",
+      "updated": "Device updated",
+      "deleted": "Device deleted",
+      "statusUpdated": "Device status updated",
+      "addError": "Failed to add device",
+      "updateError": "Failed to update device",
+      "deleteError": "Failed to delete device",
+      "statusError": "Failed to update device status"
+    },
+    "menu": {
+      "itemAdded": "Menu item added",
+      "itemUpdated": "Menu item updated",
+      "itemDeleted": "Menu item deleted",
+      "itemsMerged": "Menu items merged",
+      "itemAddError": "Failed to add menu item",
+      "itemUpdateError": "Failed to update menu item",
+      "itemDeleteError": "Failed to delete menu item",
+      "mergeError": "Failed to merge menu items"
+    },
+    "menuCategory": {
+      "added": "Category added",
+      "updated": "Category updated",
+      "deleted": "Category deleted",
+      "addError": "Failed to add category",
+      "updateError": "Failed to update category",
+      "deleteError": "Failed to delete category"
+    },
+    "menuSection": {
+      "added": "Menu section added",
+      "updated": "Menu section updated",
+      "deleted": "Menu section deleted",
+      "addError": "Failed to add menu section",
+      "updateError": "Failed to update menu section",
+      "deleteError": "Failed to delete menu section"
+    },
+    "table": {
+      "added": "Table added",
+      "updated": "Table updated",
+      "deleted": "Table deleted",
+      "addError": "Failed to add table",
+      "updateError": "Failed to update table",
+      "deleteError": "Failed to delete table",
+      "statusError": "Failed to update table status"
+    },
+    "tableSection": {
+      "added": "Table section added",
+      "updated": "Table section updated",
+      "deleted": "Table section deleted",
+      "addError": "Failed to add table section",
+      "updateError": "Failed to update table section",
+      "deleteError": "Failed to delete table section"
+    },
+    "user": {
+      "added": "User added",
+      "updated": "User updated",
+      "deleted": "User deleted",
+      "addError": "Failed to add user",
+      "updateError": "Failed to update user",
+      "deleteError": "Failed to delete user",
+      "deleteForbidden": "This user cannot be deleted",
+      "notFound": "User not found",
+      "sessionExpired": "Session expired, please log in again"
+    },
+    "notification": {
+      "created": "Notification created",
+      "broadcasted": "Notification broadcasted",
+      "sentToRole": "Sent to role: {{role}}",
+      "sentToPermission": "Sent to permission: {{permission}}",
+      "createError": "Failed to create notification",
+      "sendError": "Failed to send notification"
+    },
+    "report": {
+      "exported": "Report exported",
+      "sent": "Report sent",
+      "settingsUpdated": "Report settings updated",
+      "exportError": "Failed to export report",
+      "sendError": "Failed to send report",
+      "settingsFetchError": "Failed to load report settings",
+      "settingsUpdateError": "Failed to update report settings"
+    },
+    "profile": {
+      "updated": "Profile updated",
+      "passwordChanged": "Password changed",
+      "updateError": "Failed to update profile",
+      "passwordError": "Failed to change password"
+    },
+    "settings": {
+      "generalSaved": "General settings saved",
+      "notificationsSaved": "Notification settings saved",
+      "notificationsSavedLocal": "Saved locally — server sync failed",
+      "printSaveError": "Failed to save print settings",
+      "generalSaveError": "Failed to save general settings",
+      "notificationsSaveError": "Failed to save notification settings"
+    },
+    "payroll": {
+      "permissionsUpdated": "Payroll permissions updated",
+      "permissionsError": "Failed to update payroll permissions"
     }
   },
   "notificationCenter": {
@@ -4935,7 +5083,11 @@
       "from": "From",
       "to": "To",
       "startDate": "Start Date",
-      "endDate": "End Date"
+      "endDate": "End Date",
+      "startTime": "Start time",
+      "endTime": "End time",
+      "startTimePlaceholder": "Start time",
+      "endTimePlaceholder": "End time"
     },
     "sort": {
       "byName": "Sort by Name",
@@ -4955,7 +5107,12 @@
       "totalItems": "Total Items",
       "totalQuantity": "Total Quantity",
       "totalRevenue": "Total Revenue"
-    }
+    },
+    "orderNumber": "Order number",
+    "takeaway": "Takeaway",
+    "delivery": "Delivery",
+    "dineIn": "Dine-in",
+    "customerPhone": "Customer phone"
   },
   "serverConnection": {
     "title": "Server connection",
@@ -5230,6 +5387,8 @@
       "failed": "Failed to generate code",
       "copied": "Copied",
       "copy": "Copy",
+      "print": "Print",
+      "pdf": "PDF",
       "action": "QR code"
     }
   },

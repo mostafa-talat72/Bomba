@@ -247,7 +247,7 @@ const printAllSectionsInOnePage = (
   const now = new Date();
   const locale = language === 'ar' ? 'ar-EG' : language === 'fr' ? 'fr-FR' : 'en-US';
   const organizationTimezone = localStorage.getItem('organizationTimezone') || 'Africa/Cairo';
-  const billNum = String(extra?.billNumber || (order as any)?.billNumber || '');
+  const billNum = String(extra?.billNumber || (order as any)?.billNumber || ((order as any)?.bill && typeof (order as any).bill === 'object' ? (order as any).bill.billNumber : null) || '');
 
   const isUpdatedOrder = order.updatedAt && 
     new Date(order.updatedAt).getTime() > new Date(order.createdAt).getTime();
@@ -258,7 +258,7 @@ const printAllSectionsInOnePage = (
   const showPrice = layout.showPriceCol === true;
   const showTotal = layout.showTotalCol === true;
   const logoUrl = extra?.logoUrl;
-  const printFont = extra?.printFont || 'Tajawal';
+  const printFont = extra?.layout?.printFont || extra?.printFont || 'Tajawal';
   const showLogo = layout.logoShow !== false && layout.logoPosition !== 'hide' && !!logoUrl;
   const logoW = Math.min(200, Math.max(40, Number(layout.logoWidth) || 110));
   const logoImg = showLogo ? `<img src="${logoUrl}" style="width:${logoW}px;max-width:${logoW}px;height:auto;" />` : '';
@@ -307,8 +307,8 @@ const printAllSectionsInOnePage = (
               const showRel = layout.showRelatedBill !== false;
               const showNumLb = layout.showOrderNumberLabel !== undefined ? layout.showOrderNumberLabel === true : showNum;
               const showRelLb = layout.showRelatedBillLabel !== undefined ? layout.showRelatedBillLabel === true : showRel;
-              const printNum = String(order.orderNumber || '').replace(/^#/, '').replace(/^(BILL|ORD|SES|INV)-[^-]+-/, '') || order.orderNumber || '';
-              const bn = billNum ? String(billNum).replace(/^#/, '').replace(/^(BILL|ORD|SES|INV)-[^-]+-/, '') : '';
+              const printNum = String(order.orderNumber || '').replace(/^#/, '').replace(/^.*-/, '') || order.orderNumber || '';
+              const bn = billNum ? String(billNum).replace(/^#/, '').replace(/^.*-/, '') : '';
               if (!showNum && !(showRel && bn) && !showNumLb && !(showRelLb && bn)) return '';
               return `<div class="info" style="display:flex;justify-content:space-between;align-items:center;gap:6px;font-weight:900;margin:2px 0;"><span>${(showNum || showNumLb) ? `<span class="order-number" style="font-weight:700;">${showNumLb ? `<span class="order-number-label">${t('orderPrint.orderNumber')}:</span> ` : ''}${showNum ? `<span class="order-number-value">${printNum}</span>` : ''}</span>` : ''}</span><span>${(showRel && bn) || (showRelLb && bn) ? `<span class="related-bill">${showRelLb ? `<span class="related-bill-label">${t('orderPrint.relatedBill')}:</span> ` : ''}${showRel && bn ? `<span class="related-bill-value">${bn}</span>` : ''}</span>` : ''}</span></div>`;
             })()}
@@ -329,8 +329,8 @@ const printAllSectionsInOnePage = (
               const showU = layout.showUser !== false && !!nm;
               const showULb = layout.showUserLabel !== undefined ? layout.showUserLabel === true : showU;
               if (!showTag && !showU && !showTagLb && !showULb) return '';
-              const tag = order.fulfillmentType === 'delivery' ? '🛵 دليفري' : order.fulfillmentType === 'takeaway' ? '🥡 تيك أوي' : '🍽️ صالة';
-              return `<div class="info" style="display:flex;justify-content:space-between;align-items:center;gap:6px;font-weight:900;font-size:1.15em;margin:2px 0;"><span>${(showTag || showTagLb) ? `<span class="fulfill-badge">${showTagLb ? `<span class="order-type-label">${t('orderPrint.fulfillmentType')}:</span> ` : ''}${showTag ? `<span class="order-type-value">${tag}</span>` : ''}</span>` : ''}</span><span>${(showU || showULb) ? `<span class="order-user">${showULb ? `<span class="order-user-label">${t('orderPrint.user')}:</span> ` : ''}${showU ? `<span class="order-user-value">👤 ${nm}</span>` : ''}</span>` : ''}</span></div>`;
+              const tag = order.fulfillmentType === 'delivery' ? 'دليفري' : order.fulfillmentType === 'takeaway' ? 'تيك أوي' : 'صالة';
+              return `<div class="info" style="display:flex;justify-content:space-between;align-items:center;gap:6px;font-weight:900;font-size:1.15em;margin:2px 0;"><span>${(showTag || showTagLb) ? `<span class="fulfill-badge">${showTagLb ? `<span class="order-type-label">${t('orderPrint.fulfillmentType')}:</span> ` : ''}${showTag ? `<span class="order-type-value">${tag}</span>` : ''}</span>` : ''}</span><span>${(showU || showULb) ? `<span class="order-user">${showULb ? `<span class="order-user-label">${t('orderPrint.user')}:</span> ` : ''}${showU ? `<span class="order-user-value">${nm}</span>` : ''}</span>` : ''}</span></div>`;
             })()}
             ${order.fulfillmentType !== 'delivery' && order.fulfillmentType !== 'takeaway' && order.table?.number && layout.showTable !== false ? `
               <div class="info" style="font-size: 1.15em; font-weight: 900; margin: 2px 0; text-align: center;">
@@ -419,7 +419,7 @@ const printAllSectionsInOnePage = (
         <div class="thank-you">${extra.customFooter}</div>` : ''}
 
         <!-- توقيع المطور — ثابت دائماً وغير قابل للإخفاء -->
-        <div class="dev-sign" style="margin-top:3px;padding-top:3px;font-size:1.15em;line-height:1.1;text-align:center;font-weight:bold;border-top:1px dashed #000;">
+        <div class="dev-sign" style="margin-top:3px;padding-top:3px;font-size:1.15em;line-height:1.1;text-align:center;font-weight:bold;border-top:2px dashed #000;">
           <strong>${t('orderPrint.footer')}</strong>
         </div>
       </div>
@@ -435,48 +435,42 @@ const printAllSectionsInOnePage = (
 
 <style>${layoutCss(layout, 'order')}
 @import url('https://fonts.googleapis.com/css2?family=${printFontImport(printFont)}&display=swap');
-html {
-  width: 100%;
-  max-width: 100%;
-  overflow-x: hidden;
+html { width: 100%; max-width: 100%; overflow-x: hidden; }
+* {
+  font-family: '${printFont}', sans-serif;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
   box-sizing: border-box;
 }
 
-@page {
-  size: auto;
-  margin: 0;
-}
-
-/* ===== BODY ===== */
+/* ===== BODY (bill-like) ===== */
 body {
-  direction: ${dir};
-  font-family: '${printFont}', sans-serif;
+  margin: 0;
+  padding: 0;
+  font-size: 11px;
+  color: #000;
+  font-weight: 600;
   width: 100%;
   max-width: 100%;
-  margin: 0 auto;
-  padding: 0;
-  background: white;
-  color: #000;
-  font-size: 15px;
-  line-height: 1;
+  text-align: center;
+  direction: ${dir};
   box-sizing: border-box;
   word-wrap: break-word;
   overflow-x: hidden;
   overflow-wrap: anywhere;
   word-break: break-word;
 }
-
-/* ===== HEADER ===== */
-.header {
-  text-align: center;
-  margin: 1px auto;
-  padding: 1px 0;
+strong {
+  font-weight: 800;
 }
 
-.header h1 {
-  font-size: 18px;
-  margin: 0;
-  padding: 6px 0 4px;
+/* ===== HEADER (bill-like, بلا خط سفلي) ===== */
+.header {
+  text-align: center;
+  margin-bottom: 8px;
+  margin-top: 0;
+  font-weight: 700;
+  padding-bottom: 6px;
 }
 
 /* ===== SECTIONS ===== */
@@ -487,13 +481,13 @@ body {
 }
 
 .section-name {
-  background-color: #f0f0f0;
-  padding: 2px;
-  margin: 2px 0 2px;
-  font-size: 16px;
-  font-weight: bold;
+  font-size: 1.5em;
+  font-weight: 800;
+  margin: 1px 0 1px 0;
   text-align: center;
-  border-radius: 2px;
+  background: #e0e0e0;
+  padding: 2px;
+  border-radius: 1px;
 }
 
 /* ===== UPDATE BANNER ===== */
@@ -504,54 +498,59 @@ body {
 
 .update-banner small {
   font-size: 12px;
-  margin-top: 1px;عح
+  margin-top: 1px;
 }
 
-/* ===== ORDER INFO ===== */
+/* ===== ORDER INFO (bill-like) ===== */
 .order-info {
   margin-bottom: 2px;
-  padding-bottom: 2px;
-  font-size: 16px;
+  font-weight: 600;
+  font-size: 0.9em;
   text-align: center;
-  font-weight: bold;
 }
 
-.order-info p {
-  margin: 2px 0;
-}
-
-/* ===== TABLE ===== */
+/* ===== TABLE (bill-like) ===== */
 .items {
   width: 100%;
   border-collapse: collapse;
-  margin: 2px 0;
+  margin: 1px 0;
+  font-size: 1.05em;
+  border: 1px solid #000;
   table-layout: fixed;
   text-align: center;
   direction: ${dir};
-  border: 1.5px solid #000;
+}
+
+.items thead {
+  background: #e0e0e0;
+  font-weight: 800;
 }
 
 .items th,
 .items td {
   padding: 1px 0;
-  font-size: 1.2em;
-  font-weight: 900;
-  border: 1px solid #000;
   text-align: center;
+  border: 1px solid #000;
+  font-weight: 900;
   vertical-align: middle;
-  direction: ${dir};
-  unicode-bidi: plaintext;
+  word-wrap: break-word;
   overflow-wrap: anywhere;
   word-break: break-word;
 }
 
-/* ===== TABLE CELLS ===== */
+.items th {
+  font-size: 1.1em;
+}
+
+/* ===== TABLE CELLS (bill-like) ===== */
 .item-name {
   width: 70%;
   text-align: center;
   padding: 1px 0;
   font-weight: 900;
-  font-size: 1.05em;
+  font-size: 1.2em;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .item-qty {
@@ -559,7 +558,7 @@ body {
   text-align: center;
   padding: 1px 0;
   font-weight: 900;
-  font-size: 1.3em;
+  font-size: 1.25em;
 }
 
 /* ===== ITEM NOTES ===== */
@@ -573,47 +572,85 @@ body {
   font-style: italic;
 }
 
-/* ===== TOTAL (Section Total) ===== */
+/* ===== TOTAL (Section Total, bill-like) ===== */
 .total {
-  margin: 2px auto 0;
-  padding: 2px 0;
-  font-size: 1.2em;
-  font-weight: 900;
   text-align: center;
-  background-color: #f9f9f9;
-  border-radius: 4px;
+  padding: 2px 2px;
+  margin-bottom: 2px;
+  font-size: 1.2em;
+  font-weight: 800;
 }
 
-/* ===== NOTES ===== */
+/* ===== NOTES (bill-like) ===== */
 .notes {
   margin-top: 2px;
-  font-size: 9px;
+  font-size: 0.9em;
+  font-weight: 700;
   padding: 0 2px;
   text-align: center;
 }
 
-/* ===== FOOTER ===== */
+/* ===== FOOTER (bill-like) ===== */
 .footer {
-  margin-top: 3px;
-  padding-top: 3px;
-  font-size: 1.15em;
-  line-height: 1.1;
+  margin-top: 2px;
   text-align: center;
-  font-weight: bold;
-  border-top: 1px dashed #000;
+  font-size: 1.2em;
+  color: #000;
+  border-top: 2px dashed #000;
+  padding-top: 2px;
+  padding-bottom: 2px;
+  font-weight: 900;
 }
 
 .footer strong {
-  font-size: 1em;
   font-weight: 900;
   white-space: nowrap;
 }
 
-/* ===== PRINT ===== */
-@media print {
-  html, body { width: 100%; max-width: 100%; padding: 0; margin: 0; overflow-x: hidden; }
-  .no-print { display: none !important; }
+.thank-you {
+  text-align: center;
+  margin-top: 10px;
+  margin-bottom: 8px;
+  font-size: 1.1em;
+  font-weight: 700;
+}
 
+/* ===== PRINT (bill-like) ===== */
+@media print {
+  @page {
+    size: auto;
+    margin: 0;
+  }
+  body {
+    margin: 0;
+    padding: 0;
+    font-weight: 600;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    overflow-x: hidden;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+  table, img, div { max-width: 100%; box-sizing: border-box; }
+  .items { table-layout: fixed; width: 100%; }
+  html { width: 100%; max-width: 100%; overflow-x: hidden; }
+  .items th, .items td {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+  .no-print { display: none !important; }
+  .items {
+    border: 2px solid #000 !important;
+  }
+  .items th,
+  .items td {
+    border: 1px solid #000 !important;
+  }
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
   .section-block {
     page-break-before: always;
     break-before: always;
@@ -624,6 +661,14 @@ body {
   .section-block:first-child {
     page-break-before: auto;
     break-before: auto;
+  }
+}
+
+@media screen {
+  body {
+    max-width: 100%;
+    margin: 0 auto;
+    background: #fff;
   }
 }
 </style>

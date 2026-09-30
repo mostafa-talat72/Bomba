@@ -2,11 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLanguage } from '../context/LanguageContext';
 import api from '../services/api';
-import { Package, Calendar, FileText, Table as TableIcon, Clock, Search, ChevronDown, ChevronUp, Eye, EyeOff } from 'lucide-react';
+import { Package, FileText, Table as TableIcon, Search, ChevronDown, ChevronUp, Eye, EyeOff, Bike, ShoppingBag, Phone } from 'lucide-react';
 import { formatDateInTimezone } from '../utils/timezoneHelper';
 import { formatCurrency as formatCurrencyUtil, formatDecimal } from '../utils/formatters';
 import { WORLD_LANGUAGES } from '../../shared/languages';
 import { DatePicker, ConfigProvider } from 'antd';
+import LocalizedTimePicker from '../components/common/LocalizedTimePicker';
 import dayjs, { Dayjs } from 'dayjs';
 import arEG from 'antd/locale/ar_EG';
 import enUS from 'antd/locale/en_US';
@@ -22,6 +23,8 @@ interface SoldItemDetail {
   billNumber: string;
   tableName: string;
   tableSection: string;
+  fulfillmentType?: string;
+  customerPhone?: string;
   quantity: number;
   price: number;
   total: number;
@@ -77,11 +80,16 @@ const SoldItems: React.FC = () => {
   const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
   const [expandedItem, setExpandedItem] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [dateFilter, setDateFilter] = useState<'all' | 'today' | 'week' | 'month' | 'custom'>('all');
-  const [customDateRange, setCustomDateRange] = useState<[Dayjs, Dayjs]>([
+  // فلترة حرة بالتاريخ والوقت (مثل تقرير الاستهلاك — بدون فترات جاهزة تخفيفاً على الصفحة)
+  // الافتراضي: اليوم الحالي من 00:00 حتى الآن
+  const [dateRange, setDateRange] = useState<[Dayjs, Dayjs]>(() => ([
     dayjs().set('hour', 0).set('minute', 0).set('second', 0).set('millisecond', 0),
-    dayjs().set('hour', 23).set('minute', 59).set('second', 59).set('millisecond', 999)
-  ]);
+    dayjs(),
+  ]));
+  const [timeRange, setTimeRange] = useState<[Dayjs, Dayjs]>(() => ([
+    dayjs().set('hour', 0).set('minute', 0),
+    dayjs(),
+  ]));
   const [loading, setLoading] = useState(true);
   const [showMoney, setShowMoney] = useState(false); // State to show/hide money
   const [loadingItems, setLoadingItems] = useState<Set<string>>(new Set()); // Track loading items
@@ -138,8 +146,9 @@ const SoldItems: React.FC = () => {
   };
 
   useEffect(() => {
-    fetchSoldItems();
-  }, [dateFilter, customDateRange]);
+    if (dateRange[0] && dateRange[1]) fetchSoldItems();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dateRange[0]?.valueOf(), dateRange[1]?.valueOf()]);
 
   // Sorting function - variant-aware display name
   const applySorting = (data: Section[]): Section[] => {
@@ -189,36 +198,51 @@ const SoldItems: React.FC = () => {
     // Re-render when language changes
   }, [isRTL]);
 
+  // دمج التاريخ والوقت (مثل تقرير الاستهلاك)
+  const handleDateChange = (newDates: [Dayjs | null, Dayjs | null] | null, type: 'start' | 'end') => {
+    if (!newDates) return;
+    if (type === 'start' && newDates[0]) {
+      const startDate = newDates[0]
+        .set('hour', timeRange[0].hour())
+        .set('minute', timeRange[0].minute())
+        .set('second', 0);
+      setDateRange([startDate, dateRange[1]]);
+    } else if (type === 'end' && newDates[1]) {
+      const endDate = newDates[1]
+        .set('hour', timeRange[1].hour())
+        .set('minute', timeRange[1].minute())
+        .set('second', 59);
+      setDateRange([dateRange[0], endDate]);
+    }
+  };
+
+  const handleTimeChange = (time: Dayjs | null, type: 'start' | 'end') => {
+    if (!time) return;
+    if (type === 'start') {
+      const newStartTime = time;
+      const newStartDate = dateRange[0]
+        .set('hour', newStartTime.hour())
+        .set('minute', newStartTime.minute());
+      setTimeRange([newStartTime, timeRange[1]]);
+      setDateRange([newStartDate, dateRange[1]]);
+    } else {
+      const newEndTime = time;
+      const newEndDate = dateRange[1]
+        .set('hour', newEndTime.hour())
+        .set('minute', newEndTime.minute());
+      setTimeRange([timeRange[0], newEndTime]);
+      setDateRange([dateRange[0], newEndDate]);
+    }
+  };
+
   const fetchSoldItems = async () => {
+    if (!dateRange[0] || !dateRange[1]) return;
     setLoading(true);
     try {
-      let filterParam = dateFilter;
-      let startDate, endDate;
-      
-      // If custom date range is selected, use the custom dates
-      if (dateFilter === 'custom') {
-        // Ensure start date is at beginning of day (00:00:00)
-        const start = customDateRange[0]
-          .set('hour', 0)
-          .set('minute', 0)
-          .set('second', 0)
-          .set('millisecond', 0);
-        
-        // Ensure end date is at end of day (23:59:59.999)
-        const end = customDateRange[1]
-          .set('hour', 23)
-          .set('minute', 59)
-          .set('second', 59)
-          .set('millisecond', 999);
-        
-        startDate = start.toISOString();
-        endDate = end.toISOString();
-        filterParam = 'custom';
-        
-
-      }
-      
-      const response = await api.getSoldItems(filterParam, startDate, endDate);
+      // النطاق من منتقي التاريخ والوقت مباشرة (دائماً مخصص)
+      const startDate = dateRange[0].toISOString();
+      const endDate = dateRange[1].toISOString();
+      const response = await api.getSoldItems('custom', startDate, endDate);
       
       if (response.success && response.data) {
         let sectionsData: Section[] = response.data;
@@ -368,24 +392,26 @@ const SoldItems: React.FC = () => {
 
   return (
     <div 
-      className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 p-4 md:p-6" 
+      className="min-h-screen bg-gradient-to-br from-slate-100 via-gray-50 to-slate-100 dark:from-gray-950 dark:via-gray-900 dark:to-gray-950 p-4 md:p-6" 
       dir={isRTL ? 'rtl' : 'ltr'}
       style={{ direction: isRTL ? 'rtl' : 'ltr' }}
     >
       <div className="max-w-7xl mx-auto">
         {/* Header */}
-        <div className="mb-4 sm:mb-8">
-          <div className="flex items-center justify-between gap-2 sm:gap-4 mb-2 sm:mb-3 flex-wrap" style={{ direction: dir }}>
-            <div className="flex items-center gap-2 sm:gap-4 min-w-0" style={{ direction: dir }}>
-              <div className="bg-gradient-to-br from-blue-500 to-blue-600 p-2 sm:p-3 rounded-xl shadow-lg flex-shrink-0">
-                <Package className="w-6 h-6 sm:w-8 sm:h-8 text-white" />
+        <div className="mb-4 sm:mb-6 bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 px-4 py-3.5 sm:px-5 sm:py-4">
+          <div className="flex items-center justify-between gap-2 sm:gap-4 flex-wrap" style={{ direction: dir }}>
+            <div className="flex items-center gap-2.5 sm:gap-3 min-w-0" style={{ direction: dir }}>
+              <div className="bg-gradient-to-br from-indigo-500 to-blue-600 p-2 sm:p-2.5 rounded-xl shadow-md shadow-indigo-500/20 flex-shrink-0">
+                <Package className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
               </div>
               <div style={{ textAlign: textAlign }} className="min-w-0">
-                <h1 className="text-xl sm:text-3xl md:text-4xl font-bold text-gray-900 dark:text-white">
+                <h1 className="text-lg sm:text-2xl font-extrabold text-gray-900 dark:text-white leading-tight">
                   {t('soldItems.title')}
                 </h1>
-                <p className="text-xs sm:text-base text-gray-600 dark:text-gray-400 mt-0.5 sm:mt-1">
-                  {t('soldItems.description')}
+                <p className="text-[11px] sm:text-xs text-gray-500 dark:text-gray-400 mt-0.5 truncate">
+                  {t('soldItems.filters.from')} <span className="font-bold text-gray-700 dark:text-gray-300" dir="auto">{dateRange[0]?.format('YYYY/MM/DD HH:mm')}</span>
+                  {' · '}
+                  {t('soldItems.filters.to')} <span className="font-bold text-gray-700 dark:text-gray-300" dir="auto">{dateRange[1]?.format('YYYY/MM/DD HH:mm')}</span>
                 </p>
               </div>
             </div>
@@ -393,14 +419,14 @@ const SoldItems: React.FC = () => {
             {/* Toggle Money Visibility Button */}
             <button
               onClick={() => setShowMoney(!showMoney)}
-              className={`flex flex-1 sm:flex-none items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-lg font-medium transition-all text-sm sm:text-base ${
+              className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-full font-bold transition-all text-xs sm:text-sm border ${
                 showMoney
-                  ? 'bg-green-500 hover:bg-green-600 text-white'
-                  : 'bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300'
+                  ? 'bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-900/30 dark:hover:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
+                  : 'bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-600'
               }`}
               style={{ direction: dir }}
             >
-              {showMoney ? <Eye className="w-5 h-5" /> : <EyeOff className="w-5 h-5" />}
+              {showMoney ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
               <span>{showMoney ? t('soldItems.hideMoney') : t('soldItems.showMoney')}</span>
             </button>
           </div>
@@ -408,40 +434,29 @@ const SoldItems: React.FC = () => {
 
         {/* Filters and Search */}
         <ConfigProvider locale={getAntdLocale()} direction={isRTL ? 'rtl' : 'ltr'}>
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-4 md:p-6 mb-6 border border-gray-200 dark:border-gray-700" style={{ direction: dir }}>
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4" style={{ direction: dir }}>
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm p-4 md:p-5 mb-4 sm:mb-5 border border-gray-200 dark:border-gray-700" style={{ direction: dir }}>
+            <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4" style={{ direction: dir }}>
               {/* Search */}
               <div className="relative" style={{ direction: dir }}>
-                <Search className={`absolute ${isRTL ? 'right-3' : 'left-3'} top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5`} />
+                <Search className={`absolute ${isRTL ? 'right-3' : 'left-3'} top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5 pointer-events-none`} />
                 <input
                   type="text"
                   placeholder={t('soldItems.searchPlaceholder')}
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className={`w-full ${isRTL ? 'pr-10 pl-4' : 'pl-10 pr-4'} py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white transition-all`}
+                  className={`w-full ${isRTL ? 'pr-10 pl-9' : 'pl-10 pr-9'} py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-gray-700 dark:text-white transition-all text-sm`}
                   style={{ textAlign: textAlign, direction: dir }}
                 />
+                {searchTerm ? (
+                  <button onClick={() => setSearchTerm('')} className={`absolute ${isRTL ? 'left-2.5' : 'right-2.5'} top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-lg leading-none`} aria-label="×">×</button>
+                ) : null}
               </div>
-
-              {/* Date Filter */}
-              <select
-                value={dateFilter}
-                onChange={(e) => setDateFilter(e.target.value as any)}
-                className={`px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white transition-all`}
-                style={{ textAlign: textAlign, direction: dir }}
-              >
-                <option value="all" dir="auto">{t('soldItems.filters.allTime')}</option>
-                <option value="today" dir="auto">{t('soldItems.filters.today')}</option>
-                <option value="week" dir="auto">{t('soldItems.filters.thisWeek')}</option>
-                <option value="month" dir="auto">{t('soldItems.filters.thisMonth')}</option>
-                <option value="custom" dir="auto">{t('soldItems.filters.customRange')}</option>
-              </select>
 
               {/* Sort By */}
               <select
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value as any)}
-                className={`px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white transition-all`}
+                className={`px-4 py-2.5 text-sm border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-gray-700 dark:text-white transition-all`}
                 style={{ textAlign: textAlign, direction: dir }}
               >
                 <option value="name" dir="auto">{t('soldItems.sort.byName')}</option>
@@ -454,7 +469,7 @@ const SoldItems: React.FC = () => {
               <select
                 value={sortOrder}
                 onChange={(e) => setSortOrder(e.target.value as any)}
-                className={`px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white transition-all`}
+                className={`px-4 py-2.5 text-sm border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-gray-700 dark:text-white transition-all`}
                 style={{ textAlign: textAlign, direction: dir }}
               >
                 <option value="asc" dir="auto">{t('soldItems.sort.ascending')}</option>
@@ -462,134 +477,107 @@ const SoldItems: React.FC = () => {
               </select>
             </div>
 
-            {/* Custom Date Range Picker */}
-            {dateFilter === 'custom' && (
-              <div className="mt-4" style={{ direction: dir }}>
-                <div className="flex items-center gap-2 mb-2" style={{ direction: dir }}>
-                  <Calendar className="w-5 h-5 text-blue-500" />
-                  <span className="text-sm font-medium text-gray-700 dark:text-gray-300" style={{ textAlign: textAlign }}>
-                    {t('soldItems.filters.selectDateRange')}
-                  </span>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4" style={{ direction: dir }}>
-                  {/* From Date */}
-                  <div style={{ direction: dir }}>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2" style={{ textAlign: textAlign }}>
-                      {t('soldItems.filters.from')}
-                    </label>
+            {/* Date/Time Filter — free range like consumption report */}
+            <div className="mt-4 grid gap-2 sm:grid-cols-2" style={{ direction: dir }}>
+              <div className="flex items-center gap-2 bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600 rounded-xl px-3 py-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-blue-500 flex-shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <div className="text-[11px] font-bold text-gray-500 dark:text-gray-400">{t('soldItems.filters.startTime')}</div>
+                  <div className="flex gap-1.5 items-center">
                     <DatePicker
-                      value={customDateRange[0]}
-                      onChange={(date) => {
-                        if (date) {
-                          // Set to beginning of day
-                          const startOfDay = date
-                            .set('hour', 0)
-                            .set('minute', 0)
-                            .set('second', 0)
-                            .set('millisecond', 0);
-                          
-                          setCustomDateRange([
-                            startOfDay,
-                            customDateRange[1]
-                          ]);
-                          
-
-                        }
-                      }}
-                      format="YYYY-MM-DD"
-                      className="w-full"
+                      value={dateRange[0]}
+                      onChange={(date) => handleDateChange([date, dateRange[1]], 'start')}
+                      className="flex-1 min-w-0"
+                      format="YYYY/MM/DD"
+                      allowClear={false}
                       placeholder={t('soldItems.filters.startDate')}
                     />
-                  </div>
-                  
-                  {/* To Date */}
-                  <div style={{ direction: dir }}>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2" style={{ textAlign: textAlign }}>
-                      {t('soldItems.filters.to')}
-                    </label>
-                    <DatePicker
-                      value={customDateRange[1]}
-                      onChange={(date) => {
-                        if (date) {
-                          // Set to end of day
-                          const endOfDay = date
-                            .set('hour', 23)
-                            .set('minute', 59)
-                            .set('second', 59)
-                            .set('millisecond', 999);
-                          
-                          setCustomDateRange([
-                            customDateRange[0],
-                            endOfDay
-                          ]);
-                          
-
-                        }
-                      }}
-                      format="YYYY-MM-DD"
-                      className="w-full"
-                      placeholder={t('soldItems.filters.endDate')}
-                      disabledDate={(current) => {
-                        // Disable dates before the start date
-                        return current && current < customDateRange[0].startOf('day');
-                      }}
+                    <LocalizedTimePicker
+                      value={timeRange[0]}
+                      onChange={(time) => handleTimeChange(time, 'start')}
+                      className="w-24"
+                      minuteStep={15}
+                      placeholder={t('soldItems.filters.startTimePlaceholder')}
                     />
                   </div>
                 </div>
               </div>
-            )}
+              <div className="flex items-center gap-2 bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600 rounded-xl px-3 py-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-green-500 flex-shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <div className="text-[11px] font-bold text-gray-500 dark:text-gray-400">{t('soldItems.filters.endTime')}</div>
+                  <div className="flex gap-1.5 items-center">
+                    <DatePicker
+                      value={dateRange[1]}
+                      onChange={(date) => handleDateChange([dateRange[0], date], 'end')}
+                      className="flex-1 min-w-0"
+                      format="YYYY/MM/DD"
+                      allowClear={false}
+                      placeholder={t('soldItems.filters.endDate')}
+                    />
+                    <LocalizedTimePicker
+                      value={timeRange[1]}
+                      onChange={(time) => handleTimeChange(time, 'end')}
+                      className="w-24"
+                      minuteStep={15}
+                      placeholder={t('soldItems.filters.endTimePlaceholder')}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </ConfigProvider>
 
         {/* Summary Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 md:gap-6 mb-4 sm:mb-6">
-          <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl shadow-lg p-4 sm:p-6 text-white transform hover:scale-105 transition-transform">
-            <div className="flex items-center justify-between" style={{ direction: dir }}>
-              <div style={{ textAlign: textAlign }}>
-                <p className="text-blue-100 text-sm font-medium mb-1">{t('soldItems.summary.totalSections')}</p>
-                <p className="text-2xl sm:text-3xl font-bold truncate">{formatDecimal(sections.length, i18n.language === 'ar' ? 'ar' : i18n.language === 'fr' ? 'fr' : 'en')}</p>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 mb-4 sm:mb-5">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 border-t-4 border-t-blue-500 p-4 sm:p-5">
+            <div className="flex items-center justify-between gap-2" style={{ direction: dir }}>
+              <div style={{ textAlign: textAlign }} className="min-w-0">
+                <p className="text-[11px] font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-1">{t('soldItems.summary.totalSections')}</p>
+                <p className="text-2xl sm:text-3xl font-extrabold text-gray-900 dark:text-white tabular-nums truncate">{formatDecimal(sections.length, i18n.language === 'ar' ? 'ar' : i18n.language === 'fr' ? 'fr' : 'en')}</p>
               </div>
-              <div className="bg-white bg-opacity-20 p-3 rounded-lg">
-                <Package className="w-8 h-8" />
+              <div className="bg-blue-50 dark:bg-blue-900/30 p-3 rounded-xl flex-shrink-0">
+                <Package className="w-6 h-6 text-blue-600 dark:text-blue-400" />
               </div>
             </div>
           </div>
 
-          <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-xl shadow-lg p-4 sm:p-6 text-white transform hover:scale-105 transition-transform">
-            <div className="flex items-center justify-between" style={{ direction: dir }}>
-              <div style={{ textAlign: textAlign }}>
-                <p className="text-green-100 text-sm font-medium mb-1">{t('soldItems.summary.totalQuantity')}</p>
-                <p className="text-2xl sm:text-3xl font-bold truncate">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 border-t-4 border-t-emerald-500 p-4 sm:p-5">
+            <div className="flex items-center justify-between gap-2" style={{ direction: dir }}>
+              <div style={{ textAlign: textAlign }} className="min-w-0">
+                <p className="text-[11px] font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-1">{t('soldItems.summary.totalQuantity')}</p>
+                <p className="text-2xl sm:text-3xl font-extrabold text-gray-900 dark:text-white tabular-nums truncate">
                   {formatDecimal(sections.reduce((sum, section) => sum + section.totalQuantity, 0), i18n.language === 'ar' ? 'ar' : i18n.language === 'fr' ? 'fr' : 'en')}
                 </p>
               </div>
-              <div className="bg-white bg-opacity-20 p-3 rounded-lg">
-                <Package className="w-8 h-8" />
+              <div className="bg-emerald-50 dark:bg-emerald-900/30 p-3 rounded-xl flex-shrink-0">
+                <Package className="w-6 h-6 text-emerald-600 dark:text-emerald-400" />
               </div>
             </div>
           </div>
 
-          <div className="bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl shadow-lg p-4 sm:p-6 text-white transform hover:scale-105 transition-transform">
-            <div className="flex items-center justify-between" style={{ direction: dir }}>
-              <div style={{ textAlign: textAlign }}>
-                <p className="text-purple-100 text-sm font-medium mb-1">{t('soldItems.summary.totalRevenue')}</p>
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 border-t-4 border-t-violet-500 p-4 sm:p-5">
+            <div className="flex items-center justify-between gap-2" style={{ direction: dir }}>
+              <div style={{ textAlign: textAlign }} className="min-w-0">
+                <p className="text-[11px] font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-1">{t('soldItems.summary.totalRevenue')}</p>
                 {(() => {
                   const totalRev = sections.reduce((sum, section) => sum + section.totalRevenue, 0);
                   const totalDisc = sections.reduce((sum, section) => sum + (section.totalDiscount || 0), 0);
                   return (
                     <>
-                      <p className="text-2xl sm:text-3xl font-bold truncate">
+                      <p className="text-2xl sm:text-3xl font-extrabold text-gray-900 dark:text-white tabular-nums truncate">
                         {showMoney ? formatCurrency(totalRev - totalDisc) : '••••••'}
                       </p>
                       {showMoney && totalDisc > 0 && (
-                        <p className="text-xs text-purple-200 line-through">{formatCurrency(totalRev)} <span className="font-bold">خصم: -{formatCurrency(totalDisc)}</span></p>
+                        <p className="text-[11px] text-purple-600 dark:text-purple-400 font-bold mt-0.5 line-through">{formatCurrency(totalRev)} خصم: -{formatCurrency(totalDisc)}</p>
                       )}
                     </>
                   );
                 })()}
               </div>
-              <div className="bg-white bg-opacity-20 p-3 rounded-lg">
-                <Package className="w-8 h-8" />
+              <div className="bg-violet-50 dark:bg-violet-900/30 p-3 rounded-xl flex-shrink-0">
+                <Package className="w-6 h-6 text-violet-600 dark:text-violet-400" />
               </div>
             </div>
           </div>
@@ -598,62 +586,66 @@ const SoldItems: React.FC = () => {
         {/* Sections List */}
         {loading ? (
           <div className="text-center py-16">
-            <div className="animate-spin rounded-full h-16 w-16 border-4 border-blue-500 border-t-transparent mx-auto"></div>
-            <p className="mt-4 text-gray-600 dark:text-gray-400 font-medium">{t('common.loading')}</p>
+            <div className="animate-spin rounded-full h-14 w-14 border-4 border-indigo-500 border-t-transparent mx-auto"></div>
+            <p className="mt-4 text-sm font-bold text-gray-500 dark:text-gray-400">{t('common.loading')}</p>
           </div>
         ) : sections.length === 0 ? (
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-16 text-center border border-gray-200 dark:border-gray-700">
-            <div className="bg-gray-100 dark:bg-gray-700 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Package className="w-10 h-10 text-gray-400" />
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm p-14 text-center border border-dashed border-gray-300 dark:border-gray-600">
+            <div className="bg-gray-100 dark:bg-gray-700 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-3">
+              <Package className="w-8 h-8 text-gray-400" />
             </div>
-            <p className="text-gray-600 dark:text-gray-400 text-lg">{t('soldItems.noItems')}</p>
+            <p className="text-gray-500 dark:text-gray-400 font-bold">{t('soldItems.noItems')}</p>
           </div>
         ) : (
           <div className="space-y-6">
             {sections.map((section) => (
               <div
                 key={section.sectionId}
-                className="bg-white dark:bg-gray-800 rounded-xl shadow-lg overflow-hidden border border-gray-200 dark:border-gray-700 hover:shadow-xl transition-shadow"
+                className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm overflow-hidden border border-gray-200 dark:border-gray-700 hover:shadow-md transition-shadow"
               >
                 {/* Section Header */}
                 <button
                   onClick={() => toggleSection(section.sectionId)}
-                  className={`w-full p-6 flex items-center justify-between hover:bg-gradient-to-${isRTL ? 'l' : 'r'} hover:from-blue-50 hover:to-transparent dark:hover:from-blue-900 dark:hover:to-transparent transition-all border-b-4 border-blue-500`}
+                  className={`w-full p-4 sm:p-5 flex items-center justify-between gap-3 hover:bg-slate-50 dark:hover:bg-gray-700/40 transition-colors border-b-4 border-blue-500 ${expandedSection === section.sectionId ? 'bg-slate-50/60 dark:bg-gray-700/30' : ''}`}
                   style={{ direction: dir }}
                   disabled={loadingSections.has(section.sectionId)}
                 >
-                  <div className="flex items-center gap-4 flex-1" style={{ direction: dir }}>
-                    <div className="bg-gradient-to-br from-blue-500 to-blue-600 p-4 rounded-xl shadow-md">
-                      <Package className="w-8 h-8 text-white" />
+                  <div className="flex items-center gap-3 sm:gap-4 flex-1 min-w-0" style={{ direction: dir }}>
+                    <div className="bg-gradient-to-br from-blue-500 to-indigo-600 p-3 rounded-xl shadow-md shadow-blue-500/20 flex-shrink-0">
+                      <Package className="w-6 h-6 sm:w-7 sm:h-7 text-white" />
                     </div>
-                    <div className="flex-1" style={{ textAlign: textAlign }}>
-                      <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2" dir="auto">
+                    <div className="flex-1 min-w-0" style={{ textAlign: textAlign }}>
+                      <h2 className="text-lg sm:text-xl font-extrabold text-gray-900 dark:text-white mb-1.5 truncate" dir="auto">
                         {section.sectionName}
                       </h2>
-                      <div className="flex gap-6 text-sm text-gray-600 dark:text-gray-400 flex-wrap" style={{ direction: dir }}>
-                        <span className="flex items-center gap-1.5 bg-gray-100 dark:bg-gray-700 px-3 py-1 rounded-full" style={{ direction: dir }}>
-                          <Package className="w-4 h-4" />
-                          <span>{t('soldItems.quantity')}: {formatDecimal(section.totalQuantity, i18n.language === 'ar' ? 'ar' : i18n.language === 'fr' ? 'fr' : 'en')}</span>
+                      <div className="flex gap-2 text-xs text-gray-600 dark:text-gray-400 flex-wrap" style={{ direction: dir }}>
+                        <span className="inline-flex items-center gap-1.5 bg-gray-100 dark:bg-gray-700 px-2.5 py-1 rounded-full font-bold" style={{ direction: dir }}>
+                          <Package className="w-3.5 h-3.5" />
+                          <span className="tabular-nums">{t('soldItems.quantity')}: {formatDecimal(section.totalQuantity, i18n.language === 'ar' ? 'ar' : i18n.language === 'fr' ? 'fr' : 'en')}</span>
                         </span>
-                        <span className="flex items-center gap-1.5 bg-gray-100 dark:bg-gray-700 px-3 py-1 rounded-full" style={{ direction: dir }}>
-                          <FileText className="w-4 h-4" />
-                          <span>{formatDecimal(section.categories.length, i18n.language === 'ar' ? 'ar' : i18n.language === 'fr' ? 'fr' : 'en')} {t('soldItems.categories')}</span>
+                        <span className="inline-flex items-center gap-1.5 bg-gray-100 dark:bg-gray-700 px-2.5 py-1 rounded-full font-bold" style={{ direction: dir }}>
+                          <FileText className="w-3.5 h-3.5" />
+                          <span className="tabular-nums">{formatDecimal(section.categories.length, i18n.language === 'ar' ? 'ar' : i18n.language === 'fr' ? 'fr' : 'en')} {t('soldItems.categories')}</span>
                         </span>
-                        <span className="font-bold text-green-600 dark:text-green-400 text-lg bg-green-50 dark:bg-green-900 px-3 py-1 rounded-full">
+                        <span className="font-extrabold text-emerald-700 dark:text-emerald-400 text-sm bg-emerald-50 dark:bg-emerald-900/30 px-2.5 py-1 rounded-full tabular-nums">
                           {showMoney ? formatCurrency(section.totalRevenue - (section.totalDiscount || 0)) : '••••••'}
                           {showMoney && (section.totalDiscount || 0) > 0 && (
-                            <span className="text-xs text-purple-500 dark:text-purple-400 font-bold block line-through">{formatCurrency(section.totalRevenue)} خصم: -{formatCurrency(section.totalDiscount)}</span>
+                            <span className="text-[11px] text-purple-500 dark:text-purple-400 font-bold block line-through">{formatCurrency(section.totalRevenue)} خصم: -{formatCurrency(section.totalDiscount)}</span>
                           )}
                         </span>
                       </div>
                     </div>
                   </div>
                   {loadingSections.has(section.sectionId) ? (
-                    <div className="animate-spin rounded-full h-6 w-6 border-2 border-blue-500 border-t-transparent"></div>
+                    <div className="animate-spin rounded-full h-6 w-6 border-2 border-blue-500 border-t-transparent flex-shrink-0"></div>
                   ) : expandedSection === section.sectionId ? (
-                    <ChevronUp className="w-6 h-6 text-gray-400" />
+                    <span className="w-8 h-8 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center flex-shrink-0">
+                      <ChevronUp className="w-4 h-4 text-gray-500" />
+                    </span>
                   ) : (
-                    <ChevronDown className="w-6 h-6 text-gray-400" />
+                    <span className="w-8 h-8 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center flex-shrink-0">
+                      <ChevronDown className="w-4 h-4 text-gray-500" />
+                    </span>
                   )}
                 </button>
 
@@ -663,45 +655,49 @@ const SoldItems: React.FC = () => {
                     {section.categories.map((category) => (
                       <div
                         key={category.categoryId}
-                        className="bg-white dark:bg-gray-800 rounded-lg shadow-md overflow-hidden border border-gray-200 dark:border-gray-700 hover:shadow-lg transition-shadow"
+                        className="bg-white dark:bg-gray-800 rounded-xl shadow-sm overflow-hidden border border-gray-200 dark:border-gray-700 hover:shadow-md transition-shadow"
                       >
                         {/* Category Header */}
                         <button
                           onClick={() => toggleCategory(category.categoryId)}
-                          className={`w-full p-5 flex items-center justify-between hover:bg-gradient-to-${isRTL ? 'l' : 'r'} hover:from-purple-50 hover:to-transparent dark:hover:from-purple-900 dark:hover:to-transparent transition-all ${isRTL ? 'border-r-4' : 'border-l-4'} border-purple-500`}
+                          className={`w-full p-4 flex items-center justify-between gap-3 hover:bg-slate-50 dark:hover:bg-gray-700/40 transition-colors ${isRTL ? 'border-r-4' : 'border-l-4'} border-violet-500 ${expandedCategory === category.categoryId ? 'bg-slate-50/60 dark:bg-gray-700/30' : ''}`}
                           style={{ direction: dir }}
                           disabled={loadingCategories.has(category.categoryId)}
                         >
-                          <div className="flex items-center gap-3 flex-1" style={{ direction: dir }}>
-                            <div className="bg-gradient-to-br from-purple-500 to-purple-600 p-3 rounded-lg shadow-md">
-                              <FileText className="w-6 h-6 text-white" />
+                          <div className="flex items-center gap-3 flex-1 min-w-0" style={{ direction: dir }}>
+                            <div className="bg-gradient-to-br from-violet-500 to-purple-600 p-2.5 rounded-xl shadow-md shadow-violet-500/20 flex-shrink-0">
+                              <FileText className="w-5 h-5 text-white" />
                             </div>
-                            <div className="flex-1" style={{ textAlign: textAlign }}>
-                              <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-1.5" dir="auto">
+                            <div className="flex-1 min-w-0" style={{ textAlign: textAlign }}>
+                              <h3 className="text-base sm:text-lg font-extrabold text-gray-900 dark:text-white mb-1 truncate" dir="auto">
                                 {category.categoryName}
                               </h3>
-                              <div className="flex gap-4 text-sm text-gray-600 dark:text-gray-400 flex-wrap" style={{ direction: dir }}>
-                                <span className="flex items-center gap-1 bg-gray-100 dark:bg-gray-700 px-2.5 py-1 rounded-full" style={{ direction: dir }}>
-                                  <span>{t('soldItems.quantity')}: {formatDecimal(category.totalQuantity, i18n.language === 'ar' ? 'ar' : i18n.language === 'fr' ? 'fr' : 'en')}</span>
+                              <div className="flex gap-2 text-xs text-gray-600 dark:text-gray-400 flex-wrap" style={{ direction: dir }}>
+                                <span className="inline-flex items-center gap-1 bg-gray-100 dark:bg-gray-700 px-2.5 py-1 rounded-full font-bold" style={{ direction: dir }}>
+                                  <span className="tabular-nums">{t('soldItems.quantity')}: {formatDecimal(category.totalQuantity, i18n.language === 'ar' ? 'ar' : i18n.language === 'fr' ? 'fr' : 'en')}</span>
                                 </span>
-                                <span className="flex items-center gap-1 bg-gray-100 dark:bg-gray-700 px-2.5 py-1 rounded-full" style={{ direction: dir }}>
-                                  <span>{formatDecimal(category.items.length, i18n.language === 'ar' ? 'ar' : i18n.language === 'fr' ? 'fr' : 'en')} {t('soldItems.items')}</span>
+                                <span className="inline-flex items-center gap-1 bg-gray-100 dark:bg-gray-700 px-2.5 py-1 rounded-full font-bold" style={{ direction: dir }}>
+                                  <span className="tabular-nums">{formatDecimal(category.items.length, i18n.language === 'ar' ? 'ar' : i18n.language === 'fr' ? 'fr' : 'en')} {t('soldItems.items')}</span>
                                 </span>
-                                <span className="font-bold text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900 px-2.5 py-1 rounded-full">
+                                <span className="font-extrabold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30 px-2.5 py-1 rounded-full tabular-nums">
                                   {showMoney ? formatCurrency(category.totalRevenue - (category.totalDiscount || 0)) : '••••••'}
                                   {showMoney && (category.totalDiscount || 0) > 0 && (
-                                    <span className="text-xs text-purple-500 dark:text-purple-400 font-bold block line-through">{formatCurrency(category.totalRevenue)} خصم: -{formatCurrency(category.totalDiscount)}</span>
+                                    <span className="text-[11px] text-purple-500 dark:text-purple-400 font-bold block line-through">{formatCurrency(category.totalRevenue)} خصم: -{formatCurrency(category.totalDiscount)}</span>
                                   )}
                                 </span>
                               </div>
                             </div>
                           </div>
                           {loadingCategories.has(category.categoryId) ? (
-                            <div className="animate-spin rounded-full h-5 w-5 border-2 border-purple-500 border-t-transparent"></div>
+                            <div className="animate-spin rounded-full h-5 w-5 border-2 border-violet-500 border-t-transparent flex-shrink-0"></div>
                           ) : expandedCategory === category.categoryId ? (
-                            <ChevronUp className="w-5 h-5 text-gray-400" />
+                            <span className="w-7 h-7 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center flex-shrink-0">
+                              <ChevronUp className="w-4 h-4 text-gray-500" />
+                            </span>
                           ) : (
-                            <ChevronDown className="w-5 h-5 text-gray-400" />
+                            <span className="w-7 h-7 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center flex-shrink-0">
+                              <ChevronDown className="w-4 h-4 text-gray-500" />
+                            </span>
                           )}
                         </button>
 
@@ -713,58 +709,86 @@ const SoldItems: React.FC = () => {
                               return (
                               <div
                                 key={itemKey}
-                                className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden border border-gray-200 dark:border-gray-700 hover:shadow-md transition-shadow"
+                                className="bg-white dark:bg-gray-800 rounded-xl shadow-sm overflow-hidden border border-gray-200 dark:border-gray-700 hover:shadow-md transition-shadow"
                               >
                                 {/* Item Header - variant-aware display */}
-                                <button
-                                  onClick={() => toggleItem(itemKey)}
-                                  className={`w-full p-4 flex items-center justify-between hover:bg-gradient-to-${isRTL ? 'l' : 'r'} hover:from-orange-50 hover:to-transparent dark:hover:from-orange-900 dark:hover:to-transparent transition-all`}
-                                  style={{ direction: dir }}
-                                  disabled={loadingItems.has(itemKey)}
-                                >
-                                  <div className="flex items-center gap-3 flex-1" style={{ direction: dir }}>
-                                    <div className="bg-gradient-to-br from-orange-500 to-orange-600 p-2.5 rounded-lg shadow">
-                                      <Package className="w-5 h-5 text-white" />
-                                    </div>
-                                    <div className="flex-1" style={{ textAlign: textAlign }}>
-                                      <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-1" dir="auto">
-                                        {getDisplayName(item)}
-                                      </h4>
-                                      <div className="flex gap-3 text-sm text-gray-600 dark:text-gray-400 flex-wrap" style={{ direction: dir }}>
-                                        <span className="bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded-full">
-                                          {t('soldItems.quantity')}: {formatDecimal(item.totalQuantity, i18n.language === 'ar' ? 'ar' : i18n.language === 'fr' ? 'fr' : 'en')}
-                                        </span>
-                                        <span className="bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded-full">
-                                          {t('soldItems.orders')}: {formatDecimal(item.orderCount, i18n.language === 'ar' ? 'ar' : i18n.language === 'fr' ? 'fr' : 'en')}
-                                        </span>
-                                        <span className="font-bold text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900 px-2 py-0.5 rounded-full">
-                                          {showMoney ? formatCurrency(item.totalRevenue - (item.totalDiscount || 0)) : '••••••'}
-                                          {showMoney && (item.totalDiscount || 0) > 0 && (
-                                            <span className="text-xs text-purple-500 dark:text-purple-400 font-bold block line-through">{formatCurrency(item.totalRevenue)} خصم: -{formatCurrency(item.totalDiscount)}</span>
-                                          )}
-                                        </span>
+<button
+                                    onClick={() => toggleItem(itemKey)}
+                                    className="w-full p-3.5 sm:p-4 flex items-center justify-between gap-2 hover:bg-slate-50 dark:hover:bg-gray-700/40 transition-colors"
+                                    style={{ direction: dir }}
+                                    disabled={loadingItems.has(itemKey)}
+                                  >
+                                    <div className="flex items-center gap-3 flex-1 min-w-0" style={{ direction: dir }}>
+                                      <div className="bg-gradient-to-br from-orange-500 to-amber-600 p-2 rounded-xl shadow-md shadow-orange-500/20 flex-shrink-0">
+                                        <Package className="w-4 h-4 text-white" />
+                                      </div>
+                                      <div className="flex-1 min-w-0" style={{ textAlign: textAlign }}>
+                                        <h4 className="text-base sm:text-lg font-extrabold text-gray-900 dark:text-white mb-1 truncate" dir="auto">
+                                          {getDisplayName(item)}
+                                        </h4>
+                                        <div className="flex gap-2 text-xs text-gray-600 dark:text-gray-400 flex-wrap" style={{ direction: dir }}>
+                                          <span className="bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded-full font-bold tabular-nums">
+                                            {t('soldItems.quantity')}: {formatDecimal(item.totalQuantity, i18n.language === 'ar' ? 'ar' : i18n.language === 'fr' ? 'fr' : 'en')}
+                                          </span>
+                                          <span className="bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded-full font-bold tabular-nums">
+                                            {t('soldItems.orders')}: {formatDecimal(item.orderCount, i18n.language === 'ar' ? 'ar' : i18n.language === 'fr' ? 'fr' : 'en')}
+                                          </span>
+                                          <span className="font-extrabold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30 px-2 py-0.5 rounded-full tabular-nums">
+                                            {showMoney ? formatCurrency(item.totalRevenue - (item.totalDiscount || 0)) : '••••••'}
+                                            {showMoney && (item.totalDiscount || 0) > 0 && (
+                                              <span className="text-[11px] text-purple-500 dark:text-purple-400 font-bold block line-through">{formatCurrency(item.totalRevenue)} خصم: -{formatCurrency(item.totalDiscount)}</span>
+                                            )}
+                                          </span>
+                                        </div>
                                       </div>
                                     </div>
-                                  </div>
-                                  {loadingItems.has(itemKey) ? (
-                                    <div className="animate-spin rounded-full h-5 w-5 border-2 border-orange-500 border-t-transparent"></div>
-                                  ) : expandedItem === itemKey ? (
-                                    <ChevronUp className="w-5 h-5 text-gray-400" />
-                                  ) : (
-                                    <ChevronDown className="w-5 h-5 text-gray-400" />
-                                  )}
-                                </button>
+                                    {loadingItems.has(itemKey) ? (
+                                      <div className="animate-spin rounded-full h-5 w-5 border-2 border-orange-500 border-t-transparent flex-shrink-0"></div>
+                                    ) : expandedItem === itemKey ? (
+                                      <span className="w-7 h-7 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center flex-shrink-0">
+                                        <ChevronUp className="w-4 h-4 text-gray-500" />
+                                      </span>
+                                    ) : (
+                                      <span className="w-7 h-7 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center flex-shrink-0">
+                                        <ChevronDown className="w-4 h-4 text-gray-500" />
+                                      </span>
+                                    )}
+                                  </button>
 
                                 {/* Item Details - variant-aware key */}
                                 {expandedItem === itemKey && !loadingItems.has(itemKey) && (
                                   <div className="p-4 bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800">
                                     <div className="space-y-3">
-                                      {item.details.map((detail, index) => (
+                                      {item.details.map((detail, index) => {
+                                        const ft = detail.fulfillmentType || (detail.tableName ? 'dine_in' : 'takeaway');
+                                        const isDelivery = ft === 'delivery';
+                                        const isTakeaway = ft === 'takeaway';
+                                        const acc = isDelivery
+                                          ? { border: 'border-emerald-500', soft: 'bg-emerald-50 dark:bg-emerald-900/30', text: 'text-emerald-700 dark:text-emerald-300' }
+                                          : isTakeaway
+                                          ? { border: 'border-amber-500', soft: 'bg-amber-50 dark:bg-amber-900/30', text: 'text-amber-700 dark:text-amber-300' }
+                                          : { border: 'border-blue-500', soft: 'bg-blue-50 dark:bg-blue-900/30', text: 'text-blue-700 dark:text-blue-300' };
+                                        const badgeLabel = isDelivery
+                                          ? t('soldItems.delivery')
+                                          : isTakeaway
+                                          ? t('soldItems.takeaway')
+                                          : (detail.tableName ? `${t('soldItems.table')} ${detail.tableSection ? `${detail.tableSection} - ` : ''}${detail.tableName}` : t('soldItems.dineIn'));
+                                        return (
                                         <div
                                           key={`${detail.orderId}-${index}`}
-                                          className={`bg-white dark:bg-gray-800 rounded-lg p-4 ${isRTL ? 'border-r-4' : 'border-l-4'} border-blue-500 shadow-sm hover:shadow-md transition-shadow`}
+                                          className={`bg-white dark:bg-gray-800 rounded-xl p-4 ${isRTL ? 'border-r-4' : 'border-l-4'} ${acc.border} shadow-sm hover:shadow-md transition-shadow`}
                                         >
-                                          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+                                          {/* Type badge + order/date */}
+                                          <div className="flex items-center justify-between gap-2 flex-wrap mb-3" style={{ direction: dir }}>
+                                            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-extrabold ${acc.soft} ${acc.text}`}>
+                                              {isDelivery ? <Bike className="w-3.5 h-3.5" /> : isTakeaway ? <ShoppingBag className="w-3.5 h-3.5" /> : <TableIcon className="w-3.5 h-3.5" />}
+                                              {badgeLabel}
+                                            </span>
+                                            <span className="text-xs text-gray-500 dark:text-gray-400 font-bold" dir="auto">
+                                              {t('soldItems.orderNumber')}: {detail.orderNumber || '—'} · {formatDate(detail.orderDate)}
+                                            </span>
+                                          </div>
+                                          <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
                                             {/* Bill Info */}
                                             <div className="flex items-start gap-2" style={{ direction: dir }}>
                                               <div className="bg-blue-100 dark:bg-blue-900 p-2 rounded-lg">
@@ -778,32 +802,40 @@ const SoldItems: React.FC = () => {
                                               </div>
                                             </div>
 
-                                            {/* Table Info */}
-                                            <div className="flex items-start gap-2" style={{ direction: dir }}>
-                                              <div className="bg-purple-100 dark:bg-purple-900 p-2 rounded-lg">
-                                                <TableIcon className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+                                            {/* Customer / Table Info */}
+                                            {isDelivery ? (
+                                              <div className="flex items-start gap-2" style={{ direction: dir }}>
+                                                <div className="bg-emerald-100 dark:bg-emerald-900 p-2 rounded-lg">
+                                                  <Phone className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                                                </div>
+                                                <div style={{ textAlign: textAlign }}>
+                                                  <p className="text-xs text-gray-500 dark:text-gray-400 mb-0.5">{t('soldItems.customer')}</p>
+                                                  <p className="font-semibold text-gray-900 dark:text-white" dir="auto">{detail.customerName || '—'}</p>
+                                                  {detail.customerPhone ? (
+                                                    <p className="text-xs font-bold text-gray-600 dark:text-gray-300 mt-0.5" dir="ltr">{t('soldItems.customerPhone')}: {detail.customerPhone}</p>
+                                                  ) : null}
+                                                </div>
                                               </div>
-                                              <div style={{ textAlign: textAlign }}>
-                                                <p className="text-xs text-gray-500 dark:text-gray-400 mb-0.5">{t('soldItems.table')}</p>
-                                                <p className="font-semibold text-gray-900 dark:text-white" dir="auto">
-                                                  {detail.tableSection && `${detail.tableSection} - `}
-                                                  {detail.tableName || t('soldItems.noTable')}
-                                                </p>
+                                            ) : (!isTakeaway || detail.customerName) ? (
+                                              <div className="flex items-start gap-2" style={{ direction: dir }}>
+                                                <div className={`${isTakeaway ? 'bg-amber-100 dark:bg-amber-900' : 'bg-purple-100 dark:bg-purple-900'} p-2 rounded-lg`}>
+                                                  {isTakeaway
+                                                    ? <ShoppingBag className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                                                    : <TableIcon className="w-4 h-4 text-purple-600 dark:text-purple-400" />}
+                                                </div>
+                                                <div style={{ textAlign: textAlign }}>
+                                                  <p className="text-xs text-gray-500 dark:text-gray-400 mb-0.5">{isTakeaway ? t('soldItems.customer') : t('soldItems.table')}</p>
+                                                  {isTakeaway ? (
+                                                    <p className="font-semibold text-gray-900 dark:text-white" dir="auto">{detail.customerName}</p>
+                                                  ) : (
+                                                    <p className="font-semibold text-gray-900 dark:text-white" dir="auto">
+                                                      {detail.tableSection && `${detail.tableSection} - `}
+                                                      {detail.tableName || t('soldItems.noTable')}
+                                                    </p>
+                                                  )}
+                                                </div>
                                               </div>
-                                            </div>
-
-                                            {/* Date Info */}
-                                            <div className="flex items-start gap-2" style={{ direction: dir }}>
-                                              <div className="bg-green-100 dark:bg-green-900 p-2 rounded-lg">
-                                                <Clock className="w-4 h-4 text-green-600 dark:text-green-400" />
-                                              </div>
-                                              <div style={{ textAlign: textAlign }}>
-                                                <p className="text-xs text-gray-500 dark:text-gray-400 mb-0.5">{t('soldItems.orderDate')}</p>
-                                                <p className="font-semibold text-gray-900 dark:text-white text-sm">
-                                                  {formatDate(detail.orderDate)}
-                                                </p>
-                                              </div>
-                                            </div>
+                                            ) : null}
 
                                             {/* Quantity & Price */}
                                             <div className="flex items-start gap-2" style={{ direction: dir }}>
@@ -821,17 +853,9 @@ const SoldItems: React.FC = () => {
                                               </div>
                                             </div>
                                           </div>
-
-                                          {/* Customer Name */}
-                                          {detail.customerName && (
-                                            <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
-                                              <p className={`text-sm text-gray-600 dark:text-gray-400`} style={{ textAlign: textAlign }}>
-                                                {t('soldItems.customer')}: <span className="font-semibold text-gray-900 dark:text-white" dir="auto">{detail.customerName}</span>
-                                              </p>
-                                            </div>
-                                          )}
                                         </div>
-                                      ))}
+                                        );
+                                      })}
                                     </div>
                                   </div>
                                 )}

@@ -30,6 +30,10 @@ const menuCategorySchema = new mongoose.Schema(
             type: Boolean,
             default: true,
         },
+        showInCustomerMenu: {
+            type: Boolean,
+            default: true,
+        },
         createdBy: {
             type: mongoose.Schema.Types.ObjectId,
             ref: "User",

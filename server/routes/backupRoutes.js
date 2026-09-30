@@ -9,6 +9,10 @@ import {
     importBackup,
     verifyBackupFile,
     downloadBackup,
+    getBackupHealth,
+    getBackupCatalogEndpoint,
+    saveSecondaryBackupSettings,
+    getSecondaryBackupSettings,
 } from "../controllers/backupController.js";
 import { protect, authorize } from "../middleware/auth.js";
 
@@ -24,6 +28,10 @@ router.post("/create", createBackup);
 router.post("/import", importBackup);
 router.post("/verify/:fileName", verifyBackupFile);
 router.get("/download/:fileName", downloadBackup);
+router.get("/health", getBackupHealth);
+router.get("/catalog", getBackupCatalogEndpoint);
+router.get("/settings/secondary", getSecondaryBackupSettings);
+router.put("/settings/secondary", saveSecondaryBackupSettings);
 router.get("/", getBackups);
 router.get("/settings", getBackupSettings);
 router.put("/settings", saveBackupSettings);

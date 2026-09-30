@@ -1,0 +1,82 @@
+{
+  "backups": [
+    {
+      "fileName": "bomba-backup-2026-09-30T14-00-00-125Z.json.gz",
+      "path": "احتياطيه\\bomba-backup-2026-09-30T14-00-00-125Z.json.gz",
+      "secondaryPath": null,
+      "size": 25521246,
+      "documents": 83879,
+      "collections": 37,
+      "encrypted": false,
+      "verified": true,
+      "createdAt": "2026-09-30T14:00:00.125Z"
+    },
+    {
+      "fileName": "bomba-backup-2026-09-30T13-00-00-824Z.json.gz",
+      "path": "احتياطيه\\bomba-backup-2026-09-30T13-00-00-824Z.json.gz",
+      "secondaryPath": null,
+      "size": 25523194,
+      "documents": 83968,
+      "collections": 37,
+      "encrypted": false,
+      "verified": true,
+      "createdAt": "2026-09-30T13:00:00.824Z"
+    },
+    {
+      "fileName": "bomba-backup-2026-09-30T11-00-00-661Z.json.gz",
+      "path": "احتياطيه\\bomba-backup-2026-09-30T11-00-00-661Z.json.gz",
+      "secondaryPath": null,
+      "size": 25517196,
+      "documents": 83957,
+      "collections": 37,
+      "encrypted": false,
+      "verified": true,
+      "createdAt": "2026-09-30T11:00:00.661Z"
+    },
+    {
+      "fileName": "bomba-backup-2026-09-30T10-00-00-162Z.json.gz",
+      "path": "احتياطيه\\bomba-backup-2026-09-30T10-00-00-162Z.json.gz",
+      "secondaryPath": null,
+      "size": 25515631,
+      "documents": 83987,
+      "collections": 37,
+      "encrypted": false,
+      "verified": true,
+      "createdAt": "2026-09-30T10:00:00.162Z"
+    },
+    {
+      "fileName": "bomba-backup-2026-09-30T09-00-00-577Z.json.gz",
+      "path": "احتياطيه\\bomba-backup-2026-09-30T09-00-00-577Z.json.gz",
+      "secondaryPath": null,
+      "size": 25518453,
+      "documents": 84111,
+      "collections": 37,
+      "encrypted": false,
+      "verified": true,
+      "createdAt": "2026-09-30T09:00:00.577Z"
+    },
+    {
+      "fileName": "bomba-backup-2026-09-30T08-18-28-056Z.json.gz",
+      "path": "احتياطيه\\bomba-backup-2026-09-30T08-18-28-056Z.json.gz",
+      "secondaryPath": null,
+      "size": 5099232,
+      "documents": 60712,
+      "collections": 37,
+      "encrypted": false,
+      "verified": true,
+      "createdAt": "2026-09-30T08:18:28.056Z"
+    },
+    {
+      "fileName": "bomba-backup-2026-09-29T10-47-42-590Z.json.gz",
+      "path": "احتياطيه\\bomba-backup-2026-09-29T10-47-42-590Z.json.gz",
+      "secondaryPath": null,
+      "size": 5121928,
+      "documents": 61385,
+      "collections": 37,
+      "encrypted": false,
+      "verified": true,
+      "createdAt": "2026-09-29T10:47:42.590Z"
+    }
+  ],
+  "version": 1
+}

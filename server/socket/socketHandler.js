@@ -128,12 +128,13 @@ export const setupSocketIO = (io) => {
             socket.to(`org-${userOrg}`).emit("inventory-update", data);
         });
 
-        // Bill events — scoped to organization
+        // Bill events — scoped to organization (both channels: dash + colon)
         socket.on("bill-created", (data) => {
             socket.to(`org-${userOrg}`).emit("bill-update", {
                 type: "created",
                 bill: data,
             });
+            socket.to(`org-${userOrg}`).emit("bill:created", data);
         });
 
         socket.on("payment-received", (data) => {
@@ -141,6 +142,8 @@ export const setupSocketIO = (io) => {
                 type: "payment-received",
                 bill: data,
             });
+            socket.to(`org-${userOrg}`).emit("bill:updated", data?.bill || data);
+            socket.to(`org-${userOrg}`).emit("payment-received", data);
         });
 
         // System notifications — scoped to organization

@@ -99,7 +99,7 @@ router.get("/sold-items", authorize("soldItems", "all"), async (req, res) => {
             items: { $exists: true, $ne: [], $type: 'array' },
             ...dateQuery
         })
-        .select('items orderNumber bill table createdAt customerName fixedDiscount discount')
+        .select('items orderNumber bill table createdAt customerName customerPhone fulfillmentType fixedDiscount discount')
         .populate({
             path: 'table',
             select: 'number section',
@@ -108,7 +108,7 @@ router.get("/sold-items", authorize("soldItems", "all"), async (req, res) => {
                 select: 'name'
             }
         })
-        .populate('bill', 'billNumber')
+        .populate('bill', 'billNumber fulfillmentType customerName customerPhone deliveryInfo')
         .sort({ createdAt: -1 })
         .lean();
         
@@ -268,7 +268,10 @@ router.get("/sold-items", authorize("soldItems", "all"), async (req, res) => {
                     total: itemRevenue,
                     discount: itemDiscount,
                     orderDate: order.createdAt,
-                    customerName: order.customerName || ''
+                    customerName: order.customerName || order.bill?.customerName || '',
+                    // نوع الفاتورة (طاولة/تيك أوي/دليفري) + هاتف العميل للدليفري
+                    fulfillmentType: order.fulfillmentType || order.bill?.fulfillmentType || 'dine_in',
+                    customerPhone: order.customerPhone || order.bill?.deliveryInfo?.phone || order.bill?.customerPhone || ''
                 });
             });
         });

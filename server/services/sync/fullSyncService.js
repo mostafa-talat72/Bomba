@@ -1,6 +1,7 @@
 import Logger from "../../middleware/logger.js";
 import syncConfig from "../../config/syncConfig.js";
 import dualDatabaseManager from "../../config/dualDatabaseManager.js";
+import { isViableReplacementDoc, missingRequiredFields } from "../../utils/syncReplaceGuard.js";
 
 /**
  * FullSyncService
@@ -494,6 +495,10 @@ class FullSyncService {
             }
 
             try {
+                if (!isViableReplacementDoc(atlasCollection.collectionName, doc)) {
+                    Logger.error(`🛑 FullSyncService REFUSED replaceOne for ${atlasCollection.collectionName}:${doc._id} — missing required fields [${(missingRequiredFields(atlasCollection.collectionName, doc) || []).join(", ")}]`);
+                    continue;
+                }
                 await atlasCollection.replaceOne(
                     { _id: doc._id },
                     doc,

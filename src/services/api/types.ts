@@ -402,6 +402,7 @@ export interface MenuSection {
   description?: string;
   sortOrder: number;
   isActive: boolean;
+  showInCustomerMenu?: boolean;
   organization?: string;
   createdBy?: User;
   updatedBy?: User;
@@ -417,6 +418,7 @@ export interface MenuCategory {
   section: string | MenuSection;
   sortOrder: number;
   isActive: boolean;
+  showInCustomerMenu?: boolean;
   organization?: string;
   createdBy?: User;
   updatedBy?: User;
@@ -440,6 +442,7 @@ export interface MenuItem {
   category: string | MenuCategory;
   description?: string;
   isAvailable: boolean;
+  showInCustomerMenu?: boolean;
   orderCount: number;
   imageUrl?: string;
   preparationTime: number;

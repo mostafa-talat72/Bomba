@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { X, Copy, Check, QrCode, RefreshCw } from 'lucide-react';
+import { X, Copy, Check, QrCode, RefreshCw, Printer, FileDown } from 'lucide-react';
 import ModalPortal from '../ModalPortal';
 import { apiClient } from '../../services/api';
 import { getTableDisplay } from './tableHelpers';
@@ -109,6 +109,44 @@ const TableQrModal: React.FC<TableQrModalProps> = ({ tableNumber, tableId, orgId
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const qrTitle = `${t('tables.qr.title')} ${getTableDisplay(tableNumber, i18n.language)}`;
+
+  const handlePrint = () => {
+    if (!active?.qr) return;
+    const w = window.open('', '_blank', 'width=420,height=560');
+    if (!w) return;
+    const dir = i18n.dir() === 'rtl' ? 'rtl' : 'ltr';
+    w.document.write(
+      `<html dir="${dir}"><head><title>${qrTitle}</title>` +
+      `<style>body{font-family:sans-serif;text-align:center;padding:24px;color:#111}` +
+      `img{width:260px;height:260px;margin:8px auto}` +
+      `p.url{word-break:break-all;font-size:12px;color:#555;margin-top:12px}</style></head>` +
+      `<body><h2>${qrTitle}</h2><img src="${active.qr}" alt="QR"/>` +
+      `<p class="url">${active.url}</p>` +
+      `<script>window.onload=function(){window.print()}<\/script></body></html>`
+    );
+    w.document.close();
+  };
+
+  const handlePdf = async () => {
+    if (!active?.qr) return;
+    try {
+      const { jsPDF } = await import('jspdf');
+      // بطاقة مربعة مناسبة للطباعة على الطاولة (نص لاتيني فقط لتوافق خطوط PDF)
+      const doc = new jsPDF({ unit: 'mm', format: [100, 130] });
+      doc.setFontSize(15);
+      doc.text(`Table ${String(tableNumber)}`, 50, 14, { align: 'center' });
+      doc.addImage(active.qr, 'PNG', 15, 20, 70, 70);
+      doc.setFontSize(7.5);
+      const lines = doc.splitTextToSize(active.url, 90);
+      doc.text(lines, 50, 96, { align: 'center' });
+      doc.save(`table-${String(tableNumber)}-qr.pdf`);
+    } catch {
+      // fallback: نافذة الطباعة (الحفظ كـ PDF من المتصفح)
+      handlePrint();
+    }
+  };
+
   return (
     <ModalPortal>
       <div className="fixed inset-0 z-[400] flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
@@ -176,6 +214,24 @@ const TableQrModal: React.FC<TableQrModalProps> = ({ tableNumber, tableId, orgId
                 {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
                 {copied ? t('tables.qr.copied') : t('tables.qr.copy')}
               </button>
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                <button
+                  onClick={handlePrint}
+                  disabled={!active.qr}
+                  className="py-2.5 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 rounded-xl font-bold flex items-center justify-center gap-2 text-sm disabled:opacity-50"
+                >
+                  <Printer className="h-4 w-4" />
+                  {t('tables.qr.print')}
+                </button>
+                <button
+                  onClick={handlePdf}
+                  disabled={!active.qr}
+                  className="py-2.5 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 rounded-xl font-bold flex items-center justify-center gap-2 text-sm disabled:opacity-50"
+                >
+                  <FileDown className="h-4 w-4" />
+                  {t('tables.qr.pdf')}
+                </button>
+              </div>
             </>
           )}
         </div>

@@ -78,7 +78,7 @@ export function prepareBillSections(bill: any, ctx: SectionPrintCtx): PreparedBi
     customerName: order.customerName || billCustomerName,
     customerPhone: order.customerPhone || billCustomerPhone,
     deliveryAddress: (order as any).deliveryAddress || billDeliveryAddress,
-    billNumber: (order as any).billNumber || (bill as any).billNumber || '',
+    billNumber: (order as any).billNumber || ((order as any).bill && typeof (order as any).bill === 'object' ? (order as any).bill.billNumber : null) || (bill as any).billNumber || '',
     createdAt: order.createdAt instanceof Date ? order.createdAt.toISOString() : order.createdAt,
   }));
   const map = new Map<string, any>();

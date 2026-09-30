@@ -3,6 +3,8 @@ import mongoose from "mongoose";
 import MenuItem from "../models/MenuItem.js";
 import MenuCategory from "../models/MenuCategory.js";
 import MenuSection from "../models/MenuSection.js";
+import Table from "../models/Table.js";
+import Organization from "../models/Organization.js";
 import { writeToAtlas } from "../utils/atlasWrite.js";
 import { createTombstone, createTombstones } from "../utils/tombstoneHelper.js";
 import Logger from "../middleware/logger.js";
@@ -967,24 +969,53 @@ export const getPublicMenu = async (req, res) => {
             return res.status(400).json({ success: false, message: 'معرف المنشأة غير صحيح' });
         }
         const organization = new mongoose.Types.ObjectId(orgId);
+        // المنشأة يجب أن تكون موجودة فعلاً
+        const orgExists = await Organization.exists({ _id: organization });
+        if (!orgExists) {
+            return res.status(404).json({ success: false, message: 'المنشأة غير موجودة' });
+        }
+        // الطاولة إجبارية ويجب أن تكون موجودة في نفس المنشأة
+        const tableId = String(req.query.table || '').trim();
+        if (!tableId) {
+            return res.status(400).json({ success: false, message: 'رابط الطاولة ناقص — معرف الطاولة مفقود' });
+        }
+        if (!mongoose.Types.ObjectId.isValid(tableId)) {
+            return res.status(400).json({ success: false, message: 'معرف الطاولة غير صحيح' });
+        }
+        const tableDoc = await Table.findOne({ _id: tableId, organization }).select('number').lean();
+        if (!tableDoc) {
+            return res.status(404).json({ success: false, message: 'الطاولة غير موجودة في هذه المنشأة' });
+        }
         const activeFilter = { organization, isActive: { $ne: false } };
+        const customerFilter = { ...activeFilter, showInCustomerMenu: { $ne: false } };
         const [items, sections, categories] = await Promise.all([
-            MenuItem.find(activeFilter)
+            MenuItem.find(customerFilter)
                 .select('name description price variants category isAvailable isPopular preparationTime image sortOrder')
                 .populate({ path: 'category', select: 'name section sortOrder' })
                 .sort({ sortOrder: 1 })
                 .lean(),
-            MenuSection.find(activeFilter)
+            MenuSection.find(customerFilter)
                 .select('name description sortOrder')
                 .sort({ sortOrder: 1 })
                 .lean(),
-            MenuCategory.find(activeFilter)
+            MenuCategory.find(customerFilter)
                 .select('name section sortOrder')
                 .populate({ path: 'section', select: 'name' })
                 .sort({ sortOrder: 1 })
                 .lean(),
         ]);
-        return res.json({ success: true, data: { items, sections, categories } });
+        // الظهور الفعلي: الصنف يتبع فئته وقسمه — المخفي في أي مستوى يُستبعد من الكل
+        const visibleSectionIds = new Set(sections.map(s => String(s._id)));
+        const visibleCategories = categories.filter(c => {
+            const sid = c.section && typeof c.section === 'object' ? String(c.section._id || '') : String(c.section || '');
+            return visibleSectionIds.has(sid);
+        });
+        const visibleCategoryIds = new Set(visibleCategories.map(c => String(c._id)));
+        const visibleItems = items.filter(it => {
+            const cid = it.category && typeof it.category === 'object' ? String(it.category._id || '') : String(it.category || '');
+            return visibleCategoryIds.has(cid);
+        });
+        return res.json({ success: true, data: { items: visibleItems, sections, categories: visibleCategories, tableNumber: tableDoc?.number ?? null } });
     } catch (error) {
         return res.status(500).json({
             success: false,

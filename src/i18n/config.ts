@@ -80,28 +80,34 @@ for (const lng of preloadLocales) {
 }
 
 // Load on language change
+export const applyDocumentDirection = (lng: string) => {
+    const language = languages.find(l => l.code === lng);
+    if (!language) return;
+    document.documentElement.lang = lng;
+    document.documentElement.dir = language.dir;
+
+    const token = safeGet('token');
+    const isAuthPage = window.location.pathname.match(/^\/(login|register|verify-email|reset-password|email-actions)/);
+    const isCustomerMenu = window.location.pathname === '/menu-view';
+
+    if ((token && !isAuthPage) || isCustomerMenu) {
+      document.body.dir = language.dir;
+    } else {
+      document.body.dir = 'ltr';
+    }
+};
+
 i18n.on('languageChanged', (lng) => {
     if (!i18n.hasResourceBundle(lng, 'translation')) {
         loadLocaleResources(lng);
     }
 
-    const language = languages.find(l => l.code === lng);
-    if (language) {
-      document.documentElement.lang = lng;
-      document.documentElement.dir = language.dir;
-      
-      const token = safeGet('token');
-      const isAuthPage = window.location.pathname.match(/^\/(login|register|verify-email|reset-password|email-actions)/);
-      
-      if (token && !isAuthPage) {
-        document.body.dir = language.dir;
-      } else {
-        document.body.dir = 'ltr';
-      }
-      
-      safeSet('language', lng);
-    }
+    applyDocumentDirection(lng);
+    safeSet('language', lng);
 });
+
+// الاتجاه لا يُضبط بحدث change عند التهيئة الأولى — طبّقه فورًا
+applyDocumentDirection(i18n.language || 'ar');
 
 // Make i18n available globally for AppContext
 declare global {

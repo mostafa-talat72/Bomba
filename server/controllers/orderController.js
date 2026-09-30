@@ -566,7 +566,13 @@ export const getOrders = async (req, res) => {
                 if (visibleBillsCache.size > 50) visibleBillsCache.clear();
                 visibleBillsCache.set(orgKey, { ids: visibleBillIds, at: Date.now() });
             }
-            query.bill = { $in: visibleBillIds };
+            // طلبات العملاء المعلقة (awaiting_approval) بلا فاتورة حتى القبول —
+            // استبعادها كان يمحوها من الواجهة مع أول تحديث. نُبقيها دائماً.
+            query.$or = [
+                { bill: { $in: visibleBillIds } },
+                { bill: { $exists: false } },
+                { bill: null },
+            ];
         }
 
         // Pagination is OPT-IN via explicit ?page= (infinite-scroll views).
@@ -3668,21 +3674,31 @@ export const deliverItem = async (req, res) => {
         const remainingToDeliver = requiredQuantity - currentPreparedCount;
 
         if (remainingToDeliver <= 0) {
-            return res.status(400).json({
-                success: false,
+            // Idempotent: مسلَّم بالفعل — نجاح بلا خطأ (يمنع sectionActionFailed الكاذب عند الضغط المكرر)
+            return res.json({
+                success: true,
                 message: `${item.name} تم تسليمه بالكامل بالفعل`,
+                data: order,
+                deliveredItem: {
+                    name: item.name,
+                    previousCount: currentPreparedCount,
+                    newCount: requiredQuantity,
+                    deliveredAmount: 0,
+                    alreadyDelivered: true,
+                },
             });
         }
 
-        // تحديث preparedCount للصنف إلى الكمية الكاملة (تم تسليمه)
+        // deliver-item يجهّز ويسلّم معًا: حدّث preparedCount و deliveredCount
         item.preparedCount = requiredQuantity;
+        item.deliveredCount = requiredQuantity;
 
         // التحقق من حالة الطلب الكلية وتحديثها إذا لزم الأمر
-        const allItemsReady = order.items.every(
-            (item) => (item.preparedCount || 0) >= (item.quantity || 0)
+        const allItemsDelivered = order.items.every(
+            (item) => (item.deliveredCount || 0) >= (item.quantity || 0)
         );
 
-        if (allItemsReady && order.status !== "delivered") {
+        if (allItemsDelivered && order.status !== "delivered") {
             // إذا تم تسليم جميع الأصناف، الطلب أصبح delivered
             order.status = "delivered";
             order.deliveredTime = new Date();
