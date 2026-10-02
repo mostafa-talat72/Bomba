@@ -2161,7 +2161,7 @@ const loadInitialData = async () => {
       const printerId = routes[sectionId] || '';
       groups.set(printerId, [...(groups.get(printerId) || []), sectionId]);
     });
-    const mountedOrder = (() => {
+    const mountedBase = (() => {
       const direct = (order as any).billNumber || ((order as any)?.bill && typeof (order as any).bill === 'object' ? (order as any).bill.billNumber : null);
       if (direct) return (order as any).billNumber ? order : { ...order, billNumber: direct };
       const bref = (order as any).bill;
@@ -2174,6 +2174,19 @@ const loadInitialData = async () => {
       });
       return parent?.billNumber ? { ...order, billNumber: parent.billNumber } : order;
     })();
+    // إجمالي الفاتورة الأب لورقة التحضير — من الطلب نفسه ثم الفاتورة المرتبطة
+    const mountedBillTotal = (mountedBase as any)?.billTotal
+      ?? ((mountedBase as any)?.bill && typeof (mountedBase as any).bill === 'object' ? (mountedBase as any).bill.total : undefined)
+      ?? (() => {
+        const ob: any = order as any;
+        const bref = ob?.bill;
+        const bid = bref && typeof bref === 'object' ? (bref._id || bref.id) : bref;
+        const byId = bid ? (bills || []).find((b: any) => String(b._id || b.id) === String(bid)) : null;
+        if ((byId as any)?.total != null) return (byId as any).total;
+        const parent = (bills || []).find((b: any) => ((b.orders || []) as any[]).some((o: any) => String(o._id || o.id) === String(ob._id || ob.id)));
+        return (parent as any)?.total;
+      })();
+    const mountedOrder = mountedBillTotal != null ? { ...mountedBase, billTotal: Number(mountedBillTotal) || 0 } : mountedBase;
     await Promise.all(Array.from(groups.entries()).map(async ([printerId, sectionIds]) => {
       const profile = profiles.find((item: any) => item.id === printerId);
       if (!hasSectionCopies) {

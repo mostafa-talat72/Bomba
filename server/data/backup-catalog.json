@@ -1,6 +1,28 @@
 {
   "backups": [
     {
+      "fileName": "bomba-backup-2026-10-01T16-00-00-362Z.json.gz",
+      "path": "احتياطيه\\bomba-backup-2026-10-01T16-00-00-362Z.json.gz",
+      "secondaryPath": null,
+      "size": 25523751,
+      "documents": 82190,
+      "collections": 37,
+      "encrypted": false,
+      "verified": true,
+      "createdAt": "2026-10-01T16:00:00.362Z"
+    },
+    {
+      "fileName": "bomba-backup-2026-10-01T15-24-39-594Z.json.gz",
+      "path": "احتياطيه\\bomba-backup-2026-10-01T15-24-39-594Z.json.gz",
+      "secondaryPath": null,
+      "size": 25348625,
+      "documents": 77390,
+      "collections": 37,
+      "encrypted": false,
+      "verified": true,
+      "createdAt": "2026-10-01T15:24:39.594Z"
+    },
+    {
       "fileName": "bomba-backup-2026-09-30T14-00-00-125Z.json.gz",
       "path": "احتياطيه\\bomba-backup-2026-09-30T14-00-00-125Z.json.gz",
       "secondaryPath": null,

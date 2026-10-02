@@ -5,6 +5,7 @@ import organizationWebsiteService from "../services/organizationWebsiteService.j
 import { getUserLocale } from "../utils/localeHelper.js";
 import { getOrganizationId } from "../utils/organization.js";
 import { findReportEligibleOrders } from "../utils/reportOrderFilter.js";
+import { normalizeCipher } from "../utils/serialCipher.js";
 
 // مقارنة هويات آمنة عبر كل الأنواع: ObjectId / نص / كائن مدمج (populated) —
 // تتجنب crash الـ .toString() على القيم الفارغة ورفض المالك المدمج.
@@ -193,6 +194,24 @@ export const updateOrganization = async (req, res) => {
 
         if (publicOrderAutoAccept !== undefined) {
             organization.publicOrderAutoAccept = publicOrderAutoAccept === true;
+        }
+
+        if (req.body.numberingSettings !== undefined) {
+            const ns = req.body.numberingSettings || {};
+            try {
+                if (!organization.numberingSettings) organization.numberingSettings = {};
+                if (ns.billSerialCipher !== undefined) {
+                    organization.numberingSettings.billSerialCipher =
+                        ns.billSerialCipher === null ? undefined : normalizeCipher(ns.billSerialCipher);
+                }
+                if (ns.orderSerialCipher !== undefined) {
+                    organization.numberingSettings.orderSerialCipher =
+                        ns.orderSerialCipher === null ? undefined : normalizeCipher(ns.orderSerialCipher);
+                }
+                organization.markModified("numberingSettings");
+            } catch (cipherErr) {
+                return res.status(400).json({ success: false, message: cipherErr.message });
+            }
         }
 
         await organization.save();

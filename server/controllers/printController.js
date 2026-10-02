@@ -665,7 +665,15 @@ class PrintController {
     }
 
     content += '-'.repeat(charsPerLine) + '\n';
-    content += `Total: ${order.totalAmount || order.subtotal || 0}\n`;
+    const __orderLayout = printSettings?.printLayout?.order || {};
+    if (__orderLayout.showSectionTotal !== false) {
+      content += `Total: ${order.totalAmount || order.subtotal || 0}\n`;
+    }
+    // إجمالي الفاتورة الأب — نفس منطق ورقة HTML وبنفس مفتاح المصمم
+    const __obt = order.billTotal ?? (order.bill && typeof order.bill === 'object' ? order.bill.total : null);
+    if (__orderLayout.showBillTotal !== false && Number(__obt) > 0) {
+      content += `Bill Total: ${__obt}\n`;
+    }
 
     return content;
   }

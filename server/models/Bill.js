@@ -6,6 +6,7 @@ import { auditPlugin } from "../utils/audit.js";
 import { getInstanceId } from "../utils/instanceId.js";
 import Logger from "../middleware/logger.js";
 import { bumpVersion } from "../utils/cacheVersion.js";
+import { normalizeCipher, applyCipher, decodeSerial, escapeRegExp } from "../utils/serialCipher.js";
 
 // Helper function to get item redistribution key
 // Uses menuItem ID if available, falls back to name|price for backward compatibility
@@ -519,15 +520,41 @@ billSchema.pre("save", async function (next) {
             const dateStr = `${String(now.getFullYear()).slice(-2)}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
             const shortPrefix = `BILL-${identifier}-${dateStr}-`;
 
-            // Find the highest sequence number for this identifier + today only
-            const result = await this.constructor.aggregate([
-                { $match: { billNumber: { $regex: `^${shortPrefix}\\d+$` } } },
-                { $addFields: { seq: { $toInt: { $arrayElemAt: [{ $split: ["$billNumber", "-"] }, 3] } } } },
-                { $group: { _id: null, maxSeq: { $max: "$seq" } } }
-            ]);
-            let nextSeq = (result[0]?.maxSeq || 0) + 1;
+            // شفرة مسلسل الفواتير (إن ضبطتها المنشأة) — تُطبق على جزء المسلسل فقط
+            let cipher = null;
+            try {
+                if (this.organization) {
+                    const orgDoc = await mongoose.model("Organization").findById(this.organization).select("numberingSettings").lean();
+                    const raw = orgDoc?.numberingSettings?.billSerialCipher;
+                    if (raw) cipher = normalizeCipher(raw);
+                }
+            } catch {}
 
-            this.billNumber = `${shortPrefix}${String(nextSeq).padStart(3, '0')}`;
+            let nextSeq;
+            if (!cipher) {
+                // Find the highest sequence number for this identifier + today only
+                const result = await this.constructor.aggregate([
+                    { $match: { billNumber: { $regex: `^${shortPrefix}\\d+$` } } },
+                    { $addFields: { seq: { $toInt: { $arrayElemAt: [{ $split: ["$billNumber", "-"] }, 3] } } } },
+                    { $group: { _id: null, maxSeq: { $max: "$seq" } } }
+                ]);
+                nextSeq = (result[0]?.maxSeq || 0) + 1;
+            } else {
+                // مع الشفرة: فكّ كل مسلسلات اليوم (قديمة عادية + جديدة مشفرة) وخُذ الأقصى
+                const docs = await this.constructor.find(
+                    { billNumber: { $regex: `^${escapeRegExp(shortPrefix)}` } }
+                ).select("billNumber").lean();
+                let max = 0;
+                for (const d of docs) {
+                    const tail = String(d.billNumber || "").slice(shortPrefix.length);
+                    const dec = decodeSerial(tail, cipher);
+                    const n = dec !== null ? parseInt(dec, 10) : 0;
+                    if (Number.isFinite(n) && n > max) max = n;
+                }
+                nextSeq = max + 1;
+            }
+
+            this.billNumber = `${shortPrefix}${applyCipher(String(nextSeq), cipher)}`;
         } catch (error) {
             // Fallback bill number
             this.billNumber = `INV-${Date.now()}`;

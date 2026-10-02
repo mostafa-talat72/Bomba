@@ -42,6 +42,10 @@ async function updateOrganization(organizationData: {
       delivery?: number;
     };
   };
+  numberingSettings?: {
+    billSerialCipher?: Record<string, string> | null;
+    orderSerialCipher?: Record<string, string> | null;
+  };
 }): Promise<ApiResponse<any>> {
   return apiClient.request('/organization', {
     method: 'PUT',

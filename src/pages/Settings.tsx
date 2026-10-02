@@ -14,6 +14,7 @@ import { useLanguage } from '../context/LanguageContext';
 import { useTheme } from '../context/ThemeContext';
 import { useOrganization } from '../context/OrganizationContext';
 import { ReportSettingsSection } from '../components/ReportSettingsSection';
+import SerialCipherEditor from '../components/SerialCipherEditor';
 import { PayrollPermissionsSection } from '../components/PayrollPermissionsSection';
 import PrinterSettingsForm from '../components/settings/PrinterSettingsForm';
 import UserNotificationPrefsForm from '../components/UserNotificationPrefsForm';
@@ -152,6 +153,10 @@ interface OrganizationData {
     printHeader?: boolean;
     printFooter?: boolean;
     autoCut?: boolean;
+  };
+  numberingSettings?: {
+    billSerialCipher?: Record<string, string> | null;
+    orderSerialCipher?: Record<string, string> | null;
   };
 }
 
@@ -2294,6 +2299,7 @@ printSettings: {
                       ['org-sec-website', t('settings.organization.generatedWebsite.title')],
                       ['org-sec-print', t('settings.organization.printSettings.title')],
                       ['org-sec-discount', t('settings.organization.fixedDiscount.title') || 'الخصم الثابت'],
+                      ['org-sec-numbering', t('settings.organization.numbering.title')],
                       ['org-sec-social', t('settings.organization.socialLinks.title')],
                       ['org-sec-hours', t('settings.organization.workingHours.title')],
                       ['org-sec-perms', t('settings.organization.permissions.title')],
@@ -2669,10 +2675,40 @@ printSettings: {
                           ? t('settings.organization.customerOrders.autoAcceptOn')
                           : t('settings.organization.customerOrders.autoAcceptOff')}
                       </p>
+                      </div>
                     </div>
-                  </div>
 
-                  {/* Social Links */}
+                    {/* Serial cipher (bill/order numbering) */}
+                    <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg mb-6">
+                      <h4 id="org-sec-numbering" className="text-md font-medium text-gray-900 dark:text-gray-100 mb-4 scroll-mt-24">
+                        {t('settings.organization.numbering.title')}
+                      </h4>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+                        {t('settings.organization.numbering.desc')}
+                      </p>
+                      <div className="space-y-3">
+                        <SerialCipherEditor
+                          title={t('settings.organization.numbering.billTitle')}
+                          description={t('settings.organization.numbering.billDesc')}
+                          value={(organization as any).numberingSettings?.billSerialCipher ?? null}
+                          onChange={(v) => setOrganization((prev: any) => ({
+                            ...prev,
+                            numberingSettings: { ...(prev.numberingSettings || {}), billSerialCipher: v },
+                          }))}
+                        />
+                        <SerialCipherEditor
+                          title={t('settings.organization.numbering.orderTitle')}
+                          description={t('settings.organization.numbering.orderDesc')}
+                          value={(organization as any).numberingSettings?.orderSerialCipher ?? null}
+                          onChange={(v) => setOrganization((prev: any) => ({
+                            ...prev,
+                            numberingSettings: { ...(prev.numberingSettings || {}), orderSerialCipher: v },
+                          }))}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Social Links */}
                   <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg mb-6">
                     <h4 id="org-sec-social" className="text-md font-medium text-gray-900 dark:text-gray-100 mb-4 scroll-mt-24">
                       {t('settings.organization.socialLinks.title')}

@@ -79,6 +79,7 @@ export function prepareBillSections(bill: any, ctx: SectionPrintCtx): PreparedBi
     customerPhone: order.customerPhone || billCustomerPhone,
     deliveryAddress: (order as any).deliveryAddress || billDeliveryAddress,
     billNumber: (order as any).billNumber || ((order as any).bill && typeof (order as any).bill === 'object' ? (order as any).bill.billNumber : null) || (bill as any).billNumber || '',
+    billTotal: Number((order as any).billTotal ?? ((order as any).bill && typeof (order as any).bill === 'object' ? (order as any).bill.total : undefined) ?? (bill as any).total ?? (order as any).totalAmount ?? (order as any).finalAmount ?? 0) || 0,
     createdAt: order.createdAt instanceof Date ? order.createdAt.toISOString() : order.createdAt,
   }));
   const map = new Map<string, any>();

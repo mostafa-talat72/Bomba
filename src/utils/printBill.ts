@@ -708,29 +708,54 @@ export const buildBillPrintHTML = async (
           font-weight: 900;
         }
         .qr-section {
-          margin: 10px 0;
-          text-align: center;
+          margin: 6px 0;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
           page-break-inside: avoid;
           border: 1px dashed #ccc;
-          padding: 2px;
+          padding: 4px;
           border-radius: 2px;
         }
         .qr-code {
-          margin: 8px auto;
+          margin: 0;
+          flex-shrink: 0;
           display: block;
           border: 2px solid #000;
           border-radius: 2px;
-          padding: 2px;
+          padding: 5px;
           background: #fff;
           max-width: 120px;
+          min-width: 80px;
+          min-height: 80px;
           height: auto;
+          image-rendering: pixelated;
+        }
+        .qr-info {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          text-align: center;
+        }
+        /* وصف QR رأسي بالطول (مثل اتجاه أعمدة الجدول) — حسب اختيار المصمم */
+        .qr-info.qr-dir-v {
+          writing-mode: vertical-rl;
+          text-orientation: mixed;
+        }
+        /* وصف QR أسفل الرمز بدل بجانبه — حسب اختيار المصمم */
+        .qr-section.qr-below {
+          flex-direction: column;
+          gap: 4px;
+        }
+        .qr-section.qr-below .qr-info {
+          text-align: center;
         }
         .qr-text {
           font-size: 0.95em;
           color: #333;
-          margin-top: 5px;
           font-weight: 800;
-          line-height: 1.2;
+          line-height: 1.3;
         }
         .qr-subtitle {
           font-size: 0.85em;
@@ -911,10 +936,12 @@ export const buildBillPrintHTML = async (
         : ''}
       
       ${qrCodeDataURL && qrInfo && billLayout.showQR !== false ? `
-        <div class="qr-section">
+        <div class="qr-section${billLayout.qrTextPosition === 'below' ? ' qr-below' : ''}">
           <img src="${qrCodeDataURL}" alt="${t('billPrint.qrCode')}" class="qr-code" />
-          <div class="qr-text">${t('billPrint.contactVia')} ${organizationName}</div>
-          <div class="qr-subtitle">${t('billPrint.via')} ${qrInfo.platform}</div>
+          <div class="qr-info${billLayout.qrTextDirection === 'vertical' ? ' qr-dir-v' : ''}">
+            <div class="qr-text">${t('billPrint.contactVia')} ${organizationName}</div>
+            <div class="qr-subtitle">${t('billPrint.via')} ${qrInfo.platform}</div>
+          </div>
         </div>
       ` : ''}
       

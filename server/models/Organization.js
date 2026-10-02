@@ -86,6 +86,12 @@ const OrganizationSchema = new mongoose.Schema({
         }]
     },
 
+    // إعدادات ترقيم الفواتير والطلبات (شفرة المسلسل) — منفصلة لكل نوع
+    numberingSettings: {
+        billSerialCipher: { type: Object, default: undefined },
+        orderSerialCipher: { type: Object, default: undefined },
+    },
+
     // إعدادات التقارير والإيميلات
     reportSettings: {
         dailyReportEnabled: { type: Boolean, default: true },

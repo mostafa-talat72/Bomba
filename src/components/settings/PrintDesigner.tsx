@@ -498,6 +498,8 @@ const PrintDesigner: React.FC<PrintDesignerProps> = ({ settings, onPatch, logoUr
             // للتيك أوي/الدليفري: الفاتورة تحمل النوع ويورثه الطلب
             if (fulfillment !== 'dine_in') (s.order as any).fulfillmentType = fulfillment;
             (s.order as any).billNumber = 'BILL-XXXXXX-000001';
+            // معاينة واقعية: إجمالي الفاتورة = مجموع أصناف الطلب
+            (s.order as any).billTotal = (s.order.items || []).reduce((sum: number, it: any) => sum + (Number(it.price) || 0) * (Number(it.quantity) || 0), 0);
             out = await buildOrderPrintHTML(
               s.order, s.menuSections, s.menuItemsMap,
               effOrgName, previewLang, ft as any,
@@ -861,7 +863,14 @@ const PrintDesigner: React.FC<PrintDesignerProps> = ({ settings, onPatch, logoUr
             )}
             {doc === 'order' && (
               <>
-                <ToggleRow title={P('designerShowSectionTotal', 'إجمالي القسم')} checked={draft.showSectionTotal !== false} onChange={(v) => setL({ showSectionTotal: v })} />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3">
+                  <ToggleRow title={P('designerShowSectionTotal', 'إجمالي القسم')} checked={draft.showSectionTotal !== false} onChange={(v) => setL({ showSectionTotal: v })} />
+                  <ToggleRow title={P('designerShowBillTotal', 'إجمالي الفاتورة')} checked={draft.showBillTotal !== false} onChange={(v) => setL({ showBillTotal: v })} />
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3">
+                  <NumRow label={P('designerFontSectionTotal', 'حجم خط إجمالي القسم')} value={draft.fontSectionTotal} fallback={16} min={8} max={60} suffix="px" onChange={(v) => setL({ fontSectionTotal: v })} />
+                  <NumRow label={P('designerFontBillTotal', 'حجم خط إجمالي الفاتورة')} value={draft.fontBillTotal} fallback={18} min={8} max={60} suffix="px" onChange={(v) => setL({ fontBillTotal: v })} />
+                </div>
                 <ToggleRow title={P('designerShowOrderNotes', 'ملاحظات الطلب')} checked={draft.showOrderNotes !== false} onChange={(v) => setL({ showOrderNotes: v })} />
                 <ToggleRow title={P('designerShowItemNotes', 'ملاحظات كل صنف')} checked={draft.showItemNotes !== false} onChange={(v) => setL({ showItemNotes: v })} />
                 <ToggleRow title={P('designerShowUpdateBanner', 'بانر "طلب مُحدّث"')} checked={draft.showUpdateBanner !== false} onChange={(v) => setL({ showUpdateBanner: v })} />
@@ -890,7 +899,22 @@ const PrintDesigner: React.FC<PrintDesignerProps> = ({ settings, onPatch, logoUr
             {doc === 'bill' && (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3">
                 <ToggleRow title={t('settings.organization.printSettings.show_showQR')} checked={draft.showQR !== false} onChange={(v) => setL({ showQR: v })} />
-                <NumRow label={P('designerQrSize', 'حجم رمز QR')} value={draft.qrSize} fallback={120} min={50} max={220} suffix="px" onChange={(v) => setL({ qrSize: v })} />
+                <NumRow label={P('designerQrSize', 'حجم رمز QR')} value={draft.qrSize} fallback={120} min={80} max={220} suffix="px" onChange={(v) => setL({ qrSize: v })} />
+                <label className="flex items-center justify-between gap-2 py-1 text-xs text-gray-700 dark:text-gray-200">
+                  <span>{P('designerQrTextPosition', 'موضع وصف QR')}</span>
+                  <select value={draft.qrTextPosition || 'beside'} onChange={(e) => setL({ qrTextPosition: e.target.value as any })} className="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 p-1.5 text-xs">
+                    <option value="beside">{P('designerQrTextBeside', 'بجانب الرمز')}</option>
+                    <option value="below">{P('designerQrTextBelow', 'أسفل الرمز')}</option>
+                  </select>
+                </label>
+                <NumRow label={P('designerFontQrText', 'حجم خط وصف QR')} value={draft.fontQrText} fallback={13} min={8} max={60} suffix="px" onChange={(v) => setL({ fontQrText: v })} />
+                <label className="flex items-center justify-between gap-2 py-1 text-xs text-gray-700 dark:text-gray-200">
+                  <span>{P('designerQrTextDirection', 'اتجاه سطور الوصف')}</span>
+                  <select value={draft.qrTextDirection || 'horizontal'} onChange={(e) => setL({ qrTextDirection: e.target.value as any })} className="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 p-1.5 text-xs">
+                    <option value="horizontal">{P('designerQrDirHorizontal', 'أفقي (فوق بعض)')}</option>
+                    <option value="vertical">{P('designerQrDirVertical', 'رأسي (بالطول)')}</option>
+                  </select>
+                </label>
               </div>
             )}
             <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1">{P('designerDevSignNote', 'توقيع المطور أسفل الورقة ثابت دائماً ولا يمكن إخفاؤه.')}</p>

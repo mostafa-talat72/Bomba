@@ -4,6 +4,7 @@ import { stampUpdatedBy } from "../middleware/auditStamping.js";
 import { auditPlugin } from "../utils/audit.js";
 import { getInstanceId } from "../utils/instanceId.js";
 import { bumpVersion } from "../utils/cacheVersion.js";
+import { normalizeCipher, applyCipher, decodeSerial, escapeRegExp } from "../utils/serialCipher.js";
 
 const orderItemSchema = new mongoose.Schema({
     menuItem: {
@@ -229,14 +230,39 @@ orderSchema.pre("save", async function (next) {
             const dateStr = `${String(now.getFullYear()).slice(-2)}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
             const prefix = `ORD-${identifier}-${dateStr}-`;
 
-            // Find max sequence for this identifier + today only using aggregation
-            const result = await this.constructor.aggregate([
-                { $match: { orderNumber: { $regex: `^${prefix}\\d+$` } } },
-                { $addFields: { seq: { $toInt: { $arrayElemAt: [{ $split: ["$orderNumber", "-"] }, 3] } } } },
-                { $group: { _id: null, maxSeq: { $max: "$seq" } } }
-            ]);
-            const nextSeq = (result[0]?.maxSeq || 0) + 1;
-            this.orderNumber = `${prefix}${String(nextSeq).padStart(3, '0')}`;
+            // شفرة مسلسل الطلبات (إن ضبطتها المنشأة) — منفصلة عن شفرة الفواتير
+            let cipher = null;
+            try {
+                if (this.organization) {
+                    const orgDoc = await mongoose.model("Organization").findById(this.organization).select("numberingSettings").lean();
+                    const raw = orgDoc?.numberingSettings?.orderSerialCipher;
+                    if (raw) cipher = normalizeCipher(raw);
+                }
+            } catch {}
+
+            let nextSeq;
+            if (!cipher) {
+                // Find max sequence for this identifier + today only using aggregation
+                const result = await this.constructor.aggregate([
+                    { $match: { orderNumber: { $regex: `^${prefix}\\d+$` } } },
+                    { $addFields: { seq: { $toInt: { $arrayElemAt: [{ $split: ["$orderNumber", "-"] }, 3] } } } },
+                    { $group: { _id: null, maxSeq: { $max: "$seq" } } }
+                ]);
+                nextSeq = (result[0]?.maxSeq || 0) + 1;
+            } else {
+                const docs = await this.constructor.find(
+                    { orderNumber: { $regex: `^${escapeRegExp(prefix)}` } }
+                ).select("orderNumber").lean();
+                let max = 0;
+                for (const d of docs) {
+                    const tail = String(d.orderNumber || "").slice(prefix.length);
+                    const dec = decodeSerial(tail, cipher);
+                    const n = dec !== null ? parseInt(dec, 10) : 0;
+                    if (Number.isFinite(n) && n > max) max = n;
+                }
+                nextSeq = max + 1;
+            }
+            this.orderNumber = `${prefix}${applyCipher(String(nextSeq), cipher)}`;
         }
 
         // Calculate item totals and subtotal

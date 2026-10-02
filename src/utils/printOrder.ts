@@ -68,7 +68,7 @@ export const buildOrderPrintHTML = async (
   t: TFunction = ((key: string) => key) as TFunction,
   tableSectionName?: string,
   selectedSectionIds?: string[],
-  extra?: { logoUrl?: string; layout?: DocPrintLayout; printFont?: string; customFooter?: string; copyPrinters?: Array<string | undefined>; billNumber?: string }
+  extra?: { logoUrl?: string; layout?: DocPrintLayout; printFont?: string; customFooter?: string; copyPrinters?: Array<string | undefined>; billNumber?: string; billTotal?: number }
 ): Promise<string> => {
   // Get establishment name from order data or use fallback
   let establishmentName = fallbackOrganizationName || t('orderPrint.defaultEstablishment') || 'Cafe Management System';
@@ -242,12 +242,15 @@ const printAllSectionsInOnePage = (
   language: string,
   t: TFunction,
   tableSectionName?: string,
-  extra?: { logoUrl?: string; layout?: DocPrintLayout; printFont?: string; customFooter?: string; copyPrinters?: Array<string | undefined>; billNumber?: string }
+  extra?: { logoUrl?: string; layout?: DocPrintLayout; printFont?: string; customFooter?: string; copyPrinters?: Array<string | undefined>; billNumber?: string; billTotal?: number }
 ) => {
   const now = new Date();
   const locale = language === 'ar' ? 'ar-EG' : language === 'fr' ? 'fr-FR' : 'en-US';
   const organizationTimezone = localStorage.getItem('organizationTimezone') || 'Africa/Cairo';
   const billNum = String(extra?.billNumber || (order as any)?.billNumber || ((order as any)?.bill && typeof (order as any).bill === 'object' ? (order as any).bill.billNumber : null) || '');
+  // إجمالي الفاتورة الأب — صريح من extra ثم المرفق بالطلب ثم إجمالي الطلب نفسه
+  const rawBillTotal = extra?.billTotal ?? (order as any)?.billTotal ?? ((order as any)?.bill && typeof (order as any).bill === 'object' ? (order as any).bill.total : undefined) ?? (order as any)?.totalAmount ?? (order as any)?.finalAmount;
+  const billTotalVal = Number(rawBillTotal) || 0;
 
   const isUpdatedOrder = order.updatedAt && 
     new Date(order.updatedAt).getTime() > new Date(order.createdAt).getTime();
@@ -402,11 +405,16 @@ const printAllSectionsInOnePage = (
           </tbody>
         </table>
 
-        <!-- Section total -->
-        ${layout.showSectionTotal !== false ? `
-        <div class="total">
-          ${t('orderPrint.sectionTotal')}: <strong>${formattedTotal}</strong> ${currencySymbol}
-        </div>` : ''}
+        <!-- Totals table — إجمالي القسم ثم إجمالي الفاتورة (زخرفي وواضح في الطباعة) -->
+        ${(() => {
+          const showST = layout.showSectionTotal !== false;
+          const showBT = layout.showBillTotal !== false && billTotalVal > 0;
+          if (!showST && !showBT) return '';
+          return `<table class="order-totals"><tbody>
+            ${showST ? `<tr class="section-total"><th><span class="total-label">${t('orderPrint.sectionTotal')}</span></th><td><strong>${formattedTotal}</strong> <span class="currency">${currencySymbol}</span></td></tr>` : ''}
+            ${showBT ? `<tr class="bill-total"><th><span class="total-label">${t('orderPrint.billTotal')}</span></th><td><strong>${formatDecimal(billTotalVal, language)}</strong> <span class="currency">${currencySymbol}</span></td></tr>` : ''}
+          </tbody></table>`;
+        })()}
 
         <!-- Order notes if exist -->
         ${order.notes && layout.showOrderNotes !== false ? `
@@ -464,13 +472,17 @@ strong {
   font-weight: 800;
 }
 
-/* ===== HEADER (bill-like, بلا خط سفلي) ===== */
+/* ===== HEADER (bill-like, بلا خط سفلي — مدمج) ===== */
 .header {
   text-align: center;
-  margin-bottom: 8px;
+  margin-bottom: 2px;
   margin-top: 0;
   font-weight: 700;
-  padding-bottom: 6px;
+  padding-bottom: 2px;
+}
+
+.header h1 {
+  margin: 2px 0;
 }
 
 /* ===== SECTIONS ===== */
@@ -490,15 +502,16 @@ strong {
   border-radius: 1px;
 }
 
-/* ===== UPDATE BANNER ===== */
+/* ===== UPDATE BANNER — مدمج بدون مساحات زائدة ===== */
 .update-banner {
-  padding: 4px 0;
-  margin: 4px 0;
+  padding: 0;
+  margin: 0;
+  font-size: 0.85em;
+  line-height: 1.2;
 }
 
 .update-banner small {
-  font-size: 12px;
-  margin-top: 1px;
+  font-size: 11px;
 }
 
 /* ===== ORDER INFO (bill-like) ===== */
@@ -579,6 +592,53 @@ strong {
   margin-bottom: 2px;
   font-size: 1.2em;
   font-weight: 800;
+}
+
+/* ===== ORDER TOTALS TABLE — زخرفي وواضح في الطباعة (بلا أسود كامل) ===== */
+.order-totals {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 3px 0 2px;
+  border: 3px double #000;
+  table-layout: fixed;
+  font-size: 1.05em;
+}
+
+.order-totals th,
+.order-totals td {
+  padding: 2px 4px;
+  text-align: center;
+  font-weight: 900;
+  vertical-align: middle;
+  word-wrap: break-word;
+  overflow-wrap: anywhere;
+}
+
+.order-totals th {
+  width: 46%;
+  font-size: 1.25em;
+  background: #e8e8e8;
+  border-inline-end: 1px dashed #000;
+}
+
+.order-totals td {
+  width: 54%;
+  font-size: 1.7em;
+}
+
+/* فاصل مزدوج زخرفي بين الصفين فقط — الصف الوحيد بلا حد علوي */
+.order-totals tr + tr th,
+.order-totals tr + tr td {
+  border-top: 3px double #000;
+}
+
+.order-totals .bill-total th {
+  font-size: 1.4em;
+  background: #d9d9d9;
+}
+
+.order-totals .bill-total td {
+  font-size: 2em;
 }
 
 /* ===== NOTES (bill-like) ===== */
@@ -695,7 +755,7 @@ export const printOrder = async (
   printerName?: string,
   paperWidthMm?: number,
   copies: number = 1,
-  extra?: { logoUrl?: string; layout?: DocPrintLayout; printFont?: string; customFooter?: string; copyPrinters?: Array<string | undefined>; defaultPrinter?: string }
+  extra?: { logoUrl?: string; layout?: DocPrintLayout; printFont?: string; customFooter?: string; copyPrinters?: Array<string | undefined>; defaultPrinter?: string; billTotal?: number }
 ) => {
   // ⚡ إشعار فوري: الطباعة بدأت لحظة الضغط.
   try {

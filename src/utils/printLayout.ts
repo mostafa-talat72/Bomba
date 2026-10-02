@@ -87,12 +87,18 @@ export interface DocPrintLayout {
   showAddressLabel?: boolean; fontAddressLabel?: number;
   printFont?: string; // عائلة الخط — لكل مستند على حدة (Tajawal/Cairo/Amiri/IBM Plex Sans Arabic)
   showSectionTotal?: boolean; // التحضير: إظهار إجمالي القسم
+  showBillTotal?: boolean; // التحضير: إظهار إجمالي الفاتورة أسفل إجمالي القسم
+  fontSectionTotal?: number; // px — حجم صف إجمالي القسم (التحضير)
+  fontBillTotal?: number; // px — حجم صف إجمالي الفاتورة (التحضير)
   // ملاحظة: توقيع المطور (.dev-sign) مقفل دائماً — لا يخضع لأي إظهار/تنسيق
   showZeroRows?: boolean; // الفاتورة: إظهار الخصم/الضريبة/التوصيل حتى لو صفر
   hidePaidWhenZero?: boolean; // الفاتورة: إخفاء صف المدفوع عند الصفر
   hideRemainingWhenZero?: boolean; // الفاتورة: إخفاء صف المتبقي عند الصفر
   hideBothWhenEitherZero?: boolean; // الفاتورة: إخفاء المدفوع والمتبقي معاً عند تصفير أحدهما
   qrSize?: number; // px — حجم رمز QR
+  qrTextPosition?: 'beside' | 'below'; // الفاتورة: موضع وصف QR (بجانبه/أسفله)
+  qrTextDirection?: 'vertical' | 'horizontal'; // الفاتورة: اتجاه وصف QR (رأسي بالطول مثل الجدول/أفقي سطور فوق بعض)
+  fontQrText?: number; // px — حجم خط وصف QR (الفاتورة)
 }
 
 export const DEFAULT_DOC_LAYOUT: DocPrintLayout = {
@@ -182,7 +188,7 @@ export const layoutCss = (
   const css: string[] = [`
 .org-name,.title,.header h1{font-size:${num(l.fontTitle, 19, 8, 60)}px !important;}
 .items-table,.items-table th,.items-table td,table.items,table.items th,table.items td{font-size:${num(l.fontItems, 15, 8, 60)}px !important;}
-.totals-table,.totals-table th,.totals-table td,.category-total{font-size:${num(l.fontTotals, 16, 8, 60)}px !important;}
+.totals-table,.totals-table th,.totals-table td,.category-total,.order-totals,.order-totals th,.order-totals td{font-size:${num(l.fontTotals, 16, 8, 60)}px !important;}
 .thank-you{font-size:${num(l.fontFooter, 12, 8, 60)}px !important;white-space:pre-line !important;}`];
 
   // —— موسع: يُبث فقط عند الضبط الصريح — الغائب = شكل الطباعة الحالي بدون أي تغيير
@@ -259,7 +265,14 @@ export const layoutCss = (
   colFont(l.fontQtyCol, '.items-table .item-quantity,table.items .item-qty', 15);
   colFont(l.fontPaidCol, '.items-table .item-paid-qty', 15);
   colFont(l.fontPriceCol, '.items-table .item-price,table.items .item-price', 15);
-  colFont(l.fontTotalCol, '.items-table .item-total,.section-block .total,table.items .item-total', 16);
+  colFont(l.fontTotalCol, '.items-table .item-total,.section-block .total,.section-block .order-totals td,table.items .item-total', 16);
+  // حجم صف إجمالي القسم / إجمالي الفاتورة (التحضير) — يُبث فقط عند الضبط ويغلب العام
+  if (set(l.fontSectionTotal)) {
+    css.push(`.order-totals .section-total th,.order-totals .section-total td{font-size:${num(l.fontSectionTotal, 16, 8, 60)}px !important;}`);
+  }
+  if (set(l.fontBillTotal)) {
+    css.push(`.order-totals .bill-total th,.order-totals .bill-total td{font-size:${num(l.fontBillTotal, 18, 8, 60)}px !important;}`);
+  }
   // اتجاه النص لكل عمود (رأس/قيم): الرأسي ميلان متصل — يُبث فقط عند الضبط
   const orient = (v: any, sel: string) => {
     if (v === 'v') css.push(`${sel}{writing-mode:vertical-rl !important;text-orientation:mixed !important;white-space:nowrap !important;}`);
@@ -298,7 +311,10 @@ export const layoutCss = (
     css.push(`.items-table th,.items-table td,.totals-table th,.totals-table td,table.items th,table.items td{border-width:${b}px !important;}`);
   }
   if (l.qrSize !== undefined && l.qrSize !== null && String(l.qrSize) !== '') {
-    css.push(`.qr-code{max-width:${Math.min(220, Math.max(50, Number(l.qrSize) || 120))}px !important;}`);
+    css.push(`.qr-code{max-width:${Math.min(220, Math.max(80, Number(l.qrSize) || 120))}px !important;}`);
+  }
+  if (set(l.fontQrText)) {
+    css.push(`.qr-info{font-size:${num(l.fontQrText, 13, 8, 60)}px !important;}`);
   }
 
   // —— عروض الأعمدة (تُطبّع دائماً على 100%)
