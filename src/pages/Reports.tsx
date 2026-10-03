@@ -1262,8 +1262,11 @@ const Reports = () => {
 
     const revenue = reports.sales.totalRevenue || 0;
     const orders = reports.sales.totalOrders || 0;
-    const avgOrderValue = orders > 0 ? revenue / orders : 0;
     const sessions = reports.sessions?.totalSessions || 0;
+    // التعريف المعتمد: متوسط قيمة المعاملة (طلب/جلسة) — من السيرفر مباشرة
+    const transactions = orders + sessions;
+    const avgOrderValue = (reports.sales as any).avgOrderValue
+      ?? (transactions > 0 ? revenue / transactions : 0);
 
     return { revenue, orders, avgOrderValue, sessions };
   }, [reports.sales, reports.sessions]);
@@ -1346,7 +1349,7 @@ const Reports = () => {
     };
     const pbm = financial?.paymentsByMethod;
     if (!pbm) return null;
-    return { drawers: pbm.drawers, total: pbm.total, count: pbm.count };
+    return { drawers: pbm.drawers, discounts: (pbm as any).discounts, outstanding: (pbm as any).outstanding, total: pbm.total, count: pbm.count };
   }, [reports.financial]);
 
   const deliveryFees = useMemo(() => {

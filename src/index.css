@@ -1324,3 +1324,21 @@ body.hide-scroll-buttons button[title="النزول للأسفل"] {
 .Toastify__close-button:hover {
   opacity: 1 !important;
 }
+
+/* ===== تبويبات الديسكتوب ===== */
+/* نافذة تبويب غير نشط — مخفية مع تبويبها وتعود معه */
+.tab-modal-hidden {
+  display: none !important;
+}
+
+/* إزاحة النوافذ أسفل شريط التبويبات (ارتفاعه ~40px) بدل أن تُغطى به */
+body.desk-tabs-on [data-tab-modal] > .fixed.inset-0 {
+  top: 40px !important;
+}
+body.desk-tabs-on .ant-modal-wrap,
+body.desk-tabs-on .ant-modal-mask {
+  top: 40px !important;
+}
+body.desk-tabs-on [data-tab-shift].fixed.inset-0 {
+  top: 40px !important;
+}

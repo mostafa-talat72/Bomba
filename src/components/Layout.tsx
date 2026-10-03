@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
+import { Outlet, Link, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import appIcon from '../assets/app-icon.png';
 import {
@@ -52,6 +52,9 @@ import LanguageSwitcher from './LanguageSwitcher';
 import ScrollButtons from './ScrollButtons';
 import OccupiedTablesWarningModal from './OccupiedTablesWarningModal';
 import { getOccupiedTablesCount, getOccupiedTablesNames } from '../utils/occupiedTablesHelper';
+import { useTabs, isTabablePath, normalizeTabPath } from '../context/TabsContext';
+import protectedRoutes from './ProtectedRoutes';
+import DesktopTabBar from './DesktopTabBar';
 
 // عرف نوع read بشكل صحيح
 interface NotificationRead {
@@ -72,6 +75,7 @@ const Layout = () => {
   }, [sidebarCollapsed]);
   const location = useLocation();
   const navigate = useNavigate();
+  const tabCtx = useTabs();
   const { user, logout, sessions, orders, notifications, subscriptionStatus, tables, bills } = useApp();
   const { isDarkMode, toggleDarkMode } = useTheme();
   const tablesHeader = useTablesHeader();
@@ -240,13 +244,28 @@ const Layout = () => {
 
   const isActive = (href?: string) => !!href && location.pathname === href;
 
-  // Reset scroll position when route changes
+  // مزامنة التبويبات مع الراوتر + سكرول مستقل لكل تبويب (وضع الديسكتوب)
+  const lastTabPathRef = useRef<string>(normalizeTabPath(location.pathname));
   useEffect(() => {
-    if (mainContentRef.current) {
-      mainContentRef.current.scrollTo(0, 0);
-    } else {
-      window.scrollTo(0, 0);
+    const p = normalizeTabPath(location.pathname);
+    const el = mainContentRef.current;
+    if (!tabCtx.tabsOn) {
+      lastTabPathRef.current = p;
+      if (el) {
+        el.scrollTo(0, 0);
+      } else {
+        window.scrollTo(0, 0);
+      }
+      return;
     }
+    const prev = lastTabPathRef.current;
+    if (prev !== p) {
+      if (el) tabCtx.saveScroll(prev, el.scrollTop);
+      lastTabPathRef.current = p;
+      tabCtx.syncPath(p);
+    }
+    const y = tabCtx.getScroll(p) ?? 0;
+    requestAnimationFrame(() => { try { el?.scrollTo(0, y); } catch {} });
   }, [location.pathname]);
 
   // Filter navigation items based on user permissions
@@ -260,6 +279,27 @@ const Layout = () => {
   };
 
   const filteredNavigation = getFilteredNavigation();
+
+  // روابط مسطحة (شاملة أطفال الأجهزة) لبيانات التبويبات: اسم + أيقونة
+  const tabLinks = useMemo(() => {
+    const out: Array<{ name: string; href: string; icon?: any }> = [];
+    filteredNavigation.forEach((item: any) => {
+      if (item.href) out.push({ name: item.name, href: item.href, icon: item.icon });
+      (item.children || []).forEach((ch: any) => {
+        if (ch.href) out.push({ name: ch.name, href: ch.href, icon: ch.icon });
+      });
+    });
+    return out;
+  }, [filteredNavigation]);
+
+  // اعتراض روابط السايدبار في وضع التبويبات: تنقل داخل التبويب النشط نفسه
+  const handleNavLink = (e: React.MouseEvent, href?: string) => {
+    setSidebarOpen(false);
+    if (href && tabCtx.tabsOn && isTabablePath(href)) {
+      e.preventDefault();
+      tabCtx.navigateInTab(href);
+    }
+  };
 
   const hasOccupiedTables = useMemo(() => {
     if (!user || !Array.isArray(tables) || tables.length === 0) {
@@ -337,7 +377,14 @@ const Layout = () => {
   const [devicesOpen, setDevicesOpen] = useState(false);
 
   return (
-    <div className="flex h-screen bg-gray-50 dark:bg-gray-900 relative overflow-hidden container-responsive">
+    <div className="flex flex-col h-screen bg-gray-50 dark:bg-gray-900 relative overflow-hidden container-responsive">
+      {/* شريط التبويبات — أعلى التطبيق وفوق كل النوافذ المنبثقة */}
+      {tabCtx.tabsOn && (
+        <div className="relative z-[2000] flex-shrink-0">
+          <DesktopTabBar links={tabLinks} />
+        </div>
+      )}
+      <div className="flex flex-1 min-h-0 min-w-0 relative">
       {/* Sidebar Overlay (Mobile) */}
       {sidebarOpen && (
         <div
@@ -468,7 +515,7 @@ const Layout = () => {
                                     ? `bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-300 ${isRTL ? 'border-r-4' : 'border-l-4'} border-orange-600`
                                     : 'text-gray-700 dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100'
                                     } group flex items-center py-2 text-xs sm:text-sm font-medium rounded-md transition-colors duration-200 min-w-0 ${sidebarCollapsed ? 'justify-center px-2' : 'px-2 sm:px-3'}`}
-                                onClick={() => setSidebarOpen(false)}
+                                onClick={(e) => handleNavLink(e, child.href)}
                               >
                                 <child.icon className={`${sidebarCollapsed ? '' : (isRTL ? 'ml-2 sm:ml-3' : 'mr-2 sm:mr-3')} h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0 ${sidebarCollapsed ? 'mx-auto' : ''}`} />
                                 {!sidebarCollapsed && <span className="truncate">{child.name}</span>}
@@ -502,7 +549,7 @@ const Layout = () => {
                         ? `bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-300 ${isRTL ? 'border-r-4' : 'border-l-4'} border-orange-600`
                         : 'text-gray-700 dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100'
                         } group flex items-center py-2 text-xs sm:text-sm font-medium rounded-md transition-colors duration-200 min-w-0 relative ${sidebarCollapsed ? 'justify-center px-2' : 'px-2 sm:px-3'}`}
-                      onClick={() => setSidebarOpen(false)}
+                      onClick={(e) => handleNavLink(e, item.href || '/')}
                     >
                       <Icon className={`${sidebarCollapsed ? '' : (isRTL ? 'ml-2 sm:ml-3' : 'mr-2 sm:mr-3')} h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0 ${sidebarCollapsed ? 'mx-auto' : ''}`} />
                       {!sidebarCollapsed && <span className="truncate">{item.name}</span>}
@@ -648,9 +695,20 @@ const Layout = () => {
           </header>
 
           <div className="px-3 sm:px-6 py-2 w-full">
-            <Outlet />
+            {tabCtx.tabsOn ? (
+              tabCtx.tabs.map((tb) => (
+                <div key={tb.id} style={{ display: tb.id === tabCtx.activeId ? undefined : 'none' }}>
+                  <Routes location={tb.path}>
+                    {protectedRoutes}
+                  </Routes>
+                </div>
+              ))
+            ) : (
+              <Outlet />
+            )}
           </div>
         </main>
+        </div>
       </div>
       <ScrollButtons mainContentRef={mainContentRef} />
       

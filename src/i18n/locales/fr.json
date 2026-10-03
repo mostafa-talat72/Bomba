@@ -1,4 +1,7 @@
 {
+  "tabs": {
+    "maxReached": "Maximum 10 onglets ouverts"
+  },
   "common": {
     "save": "sauvegarder",
     "cancel": "annulation",
@@ -1664,7 +1667,10 @@
       "other": "Autre",
       "colMethod": "Mode",
       "colAmount": "Total",
-      "colCount": "Nombre"
+      "colCount": "Nombre",
+      "discount": "Remise",
+      "net": "Net",
+      "outstanding": "Dû"
     },
     "paymentsByDrawer": {
       "title": "Paiements par tiroir"
@@ -2659,6 +2665,8 @@
       "to": "à",
       "date": "date",
       "categoryTotal": "Total {{catégorie}}",
+      "categoryDiscount": "Remise {{category}}",
+      "categoryNet": "Net {{category}}",
       "thankYou": "Merci à tous",
       "footer": "Ce système a été conçu et développé par Mustafa Talaat Software Solutions | 01116626164",
       "printButton": "Imprimer le rapport"
@@ -4537,6 +4545,24 @@
       "update": "mettre à jour"
     }
   },
+  "lanRole": {
+    "title": "Rôle de l'appareil (LAN)",
+    "hint": "Rôle de cet appareil dans le protocole primaire/secondaire",
+    "role": "Rôle",
+    "primary": "Primaire",
+    "secondary": "Secondaire",
+    "standalone": "Autonome",
+    "searching": "Recherche",
+    "unknown": "Inconnu",
+    "class": "Classe",
+    "class_fixed": "Fixe (caisse)",
+    "class_mobile": "Mobile",
+    "eligible": "Éligible comme primaire",
+    "eligibleOn": "Éligible",
+    "eligibleOff": "Secours uniquement",
+    "rule": "Le premier démarrage éligible gagne • la classe départage • pas de préemption d'un primaire actif",
+    "standaloneBanner": "Fonctionnement autonome — aucun primaire joignable, données en sécurité sur cet appareil"
+  },
   "toast": {
     "organization": {
       "fetchError": "Échec du chargement des données de l'établissement",
@@ -5226,7 +5252,12 @@
     "delete": "Supprimer",
     "confirmShort": "Confirmer ?",
     "customerHistoryTitle": "Historique du client",
-    "discountLabel": "Remise : -{{amount}}"
+    "discountLabel": "Remise : -{{amount}}",
+    "manage": "Gérer le paiement",
+    "beforeLabel": "Avant remise",
+    "netLabel": "Net",
+    "paidLabel": "Payé",
+    "remainingLabel": "Restant"
   },
   "billEdit": {
     "customerTitle": "Coordonnées du client",
@@ -5252,6 +5283,7 @@
     "menuTab": "Menu",
     "orderTab": "Commande",
     "paidNotice": "Note : la modification d'une facture payée recalcule le reste et le statut",
+    "overpaymentDue": "Attention : le payé dépasse le total de {{amount}} — montant à rendre au client",
     "loadingItems": "Chargement des articles...",
     "sections": "Sections",
     "categories": "Catégories",
@@ -5269,6 +5301,7 @@
     "savePrintAll": "Enregistrer et tout imprimer",
     "savePrintBill": "Enregistrer et imprimer",
     "saveAndPayFull": "Enregistrer et tout payer",
+    "saveAndManage": "Enregistrer et gérer le paiement",
     "addServiceToBill": "Ajouter un service",
     "editService": "Modifier le service",
     "serviceSubtitle": "Détails du service supplémentaire",
@@ -5305,7 +5338,18 @@
     "total": "Total {{amount}}",
     "cancel": "Annuler",
     "paying": "Paiement...",
-    "payAmount": "Payer {{amount}}"
+    "payAmount": "Payer {{amount}}",
+    "selected": "Sélection",
+    "selectedEmpty": "Appuyez sur + pour ajouter un article ici",
+    "removeItem": "Retirer",
+    "paidTitle": "Payé",
+    "paidEmpty": "Aucun paiement",
+    "tabItems": "Articles",
+    "tabSelected": "Sélection",
+    "tabPaid": "Payé",
+    "editEntry": "Modifier le paiement",
+    "zeroDeletes": "Zéro supprime le paiement et recalcule la facture",
+    "includesDiscount": "Remise incluse {{amount}}"
   },
   "customerOrders": {
     "accepted": "Commande acceptée",
@@ -5319,6 +5363,13 @@
     "reject": "Refuser"
   },
   "payment": {
+    "amountsSection": "Montants",
+    "methodSection": "Mode de paiement",
+    "beforeDiscount": "Avant remise",
+    "discountAmount": "Remise",
+    "billKindDineIn": "Sur place",
+    "billKindTakeaway": "À emporter",
+    "billKindDelivery": "Livraison",
     "invoice": "Facture #{{number}}",
     "tableLine": "• Table {{number}}",
     "tableButton": "Table",

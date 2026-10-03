@@ -1,7 +1,5 @@
 import React, { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import Takeaway from './pages/Takeaway';
-import Delivery from './pages/Delivery';
 import { useTranslation } from 'react-i18next';
 import { ConfigProvider } from 'antd';
 import arEG from 'antd/locale/ar_EG';
@@ -12,6 +10,7 @@ import { ThemeProvider } from './context/ThemeContext';
 import { LanguageProvider, useLanguage } from './context/LanguageContext';
 import { OrganizationProvider } from './context/OrganizationContext';
 import { TablesHeaderProvider } from './context/TablesHeaderContext';
+import { TabsProvider } from './context/TabsContext';
 import api from './services/api';
 import { openCashDrawerThroughAgent } from './utils/localPrintBridge';
 import Layout from './components/Layout';
@@ -20,46 +19,14 @@ import ErrorBoundary from './components/ErrorBoundary';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import EmailActions from './pages/EmailActions';
-import HomeRedirect from './components/HomeRedirect';
-import appIcon from './assets/app-icon.png';
+import ProtectedRoute, { PageLoader } from './components/ProtectedRoute';
+import protectedRoutes from './components/ProtectedRoutes';
 
-// ── Code Splitting: تحميل الصفحات عند الطلب لتسريع الإقلاع ──────────────────
-const Dashboard = lazy(() => import('./pages/Dashboard'));
-const PlayStation = lazy(() => import('./pages/PlayStation'));
-const Computer = lazy(() => import('./pages/Computer'));
-const Menu = lazy(() => import('./pages/Menu'));
-const Tables = lazy(() => import('./pages/Tables'));
+// ── Code Splitting: تحميل الصفحات العامة عند الطلب (المحمية في ProtectedRoutes) ──
 const BillView = lazy(() => import('./pages/BillView'));
-const Reports = lazy(() => import('./pages/Reports'));
-const Inventory = lazy(() => import('./pages/Inventory'));
-const Costs = lazy(() => import('./pages/Costs'));
-const Users = lazy(() => import('./pages/Users'));
-const Settings = lazy(() => import('./pages/Settings'));
-const NotificationManagement = lazy(() => import('./pages/NotificationManagement'));
-const Subscription = lazy(() => import('./pages/Subscription'));
 const VerifyEmail = lazy(() => import('./pages/VerifyEmail'));
 const ResetPassword = lazy(() => import('./pages/ResetPassword'));
-const ConsumptionReport = lazy(() => import('./pages/ConsumptionReport'));
-const Bills = lazy(() => import('./pages/Bills'));
-const Customers = lazy(() => import('./pages/Customers'));
-const Payroll = lazy(() => import('./pages/Payroll'));
-const SoldItems = lazy(() => import('./pages/SoldItems'));
-const Warehouse = lazy(() => import('./pages/Warehouse'));
-const KitchenDisplay = lazy(() => import('./pages/KitchenDisplay'));
 const CustomerMenu = lazy(() => import('./pages/CustomerMenu'));
-const SyncStatus = lazy(() => import('./pages/SyncStatus'));
-const AuditLogPage = lazy(() => import('./pages/AuditLog'));
-const Shifts = lazy(() => import('./pages/Shifts'));
-
-// شاشة تحميل أثناء تقسيم الحزم
-const PageLoader = () => (
-  <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
-    <div className="text-center">
-      <img src={appIcon} alt="MTE Systems" className="w-20 h-20 rounded-3xl shadow-lg object-contain mx-auto mb-4 animate-spin" style={{ animationDuration: '2.5s' }} />
-      <p className="text-gray-600 dark:text-gray-300">جارٍ التحميل...</p>
-    </div>
-  </div>
-);
 
 // ⚡ كاش إعدادات F12: أول ضغطة تجهزه، وبعده الدرج يفتح لحظياً بدون أي fetch.
 let f12OrgCache: { data: any; expiresAt: number } | null = null;
@@ -231,99 +198,7 @@ const ExitGuard = () => {
   return null;
 };
 
-const ProtectedRoute = ({ children, requiredPermissions = [], requiredRole }: {
-  children: React.ReactNode;
-  requiredPermissions?: string[];
-  requiredRole?: string;
-}) => {
-  const { user, isAuthenticated, isLoading } = useApp();
-  if (isLoading) return <PageLoader />;
-
-  // السماح دائماً بصفحة إعادة تعيين كلمة المرور
-  if (window.location.pathname.startsWith('/reset-password')) {
-    return <>{children}</>;
-  }
-
-  if (!isAuthenticated || !user) {
-    return <Navigate to="/login" replace />;
-  }
-
-  // التحقق من الصلاحية (دور المدير يتجاوز الكل مثل permissionHelper)
-  if (requiredPermissions.length > 0) {
-    const hasPermission = user.role === 'admin' ||
-                         user.permissions.includes('all') ||
-                         requiredPermissions.some(permission => user.permissions.includes(permission));
-    if (!hasPermission) {
-      // البحث عن أول صفحة متاحة للمستخدم
-      const userPermissions = user.permissions || [];
-      const pagePriority = [
-        { path: '/dashboard', permission: 'dashboard' },
-        { path: '/playstation', permission: 'playstation' },
-        { path: '/computer', permission: 'computer' },
-        { path: '/tables', permission: 'tables' },
-        { path: '/tables', permission: 'cafe' },
-        { path: '/tables', permission: 'billing' },
-        { path: '/takeaway', permission: 'takeaway' },
-        { path: '/delivery', permission: 'delivery' },
-        { path: '/menu', permission: 'menu' },
-        { path: '/reports', permission: 'reports' },
-        { path: '/consumption-report', permission: 'consumption' },
-        { path: '/bills', permission: 'bills' },
-        { path: '/customers', permission: 'customers' },
-        { path: '/sold-items', permission: 'soldItems' },
-        { path: '/kitchen-display', permission: 'kitchenDisplay' },
-        { path: '/inventory', permission: 'inventory' },
-        { path: '/warehouse', permission: 'warehouse' },
-        { path: '/kitchen-display', permission: 'kitchenDisplay' },
-        { path: '/costs', permission: 'costs' },
-        { path: '/users', permission: 'users' },
-        { path: '/payroll', permission: 'payroll' },
-        { path: '/settings', permission: 'settings' },
-        { path: '/subscription', permission: 'subscription' },
-        { path: '/notifications', permission: 'notifications' },
-        { path: '/shifts', permission: 'shifts' },
-        { path: '/audit-log', permission: 'auditLog' },
-        { path: '/sync-status', permission: 'syncStatus' },
-      ];
-
-      const accessiblePage = pagePriority.find(page =>
-        userPermissions.includes('all') || userPermissions.includes(page.permission)
-      );
-
-      if (accessiblePage) {
-        return <Navigate to={accessiblePage.path} replace />;
-      } else {
-        // إذا لم يكن لديه أي صلاحيات، اعرض رسالة خطأ
-        return (
-          <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
-            <div className="text-center">
-              <div className="w-16 h-16 bg-red-100 dark:bg-red-900 rounded-full flex items-center justify-center mx-auto mb-4">
-                <svg className="w-8 h-8 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
-                </svg>
-              </div>
-              <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-2">لا توجد صلاحيات متاحة</h2>
-              <p className="text-gray-600 dark:text-gray-300 mb-4">لم يتم منحك أي صلاحيات للوصول إلى النظام</p>
-              <button
-                onClick={() => window.location.reload()}
-                className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors"
-              >
-                إعادة المحاولة
-              </button>
-            </div>
-          </div>
-        );
-      }
-    }
-  }
-
-  // التحقق من الدور
-  if (requiredRole && user.role !== requiredRole) {
-    return <Navigate to="/dashboard" replace />;
-  }
-
-  return <>{children}</>;
-};
+// (نُقل ProtectedRoute وPageLoader إلى components/ProtectedRoute.tsx)
 
 // مكون للتحقق من المسار الحالي
 const RouteHandler = () => {
@@ -386,128 +261,8 @@ const RouteHandler = () => {
         <Route path="/register" element={<Register />} />
         <Route path="/email-actions" element={<EmailActions />} />
         {/* صفحات النظام — محمية عبر ProtectedRoute */}
-        <Route path="/" element={<Layout />}>
-          <Route index element={<HomeRedirect />} />
-          <Route path="dashboard" element={
-            <ProtectedRoute requiredPermissions={['dashboard']}>
-              <Dashboard />
-            </ProtectedRoute>
-          } />
-          <Route path="playstation" element={
-            <ProtectedRoute requiredPermissions={['playstation']}>
-              <PlayStation />
-            </ProtectedRoute>
-          } />
-          <Route path="computer" element={
-            <ProtectedRoute requiredPermissions={['computer']}>
-              <Computer />
-            </ProtectedRoute>
-          } />
-          <Route path="tables" element={
-            <ProtectedRoute requiredPermissions={['tables', 'cafe', 'billing']}>
-              <Tables />
-            </ProtectedRoute>
-          } />
-          <Route path="takeaway" element={
-            <ProtectedRoute requiredPermissions={['tables', 'cafe', 'billing', 'takeaway']}>
-              <Takeaway />
-            </ProtectedRoute>
-          } />
-          <Route path="delivery" element={
-            <ProtectedRoute requiredPermissions={['tables', 'cafe', 'billing', 'delivery']}>
-              <Delivery />
-            </ProtectedRoute>
-          } />
-          <Route path="menu" element={
-            <ProtectedRoute requiredPermissions={['menu']}>
-              <Menu />
-            </ProtectedRoute>
-          } />
-          <Route path="reports" element={
-            <ProtectedRoute requiredPermissions={['reports']}>
-              <Reports />
-            </ProtectedRoute>
-          } />
-          <Route path="consumption-report" element={
-            <ProtectedRoute requiredPermissions={['reports', 'consumption']}>
-              <ConsumptionReport />
-            </ProtectedRoute>
-          } />
-          <Route path="bills" element={
-            <ProtectedRoute requiredPermissions={['bills']}>
-              <Bills />
-            </ProtectedRoute>
-          } />
-          <Route path="customers" element={
-            <ProtectedRoute requiredPermissions={['customers']}>
-              <Customers />
-            </ProtectedRoute>
-          } />
-          <Route path="sold-items" element={
-            <ProtectedRoute requiredPermissions={['soldItems']}>
-              <SoldItems />
-            </ProtectedRoute>
-          } />
-          <Route path="warehouse" element={
-            <ProtectedRoute requiredPermissions={['warehouse']}>
-              <Warehouse />
-            </ProtectedRoute>
-          } />
-          <Route path="kitchen-display" element={
-            <ProtectedRoute requiredPermissions={['kitchenDisplay']}>
-              <KitchenDisplay />
-            </ProtectedRoute>
-          } />
-          <Route path="inventory" element={
-            <ProtectedRoute requiredPermissions={['inventory']}>
-              <Inventory />
-            </ProtectedRoute>
-          } />
-          <Route path="costs" element={
-            <ProtectedRoute requiredPermissions={['costs']}>
-              <Costs />
-            </ProtectedRoute>
-          } />
-          <Route path="payroll" element={
-            <ProtectedRoute requiredPermissions={['users', 'payroll']}>
-              <Payroll />
-            </ProtectedRoute>
-          } />
-          <Route path="users" element={
-            <ProtectedRoute requiredPermissions={['users']}>
-              <Users />
-            </ProtectedRoute>
-          } />
-          <Route path="settings" element={
-            <ProtectedRoute requiredPermissions={[]}>
-              <Settings />
-            </ProtectedRoute>
-          } />
-          <Route path="sync-status" element={
-            <ProtectedRoute requiredPermissions={['syncStatus']}>
-              <SyncStatus />
-            </ProtectedRoute>
-          } />
-          <Route path="audit-log" element={
-            <ProtectedRoute requiredPermissions={['auditLog']}>
-              <AuditLogPage />
-            </ProtectedRoute>
-          } />
-          <Route path="shifts" element={
-            <ProtectedRoute requiredPermissions={['shifts']}>
-              <Shifts />
-            </ProtectedRoute>
-          } />
-          <Route path="notifications" element={
-            <ProtectedRoute requiredPermissions={['dashboard', 'playstation', 'computer', 'tables', 'cafe', 'menu', 'billing', 'reports', 'inventory', 'warehouse', 'costs', 'users', 'settings', 'notifications']}>
-              <NotificationManagement />
-            </ProtectedRoute>
-          } />
-          <Route path="/subscription" element={
-            <ProtectedRoute requiredPermissions={['subscription']}>
-              <Subscription />
-            </ProtectedRoute>
-          } />
+        <Route path="/" element={<TabsProvider><Layout /></TabsProvider>}>
+          {protectedRoutes}
         </Route>
       {/* fallback — يوجه حسب حالة الدخول */}
               <Route path="*" element={<Navigate to={isAuthenticated ? "/" : "/login"} replace />} />

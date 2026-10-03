@@ -27,9 +27,22 @@ async function setLanTimeSource(enabled: boolean): Promise<ApiResponse<any>> {
   });
 }
 
+async function getLanRole(): Promise<ApiResponse<any>> {
+  return apiClient.request('/lan/role');
+}
+
+async function setLanRole(patch: { eligible?: boolean; deviceClass?: 'fixed' | 'mobile' }): Promise<ApiResponse<any>> {
+  return apiClient.request('/lan/role', {
+    method: 'PUT',
+    body: JSON.stringify(patch),
+  });
+}
+
 export const syncApi = {
   runTypeAudit,
   getSyncOverview,
   syncLanTime,
   setLanTimeSource,
+  getLanRole,
+  setLanRole,
 };

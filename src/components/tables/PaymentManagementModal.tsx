@@ -8,8 +8,8 @@ import { Bill } from '../../services/api';
 import { useOrganization } from '../../context/OrganizationContext';
 import { formatDecimal, localeTag } from '../../utils/formatters';
 import { printBill } from '../../utils/printBill';
-import { resolveEffectivePrintSettings } from '../../utils/resolvePrintSettings';
-import { getPrintFlagFresh } from '../../utils/freshPrintSettings';
+import { resolveEffectivePrintSettings, resolveFulfillmentFlag } from '../../utils/resolvePrintSettings';
+import { getFulfillmentFlagFresh } from '../../utils/freshPrintSettings';
 import { aggregateItemsWithPayments } from '../../utils/billAggregation';
 import { canPayFullBill, canDeleteBill, canEditPartialPayment, canMoveBillTableToTable } from '../../utils/permissionHelper';
 import { getTableDisplay } from './tableHelpers';
@@ -129,6 +129,21 @@ const PaymentManagementModal: React.FC<PaymentManagementModalProps> = ({
     }
     if (splitEnabled) {
       if (!onSplitSubmit || !splitAmount2) return;
+      // الجزء الثاني يُدخل يدويًا — والجزء الأول = المتبقي − الثاني تلقائيًا
+      // (وإلا جُمع الثاني فوق الإجمالي الكامل كما كان يحدث)
+      const rem = Number(selectedBill?.remaining) || 0;
+      const a2 = parseFloat(splitAmount2);
+      if (isNaN(a2) || a2 <= 0 || a2 >= rem) {
+        showNotification(t('billing.notifications.invalidAmount'), 'error');
+        return;
+      }
+      const a1cur = parseFloat(paymentAmount);
+      if (isNaN(a1cur) || a1cur >= rem - 0.011) {
+        setPaymentAmount(String(Math.round((rem - a2) * 100) / 100));
+      } else if (a1cur + a2 - rem > 0.011) {
+        showNotification(t('billing.notifications.invalidAmount'), 'error');
+        return;
+      }
       setConfirmPay({ mode: 'split' });
     } else {
       if (!paymentAmount) return;
@@ -144,21 +159,21 @@ const PaymentManagementModal: React.FC<PaymentManagementModalProps> = ({
     } catch (e) { console.error(e); }
   };
 
-  // الدفع بالكامل عند الطباعة — إعداد ثابت من الإعدادات (printMarksPaid) يطبق
-  // على جميع الفواتير، بلا خيار لكل فاتورة.
+  // الدفع بالكامل عند الطباعة — حسب نوع الفاتورة (طاولة/تيك أوي/دليفري).
   // ملاحظة: user.organization لقطة من تسجيل الدخول وقد تكون قديمة بعد حفظ
   // الإعدادات — فنقرأ القيمة الطازجة من السيرفر عند فتح النافذة (مع الذاكرة كبديل فوري).
-  const memoryPayOnPrint = resolveEffectivePrintSettings(user, (user as any)?.organization)?.printMarksPaid === true;
+  const billFulfillmentKind = (selectedBill as any)?.fulfillmentType as string | undefined;
+  const memoryPayOnPrint = resolveFulfillmentFlag(resolveEffectivePrintSettings(user, (user as any)?.organization), 'printMarksPaid', billFulfillmentKind, false) === true;
   const [payOnPrintFresh, setPayOnPrintFresh] = React.useState<boolean | null>(null);
   React.useEffect(() => {
     if (!isOpen) return;
     let cancelled = false;
     setPayOnPrintFresh(null);
-    getPrintFlagFresh(user, 'printMarksPaid')
+    getFulfillmentFlagFresh(user, 'printMarksPaid', billFulfillmentKind, false)
       .then((v) => { if (!cancelled) setPayOnPrintFresh(v); })
       .catch(() => { if (!cancelled) setPayOnPrintFresh(false); });
     return () => { cancelled = true; };
-  }, [isOpen, (selectedBill as any)?._id || (selectedBill as any)?.id]);
+  }, [isOpen, (selectedBill as any)?._id || (selectedBill as any)?.id, billFulfillmentKind]);
   const shouldPayOnPrint = (payOnPrintFresh ?? memoryPayOnPrint) === true;
   const [printing, setPrinting] = React.useState(false);
   const handlePrintClick = async () => {
@@ -249,6 +264,11 @@ const PaymentManagementModal: React.FC<PaymentManagementModalProps> = ({
                   <h3 className="text-lg font-bold text-white leading-tight">{t('billing.paymentManagementTitle')}</h3>
                   <div className="flex items-center gap-3 mt-0.5 flex-wrap">
                     <span className="text-sm text-blue-200">{t('payment.invoice', { number: selectedBill?.billNumber || (selectedBill?.id || selectedBill?._id)?.toString().slice(-6) })}</span>
+                    {(() => {
+                      const ft = (selectedBill as any)?.fulfillmentType || 'dine_in';
+                      const label = ft === 'delivery' ? `🛵 ${t('payment.billKindDelivery', 'دليفري')}` : ft === 'takeaway' ? `🥡 ${t('payment.billKindTakeaway', 'تيك أوي')}` : `🍽 ${t('payment.billKindDineIn', 'صالة')}`;
+                      return <span className="text-sm px-2 py-0.5 rounded-full font-bold bg-white/15 text-white border border-white/20">{label}</span>;
+                    })()}
                     {selectedBill?.table && <span className="text-sm text-blue-200">{t('payment.tableLine', { number: getTableDisplay((selectedBill.table as any).number, i18n.language) })}</span>}
                     <span className={`text-sm px-2 py-0.5 rounded-full font-bold ${getStatusColor(selectedBill.status)}`}>{getStatusText(selectedBill.status)}</span>
                   </div>
@@ -268,57 +288,92 @@ const PaymentManagementModal: React.FC<PaymentManagementModalProps> = ({
               </div>
             </div>
 
-            {/* ══ إجماليات ثابتة ══ */}
-            <div className="flex-shrink-0 px-3 sm:px-4 py-2.5 bg-gray-50 dark:bg-gray-800/60 border-b border-gray-100 dark:border-gray-700/60">
-              <div className="flex items-center gap-2 sm:gap-3 max-w-lg flex-wrap">
-                <div className="grid grid-cols-3 gap-2 sm:gap-3 flex-1 min-w-[220px]">
-                  {[
-                    { label: t('billing.totalAmount'),    value: selectedBill?.total     || 0, cls: 'text-gray-800 dark:text-gray-100',          bg: 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700' },
-                    { label: t('billing.paidPreviously'), value: selectedBill?.paid      || 0, cls: 'text-emerald-700 dark:text-emerald-400',     bg: 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800/60' },
-                    { label: t('billing.remaining'),      value: selectedBill?.remaining || 0,
-                      cls: (selectedBill?.remaining||0) > 0 ? 'text-red-700 dark:text-red-400' : 'text-emerald-700 dark:text-emerald-400',
-                      bg:  (selectedBill?.remaining||0) > 0 ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800/60' : 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800/60' },
-                  ].map(item => (
-                    <div key={item.label} className={`${item.bg} border rounded-xl px-2 sm:px-3 py-1.5 text-center min-w-0`}>
-                      <p className="text-[10px] text-gray-500 dark:text-gray-400 mb-0.5 truncate">{item.label}</p>
-                      <p className={`text-base sm:text-lg font-bold truncate ${item.cls}`}>{formatCurrency(item.value)}</p>
-                    </div>
-                  ))}
-                </div>
-                {/* الخصومات */}
+            {/* ══ إجماليات ثابتة: قسمان — المبالغ + طريقة الدفع ══ */}
+            <div className="flex-shrink-0 px-3 sm:px-4 py-2.5 bg-gray-50 dark:bg-gray-800/60 border-b border-gray-100 dark:border-gray-700/60 flex flex-col gap-2">
+              {/* ── قسم 1: المبالغ ── */}
+              <div>
+                <p className="text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5 flex items-center gap-1">
+                  <DollarSign className="h-3 w-3" />{t('payment.amountsSection', 'المبالغ')}
+                </p>
                 {(() => {
-                  const totalFD = (selectedBill?.orders || []).reduce((sum: number, o: any) => sum + (o?.fixedDiscount?.amount || 0), 0);
+                  const totalFD = (selectedBill?.orders || []).reduce((sum: number, o: any) => sum + (Number(o?.fixedDiscount?.amount) || 0), 0);
                   const totalOrderDiscounts = (selectedBill?.orders || []).reduce((sum: number, o: any) => sum + (Number(o?.discount) || 0), 0);
                   const billDiscount = Number(selectedBill?.discount) || 0;
                   const totalAllDiscounts = totalFD + totalOrderDiscounts + billDiscount;
-                  if (totalAllDiscounts <= 0) return null;
-                  const subtotal = (selectedBill?.total || 0) + totalAllDiscounts;
+                  const netTotal = Number(selectedBill?.total) || 0;
+                  const beforeTotal = netTotal + totalAllDiscounts;
+                  const paidTotal = Number(selectedBill?.paid) || 0;
+                  const remTotal = Number(selectedBill?.remaining) || 0;
+                  const cards = [
+                    ...(totalAllDiscounts > 0 ? [
+                      { label: t('payment.beforeDiscount', 'قبل الخصم'), value: beforeTotal, cls: 'text-gray-500 dark:text-gray-400 line-through', bg: 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700' },
+                      { label: t('payment.discountAmount', 'الخصم'), value: totalAllDiscounts, prefix: '-', cls: 'text-purple-600 dark:text-purple-400', bg: 'bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-800/60' },
+                    ] : []),
+                    { label: t('billing.totalAmount'), value: netTotal, cls: 'text-gray-800 dark:text-gray-100', bg: 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700' },
+                    { label: t('billing.paidPreviously'), value: paidTotal, cls: 'text-emerald-700 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800/60' },
+                    { label: t('billing.remaining'), value: remTotal,
+                      cls: remTotal > 0 ? 'text-red-700 dark:text-red-400' : 'text-emerald-700 dark:text-emerald-400',
+                      bg: remTotal > 0 ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800/60' : 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800/60' },
+                  ];
                   return (
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-sm text-gray-400 dark:text-gray-500 line-through">{formatCurrency(subtotal)}</span>
-                      <span className="text-base sm:text-lg font-bold text-purple-600 dark:text-purple-400">{t('payment.discountsLabel', { amount: formatCurrency(totalAllDiscounts) })}</span>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-2">
+                      {cards.map(item => (
+                        <div key={item.label} className={`${item.bg} border rounded-xl px-2 sm:px-3 py-1.5 text-center min-w-0`}>
+                          <p className="text-[10px] text-gray-500 dark:text-gray-400 mb-0.5 truncate">{item.label}</p>
+                          <p className={`text-base sm:text-lg font-bold truncate ${item.cls}`}>{(item as any).prefix || ''}{formatCurrency(item.value)}</p>
+                        </div>
+                      ))}
                     </div>
                   );
                 })()}
-                {/* مؤشر التقريب التلقائي */}
-                {onToggleRounding && (
-                  <button onClick={onToggleRounding}
-                    title={t('payment.roundingTitle')}
-                    className={`flex items-center gap-1 px-2.5 py-2 rounded-xl text-[11px] font-bold transition-all border flex-shrink-0 ${
-                      roundingLabel && roundingLabel !== t('payment.noRounding')
-                        ? 'bg-emerald-50 dark:bg-emerald-900/30 border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300'
-                        : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-400'
-                    }`}>
-                    ≈ {roundingLabel || t('payment.noRounding')}
-                  </button>
-                )}
-                {selectedBill?.table && canMoveBillTableToTable(user) && (
-                  <button onClick={() => { setNewTableNumber((selectedBill.table as any)?._id || null); setShowChangeTableModal(true); }}
-                    className="flex items-center gap-1.5 px-3 py-2 bg-amber-50 dark:bg-amber-900/30 hover:bg-amber-100 dark:hover:bg-amber-900/50 rounded-xl text-amber-600 dark:text-amber-400 text-sm font-bold transition-all border border-amber-200 dark:border-amber-700 flex-shrink-0">
-                    <TableIcon className="h-3.5 w-3.5" />{t('billing.changeTable')}
-                  </button>
-                )}
+                <div className="flex items-center gap-2 mt-2 flex-wrap">
+                  {/* مؤشر التقريب التلقائي */}
+                  {onToggleRounding && (
+                    <button onClick={onToggleRounding}
+                      title={t('payment.roundingTitle')}
+                      className={`flex items-center gap-1 px-2.5 py-2 rounded-xl text-[11px] font-bold transition-all border flex-shrink-0 ${
+                        roundingLabel && roundingLabel !== t('payment.noRounding')
+                          ? 'bg-emerald-50 dark:bg-emerald-900/30 border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300'
+                          : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-400'
+                      }`}>
+                      ≈ {roundingLabel || t('payment.noRounding')}
+                    </button>
+                  )}
+                  {selectedBill?.table && canMoveBillTableToTable(user) && (
+                    <button onClick={() => { setNewTableNumber((selectedBill.table as any)?._id || null); setShowChangeTableModal(true); }}
+                      className="flex items-center gap-1.5 px-3 py-2 bg-amber-50 dark:bg-amber-900/30 hover:bg-amber-100 dark:hover:bg-amber-900/50 rounded-xl text-amber-600 dark:text-amber-400 text-sm font-bold transition-all border border-amber-200 dark:border-amber-700 flex-shrink-0">
+                      <TableIcon className="h-3.5 w-3.5" />{t('billing.changeTable')}
+                    </button>
+                  )}
+                </div>
               </div>
+              {/* ── قسم 2: طريقة الدفع ── */}
+              {selectedBill?.status !== 'paid' && (
+                <div>
+                  <p className="text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5 flex items-center gap-1">
+                    <DollarSign className="h-3 w-3" />{t('payment.methodSection', 'طريقة الدفع')}
+                  </p>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    {PAYMENT_METHODS.map(m => (
+                      <button key={m} onClick={() => setPaymentMethod(m)}
+                        className={`py-2 rounded-xl border-2 text-center text-sm font-bold transition-all ${
+                          paymentMethod === m ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300' : 'border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:border-blue-300'
+                        }`}>
+                        <div className="text-lg mb-0.5">{paymentMethodIcon(m)}</div>
+                        {methodLabel(m)}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="mt-2">
+                    <DrawerSelect
+                      value={paymentDrawer}
+                      onChange={setPaymentDrawer}
+                      className="w-full"
+                      showLabels={true}
+                    />
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Mobile tabs: pay | details */}
@@ -397,25 +452,7 @@ const PaymentManagementModal: React.FC<PaymentManagementModalProps> = ({
                             <input type="text" value={formatCurrency(parseFloat(paymentAmount))}
                               className="w-full border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-1.5 text-base bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 font-bold" disabled />
                           </div>
-                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                            {PAYMENT_METHODS.map(m => (
-                              <button key={m} onClick={() => setPaymentMethod(m)}
-                                className={`py-2 rounded-xl border-2 text-center text-sm font-bold transition-all ${
-                                  paymentMethod === m ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300' : 'border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:border-blue-300'
-                                }`}>
-                                <div className="text-lg mb-0.5">{paymentMethodIcon(m)}</div>
-                                {methodLabel(m)}
-                              </button>
-                            ))}
-                          </div>
-                          <div className="mt-2">
-                            <DrawerSelect
-                              value={paymentDrawer}
-                              onChange={setPaymentDrawer}
-                              className="w-full"
-                              showLabels={true}
-                            />
-                          </div>
+                          {/* طريقة الدفع والدرج مختارة من قسم طريقة الدفع بالأعلى */}
                           {/* دفع مقسوم — طريقتان */}
                           {onSplitSubmit && selectedBill && !(['paid'] as string[]).includes(selectedBill.status) && (
                             <div className="pt-0.5">

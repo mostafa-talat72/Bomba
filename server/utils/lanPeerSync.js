@@ -504,6 +504,34 @@ async function catchUpWithAllPeers() {
     }
 }
 
+let heartbeatTimer = null;
+
+/**
+ * نبض اللحاق الدوري (B): كل 20 ثانية سحب تزايدي من كل جار معروف.
+ * يضع سقفًا أعلى لأي فوات (دفع ضائع، كتابة خام فاتت الناشر) — رخيص لأنه
+ * تزايدي بالعلامات المائية، وcatchUpWithAllPeers يمنع التداخل ذاتيًا.
+ */
+export function startLanHeartbeat(intervalMs = 20000) {
+    if (heartbeatTimer) return;
+    if (!meshSyncEnabled()) return;
+    heartbeatTimer = setInterval(() => {
+        if (!meshSyncEnabled()) return;
+        try {
+            if (lanMeshDiscovery.getPeers().length === 0) return;
+        } catch { return; }
+        catchUpWithAllPeers().catch(() => {});
+    }, intervalMs);
+    if (heartbeatTimer.unref) heartbeatTimer.unref();
+    Logger.info(`[LanMesh] catch-up heartbeat every ${Math.round(intervalMs / 1000)}s`);
+}
+
+export function stopLanHeartbeat() {
+    if (heartbeatTimer) {
+        clearInterval(heartbeatTimer);
+        heartbeatTimer = null;
+    }
+}
+
 /** Wire auto catch-up: when a peer appears, pull its missing changes. */
 export function wirePeerCatchUp() {
     lanMeshDiscovery.removeAllListeners("peer-up-catchup");
@@ -524,4 +552,6 @@ export default {
     normalizeIncomingDoc,
     catchUpWithPeer,
     wirePeerCatchUp,
+    startLanHeartbeat,
+    stopLanHeartbeat,
 };

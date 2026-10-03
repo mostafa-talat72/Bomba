@@ -10,11 +10,63 @@ export interface MethodTotals {
   count?: number;
 }
 
+export interface DiscountTotals {
+  fixedDiscount?: number;
+  manualDiscount?: number;
+  totalDiscounts?: number;
+}
+
 export interface PaymentsByMethodData {
   methods?: Record<string, MethodTotals>;
+  discounts?: DiscountTotals;
+  outstanding?: number;
   total?: number;
   count?: number;
 }
+
+/** بطاقة الإجمالي: قبل الخصم + الخصم + الصافي + المستحق (سطور إضافية عند وجودها) */
+const GrandTotalCard: React.FC<{
+  total?: number;
+  count?: number;
+  discounts?: DiscountTotals;
+  outstanding?: number;
+  formatCurrency: (n: number) => string;
+  t: (k: string, fb?: string) => string;
+  countLabel: (c: any) => string;
+}> = ({ total, count, discounts, outstanding, formatCurrency, t, countLabel }) => {
+  const collected = Number(total) || 0;
+  const disc = Number(discounts?.totalDiscounts) || 0;
+  const recv = Number(outstanding) || 0;
+  const gross = collected + disc;
+  return (
+    <div className="bg-emerald-600 dark:bg-emerald-700 rounded-xl shadow-sm px-2 py-2 text-center col-span-2 sm:col-span-1">
+      <div className="text-[11px] font-bold text-emerald-100">
+        {t('reports.paymentsByMethod.total', 'الإجمالي')}
+      </div>
+      <div className="text-sm sm:text-base font-extrabold text-white">
+        {formatCurrency(gross)}
+      </div>
+      {disc > 0 && (
+        <>
+          <div className="text-[10px] text-amber-200">
+            {t('reports.paymentsByMethod.discount', 'الخصم')}: −{formatCurrency(disc)}
+          </div>
+          <div className="text-[10px] font-extrabold text-white">
+            {t('reports.paymentsByMethod.net', 'الصافي')}: {formatCurrency(collected)}
+          </div>
+        </>
+      )}
+      {recv > 0 && (
+        <div className="text-[10px] text-sky-200">
+          {t('reports.paymentsByMethod.outstanding', 'المستحق')}: {formatCurrency(recv)}
+        </div>
+      )}
+      <div className="text-[10px] text-emerald-200">
+        {countLabel(count)}
+      </div>
+    </div>
+  );
+};
 
 interface PaymentsByMethodCardsProps {
   data: PaymentsByMethodData | null;
@@ -80,17 +132,15 @@ export const PaymentsByMethodCards: React.FC<PaymentsByMethodCardsProps> = ({ da
               </div>
             </div>
           )}
-          <div className="bg-emerald-600 dark:bg-emerald-700 rounded-xl shadow-sm px-2 py-2 text-center col-span-2 sm:col-span-1">
-            <div className="text-[11px] font-bold text-emerald-100">
-              {t('reports.paymentsByMethod.total', 'الإجمالي')}
-            </div>
-            <div className="text-sm sm:text-base font-extrabold text-white">
-              {formatCurrency(Number(data?.total) || 0)}
-            </div>
-            <div className="text-[10px] text-emerald-200">
-              {paymentCountLabel(data?.count, i18n.language)}
-            </div>
-          </div>
+          <GrandTotalCard
+            total={data?.total}
+            count={data?.count}
+            discounts={data?.discounts}
+            outstanding={data?.outstanding}
+            formatCurrency={formatCurrency}
+            t={t as (k: string, fb?: string) => string}
+            countLabel={(c) => paymentCountLabel(c, i18n.language)}
+          />
         </div>
       )}
     </div>
@@ -157,6 +207,8 @@ const DRAWER_CARD_STYLES: Record<string, string> = {
 
 export interface DrawersBreakdownData {
   drawers?: Record<string, MethodTotals>;
+  discounts?: DiscountTotals;
+  outstanding?: number;
   total?: number;
   count?: number;
 }
@@ -202,17 +254,15 @@ export const DrawerBreakdownCards: React.FC<DrawerBreakdownCardsProps> = ({ data
               </div>
             </div>
           ))}
-          <div className="bg-emerald-600 dark:bg-emerald-700 rounded-xl shadow-sm px-2 py-2 text-center col-span-2 sm:col-span-1">
-            <div className="text-[11px] font-bold text-emerald-100">
-              {t('reports.paymentsByMethod.total', 'الإجمالي')}
-            </div>
-            <div className="text-sm sm:text-base font-extrabold text-white">
-              {formatCurrency(Number(data?.total) || 0)}
-            </div>
-            <div className="text-[10px] text-emerald-200">
-              {paymentCountLabel(data?.count, i18n.language)}
-            </div>
-          </div>
+          <GrandTotalCard
+            total={data?.total}
+            count={data?.count}
+            discounts={data?.discounts}
+            outstanding={data?.outstanding}
+            formatCurrency={formatCurrency}
+            t={t as (k: string, fb?: string) => string}
+            countLabel={(c) => paymentCountLabel(c, i18n.language)}
+          />
         </div>
       )}
     </div>

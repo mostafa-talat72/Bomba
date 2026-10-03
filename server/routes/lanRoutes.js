@@ -135,6 +135,51 @@ router.post("/time-source", async (req, res) => {
     }
 });
 
+// Device role in the primary/secondary protocol (polled by badge + settings)
+router.get("/role", async (req, res) => {
+    try {
+        const { getRoleConfig } = await import("../utils/lanRole.js");
+        const disc = global.lanDiscovery
+            ? global.lanDiscovery.getStatus()
+            : { role: "unknown", primary: null, peers: [] };
+        res.json({
+            success: true,
+            role: disc.role || "unknown",
+            eligible: getRoleConfig().eligible,
+            deviceClass: getRoleConfig().deviceClass,
+            bootId: disc.bootId || null,
+            primary: disc.primary || null,
+            peers: disc.peers || [],
+            timestamp: new Date().toISOString(),
+        });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// Update this device's role config (admin only — affects elections)
+router.put("/role", async (req, res) => {
+    try {
+        const { protect, authorize } = await import("../middleware/auth.js");
+        await new Promise((resolve, reject) => {
+            protect(req, res, (err) => (err ? reject(err) : resolve()));
+        });
+        await new Promise((resolve, reject) => {
+            authorize("settings", "all")(req, res, (err) => (err ? reject(err) : resolve()));
+        });
+        const { saveRoleConfig, getRoleConfig } = await import("../utils/lanRole.js");
+        const saved = saveRoleConfig(req.body || {});
+        if (global.lanDiscovery && typeof global.lanDiscovery.reloadRoleConfig === "function") {
+            global.lanDiscovery.reloadRoleConfig();
+        }
+        res.json({ success: true, role: getRoleConfig() });
+    } catch (err) {
+        if (res.headersSent) return;
+        const status = err?.status || (/token|auth|permission|401|403/i.test(err?.message || "") ? 401 : 400);
+        res.status(status).json({ success: false, error: err.message });
+    }
+});
+
 // List discovered peers (polled by the frontend LAN badge every 10s)
 router.get("/peers", (req, res) => {
     try {

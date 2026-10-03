@@ -136,7 +136,7 @@ const ConsumptionReport = () => {
     const start = now.hour() < 7
       ? now.subtract(1, 'day').hour(7).minute(0).second(0).millisecond(0)
       : now.hour(7).minute(0).second(0).millisecond(0);
-    const end = start.add(1, 'day').subtract(1, 'second');
+    const end = start.add(1, 'day').subtract(1, 'millisecond');
     return [start, end];
   });
   const [timeRange, setTimeRange] = useState<[Dayjs, Dayjs]>([
@@ -392,6 +392,9 @@ const ConsumptionReport = () => {
       const categoryPages = categories
         .map(([category, items]) => {
           const categoryTotal = calculateTotal(items);
+          // صافي القسم = الخام − خصمه (ليطابق صافي الشاشة بدل الخام)
+          const categoryDiscount = Number((sectionDiscounts as any)?.[category]?.totalDiscount) || 0;
+          const categoryNet = categoryTotal - categoryDiscount;
           
           // Translate category name if it's a gaming device
           const displayCategory = category === OTHER_SECTION_KEY
@@ -473,6 +476,13 @@ const ConsumptionReport = () => {
                 <div class="category-total">
                   <strong>${t('consumptionReport.print.categoryTotal', { category: displayCategory })}:</strong> ${formatCurrency(categoryTotal)}
                 </div>
+                ${categoryDiscount > 0 ? `
+                <div class="category-total">
+                  <strong>${t('consumptionReport.print.categoryDiscount', { category: displayCategory })}:</strong> -${formatCurrency(categoryDiscount)}
+                </div>
+                <div class="category-total">
+                  <strong>${t('consumptionReport.print.categoryNet', { category: displayCategory })}:</strong> ${formatCurrency(categoryNet)}
+                </div>` : ''}
 
                 ${consLayout.showThanks !== false ? `<div class="thank-you">${(settings as any)?.customFooterConsumption || t('consumptionReport.print.thankYou')}</div>` : ''}
               </div>
@@ -490,6 +500,19 @@ const ConsumptionReport = () => {
         if (!pm) return '';
         const row = (label: string, v: any) => `<tr><td style="border:1px solid #000;padding:5px;font-weight:900;">${label}</td><td style="border:1px solid #000;padding:5px;font-weight:900;">${formatCurrency(Number(v?.total) || 0)}</td><td style="border:1px solid #000;padding:5px;font-weight:900;">${paymentCountLabel(v?.count, i18n.language)}</td></tr>`;
         const otherRow = ((pm.other?.total || 0) > 0 || (pm.other?.count || 0) > 0) ? row(t('reports.paymentsByMethod.other', 'أخرى'), pm.other) : '';
+        const discTotal = Number((paymentsByMethod as any)?.discounts?.totalDiscounts) || 0;
+        const collectedTotal = Number((paymentsByMethod as any)?.total) || 0;
+        const recvTotal = Number((paymentsByMethod as any)?.outstanding) || 0;
+        const recvRow = recvTotal > 0
+          ? `<tr><td style="border:1px solid #000;padding:5px;font-weight:900;">${t('reports.paymentsByMethod.outstanding', 'المستحق')}</td><td style="border:1px solid #000;padding:5px;font-weight:900;">${formatCurrency(recvTotal)}</td><td style="border:1px solid #000;padding:5px;font-weight:900;">—</td></tr>`
+          : '';
+        const grossRow = discTotal > 0
+          ? `<tr><td style="border:2px solid #000;padding:6px;font-weight:900;background:#e0e0e0;">${t('reports.paymentsByMethod.total', 'الإجمالي')}</td><td style="border:2px solid #000;padding:6px;font-weight:900;background:#e0e0e0;">${formatCurrency(collectedTotal + discTotal)}</td><td style="border:2px solid #000;padding:6px;font-weight:900;background:#e0e0e0;">${paymentCountLabel((paymentsByMethod as any)?.count, i18n.language)}</td></tr>`
+          + `<tr><td style="border:1px solid #000;padding:5px;font-weight:900;">${t('reports.paymentsByMethod.discount', 'الخصم')}</td><td style="border:1px solid #000;padding:5px;font-weight:900;">−${formatCurrency(discTotal)}</td><td style="border:1px solid #000;padding:5px;font-weight:900;">—</td></tr>`
+          + `<tr><td style="border:2px solid #000;padding:6px;font-weight:900;background:#e0e0e0;">${t('reports.paymentsByMethod.net', 'الصافي')}</td><td style="border:2px solid #000;padding:6px;font-weight:900;background:#e0e0e0;">${formatCurrency(collectedTotal)}</td><td style="border:2px solid #000;padding:6px;font-weight:900;background:#e0e0e0;">${paymentCountLabel((paymentsByMethod as any)?.count, i18n.language)}</td></tr>`
+          + recvRow
+          : `<tr><td style="border:2px solid #000;padding:6px;font-weight:900;background:#e0e0e0;">${t('reports.paymentsByMethod.total', 'الإجمالي')}</td><td style="border:2px solid #000;padding:6px;font-weight:900;background:#e0e0e0;">${formatCurrency(collectedTotal)}</td><td style="border:2px solid #000;padding:6px;font-weight:900;background:#e0e0e0;">${paymentCountLabel((paymentsByMethod as any)?.count, i18n.language)}</td></tr>`
+          + recvRow;
         return `<div class="page"><div class="page-content">
           <div class="header">
             <div class="org-name">${organizationName}</div>
@@ -509,7 +532,7 @@ const ConsumptionReport = () => {
               ${row(`${paymentMethodIcon('transfer')} ${paymentMethodLabel('transfer', t)}`, pm.transfer)}
               ${row(`${paymentMethodIcon('e_wallet')} ${paymentMethodLabel('e_wallet', t)}`, pm.e_wallet)}
               ${otherRow}
-              <tr><td style="border:2px solid #000;padding:6px;font-weight:900;background:#e0e0e0;">${t('reports.paymentsByMethod.total', 'الإجمالي')}</td><td style="border:2px solid #000;padding:6px;font-weight:900;background:#e0e0e0;">${formatCurrency(Number((paymentsByMethod as any)?.total) || 0)}</td><td style="border:2px solid #000;padding:6px;font-weight:900;background:#e0e0e0;">${paymentCountLabel((paymentsByMethod as any)?.count, i18n.language)}</td></tr>
+              ${grossRow}
             </tbody>
           </table>
           <div class="divider"></div>
@@ -522,7 +545,7 @@ const ConsumptionReport = () => {
             </tr></thead>
             <tbody>
               ${['cashier', 'hall', 'takeaway', 'delivery', 'safe'].map((d: string) => row(`${drawerIcon(d)} ${drawerLabel(d, t)}`, (paymentsByMethod as any)?.drawers?.[d])).join('')}
-              <tr><td style="border:2px solid #000;padding:6px;font-weight:900;background:#e0e0e0;">${t('reports.paymentsByMethod.total', 'الإجمالي')}</td><td style="border:2px solid #000;padding:6px;font-weight:900;background:#e0e0e0;">${formatCurrency(Number((paymentsByMethod as any)?.total) || 0)}</td><td style="border:2px solid #000;padding:6px;font-weight:900;background:#e0e0e0;">${paymentCountLabel((paymentsByMethod as any)?.count, i18n.language)}</td></tr>
+              ${grossRow}
             </tbody>
           </table>
           <div class="divider"></div>
@@ -1654,7 +1677,7 @@ const ConsumptionReport = () => {
         <div className="mb-4 sm:mb-6">
           <PaymentsByMethodCards data={paymentsByMethod} formatCurrency={formatCurrency} />
           <DrawerBreakdownCards
-            data={{ drawers: (paymentsByMethod as any)?.drawers, total: (paymentsByMethod as any)?.total, count: (paymentsByMethod as any)?.count }}
+            data={{ drawers: (paymentsByMethod as any)?.drawers, discounts: (paymentsByMethod as any)?.discounts, outstanding: (paymentsByMethod as any)?.outstanding, total: (paymentsByMethod as any)?.total, count: (paymentsByMethod as any)?.count }}
             formatCurrency={formatCurrency}
           />
           <DeliveryFeesCards

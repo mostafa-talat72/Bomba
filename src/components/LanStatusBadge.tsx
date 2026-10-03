@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { Wifi, WifiOff, MonitorSmartphone } from 'lucide-react';
+import { Wifi, WifiOff, MonitorSmartphone, Crown } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { io, Socket } from 'socket.io-client';
 import { API_BASE_URL } from '../utils/apiBase';
 
@@ -23,8 +24,10 @@ interface LanToast {
 //   (server emits them the moment UDP discovery sees a device join/leave).
 // - Shows a clear toast so the user knows another device connected.
 const LanStatusBadge = () => {
+  const { t } = useTranslation();
   const [peers, setPeers] = useState<LanPeer[]>([]);
   const [reachable, setReachable] = useState(false);
+  const [role, setRole] = useState<string>('unknown');
   const [toasts, setToasts] = useState<LanToast[]>([]);
   const knownPeersRef = useRef<Map<string, LanPeer>>(new Map());
   const toastIdRef = useRef(0);
@@ -65,6 +68,13 @@ const LanStatusBadge = () => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
         if (cancelled) return;
+        try {
+          const rr = await fetch(`${API_BASE_URL}/api/lan/role`);
+          if (rr.ok) {
+            const rd = await rr.json();
+            if (!cancelled && rd?.success && rd.role) setRole(String(rd.role));
+          }
+        } catch {}
         // Skip join-toasts on the very first load (devices already there).
         const list: LanPeer[] = Array.isArray(data.peers) ? data.peers : [];
         if (!announce) {
@@ -158,8 +168,25 @@ const LanStatusBadge = () => {
               ? `LAN: متصل • ${peers.length === 1 ? 'جهاز واحد' : `${peers.length} أجهزة`} (${peers[0].ip})`
               : 'LAN: غير متصل'}
           </span>
+          {role !== 'unknown' && (
+            <span
+              className={`flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
+                role === 'primary'
+                  ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
+                  : role === 'standalone'
+                    ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300'
+                    : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
+              }`}
+              title={t('lanRole.hint')}
+            >
+              {role === 'primary' && <Crown className="h-3 w-3" />}
+              {t(`lanRole.${role}`)}
+            </span>
+          )}
         </div>
       )}
+
+
 
       {/* Join/leave toasts — bottom center, auto-dismiss */}
       {toasts.length > 0 && (

@@ -103,6 +103,13 @@ const MobileConnectCard: React.FC<{ showChromeOption?: boolean }> = ({ showChrom
         const ip = data?.discovery?.localIP || data?.lan?.localIP || null;
         if (ip && ip !== '127.0.0.1' && ip !== 'localhost') rawList.push({ ip, iface: '' });
       }
+      // الرئيس أولًا لروابط العملاء — مع بقاء البدائل
+      const primaryIp = (!data?.isPrimary && data?.primary?.address) || null;
+      if (primaryIp && primaryIp !== '127.0.0.1' && primaryIp !== 'localhost') {
+        const rest = rawList.filter(e => e.ip !== primaryIp);
+        rawList.length = 0;
+        rawList.push({ ip: primaryIp, iface: '' }, ...rest);
+      }
       if (!rawList.length) return;
 
       const currentPort = (() => {

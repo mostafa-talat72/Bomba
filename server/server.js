@@ -35,6 +35,7 @@ import syncQueueManager from "./services/sync/syncQueueManager.js";
 import syncMonitor from "./services/sync/syncMonitor.js";
 import lanSyncService from "./services/sync/lanSyncService.js";
 import lanDiscovery from "./services/sync/lanDiscovery.js";
+import { primaryRedirect, startPrimaryProbe } from "./utils/primaryRedirect.js";
 
 // Bidirectional sync imports
 import OriginTracker from "./services/sync/originTracker.js";
@@ -217,6 +218,20 @@ mongoose.connection.once("open", async () => {
         Logger.info(`✅ Table status startup fix completed: fixed ${tableFixResult.fixed}/${tableFixResult.total} (occupied:${tableFixResult.occupied} empty:${tableFixResult.empty})`);
     } catch (tableFixError) {
         Logger.error("❌ Error in automatic table status fix:", tableFixError.message);
+    }
+
+    // Auto-heal duplicate payments (نفس المبلغ+الطريقة مكررًا على فاتورة مدفوعة)
+    try {
+        const { healDuplicatePayments } = await import("./utils/duplicatePaymentHeal.js");
+        const healRes = await healDuplicatePayments();
+        if (healRes.fixed > 0) {
+            console.log(`[PaymentHeal] fixed ${healRes.fixed} bill(s), removed ${healRes.removed} duplicate payment(s)`);
+        }
+        if (healRes.skipped.length > 0) {
+            Logger.warn(`[PaymentHeal] skipped (would break full payment): ${healRes.skipped.join(", ")}`);
+        }
+    } catch (healError) {
+        Logger.error("❌ Error in duplicate payment heal:", healError.message);
     }
 
     // Auto-repair bill ↔ order linkage (يصلح bill.orders المدمجة + الطلبات اليتيمة تلقائياً)
@@ -729,6 +744,10 @@ app.use((req, res, next) => {
     next();
 });
 
+// متصفحات LAN على جهاز ثانوي -> الرئيس لحظيًا (صفحات فقط؛ API محلي كاحتياطي)
+app.use(primaryRedirect);
+startPrimaryProbe();
+
 // Auto-complete stale kitchen orders (runs even with the kitchen screen closed)
 startAutoOrderCompleter(io);
 
@@ -800,6 +819,8 @@ if (process.env.DESKTOP_DIST_PATH) {
     ];
     function mountDist(targetApp, { proxyBackend = false } = {}) {
         if (proxyBackend) {
+            // واجهة :3000 على جهاز ثانوي -> صفحات الرئيس (نفس قاعدة الباكند)
+            targetApp.use(primaryRedirect);
             const proxyHttp = (req, res) => {
                 const port = backendPort();
                 const headers = { ...req.headers };
@@ -1080,6 +1101,16 @@ server.listen(PORT, HOST, async () => {
             await lanMeshDiscovery.start();
             global.lanMeshDiscovery = lanMeshDiscovery;
             wirePeerCatchUp(); // auto-pull missing changes when a peer (re)appears
+            // A: change-stream publisher — one observer for ALL local writes
+            try {
+                const { startLanChangePublisher } = await import("./utils/lanChangePublisher.js");
+                await startLanChangePublisher().catch(() => {});
+            } catch {}
+            // B: catch-up heartbeat every 20s — ceiling on any miss
+            try {
+                const { startLanHeartbeat } = await import("./utils/lanPeerSync.js");
+                startLanHeartbeat(20000);
+            } catch {}
             // Instant UI: push peer join/leave to browsers the moment it happens
             // (badge + toast), so the user sees "device connected" immediately.
             try {

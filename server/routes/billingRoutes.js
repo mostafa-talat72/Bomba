@@ -1,6 +1,7 @@
 import express from "express";
 import {
     getBills,
+    getBillsTotals,
     getBill,
     getPublicBill,
     createBill,
@@ -45,6 +46,9 @@ router
     .route("/")
     .get(authorize("billing", "tables", "staff", "bills", "all"), getBills)
     .post(authorize("billing", "tables", "staff", "bills", "all"), createBill);
+
+// إجماليات الفترة كاملة (بلا سقف ترقيم) — قبل "/:id" حتى لا تُلتقط totals كمعرف
+router.get("/totals", authorize("billing", "tables", "staff", "bills", "all"), getBillsTotals);
 
 router
     .route("/:id")

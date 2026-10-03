@@ -475,7 +475,7 @@ export const getFinancialReport = async (req, res) => {
             organization: organizationId,
         });
 
-        const paymentsByMethodPromise = getPaymentsByMethodData(organizationId, startDate, endDate);
+        const paymentsByMethodPromise = getPaymentsByMethodData(organizationId, startDate, endDate, reportOrderIds);
 
         const [previousBillRevenue, totalOrders, totalSessions, paymentsByMethod] = await Promise.all([
             previousBillRevenuePromise,
@@ -1619,11 +1619,12 @@ const PAYMENT_DRAWERS = ["cashier", "hall", "takeaway", "delivery", "safe"];
 
 // إجماليات المدفوعات حسب النوع والدرج داخل فترة: الدفعات الكاملة (payments)
 // + الدفعات الجزئية (paymentHistory) — مصدران منفصلان بلا ازدواج.
-const getPaymentsByMethodData = async (organizationId, startDate, endDate) => {
+const getPaymentsByMethodData = async (organizationId, startDate, endDate, eligibleOrderIds = null) => {
     const [agg] = await Bill.aggregate([
         {
             $match: {
                 organization: organizationId,
+                status: { $ne: "cancelled" },
                 // أي دفعة داخل الفترة تعني حفظ الفاتورة وقتها أو بعدها — فلتر موسّع آمن
                 updatedAt: { $gte: startDate },
             },
@@ -1692,6 +1693,44 @@ const getPaymentsByMethodData = async (organizationId, startDate, endDate) => {
                         },
                     },
                 ],
+                // أموال الجلسات (بلايستيشن/كمبيوتر): مخزن منفصل sessionPayments.payments
+                // بتاريخ paidAt — لا تُكرر في payments/paymentHistory (مثبت بالداتا)
+                session: [
+                    { $project: { _s: "$sessionPayments" } },
+                    { $unwind: "$_s" },
+                    { $project: { _p: "$_s.payments" } },
+                    { $unwind: "$_p" },
+                    {
+                        $match: {
+                            $or: [
+                                { "_p.paidAt": { $gte: startDate, $lte: endDate } },
+                                { "_p.paidAt": { $exists: false } },
+                            ],
+                        },
+                    },
+                    {
+                        $group: {
+                            _id: {
+                                m: {
+                                    $cond: [
+                                        { $in: ["$_p.method", PAYMENT_MONEY_METHODS] },
+                                        "$_p.method",
+                                        "other",
+                                    ],
+                                },
+                                d: {
+                                    $cond: [
+                                        { $in: ["$_p.drawer", PAYMENT_DRAWERS] },
+                                        "$_p.drawer",
+                                        "safe",
+                                    ],
+                                },
+                            },
+                            total: { $sum: "$_p.amount" },
+                            count: { $sum: 1 },
+                        },
+                    },
+                ],
             },
         },
     ]);
@@ -1712,7 +1751,11 @@ const getPaymentsByMethodData = async (organizationId, startDate, endDate) => {
     };
     let total = 0;
     let count = 0;
-    for (const bucket of [...((agg && agg.full) || []), ...((agg && agg.partial) || [])]) {
+    for (const bucket of [
+        ...((agg && agg.full) || []),
+        ...((agg && agg.partial) || []),
+        ...((agg && agg.session) || []),
+    ]) {
         const mKey = PAYMENT_MONEY_METHODS.includes(bucket._id && bucket._id.m) ? bucket._id.m : "other";
         const dKey = PAYMENT_DRAWERS.includes(bucket._id && bucket._id.d) ? bucket._id.d : "safe";
         const t = Number(bucket.total) || 0;
@@ -1723,6 +1766,72 @@ const getPaymentsByMethodData = async (organizationId, startDate, endDate) => {
         drawers[dKey].count += c;
         total += t;
         count += c;
+    }
+    // أموال الأصناف غير المعكوسة فاتوريًا: بند بهيستوري بعيد زمنيًا (>60ث) عن أي
+    // سجل فاتوري = مال حقيقي مستقل (القريب = علامة ترحيل مكررة تُتجاهل).
+    // يغطي: اليتيم (بلا سجلات) + المختلط (داخل فواتير لها A/B).
+    const MIRROR_MS = 60000;
+    const scopedBills = await Bill.find(
+        {
+            organization: organizationId,
+            status: { $ne: "cancelled" },
+            updatedAt: { $gte: startDate },
+            "itemPayments.0": { $exists: true },
+        },
+        { payments: 1, paymentHistory: 1, itemPayments: 1 }
+    ).lean();
+    const startMs = new Date(startDate).getTime();
+    const endMs = new Date(endDate).getTime();
+    const bucket = (amt, m, d) => {
+        const mKey = PAYMENT_MONEY_METHODS.includes(m) ? m : "other";
+        const dKey = PAYMENT_DRAWERS.includes(d) ? d : "safe";
+        methods[mKey].total += amt;
+        methods[mKey].count += 1;
+        drawers[dKey].total += amt;
+        drawers[dKey].count += 1;
+        total += amt;
+        count += 1;
+    };
+    const nearAB = (abTimes, t) =>
+        !Number.isNaN(t) && abTimes.some((at) => Math.abs(at - t) <= MIRROR_MS);
+    for (const b of scopedBills) {
+        const abTimes = [];
+        for (const p of b.payments || []) {
+            const t = new Date(p.timestamp).getTime();
+            if (!Number.isNaN(t)) abTimes.push(t);
+        }
+        for (const h of b.paymentHistory || []) {
+            const t = new Date(h.timestamp).getTime();
+            if (!Number.isNaN(t)) abTimes.push(t);
+        }
+        for (const ip of b.itemPayments || []) {
+            let histSum = 0;
+            for (const h of ip.paymentHistory || []) {
+                const amt = Number(h.amount) || 0;
+                if (amt > 0) histSum += amt;
+                if (!(amt > 0)) continue;
+                const t = new Date(h.timestamp || h.paidAt).getTime();
+                if (!Number.isNaN(t)) {
+                    if (t < startMs || t > endMs) continue;
+                    if (nearAB(abTimes, t)) continue;
+                } else if (abTimes.length > 0) {
+                    continue;
+                }
+                bucket(amt, h.method, h.drawer);
+            }
+            // مبلغ عارٍ: paidAmount بلا هيستوري — حقيقي إن لم يجاور سجلًا فاتوريًا
+            const bare = (Number(ip.paidAmount) || 0) - histSum;
+            if (bare > 0.005) {
+                const t = new Date(ip.paidAt).getTime();
+                if (!Number.isNaN(t)) {
+                    if (t < startMs || t > endMs) continue;
+                    if (nearAB(abTimes, t)) continue;
+                } else if (abTimes.length > 0) {
+                    continue;
+                }
+                bucket(bare, ip.paymentMethod, null);
+            }
+        }
     }
     // رسوم التوصيل: مجموع deliveryFee لفواتير الدليفري المنشأة داخل الفترة.
     const [df] = await Bill.aggregate([
@@ -1745,7 +1854,40 @@ const getPaymentsByMethodData = async (organizationId, startDate, endDate) => {
         total: Number(df?.total) || 0,
         count: Number(df?.count) || 0,
     };
-    return { methods, drawers, deliveryFees, total, count };
+    // الخصم: نفس تعريف تقرير الاستهلاك حرفيًا (طلبات ثابت+يدوي بنطاق الإنشاء)
+    // — رقم واحد متطابق في كل البطاقات بدل تعريفين مختلفين
+    let discOrderIds = eligibleOrderIds;
+    if (!discOrderIds) {
+        discOrderIds = await getReportEligibleOrderIds(organizationId, { startDate, endDate });
+    }
+    const [dd] = await Order.aggregate([
+        { $match: { _id: { $in: discOrderIds } } },
+        {
+            $group: {
+                _id: null,
+                fixedDiscount: { $sum: "$fixedDiscount.amount" },
+                manualDiscount: { $sum: "$discount" },
+            },
+        },
+    ]);
+    const discounts = {
+        fixedDiscount: Number(dd?.fixedDiscount) || 0,
+        manualDiscount: Number(dd?.manualDiscount) || 0,
+        totalDiscounts: (Number(dd?.fixedDiscount) || 0) + (Number(dd?.manualDiscount) || 0),
+    };
+    // المستحق الحالي لفواتير النطاق (غير ملغاة) — يفسّر فرق المبيعات عن المحصّل
+    const [ost] = await Bill.aggregate([
+        {
+            $match: {
+                organization: organizationId,
+                status: { $ne: "cancelled" },
+                createdAt: { $gte: startDate, $lte: endDate },
+            },
+        },
+        { $group: { _id: null, outstanding: { $sum: "$remaining" } } },
+    ]);
+    const outstanding = Number(ost?.outstanding) || 0;
+    return { methods, drawers, deliveryFees, discounts, outstanding, total, count };
 };
 
 const getInventoryReportData = async (organization) => {
@@ -1755,6 +1897,10 @@ const getInventoryReportData = async (organization) => {
     const items = await InventoryItem.find({ organization: organizationId }).select('name category currentStock minStock price').lean();
 
     const totalItems = items.length;
+    const totalQuantity = items.reduce(
+        (sum, item) => sum + (Number(item.currentStock) || 0),
+        0
+    );
     const totalValue = items.reduce(
         (sum, item) => sum + item.currentStock * item.price,
         0
@@ -1765,6 +1911,7 @@ const getInventoryReportData = async (organization) => {
 
     return {
         totalItems,
+        totalQuantity,
         totalValue,
         lowStockItems,
         items: items.map((item) => ({
@@ -2263,11 +2410,11 @@ const getStaffPerformanceData = async (organization, startDate, endDate, eligibl
             staffStats[staffId].totalRevenue += Number(session.finalCost) || 0;
         });
 
-        // Calculate average order value and sort by total revenue
+        // Calculate average transaction value (orders + sessions) and sort by total revenue
         const result = Object.values(staffStats)
             .map(staff => ({
                 ...staff,
-                avgOrderValue: staff.ordersCount > 0 ? (staff.totalRevenue / staff.ordersCount).toFixed(2) : 0
+                avgOrderValue: (staff.ordersCount + staff.sessionsCount) > 0 ? (staff.totalRevenue / (staff.ordersCount + staff.sessionsCount)).toFixed(2) : 0
             }))
             .sort((a, b) => b.totalRevenue - a.totalRevenue);
 

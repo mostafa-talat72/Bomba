@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Table as TableIcon, ShoppingCart, DollarSign, Plus, Clock, Printer, ArrowLeftRight, Edit } from 'lucide-react';
+import { Table as TableIcon, ShoppingCart, DollarSign, Plus, Clock, Printer, ArrowLeftRight, Edit, Settings } from 'lucide-react';
 import { Table, Bill } from '../../services/api';
 import { formatCurrency as formatCurrencyUtil } from '../../utils/formatters';
 import { paymentMethodLabel, paymentMethodIcon, type PaymentMethod } from '../../utils/paymentMethod';
@@ -26,6 +26,14 @@ export interface TableButtonProps {
   onQuickPrint?: (table: Table, e: React.MouseEvent) => void;
   onQuickChangeTable?: (table: Table, e: React.MouseEvent) => void;
   onQuickEditBill?: (table: Table, e: React.MouseEvent) => void;
+  /** دفع أصناف (كالتيك أوي/الدليفري) — لأول فاتورة غير مدفوعة */
+  onPayItems?: (table: Table, e: React.MouseEvent) => void;
+  /** إدارة الدفع — لأول فاتورة غير مدفوعة (يظهر فقط عند وجودها) */
+  onManage?: (table: Table, e: React.MouseEvent) => void;
+  /** حذف (لأول فاتورة غير مدفوعة — بتأكيد مزدوج) */
+  onDeleteBill?: (table: Table, e: React.MouseEvent) => void;
+  canPayItems?: boolean;
+  canDelete?: boolean;
   onHoverChange?: (table: Table | null) => void;
   /** طريقة الدفع الحالية (تظهر على الكارت وتُستخدم عند الدفع) */
   method: PaymentMethod;
@@ -38,9 +46,11 @@ export interface TableButtonProps {
   pendingRequestsCount?: number;
 }
 
-const TableButton = React.memo<TableButtonProps>(({ table, isSelected, isOccupied, tableBills, tableOrdersCount, activeSessionType, activeSessionCount = 0, sessionUrgency = 'none', onClick, onOpen, onQuickOrder, onQuickBilling, onEndAllSessions, onQuickPrint, onQuickChangeTable, onQuickEditBill,            onHoverChange, liveExtra = 0, pendingRequestsCount = 0, method, onMethodChange, drawer, onDrawerChange }) => {
+const TableButton = React.memo<TableButtonProps>(({ table, isSelected, isOccupied, tableBills, tableOrdersCount, activeSessionType, activeSessionCount = 0, sessionUrgency = 'none', onClick, onOpen, onQuickOrder, onQuickBilling, onEndAllSessions, onQuickPrint, onQuickChangeTable, onQuickEditBill, onPayItems, onManage, onDeleteBill, canPayItems = false, canDelete = false,            onHoverChange, liveExtra = 0, pendingRequestsCount = 0, method, onMethodChange, drawer, onDrawerChange }) => {
   const { t, i18n } = useTranslation();
   const [showTooltip, setShowTooltip] = useState(false);
+  const [confirmDel, setConfirmDel] = useState(false);
+  const unpaidBills = tableBills.filter(b => ['draft', 'partial', 'overdue'].includes(b.status));
 
   const ageLabel = isOccupied ? getAgeLabel(tableBills) : '';
   const ageColor = isOccupied ? getTableAgeColor(tableBills) : null;
@@ -144,9 +154,9 @@ const TableButton = React.memo<TableButtonProps>(({ table, isSelected, isOccupie
         )}
 
         {/* ── جسم الكارت (عرض فقط على الموبايل — الأزرار داخل نافذة الطاولة) ── */}
-        <div className="flex flex-col items-center justify-center px-2 sm:px-3 pt-3 sm:pt-5 pb-3">
+        <div className="flex flex-col items-center justify-center px-2.5 sm:px-4 pt-4 sm:pt-6 pb-4">
           {/* أيقونة الطاولة / الجلسة النشطة */}
-          <div className={`w-9 h-9 sm:w-11 sm:h-11 rounded-xl flex items-center justify-center mb-1.5 sm:mb-2 transition-all duration-300 group-hover:scale-110 group-hover:rotate-6 shadow-sm ${styles.icon}`}>
+          <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center mb-1.5 sm:mb-2 transition-all duration-300 group-hover:scale-110 group-hover:rotate-6 shadow-sm ${styles.icon}`}>
             {isOccupied && activeSessionType ? (
               <span className="text-2xl sm:text-4xl leading-none select-none animate-pulse">
                 {activeSessionType === 'playstation' ? '🎮' :
@@ -158,7 +168,7 @@ const TableButton = React.memo<TableButtonProps>(({ table, isSelected, isOccupie
           </div>
 
           {/* رقم الطاولة — سطران كحد أقصى، القص عند المسافات فقط */}
-          <span className={`text-lg sm:text-2xl font-extrabold leading-tight text-center line-clamp-2 break-normal ${styles.text}`}>
+          <span className={`text-xl sm:text-2xl font-extrabold leading-tight text-center line-clamp-2 break-normal ${styles.text}`}>
             {getTableDisplay(table.number, i18n.language)}
           </span>
 
@@ -215,6 +225,15 @@ const TableButton = React.memo<TableButtonProps>(({ table, isSelected, isOccupie
                 <DollarSign className="h-3.5 w-3.5" />
                 <span>{t('tableBtn.pay')}</span>
               </button>
+              {(onPayItems && canPayItems && unpaidBills.length > 0) && (
+                <button
+                  onClick={(e) => onPayItems(table, e)}
+                  className="min-h-8 bg-white hover:bg-gray-50 dark:bg-gray-900 dark:hover:bg-gray-800 text-indigo-600 dark:text-indigo-400 text-xs font-bold rounded-md flex items-center justify-center gap-1 shadow border border-indigo-200 dark:border-indigo-800 transition-all"
+                  title={t('billCard.payItemsTitle')}>
+                  <span className="text-sm leading-none">🧾</span>
+                  <span>{t('billCard.items')}</span>
+                </button>
+              )}
               {(onQuickEditBill && tableBills.some(b => ['draft','partial','overdue','paid'].includes(b.status))) && (
                 <button
                   onClick={(e) => onQuickEditBill(table, e)}
@@ -270,6 +289,15 @@ const TableButton = React.memo<TableButtonProps>(({ table, isSelected, isOccupie
                   <span>{t('tableBtn.print')}</span>
                 </button>
               )}
+              {(onManage && hasUnpaidBills) && (
+                <button
+                  onClick={(e) => onManage(table, e)}
+                  className="min-h-8 bg-white hover:bg-gray-50 dark:bg-gray-900 dark:hover:bg-gray-800 text-slate-600 dark:text-slate-300 text-xs font-bold rounded-md flex items-center justify-center gap-1 shadow border border-slate-200 dark:border-slate-700 transition-all"
+                  title={t('billCard.manage', 'إدارة الدفع')}>
+                  <Settings className="h-3.5 w-3.5" />
+                  <span>{t('billCard.manage', 'إدارة الدفع')}</span>
+                </button>
+              )}
               {(activeSessionCount > 0 && onEndAllSessions) && (
                 <button
                   onClick={(e) => onEndAllSessions(table, e)}
@@ -282,6 +310,15 @@ const TableButton = React.memo<TableButtonProps>(({ table, isSelected, isOccupie
               )}
               </div>
               </div>
+              {/* حذف الفاتورة (تأكيد مزدوج) */}
+              {(onDeleteBill && canDelete && unpaidBills.length > 0) && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); if (confirmDel) { setConfirmDel(false); onDeleteBill(table, e); } else { setConfirmDel(true); setTimeout(() => setConfirmDel(false), 3000); } }}
+                  className={`mt-1 w-full py-1 text-xs font-bold rounded-md flex items-center justify-center gap-1 shadow border transition-all ${confirmDel ? 'bg-red-700 text-white border-red-800 animate-pulse' : 'bg-red-500 hover:bg-red-600 text-white border-red-600'}`}
+                  title={t('billCard.deleteBillTitle')}>
+                  <span>{confirmDel ? t('billCard.confirmDelete') : t('billCard.delete')}</span>
+                </button>
+              )}
               {/* تغيير طريقة الدفع من الكارت مباشرة */}
               <select value={method} onChange={e => onMethodChange(e.target.value as PaymentMethod)}
                 onClick={e => e.stopPropagation()} title={t('billCard.paymentMethodTitle')}

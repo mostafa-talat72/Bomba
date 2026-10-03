@@ -1,4 +1,7 @@
 {
+  "tabs": {
+    "maxReached": "الحد الأقصى 10 تبويبات مفتوحة"
+  },
   "common": {
     "save": "حفظ",
     "cancel": "إلغاء",
@@ -1676,7 +1679,10 @@
       "other": "أخرى",
       "colMethod": "النوع",
       "colAmount": "الإجمالي",
-      "colCount": "العدد"
+      "colCount": "العدد",
+      "discount": "الخصم",
+      "net": "الصافي",
+      "outstanding": "المستحق"
     },
     "paymentsByDrawer": {
       "title": "المدفوعات حسب الدرج"
@@ -2781,6 +2787,8 @@
       "to": "إلى",
       "date": "تاريخ",
       "categoryTotal": "إجمالي {{category}}",
+      "categoryDiscount": "خصم {{category}}",
+      "categoryNet": "صافي {{category}}",
       "thankYou": "شكراً لكم",
       "footer": " تصميم وتطوير <strong style=\"font-weight:650\">م. مصطفى طلعت للحلول البرمجية</strong><br>01116626164",
       "printButton": "طباعة التقرير"
@@ -4673,6 +4681,24 @@
       "update": "تحديث"
     }
   },
+  "lanRole": {
+    "title": "دور الجهاز (LAN)",
+    "hint": "دور هذا الجهاز في بروتوكول الرئيس/الثانوي",
+    "role": "الدور",
+    "primary": "رئيسي",
+    "secondary": "ثانوي",
+    "standalone": "مستقل",
+    "searching": "يبحث",
+    "unknown": "غير معروف",
+    "class": "الفئة",
+    "class_fixed": "ثابت (كاشير)",
+    "class_mobile": "متحرك",
+    "eligible": "مؤهل للرئاسة",
+    "eligibleOn": "مؤهل",
+    "eligibleOff": "احتياطي فقط",
+    "rule": "الأسبق المؤهل يفوز • الرتبة تكسر التعادل • بلا انتزاع لرئيس حي",
+    "standaloneBanner": "يعمل مستقلًا — لا رئيس متاح، البيانات محفوظة على هذا الجهاز"
+  },
   "toast": {
     "organization": {
       "fetchError": "فشل تحميل بيانات المنشأة",
@@ -5438,7 +5464,12 @@
     "delete": "حذف",
     "confirmShort": "تأكيد؟",
     "customerHistoryTitle": "سجل العميل",
-    "discountLabel": "خصم: -{{amount}}"
+    "discountLabel": "خصم: -{{amount}}",
+    "manage": "إدارة الدفع",
+    "beforeLabel": "قبل الخصم",
+    "netLabel": "الصافي",
+    "paidLabel": "المدفوع",
+    "remainingLabel": "المتبقي"
   },
   "billEdit": {
     "customerTitle": "بيانات العميل",
@@ -5464,6 +5495,7 @@
     "menuTab": "المنيو",
     "orderTab": "الطلب",
     "paidNotice": "تنبيه: تعديل فاتورة مدفوعة — سيعاد حساب المتبقي والحالة تلقائياً",
+    "overpaymentDue": "تنبيه: المدفوع يتجاوز الإجمالي بـ {{amount}} — مبلغ مستحق الرد للعميل",
     "loadingItems": "جارٍ تحميل الأصناف...",
     "sections": "الأقسام",
     "categories": "الفئات",
@@ -5481,6 +5513,7 @@
     "savePrintAll": "حفظ وطباعة الكل",
     "savePrintBill": "حفظ وطباعة الفاتورة",
     "saveAndPayFull": "حفظ ودفع كامل",
+    "saveAndManage": "حفظ وإدارة الدفع",
     "addServiceToBill": "إضافة خدمة للفاتورة",
     "editService": "تعديل الخدمة",
     "serviceSubtitle": "تفاصيل الخدمة الإضافية",
@@ -5517,7 +5550,18 @@
     "total": "الإجمالي {{amount}}",
     "cancel": "إلغاء",
     "paying": "جارٍ الدفع...",
-    "payAmount": "ادفع {{amount}}"
+    "payAmount": "ادفع {{amount}}",
+    "selected": "المحدد",
+    "selectedEmpty": "اضغط + على أي صنف لإضافته هنا",
+    "removeItem": "إزالة",
+    "paidTitle": "المدفوع",
+    "paidEmpty": "لا مدفوعات بعد",
+    "tabItems": "الأصناف",
+    "tabSelected": "المحدد",
+    "tabPaid": "المدفوع",
+    "editEntry": "تعديل الدفعة",
+    "zeroDeletes": "الصفر يحذف الدفعة ويعيد حساب الفاتورة",
+    "includesDiscount": "شامل خصم {{amount}}"
   },
   "customerOrders": {
     "accepted": "تم قبول الطلب",
@@ -5531,6 +5575,13 @@
     "reject": "رفض"
   },
   "payment": {
+    "amountsSection": "المبالغ",
+    "methodSection": "طريقة الدفع",
+    "beforeDiscount": "قبل الخصم",
+    "discountAmount": "الخصم",
+    "billKindDineIn": "صالة",
+    "billKindTakeaway": "تيك أوي",
+    "billKindDelivery": "دليفري",
     "invoice": "فاتورة #{{number}}",
     "tableLine": "• طاولة {{number}}",
     "tableButton": "الطاولة",

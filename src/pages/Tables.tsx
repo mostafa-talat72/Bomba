@@ -24,7 +24,7 @@ import { printOrder } from '../utils/printOrder';
 import { resolveMenuItem } from '../utils/orderSectionPrint';
 import { preloadBillReceipt, printBill } from '../utils/printBill';
 import { getCachedDevicePrinter, printThroughLocalBridge } from '../utils/localPrintBridge';
-import { getPrintFlagFresh, getEffectivePrintSettingsFresh } from '../utils/freshPrintSettings';
+import { getFulfillmentFlagFresh, getEffectivePrintSettingsFresh } from '../utils/freshPrintSettings';
 import { useBillAggregation } from '../hooks/useBillAggregation';
 import { useInfiniteList } from '../hooks/useInfiniteList';
 import {
@@ -66,8 +66,8 @@ const EMPTY_ORDERS_COUNT = 0;
 
 // ─── تحميل متأخر لنوافذ الدفع الثقيلة (يقلل الحزمة الأولية ويسرّع فتح الصفحة) ──
 // ملفوفة بـ memo لتجنب إعادة الرسم بلا داعٍ عند كل render للصفحة
-const PartialPaymentModal = React.lazy(() => import('../components/PartialPaymentModal'));
 const PaymentManagementModal = React.lazy(() => import('../components/tables/PaymentManagementModal'));
+const ItemPartialPayModal = React.lazy(() => import('../components/tables/ItemPartialPayModal'));
 
 // ─── Main Component ─────────────────────────────────────────────────────────
 const Tables: React.FC = () => {
@@ -86,7 +86,8 @@ const Tables: React.FC = () => {
     createTableSection, updateTableSection, deleteTableSection,
     createTable, updateTable, deleteTable,
     bills, fetchBills, setBills, orders, fetchOrders, setOrders, user,
-    cancelBill, addPartialPayment, addPartialPaymentAggregated, payForItems, paySessionPartial, updateBillAggregatedItems, deleteBill, updateBill,
+    cancelBill, addPartialPayment, payForItems, paySessionPartial,
+           updateBillAggregatedItems, deleteBill, updateBill,
     endSession, createSessionWithExistingBill, changeSessionTable, linkSessionToTable, unlinkTableFromSession, updateSessionTimes, updateSessionStartTime, updateControllersPeriodTime, updateSessionCost,
     deliverItem, deliverOrderSection, cancelOrder,
   } = useApp() as any;
@@ -144,6 +145,7 @@ const Tables: React.FC = () => {
   const [selectedBill, setSelectedBill] = useState<Bill | null>(null);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showPartialPaymentModal, setShowPartialPaymentModal] = useState(false);
+  const [payItemsBill, setPayItemsBill] = useState<Bill | null>(null);
   const [showSessionEndModal, setShowSessionEndModal] = useState(false);
   const [sessionToEnd, setSessionToEnd] = useState<string | null>(null);
   const [customerNameForEndSession, setCustomerNameForEndSession] = useState('');
@@ -175,7 +177,7 @@ const Tables: React.FC = () => {
   const [sessionToPayData, setSessionToPayData] = useState<{ session: Session; amount: string; method: PaymentMethod } | null>(null);
   const [isCancelingBill, setIsCancelingBill] = useState(false);
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
-  const [isProcessingPartialPayment, setIsProcessingPartialPayment] = useState(false);
+
   const [isEndingSession, setIsEndingSession] = useState(false);
   const [tableBillsFilter, setTableBillsFilter] = useState('unpaid');
   const [searchQuery, setSearchQuery] = useState('');
@@ -320,7 +322,8 @@ const Tables: React.FC = () => {
   const [priceEditItem, setPriceEditItem] = useState<{ index: number; item: LocalOrderItem } | null>(null);
 
   // ── useBillAggregation ───────────────────────────────────────────────────
-  const { aggregatedItems: backendAggregatedItems, loading: aggregationLoading, refetch: refetchAggregatedItems } = useBillAggregation(selectedBill?.id || selectedBill?._id || null);
+  const { loading: aggregationLoading, refetch:
+           refetchAggregatedItems } = useBillAggregation(selectedBill?.id || selectedBill?._id || null);
 
   // ── Refs sync ────────────────────────────────────────────────────────────
   useEffect(() => { selectedBillRef.current = selectedBill; }, [selectedBill]);
@@ -2504,7 +2507,8 @@ const loadInitialData = async () => {
         showNotification(t('billing.notifications.payFullBillSuccess'), 'success');
 
         // إعداد طازج من السيرفر: لقطة تسجيل الدخول قد لا ترى التفعيل الجديد.
-        if (await getPrintFlagFresh(user, 'autoPrintOnPayment')) {
+        // الأتمتة حسب نوع الفاتورة (طاولة/تيك أوي/دليفري) — لا القراءة العامة.
+        if (await getFulfillmentFlagFresh(user, 'autoPrintOnPayment', (finalPaidBill as any)?.fulfillmentType)) {
           try { await printBill(finalPaidBill, user?.organizationName, i18n.language, t, getTableSectionName(finalPaidBill.table), 'payment'); } catch {}
         }
         // مزامنة خلفية غير حاجبة بدل fetchTables/fetchBills المتزامنين.
@@ -2572,7 +2576,8 @@ const loadInitialData = async () => {
         showNotification(t('billing.notifications.payFullBillSuccess'), 'success');
 
         // إعداد طازج من السيرفر: لقطة تسجيل الدخول قد لا ترى التفعيل الجديد.
-        if (await getPrintFlagFresh(user, 'autoPrintOnPayment')) {
+        // الأتمتة حسب نوع الفاتورة (طاولة/تيك أوي/دليفري) — لا القراءة العامة.
+        if (await getFulfillmentFlagFresh(user, 'autoPrintOnPayment', (finalPaidBill as any)?.fulfillmentType)) {
           await printBill(finalPaidBill, user?.organizationName, i18n.language, t, getTableSectionName(finalPaidBill.table), 'payment');
         }
         // مزامنة خلفية غير حاجبة بدل fetchTables/fetchBills المتزامنين.
@@ -2662,45 +2667,8 @@ const loadInitialData = async () => {
 
   const handlePartialPayment = async (bill: Bill) => {
     if (!canPartialPayment(user)) { showNotification(t('common.permissionDenied'), 'error'); return; }
-    const saved = billPayPrefs[billPayKey(bill)];
-    setPaymentMethod(saved?.method || 'cash');
-    setPaymentDrawer(saved?.drawer || defaultDrawerForFulfillment((bill as any).fulfillmentType || 'dine_in'));
-    setSelectedBill(bill); setShowPartialPaymentModal(true);
-  };
-
-  const handlePartialPaymentSubmit = async (items: Array<{ itemId: string; quantity: number }>, method: PaymentMethod, drawer?: CashDrawer) => {
-    if (!selectedBill || items.length === 0) return;
-    if (method === 'cash') fireInstantDrawer(selectedBill, 'payment');
-    const snapBills = [...bills] as Bill[];
-    const snapSelected = selectedBill ? { ...selectedBill } as Bill : null;
-    const totalPaidOptimistic = items.reduce((s, item) => {
-      const agg = backendAggregatedItems.find(a => a.id === item.itemId);
-      return s + (agg ? agg.price * item.quantity : 0);
-    }, 0);
-    // ── optimistic <50ms ──
-    try {
-      setBills(prev => prev.map((b: any) => String(b._id || b.id) === String(selectedBill._id || selectedBill.id) ? { ...b, paid: (Number(b.paid)||0)+totalPaidOptimistic, remaining: Math.max(0,(Number(b.total)||0)-(Number(b.paid)||0)-totalPaidOptimistic), _optimistic: true } : b));
-      if (snapSelected) setSelectedBill({ ...snapSelected, paid: (Number(snapSelected.paid)||0)+totalPaidOptimistic, remaining: Math.max(0,(Number(snapSelected.total)||0)-(Number(snapSelected.paid)||0)-totalPaidOptimistic) } as Bill);
-    } catch {}
-    try {
-      setIsProcessingPartialPayment(true);
-      const bill = await addPartialPaymentAggregated(selectedBill.id || selectedBill._id, { items, paymentMethod: method, drawer: drawer || paymentDrawer });
-      if (bill) {
-        setIsProcessingPartialPayment(false);
-        showNotification(t('billing.notifications.partialPaymentSuccess', { amount: formatCurrency(totalPaidOptimistic) }), 'success');
-        setBills(prev => prev.map((b: any) => String(b._id || b.id) === String(selectedBill._id || selectedBill.id) ? { ...b, ...bill, _optimistic: undefined } : b));
-        setSelectedBill({ ...bill } as Bill);
-        scheduleBackgroundRefetch(true);
-        if ((bill as Bill).status === 'paid') {
-          setShowPartialPaymentModal(false);
-          showNotification(t('billing.notifications.billCompleted'), 'success');
-        }
-      } else {
-        setBills(snapBills); if (snapSelected) setSelectedBill(snapSelected);
-        showNotification(t('billing.notifications.partialPaymentError'), 'error');
-        setIsProcessingPartialPayment(false);
-      }
-    } catch { setBills(snapBills); if (snapSelected) setSelectedBill(snapSelected); showNotification(t('billing.notifications.partialPaymentError'), 'error'); setIsProcessingPartialPayment(false); }
+    // نافذة دفع الأصناف الجديدة الموحدة (تُستخدم في كل الصفحات)
+    setPayItemsBill(bill);
   };
 
   const handlePaySessionPartial = async (session?: Session) => {
@@ -2922,7 +2890,40 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
   // زر "فتح" الصريح على الكارت — يوقف الانتشار ثم يفتح (الضغط على جسم الكارت يفتح أيضاً).
   const stableOpenTable = useCallback((tb: Table, e: React.MouseEvent) => { e.stopPropagation(); lastFocusedTableRef.current = tb; handleTableClick(tb); }, []);
   const stableQuickOrder = useCallback((tb: Table, e: React.MouseEvent) => { lastFocusedTableRef.current = tb; handleQuickOrder(tb, e); }, []);
-  const stableQuickBilling = useCallback((tb: Table, e: React.MouseEvent) => { lastFocusedTableRef.current = tb; handleQuickBilling(tb, e); }, [handleQuickBilling]);
+  const stableQuickBilling = useCallback((tb: Table, e: React.MouseEvent) => {
+lastFocusedTableRef.current = tb; handleQuickBilling(tb, e); }, [handleQuickBilling]);
+  // إدارة الدفع من كارت الطاولة — أول فاتورة غير مدفوعة تُفتح في نافذة الإدارة
+  const stableQuickManage = useCallback((tb: Table, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const tableId = String((tb as any)._id || (tb as any).id || tb);
+    const cardBills = tableCardData.get(tableId)?.tBills || (tableBillsMap as any)[tableId]?.bills || [];
+    const unpaidBill = cardBills.find((b: any) => ['draft', 'partial', 'overdue'].includes(b.status))
+      || bills.find((b: Bill) => {
+        const btid = (b.table as any)?._id || (b.table as any)?.id || b.table;
+        return String(btid) === tableId && ['draft', 'partial', 'overdue'].includes(b.status);
+      });
+    if (unpaidBill) void handlePaymentClick(unpaidBill);
+  }, [tableCardData, tableBillsMap, bills]);
+  // دفع أصناف من الكارت (كالتيك أوي/الدليفري) — لأول فاتورة غير مدفوعة
+  const handlePayItemsOnCard = useCallback((tb: Table, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const bills = tableCardData.get((tb._id || (tb as any).id).toString())?.tBills || [];
+    const unpaid = bills.filter((b: any) => ['draft', 'partial', 'overdue'].includes(b.status));
+    if (unpaid.length === 0) { showNotification(t('tables.noUnpaidBill'), 'error'); return; }
+    if (!canPartialPayment(user)) { showNotification(t('common.permissionDenied'), 'error'); return; }
+    setPayItemsBill(unpaid[0] as Bill);
+  }, [tableCardData, user, t]);
+  const stablePayItems = useCallback((tb: Table, e: React.MouseEvent) => { lastFocusedTableRef.current = tb; handlePayItemsOnCard(tb, e); }, [handlePayItemsOnCard]);
+  // حذف من الكارت — لأول فاتورة غير مدفوعة (بتأكيد المودال الذي يعرض رقمها)
+  const handleDeleteBillOnCard = useCallback((tb: Table, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!canDeleteBill(user)) { showNotification(t('common.permissionDenied'), 'error'); return; }
+    const bills = tableCardData.get((tb._id || (tb as any).id).toString())?.tBills || [];
+    const unpaid = bills.filter((b: any) => ['draft', 'partial', 'overdue'].includes(b.status));
+    if (unpaid.length === 0) { showNotification(t('tables.noUnpaidBill'), 'error'); return; }
+    setSelectedBill(unpaid[0] as Bill); setShowCancelConfirmModal(true);
+  }, [tableCardData, user, t]);
+  const stableDeleteBill = useCallback((tb: Table, e: React.MouseEvent) => { lastFocusedTableRef.current = tb; handleDeleteBillOnCard(tb, e); }, [handleDeleteBillOnCard]);
   const stableHoverChange = useCallback((tb: Table | null) => {
     lastFocusedTableRef.current = tb;
     if (tb) void repairTableBills(tb);
@@ -3271,7 +3272,7 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
 
   // ── RENDER ────────────────────────────────────────────────────────────────
   return (
-    <div className={`space-y-1 sm:space-y-2 ${isFullscreen ? 'fixed inset-0 z-[100] bg-white dark:bg-gray-900 overflow-y-auto p-4' : '-mx-4 sm:-mx-6'}`}>
+    <div data-tab-shift className={`space-y-1 sm:space-y-2 ${isFullscreen ? 'fixed inset-0 z-[100] bg-white dark:bg-gray-900 overflow-y-auto p-4' : '-mx-4 sm:-mx-6'}`}>
 
       {/* ── Payment Success Animation (#3) ── */}
       {showPaymentSuccessAnim && (
@@ -3419,6 +3420,11 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
                               onOpen={stableOpenTable}
                               onQuickOrder={stableQuickOrder}
                               onQuickBilling={stableQuickBilling}
+                              onManage={stableQuickManage}
+                              onPayItems={stablePayItems}
+                              onDeleteBill={stableDeleteBill}
+                              canPayItems={canPartialPayment(user)}
+                              canDelete={canDeleteBill(user)}
                               onQuickPrint={stableQuickPrint}
                               onQuickChangeTable={stableQuickChangeTable}
                               onQuickEditBill={stableQuickEditBill}
@@ -3741,6 +3747,9 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
                   ] as typeof acts : []),
                   ...(activeSessionsCount > 0 ? [
                     { key: 'stop', label: t('tables.actions.stopSessions'), icon: <span className="text-base leading-none">⏹</span>, cls: 'bg-white dark:bg-gray-700 border-red-300 dark:border-red-800 text-red-600 dark:text-red-400', show: true, run: () => handleEndAllSessions(selectedTable, stubEvt) },
+                  ] as typeof acts : []),
+                  ...(hasUnpaid && canPartialPayment(user) ? [
+                    { key: 'payitems', label: t('billCard.items'), icon: <span className="text-base leading-none">🧾</span>, cls: 'bg-white dark:bg-gray-700 border-indigo-300 dark:border-indigo-700 text-indigo-600 dark:text-indigo-400', show: true, run: () => stablePayItems(selectedTable, stubEvt) },
                   ] as typeof acts : []),
                   { key: 'qr', label: t('tables.qr.action'), icon: <QrCode className="h-4 w-4" />, cls: 'bg-white dark:bg-gray-700 border-orange-300 dark:border-orange-700 text-orange-600 dark:text-orange-400', show: !!orgIdForQr, run: () => setQrTable(selectedTable) },
                 ];
@@ -4071,6 +4080,20 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
                                         <button onClick={e => { e.stopPropagation(); setPayChoiceBill(bill); setShowPayChoiceModal(true); }}
                                           className="min-h-9 px-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold rounded-lg flex items-center gap-1 transition-all whitespace-nowrap">
                                           <DollarSign className="h-3 w-3" />{t('tables.actions.pay')}
+                                        </button>
+                                      )}
+                                      {isUnpaid && canPartialPayment(user) && (
+                                        <button onClick={e => { e.stopPropagation(); setPayItemsBill(bill); }}
+                                          className="min-h-9 px-2.5 bg-white hover:bg-gray-50 dark:bg-gray-900 dark:hover:bg-gray-800 text-indigo-600 dark:text-indigo-400 text-sm font-bold rounded-lg flex items-center gap-1 shadow border border-indigo-200 dark:border-indigo-800 transition-all whitespace-nowrap"
+                                          title={t('billCard.payItemsTitle')}>
+                                          <span className="text-sm leading-none">🧾</span>{t('billCard.items')}
+                                        </button>
+                                      )}
+                                      {isUnpaid && canDeleteBill(user) && (
+                                        <button onClick={e => { e.stopPropagation(); setSelectedBill(bill); setShowCancelConfirmModal(true); }}
+                                          className="min-h-9 w-9 bg-red-500 hover:bg-red-600 text-white rounded-lg flex items-center justify-center transition-all"
+                                          title={t('billCard.deleteBillTitle')}>
+                                          <span className="text-sm leading-none">🗑</span>
                                         </button>
                                       )}
                                       <button onClick={e => { e.stopPropagation(); printBill(bill as any, user?.organizationName, i18n.language, t, getTableSectionName(bill.table)).catch(() => {}); }}
@@ -4510,13 +4533,34 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
         loading={isEndingAll}
       />
 
-      {/* ── Partial Payment Modal ── */}
+      {/* ── Pay Items Modal (unified for payment management + table card) ── */}
       <React.Suspense fallback={null}>
-      <PartialPaymentModal
-        key={`partial-${selectedBill?._id || selectedBill?.id}-${selectedBill?.itemPayments?.length || 0}-${selectedBill?.paid || 0}`}
-        isOpen={showPartialPaymentModal} onClose={() => setShowPartialPaymentModal(false)}
-        bill={selectedBill} onPaymentSubmit={handlePartialPaymentSubmit} isProcessing={isProcessingPartialPayment}
-        initialDrawer={paymentDrawer} />
+      {payItemsBill && (
+        <ItemPartialPayModal
+          bill={payItemsBill}
+          onClose={() => setPayItemsBill(null)}
+          onSuccess={(updated: any, meta?: any) => {
+            const id = String(updated?._id || updated?.id || '');
+            if (id) {
+              setBills((prev: any[]) => prev.map((b: any) => String(b._id || b.id) === id ? updated : b));
+              setSelectedBill((prev: any) => prev && String(prev._id || prev.id) === id ? updated : prev);
+            }
+            if (meta?.method === 'cash' && updated) fireInstantDrawer(updated as Bill, 'payment');
+            if (meta && Number(meta.total) > 0) showNotification(t('billing.notifications.partialPaymentSuccess', { amount: formatCurrency(meta.total) }), 'success');
+            if ((updated as any)?.status === 'paid') showNotification(t('billing.notifications.billCompleted'), 'success');
+            setPayItemsBill(null);
+            scheduleBackgroundRefetch(true);
+          }}
+          canEditPaid={canEditPartialPayment(user)}
+          onRefreshBill={(updated: any) => {
+            const id = String(updated?._id || updated?.id || '');
+            if (!id) return;
+            setBills((prev: any[]) => prev.map((b: any) => String(b._id || b.id) === id ? updated : b));
+            setSelectedBill((prev: any) => prev && String(prev._id || prev.id) === id ? updated : prev);
+            setPayItemsBill(updated);
+          }}
+        />
+      )}
       </React.Suspense>
 
       {/* ── Cancel Bill Confirm Modal ── */}
@@ -5055,6 +5099,7 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
         menuItems={menuItems}
         menuSections={menuSections}
         menuCategories={menuCategories}
+        onSaveAndManage={(b: any) => { void handlePaymentClick(b); }}
         getCategoriesForSection={getCategoriesForSection}
         getItemsForCategory={getItemsForCategory}
           onSuccess={async (updatedBill) => {
@@ -5075,7 +5120,8 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
               return next;
             });
               // إعداد طازج من السيرفر: لقطة تسجيل الدخول قد لا ترى التفعيل الجديد.
-              if (await getPrintFlagFresh(user, 'autoPrintOnPayment')) {
+              // الأتمتة حسب نوع الفاتورة (طاولة/تيك أوي/دليفري) — لا القراءة العامة.
+              if (await getFulfillmentFlagFresh(user, 'autoPrintOnPayment', (updatedBill as any)?.fulfillmentType)) {
                 printBill(updatedBill, user?.organizationName, i18n.language, t, getTableSectionName((updatedBill as any).table), 'payment').catch(() => {});
               }
           }

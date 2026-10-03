@@ -125,6 +125,7 @@ class LanSyncService {
         // Start discovery
         lanDiscovery.on("became-primary", () => this.onBecamePrimary());
         lanDiscovery.on("became-secondary", (info) => this.onBecameSecondary(info));
+        lanDiscovery.on("became-standalone", () => this.onBecameStandalone());
         lanDiscovery.on("primary-lost", () => this.onPrimaryLost());
         lanDiscovery.on("primary-changed", (info) => this.onPrimaryChanged(info));
         lanDiscovery.on("election-won", () => this.onBecamePrimary());
@@ -298,6 +299,17 @@ class LanSyncService {
     onPrimaryLost() {
         Logger.warn("[LanSync] Primary lost, waiting for election...");
         // Disconnect client socket
+        if (this.clientSocket) {
+            try { this.clientSocket.disconnect(); } catch {}
+            this.clientSocket = null;
+        }
+        if (this.reconnectTimer) { clearTimeout(this.reconnectTimer); this.reconnectTimer = null; }
+    }
+
+    onBecameStandalone() {
+        Logger.warn("[LanSync] Role -> STANDALONE (ineligible): serving local only, no primary claims");
+        this.isPrimary = false;
+        this.primaryInfo = null;
         if (this.clientSocket) {
             try { this.clientSocket.disconnect(); } catch {}
             this.clientSocket = null;

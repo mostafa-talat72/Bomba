@@ -57,6 +57,13 @@ const TableQrModal: React.FC<TableQrModalProps> = ({ tableNumber, tableId, orgId
         const ip = data?.discovery?.localIP || data?.lan?.localIP || null;
         if (ip && ip !== '127.0.0.1' && ip !== 'localhost') ips.push(ip);
       }
+      // العملاء عبر الرئيس أولًا (قراءة لحظية) — مع بقاء المحلي كاحتياطي
+      const primaryIp = (!data?.isPrimary && data?.primary?.address) || null;
+      if (primaryIp && primaryIp !== '127.0.0.1' && primaryIp !== 'localhost') {
+        const rest = ips.filter(x => x !== primaryIp);
+        ips.length = 0;
+        ips.push(primaryIp, ...rest);
+      }
       if (!ips.length) return;
       const built: QrEntry[] = [];
       for (const ip of ips) {

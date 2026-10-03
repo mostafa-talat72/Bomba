@@ -8,17 +8,21 @@ import { printBill } from '../utils/printBill';
 import { Search, Plus } from 'lucide-react';
 import BillItemsEditModal from '../components/tables/BillItemsEditModal';
 import ItemPartialPayModal from '../components/tables/ItemPartialPayModal';
+import PaymentManagementModal from '../components/tables/PaymentManagementModal';
+import type { PaymentMethod } from '../utils/paymentMethod';
+import type { CashDrawer } from '../utils/paymentDrawer';
 import { canDeleteBill, canViewCustomerContacts, canApplyManualDiscount, canMoveBillTakeawayToTable, canCreateTakeaway, canEditTakeaway, canPayFullTakeaway, canPayPartialTakeaway } from '../utils/permissionHelper';
 import { useInfiniteList } from '../hooks/useInfiniteList';
 import { io, Socket } from 'socket.io-client';
 import { API_BASE_URL } from '../utils/apiBase';
 
 import BillTableCard from '../components/tables/BillTableCard';
-import { getShortBillNumber, localeTag } from '../utils/formatters';
+import { getShortBillNumber, localeTag, formatCurrency as formatCurrencyUtil } from '../utils/formatters';
 import ChangeTableModal from '../components/tables/ChangeTableModal';
 
 import OrderPrintSectionsModal from '../components/tables/OrderPrintSectionsModal';
 import { startBillPrep, confirmBillPrep } from '../utils/orderSectionPrint';
+import { getFulfillmentFlagFresh } from '../utils/freshPrintSettings';
 
 // شريط الخصم أسفل الكارت
 const DiscountStrip = memo(({ bill, onDiscount }: { bill: any; onDiscount: (b: any, d: number, t: 'amount' | 'percent') => void }) => {
@@ -133,6 +137,26 @@ const Takeaway = () => {
       if (r.printed === 0) showNotification(t('takeaway.notifications.noMatchingSections'), 'error');
       else showNotification(t('takeaway.notifications.sentToPrint', { count: r.printed }), 'success');
     } catch { showNotification(t('takeaway.notifications.prepPrintFailed'), 'error'); }
+  };
+
+  // طباعة تلقائية عند اكتمال السداد: الفاتورة دائمًا + التحضير إن كانت المزدوجة مفعلة.
+  // التحضير بالأقسام الافتراضية (أو الكل) لأن التدفق الآلي لا يسأل المستخدم.
+  const autoPrintPaidBill = async (paidBill: any) => {
+    try {
+      if (!paidBill || Number(paidBill?.remaining) > 0) return;
+      if (!(await getFulfillmentFlagFresh(user, 'autoPrintOnPayment', 'takeaway'))) return;
+      await printBill(paidBill, (user as any)?.organizationName, i18n.language, t, undefined, 'payment');
+      if (!(await getFulfillmentFlagFresh(user, 'printBoth', 'takeaway'))) return;
+      const ctx = prepCtx();
+      const r = await startBillPrep(paidBill, ctx);
+      if (r.status === 'prompt') {
+        const { getEffectivePrintSettingsFresh } = await import('../utils/freshPrintSettings');
+        const { resolveFulfillmentValue } = await import('../utils/resolvePrintSettings');
+        const ps = await getEffectivePrintSettingsFresh(user).catch(() => null);
+        const defaults = ((resolveFulfillmentValue(ps, 'defaultOrderPrintSections', 'takeaway', []) || []) as string[]).map((id) => String(id)).filter((id) => r.sections.some((s) => s.id === id));
+        await confirmBillPrep(r.orders, defaults.length ? defaults : r.sections.map((s) => s.id), r.menuItemsMap, ctx);
+      }
+    } catch {}
   };
 
   const handlePrint = async (bill: any) => {
@@ -379,11 +403,15 @@ const Takeaway = () => {
   };
 
   // تحصيل مباشر مع تأكيد داخل الكارت (بلا نافذة دفع).
+  const collectInflight = useRef<Set<string>>(new Set());
   const handleCollect = async (bill: any, method: string, drawer: string = 'takeaway') => {
     if (!canPayFullTakeaway(user)) { showNotification(t('common.permissionDenied'), 'error'); return; }
     const amount = Number(bill.remaining) || 0;
     if (amount <= 0) return;
     const id = bill._id || bill.id;
+    const idStr = String(id);
+    if (collectInflight.current.has(idStr)) return;
+    collectInflight.current.add(idStr);
     setBills((prev: any[]) => prev.map((b: any) => {
       if (String(b._id || b.id) !== String(id)) return b;
       const paid = (Number(b.paid) || 0) + amount;
@@ -394,7 +422,69 @@ const Takeaway = () => {
       const res: any = await (api as any).addPayment(id, { amount, method, drawer, reference: method === 'e_wallet' ? t('takeaway.payment.eWalletReference') : undefined });
       applyBill(id, res?.success ? res.data : null);
       if (res?.success) showNotification(t('takeaway.notifications.collected'), 'success');
+      // أتمتة الطباعة حسب نوع الفاتورة (تيك أوي) — عند اكتمال السداد
+      await autoPrintPaidBill(res?.success ? res.data : null);
     } catch (e: any) { showNotification(e?.message || t('takeaway.notifications.collectFailed'), 'error'); refreshSingleBill?.({ _id: id }); }
+    finally { collectInflight.current.delete(idStr); }
+  };
+
+  // ── نافذة إدارة الدفع (تفتح حتى للمدفوع بالكامل) ──
+  const [manageBill, setManageBill] = useState<any | null>(null);
+  const [mPayAmount, setMPayAmount] = useState('');
+  const [mPayRef, setMPayRef] = useState('');
+  const [mProcessing, setMProcessing] = useState(false);
+  const manageId = manageBill ? String(manageBill._id || manageBill.id) : '';
+  const openManage = (b: any) => { setManageBill(b); setMPayAmount(String(Number(b?.remaining) || '')); setMPayRef(''); };
+  const handleManageSubmit = async () => {
+    const b = manageBill;
+    if (!b) return;
+    if (!canPayFullTakeaway(user)) { showNotification(t('common.permissionDenied'), 'error'); return; }
+    const amount = Number(mPayAmount) || 0;
+    if (amount <= 0) return;
+    const method = payMethods[manageId] || 'cash';
+    const drawer = payDrawers[manageId] || 'takeaway';
+    setMProcessing(true);
+    try {
+      const res: any = await (api as any).addPayment(b._id || b.id, { amount, method, drawer, reference: method === 'e_wallet' ? t('takeaway.payment.eWalletReference') : undefined });
+      applyBill(b._id || b.id, res?.success ? res.data : null);
+      if (res?.success) {
+        setManageBill(res.data);
+        setMPayAmount(String(Number(res.data?.remaining) || ''));
+        showNotification(t('takeaway.notifications.collected'), 'success');
+        // أتمتة الطباعة حسب النوع — عند اكتمال السداد فقط
+        await autoPrintPaidBill(res.data);
+      }
+    } catch (e: any) { showNotification(e?.message || t('takeaway.notifications.collectFailed'), 'error'); refreshSingleBill?.({ _id: b._id || b.id }); }
+    finally { setMProcessing(false); }
+  };
+
+  // ── الدفع المقسوم بطريقتين (نفس نافذة الطاولة) ──
+  const handleTakeawaySplit = async (amount2: string, method2: string) => {
+    const b = manageBill;
+    if (!b) return;
+    if (!canPayFullTakeaway(user)) { showNotification(t('common.permissionDenied'), 'error'); return; }
+    const a1 = Number(mPayAmount) || 0;
+    const a2 = Number(amount2) || 0;
+    if (!(a1 > 0) || !(a2 > 0)) return;
+    const method1 = payMethods[manageId] || 'cash';
+    if (method1 === method2) { showNotification(t('billing.splitPayDifferentMethods'), 'error'); return; }
+    const drawer = payDrawers[manageId] || 'takeaway';
+    const id = b._id || b.id;
+    setMProcessing(true);
+    try {
+      const r1: any = await (api as any).addPayment(id, { amount: a1, method: method1, drawer });
+      const r2: any = await (api as any).addPayment(id, { amount: a2, method: method2, drawer });
+      const nb = r2?.success ? r2.data : r1?.data;
+      applyBill(id, nb || null);
+      if (nb) {
+        setManageBill(nb);
+        setMPayAmount(String(Number(nb?.remaining) || ''));
+        showNotification(t('takeaway.notifications.collected'), 'success');
+        // أتمتة الطباعة حسب النوع — عند اكتمال السداد فقط
+        await autoPrintPaidBill(nb);
+      }
+    } catch (e: any) { showNotification(e?.message || t('takeaway.notifications.collectFailed'), 'error'); refreshSingleBill?.({ _id: id }); }
+    finally { setMProcessing(false); }
   };
 
   const handleWhatsApp = (bill: any) => {
@@ -473,7 +563,7 @@ const Takeaway = () => {
               canEdit={canEditTakeaway(user)}
               canPayFull={canPayFullTakeaway(user)} canPayPartial={canPayPartialTakeaway(user)}
               onOpen={guardTakeawayEdit(setBillToEdit)} onAddItems={guardTakeawayEdit(setBillToEdit)} onEditItems={guardTakeawayEdit(setBillToEdit)}
-              onCollect={handleCollect} onPrint={handlePrint} onMove={(b: any) => { if (!canMoveBillTakeawayToTable(user)) { showNotification(t('common.permissionDenied'), 'error'); return; } guardTakeawayEdit(setMoveBill)(b); }} onPayItems={guardTakeawayPartial(setPayItemsBill)}
+              onCollect={handleCollect} onPrint={handlePrint} onMove={(b: any) => { if (!canMoveBillTakeawayToTable(user)) { showNotification(t('common.permissionDenied'), 'error'); return; } guardTakeawayEdit(setMoveBill)(b); }} onPayItems={guardTakeawayPartial(setPayItemsBill)} onManage={openManage}
               onPrepPrint={handlePrepPrint}
               onWhatsApp={handleWhatsApp} onDelete={handleDelete} />
           </div>
@@ -506,6 +596,35 @@ const Takeaway = () => {
           bill={payItemsBill}
           onClose={() => setPayItemsBill(null)}
           onSuccess={(updated: any) => { applyBill(updated?._id || updated?.id || payItemsBill?._id, updated); setPayItemsBill(null); }}
+          canEditPaid={canPayPartialTakeaway(user)}
+          onRefreshBill={(updated: any) => { if (updated) { applyBill(updated?._id || updated?.id || payItemsBill?._id, updated); setPayItemsBill(updated); } }}
+        />
+      )}
+      {manageBill && (
+        <PaymentManagementModal
+          isOpen={!!manageBill}
+          selectedBill={manageBill}
+          user={user}
+          paymentAmount={mPayAmount} setPaymentAmount={setMPayAmount}
+          paymentMethod={(payMethods[manageId] || 'cash') as PaymentMethod} setPaymentMethod={(m: PaymentMethod) => setPayMethods(p => ({ ...p, [manageId]: m }))}
+          paymentDrawer={(payDrawers[manageId] || 'takeaway') as CashDrawer} setPaymentDrawer={(d: CashDrawer) => setPayDrawers(p => ({ ...p, [manageId]: d }))}
+          paymentReference={mPayRef} setPaymentReference={setMPayRef}
+          isProcessingPayment={mProcessing}
+          handlePaymentSubmit={handleManageSubmit}
+          onSplitSubmit={handleTakeawaySplit}
+          handlePartialPayment={async (b: any) => { setManageBill(null); setPayItemsBill(b); }}
+          handleEndSession={async () => {}}
+          handleEditItemPayment={() => { const b = manageBill; setManageBill(null); if (b) setPayItemsBill(b); }}
+          handleClosePaymentModal={() => setManageBill(null)}
+          setShowCancelConfirmModal={(v: boolean) => { if (v && manageBill) { const b = manageBill; setManageBill(null); void handleDelete(b); } }}
+          setShowChangeTableModal={(v: boolean) => { if (v && manageBill) { const b = manageBill; setManageBill(null); guardTakeawayEdit(setMoveBill)(b); } }}
+          setNewTableNumber={() => {}}
+          setShowSessionPaymentModal={() => {}}
+          setShowPaymentModal={(v: boolean) => { if (!v) setManageBill(null); }}
+          setActiveTab={() => {}} setActiveTab3={() => {}}
+          getSessionCost={() => 0}
+          formatCurrency={(n: number) => formatCurrencyUtil(Number(n) || 0, i18n.language, localStorage.getItem('organizationCurrency') || 'EGP')}
+          showNotification={showNotification}
         />
       )}
       {prepSelection && (
@@ -533,6 +652,7 @@ const Takeaway = () => {
         isOpen={!!billToEdit}
         onClose={closeItemsModal}
         bill={billToEdit}
+        onSaveAndManage={openManage}
         menuItems={menuItems || []}
         menuSections={menuSections || []}
         menuCategories={menuCategories || []}

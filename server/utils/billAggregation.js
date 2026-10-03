@@ -6,14 +6,26 @@
 /**
  * Creates a unique key for an item based on name, price, and addons
  */
-function createItemKey(itemName, itemPrice, addons = [], variant = null) {
+export function createItemKey(itemName, itemPrice, addons = [], variant = null) {
     // Sort addons by name and price to ensure consistent keys
     const addonsKey = addons
         .map(addon => `${addon.name}:${addon.price}`)
         .sort()
         .join('|');
-    
+
     return `${itemName}|${variant || ''}|${itemPrice}|${addonsKey}`;
+}
+
+/**
+ * معدل خصم الطلب (0-1) — نفس صيغة orderDiscountRate في billingController.
+ * يُستخدم لفصل صفوف التجميع: خصم الطلب يخص أصنافه فقط ولا يتسرب للمشابه في طلب آخر.
+ */
+export function orderRateBucket(order) {
+    const sub = (order?.items || []).reduce((s, it) => s + (Number(it.price) || 0) * (Number(it.quantity) || 0), 0);
+    if (!(sub > 0)) return 0;
+    const d = (Number(order?.fixedDiscount?.amount) || 0) + (Number(order?.discount) || 0);
+    const rate = Math.min(1, Math.max(0, d / sub));
+    return Math.round(rate * 10000);
 }
 
 /**
@@ -139,14 +151,16 @@ function getItemIdsForAggregatedItem(aggregatedItemId, orders) {
 
     // Find the original item to get its details
     let targetItem = null;
+    let targetBucket = 0;
 
     for (const order of orders) {
         if (!order.items || !Array.isArray(order.items)) continue;
-        
+
         for (let i = 0; i < order.items.length; i++) {
             const currentItemId = `${order._id}-${i}`;
             if (currentItemId === aggregatedItemId) {
                 targetItem = order.items[i];
+                targetBucket = orderRateBucket(order);
                 break;
             }
         }
@@ -157,12 +171,14 @@ function getItemIdsForAggregatedItem(aggregatedItemId, orders) {
         return []; // Item not found
     }
 
-    // Find all items with same name+price+addons+variant that actually exist
+    // Find all items with same name+price+addons+variant that actually exist —
+    // فقط داخل الطلبات بنفس معدل الخصم (حتى لا يسحب الدفع وحدات من طلب آخر)
     const targetKey = createItemKey(targetItem.name, targetItem.price, targetItem.addons, targetItem.variant);
     const matchingItemIds = [];
 
     orders.forEach((order) => {
         if (!order.items || !Array.isArray(order.items)) return;
+        if (orderRateBucket(order) !== targetBucket) return;
 
         order.items.forEach((item, itemIndex) => {
             const itemKey = createItemKey(item.name, item.price, item.addons, item.variant);
@@ -197,14 +213,16 @@ export function aggregateItemsWithPayments(
     const itemMap = new Map();
 
     // First pass: aggregate all items by their unique key (name+price+addons)
+    // + discount-rate bucket — أصناف طلب عليه خصم لا تندمج مع المشابه في طلب آخر
     orders.forEach((order) => {
         if (!order.items || !Array.isArray(order.items)) {
             return;
         }
+        const bucket = orderRateBucket(order);
 
         order.items.forEach((item, itemIndex) => {
             const itemId = `${order._id}-${itemIndex}`;
-            const key = `${item.isService ? 'service' : 'item'}|${createItemKey(item.name, item.price, item.addons, item.variant)}|${item.showInPrint !== false}`;
+            const key = `${item.isService ? 'service' : 'item'}|${createItemKey(item.name, item.price, item.addons, item.variant)}|${item.showInPrint !== false}|disc:${bucket}`;
 
             if (!itemMap.has(key)) {
                 // Create new aggregated item
@@ -311,5 +329,7 @@ export function expandAggregatedItemsForPayment(selectedItems, orders, itemPayme
 export default {
     aggregateItemsWithPayments,
     expandAggregatedItemsForPayment,
-    getItemIdsForAggregatedItem
+    getItemIdsForAggregatedItem,
+    createItemKey,
+    orderRateBucket
 };

@@ -9,11 +9,15 @@ import { Bill } from '../services/api';
 import { printBill } from '../utils/printBill';
 import BillItemsEditModal from '../components/tables/BillItemsEditModal';
 import BillTableCard from '../components/tables/BillTableCard';
-import { getShortBillNumber, localeTag } from '../utils/formatters';
+import { getShortBillNumber, localeTag, formatCurrency as formatCurrencyUtil } from '../utils/formatters';
 import ChangeTableModal from '../components/tables/ChangeTableModal';
 import OrderPrintSectionsModal from '../components/tables/OrderPrintSectionsModal';
 import { startBillPrep, confirmBillPrep } from '../utils/orderSectionPrint';
+import { getFulfillmentFlagFresh } from '../utils/freshPrintSettings';
 import ItemPartialPayModal from '../components/tables/ItemPartialPayModal';
+import PaymentManagementModal from '../components/tables/PaymentManagementModal';
+import type { PaymentMethod } from '../utils/paymentMethod';
+import type { CashDrawer } from '../utils/paymentDrawer';
 import { canDeleteBill, canApplyManualDiscount, canMoveBillDeliveryToTable, canCreateDelivery, canEditDelivery, canPayFullDelivery, canPayPartialDelivery } from '../utils/permissionHelper';
 import { Search, Plus, Phone, User } from 'lucide-react';
 import { isSoundEnabled, playWarnBeep, playDangerBeep } from '../utils/sound';
@@ -181,6 +185,26 @@ const Delivery = () => {
       if (r.printed === 0) palert(t('delivery.notifications.noMatchingSections'));
       else palert(t('delivery.notifications.sentToPrint', { count: r.printed }), true);
     } catch { palert(t('delivery.notifications.prepPrintFailed')); }
+  };
+
+  // طباعة تلقائية عند اكتمال السداد: الفاتورة دائمًا + التحضير إن كانت المزدوجة مفعلة.
+  // التحضير بالأقسام الافتراضية (أو الكل) لأن التدفق الآلي لا يسأل المستخدم.
+  const autoPrintPaidBill = async (paidBill: any) => {
+    try {
+      if (!paidBill || Number(paidBill?.remaining) > 0) return;
+      if (!(await getFulfillmentFlagFresh(user, 'autoPrintOnPayment', 'delivery'))) return;
+      await printBill(paidBill, (user as any)?.organizationName, i18n.language, t, undefined, 'payment');
+      if (!(await getFulfillmentFlagFresh(user, 'printBoth', 'delivery'))) return;
+      const ctx = prepCtx();
+      const r = await startBillPrep(paidBill, ctx);
+      if (r.status === 'prompt') {
+        const { getEffectivePrintSettingsFresh } = await import('../utils/freshPrintSettings');
+        const { resolveFulfillmentValue } = await import('../utils/resolvePrintSettings');
+        const ps = await getEffectivePrintSettingsFresh(user).catch(() => null);
+        const defaults = ((resolveFulfillmentValue(ps, 'defaultOrderPrintSections', 'delivery', []) || []) as string[]).map((id) => String(id)).filter((id) => r.sections.some((s) => s.id === id));
+        await confirmBillPrep(r.orders, defaults.length ? defaults : r.sections.map((s) => s.id), r.menuItemsMap, ctx);
+      }
+    } catch {}
   };
 
   const handlePrint = async (bill: any) => {
@@ -819,38 +843,50 @@ const Delivery = () => {
     fn(b);
   };
 
+  // منع الدفع المكرر بالضغط المتتابع (سجلات مضاعفة مثبتة بالداتا)
+  const payInflight = useRef<Set<string>>(new Set());
   // تحصيل مباشر (التأكيد داخل الكارت نفسه — بلا نافذة دفع).
   const handleCollect = async (bill: any, method: string, drawer: string = 'delivery') => {
     if (!canPayFullDelivery(user)) { palert(t('common.permissionDenied')); return; }
     const amount = Number(bill.remaining) || 0;
     if (amount <= 0) return;
     const id = bill._id || bill.id;
+    const idStr = String(id);
+    if (payInflight.current.has(idStr)) return;
+    payInflight.current.add(idStr);
     optimisticPay(bill, amount);
     try {
       const res: any = await (api as any).addPayment(id, { amount, method, drawer, reference: method === 'e_wallet' ? t('delivery.payment.eWalletRef') : undefined });
       applyBill(id, res?.success ? res.data : null);
       if (res?.success) {
         palert(t('delivery.notifications.collectedSuccess'), true);
-        // ختم التسليم تلقائياً عند اكتمال التحصيل (خطوة واحدة مثل الفاتورة)
+        // تحديث حالة التوصيل بعد اكتمال التحصيل
         try {
           const done = res.data || { ...bill, paid: (Number(bill.paid) || 0) + amount, remaining: 0 };
           if ((done.deliveryInfo?.status || 'preparing') !== 'delivered') {
             await updateStatus(done, 'delivered');
           }
         } catch {}
+        // أتمتة الطباعة حسب نوع الفاتورة (دليفري) — عند اكتمال السداد
+        await autoPrintPaidBill(res?.success ? res.data : null);
       }
     } catch (e: any) { refreshSingleBill?.({ _id: id }); }
+    finally { payInflight.current.delete(idStr); }
   };
 
   const handlePartial = async (bill: any, amount: number, method: string, drawer: string = 'delivery') => {
     const remaining = Number(bill.remaining) || 0;
     if (!(amount > 0) || amount > remaining) { palert(t('delivery.notifications.invalidAmount')); return; }
     const id = bill._id || bill.id;
+    const idStr = String(id);
+    if (payInflight.current.has(idStr)) return;
+    payInflight.current.add(idStr);
     optimisticPay(bill, amount);
     try {
       const res: any = await (api as any).addPayment(id, { amount, method, drawer, reference: method === 'e_wallet' ? t('delivery.payment.eWalletRef') : undefined });
       applyBill(id, res?.success ? res.data : null);
     } catch (e: any) { refreshSingleBill?.({ _id: id }); }
+    finally { payInflight.current.delete(idStr); }
   };
 
   const handleDiscount = async (bill: any, discount: number, type: 'amount' | 'percent' = 'percent') => {
@@ -864,6 +900,78 @@ const Delivery = () => {
   };
 
   const [payItemsBill, setPayItemsBill] = useState<any | null>(null);
+
+  // ── نافذة إدارة الدفع (تفتح حتى للمدفوع بالكامل) ──
+  const [manageBill, setManageBill] = useState<any | null>(null);
+  const [mPayAmount, setMPayAmount] = useState('');
+  const [mPayRef, setMPayRef] = useState('');
+  const [mProcessing, setMProcessing] = useState(false);
+  const manageId = manageBill ? String(manageBill._id || manageBill.id) : '';
+  const manageNotify = (msg: string, type?: string) => palert(msg, type === 'success');
+  const openManage = (b: any) => { setManageBill(b); setMPayAmount(String(Number(b?.remaining) || '')); setMPayRef(''); };
+  const handleManageSubmit = async () => {
+    const b = manageBill;
+    if (!b) return;
+    if (!canPayFullDelivery(user)) { palert(t('common.permissionDenied')); return; }
+    const amount = Number(mPayAmount) || 0;
+    if (amount <= 0) return;
+    const method = payMethods[manageId] || 'cash';
+    const drawer = payDrawers[manageId] || 'delivery';
+    const id = b._id || b.id;
+    setMProcessing(true);
+    try {
+      const res: any = await (api as any).addPayment(id, { amount, method, drawer, reference: method === 'e_wallet' ? t('delivery.payment.eWalletRef') : undefined });
+      applyBill(id, res?.success ? res.data : null);
+      if (res?.success) {
+        palert(t('delivery.notifications.collectedSuccess'), true);
+        setManageBill(res.data);
+        setMPayAmount(String(Number(res.data?.remaining) || ''));
+        try {
+          const done = res.data || b;
+          if ((done.deliveryInfo?.status || 'preparing') !== 'delivered' && Number(done?.remaining) <= 0) {
+            await updateStatus(done, 'delivered');
+          }
+        } catch {}
+        // أتمتة الطباعة حسب النوع — عند اكتمال السداد فقط
+        await autoPrintPaidBill(res?.success ? res.data : null);
+      }
+    } catch (e: any) { refreshSingleBill?.({ _id: id }); }
+    finally { setMProcessing(false); }
+  };
+
+  // ── الدفع المقسوم بطريقتين (نفس نافذة الطاولة) ──
+  const handleDeliverySplit = async (amount2: string, method2: string) => {
+    const b = manageBill;
+    if (!b) return;
+    if (!canPayFullDelivery(user)) { palert(t('common.permissionDenied')); return; }
+    const a1 = Number(mPayAmount) || 0;
+    const a2 = Number(amount2) || 0;
+    if (!(a1 > 0) || !(a2 > 0)) return;
+    const method1 = payMethods[manageId] || 'cash';
+    if (method1 === method2) { palert(t('billing.splitPayDifferentMethods')); return; }
+    const drawer = payDrawers[manageId] || 'delivery';
+    const id = b._id || b.id;
+    setMProcessing(true);
+    try {
+      const r1: any = await (api as any).addPayment(id, { amount: a1, method: method1, drawer });
+      const r2: any = await (api as any).addPayment(id, { amount: a2, method: method2, drawer });
+      const nb = r2?.success ? r2.data : r1?.data;
+      applyBill(id, nb || null);
+      if (nb) {
+        setManageBill(nb);
+        setMPayAmount(String(Number(nb?.remaining) || ''));
+        palert(t('delivery.notifications.collectedSuccess'), true);
+        try {
+          if ((nb.deliveryInfo?.status || 'preparing') !== 'delivered' && Number(nb?.remaining) <= 0) {
+            await updateStatus(nb, 'delivered');
+          }
+        } catch {}
+        // أتمتة الطباعة حسب النوع — عند اكتمال السداد فقط
+        await autoPrintPaidBill(nb);
+      }
+    } catch (e: any) { refreshSingleBill?.({ _id: id }); }
+    finally { setMProcessing(false); }
+  };
 
   // فتح إدارة الدفع من إشعار "عرض الطلب" — تُجلب الفاتورة (مدفوعة غالبًا) ثم تُفتح
   const location = useLocation();
@@ -1049,7 +1157,7 @@ const Delivery = () => {
                   canPayFull={canPayFullDelivery(user)} canPayPartial={canPayPartialDelivery(user)}
                   onOpen={guardDeliveryEdit(setBillToEdit)} onAddItems={guardDeliveryEdit(setBillToEdit)} onEditItems={guardDeliveryEdit(setBillToEdit)}
                   onCollect={handleCollect} onPrint={handlePrint} onMove={(b: any) => { if (!canMoveBillDeliveryToTable(user)) { palert(t('common.permissionDenied')); return; } guardDeliveryEdit(setMoveBill)(b); }} onWhatsApp={handleWhatsApp}
-                  onDelete={handleDelete} onCustomer={openLoyalty} onPayItems={guardDeliveryPartial(setPayItemsBill)} onPrepPrint={handlePrepPrint}
+                  onDelete={handleDelete} onCustomer={openLoyalty} onPayItems={guardDeliveryPartial(setPayItemsBill)} onPrepPrint={handlePrepPrint} onManage={openManage}
                   onDriverSave={(b, name) => updateStatus(b, b.deliveryInfo?.status || 'preparing', { driver: name })} />
               </div>
             ))}
@@ -1104,6 +1212,35 @@ const Delivery = () => {
           bill={payItemsBill}
           onClose={() => setPayItemsBill(null)}
           onSuccess={(updated: any) => { applyBill(updated?._id || updated?.id || payItemsBill?._id, updated); setPayItemsBill(null); }}
+          canEditPaid={canPayPartialDelivery(user)}
+          onRefreshBill={(updated: any) => { if (updated) { applyBill(updated?._id || updated?.id || payItemsBill?._id, updated); setPayItemsBill(updated); } }}
+        />
+      )}
+      {manageBill && (
+        <PaymentManagementModal
+          isOpen={!!manageBill}
+          selectedBill={manageBill}
+          user={user}
+          paymentAmount={mPayAmount} setPaymentAmount={setMPayAmount}
+          paymentMethod={(payMethods[manageId] || 'cash') as PaymentMethod} setPaymentMethod={(m: PaymentMethod) => setPayMethods(p => ({ ...p, [manageId]: m }))}
+          paymentDrawer={(payDrawers[manageId] || 'delivery') as CashDrawer} setPaymentDrawer={(d: CashDrawer) => setPayDrawers(p => ({ ...p, [manageId]: d }))}
+          paymentReference={mPayRef} setPaymentReference={setMPayRef}
+          isProcessingPayment={mProcessing}
+          handlePaymentSubmit={handleManageSubmit}
+          onSplitSubmit={handleDeliverySplit}
+          handlePartialPayment={async (b: any) => { setManageBill(null); setPayItemsBill(b); }}
+          handleEndSession={async () => {}}
+          handleEditItemPayment={() => { const b = manageBill; setManageBill(null); if (b) setPayItemsBill(b); }}
+          handleClosePaymentModal={() => setManageBill(null)}
+          setShowCancelConfirmModal={(v: boolean) => { if (v && manageBill) { const b = manageBill; setManageBill(null); void handleDelete(b); } }}
+          setShowChangeTableModal={(v: boolean) => { if (v && manageBill) { const b = manageBill; setManageBill(null); guardDeliveryEdit(setMoveBill)(b); } }}
+          setNewTableNumber={() => {}}
+          setShowSessionPaymentModal={() => {}}
+          setShowPaymentModal={(v: boolean) => { if (!v) setManageBill(null); }}
+          setActiveTab={() => {}} setActiveTab3={() => {}}
+          getSessionCost={() => 0}
+          formatCurrency={(n: number) => formatCurrencyUtil(Number(n) || 0, i18n.language, localStorage.getItem('organizationCurrency') || 'EGP')}
+          showNotification={manageNotify}
         />
       )}
 
@@ -1111,6 +1248,7 @@ const Delivery = () => {
         isOpen={!!billToEdit}
         onClose={closeItemsModal}
         bill={billToEdit}
+        onSaveAndManage={openManage}
         menuItems={menuItems || []}
         menuSections={menuSections || []}
         menuCategories={menuCategories || []}

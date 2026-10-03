@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ShoppingCart, DollarSign, Printer, ArrowLeftRight, Edit, MessageCircle, ChefHat } from 'lucide-react';
+import { ShoppingCart, DollarSign, Printer, ArrowLeftRight, Edit, MessageCircle, ChefHat, Settings } from 'lucide-react';
 import { Bill } from '../../services/api';
 import { formatCurrency as formatCurrencyUtil, getShortBillNumber } from '../../utils/formatters';
 import { paymentMethodLabel, paymentMethodIcon } from '../../utils/paymentMethod';
@@ -25,6 +25,8 @@ export interface BillTableCardProps {
   onPrint: (bill: any) => void;
   onMove: (bill: any) => void;
   onPayItems?: (bill: any) => void;
+  /** فتح نافذة إدارة الدفع — يظهر دائمًا حتى للمدفوع بالكامل */
+  onManage?: (bill: any) => void;
   onPrepPrint?: (bill: any) => void;
   onWhatsApp?: (bill: any) => void;
   onDelete: (bill: any) => void;
@@ -44,7 +46,7 @@ export interface BillTableCardProps {
 const BillTableCard = React.memo<BillTableCardProps>(({
   bill, kind, method, onMethodChange, drawer, onDrawerChange, showPhone = true,
   compact, onOpen, onAddItems, onCollect, onEditItems, onPrint, onMove,
-  onWhatsApp, onDelete, onCustomer, onHoverChange, onDriverSave, onPayItems, onPrepPrint, children,
+  onWhatsApp, onDelete, onCustomer, onHoverChange, onDriverSave, onPayItems, onManage, onPrepPrint, children,
   canEdit = true, canPayFull = true, canPayPartial = true,
 }) => {
   const { t, i18n } = useTranslation();
@@ -141,24 +143,29 @@ const BillTableCard = React.memo<BillTableCardProps>(({
           ) : null}
 
           {(() => {
-            const totalFD = (bill.orders || []).reduce((sum: number, o: any) => sum + (o?.fixedDiscount?.amount || 0), 0);
+            const totalFD = (bill.orders || []).reduce((sum: number, o: any) => sum + (Number(o?.fixedDiscount?.amount) || 0) + (Number(o?.discount) || 0), 0);
             const billDiscount = Number(bill.discount) || 0;
             const totalAllDiscounts = totalFD + billDiscount;
-            const subtotalBeforeDiscount = (bill.total || 0) + totalAllDiscounts;
-            const netAmount = isOccupied ? totalRemaining : (Number(bill.total) || 0);
-            if (totalAllDiscounts <= 0) {
-              if (netAmount <= 0) return null;
-              return (
-                <span className={`text-base sm:text-lg font-bold mt-0.5 ${styles.sub}`}>
-                  {formatCurrencyUtil(netAmount, i18n.language, localStorage.getItem('organizationCurrency') || 'EGP')}
-                </span>
-              );
-            }
+            const netAmount = Number(bill.total) || 0;
+            const subtotalBeforeDiscount = netAmount + totalAllDiscounts;
+            const paidAmount = Number(bill.paid) || 0;
+            const remAmount = Number(bill.remaining) || 0;
+            const cur = localStorage.getItem('organizationCurrency') || 'EGP';
+            const money = (v: number) => formatCurrencyUtil(v, i18n.language, cur);
+            if (netAmount <= 0 && paidAmount <= 0 && remAmount <= 0) return null;
             return (
-              <div className="flex items-center justify-center gap-2 mt-0.5 flex-wrap">
-                <span className="text-base sm:text-lg font-bold text-gray-400 dark:text-gray-500 line-through whitespace-nowrap">{formatCurrencyUtil(subtotalBeforeDiscount, i18n.language, localStorage.getItem('organizationCurrency') || 'EGP')}</span>
-                <span className="text-base sm:text-lg font-bold text-purple-600 dark:text-purple-400 whitespace-nowrap">{t('billCard.discountLabel', { amount: formatCurrencyUtil(totalAllDiscounts, i18n.language, localStorage.getItem('organizationCurrency') || 'EGP') })}</span>
-                <span className={`text-base sm:text-lg font-bold whitespace-nowrap ${styles.sub}`}>{formatCurrencyUtil(netAmount, i18n.language, localStorage.getItem('organizationCurrency') || 'EGP')}</span>
+              <div className="flex flex-col items-center mt-0.5 gap-0.5 w-full">
+                {totalAllDiscounts > 0 && (
+                  <div className="flex items-center justify-center gap-2 flex-wrap">
+                    <span className="text-sm font-bold text-gray-400 dark:text-gray-500 line-through whitespace-nowrap">{t('billCard.beforeLabel', 'قبل الخصم')}: {money(subtotalBeforeDiscount)}</span>
+                    <span className="text-sm font-bold text-purple-600 dark:text-purple-400 whitespace-nowrap">{t('billCard.discountLabel', { amount: money(totalAllDiscounts) })}</span>
+                  </div>
+                )}
+                <div className={`text-base sm:text-lg font-extrabold whitespace-nowrap ${styles.text}`}>{t('billCard.netLabel', 'الصافي')}: {money(netAmount)}</div>
+                <div className="flex items-center justify-center gap-2 flex-wrap text-xs sm:text-sm font-bold">
+                  <span className="text-green-600 dark:text-green-400 whitespace-nowrap">{t('billCard.paidLabel', 'المدفوع')}: {money(paidAmount)}</span>
+                  <span className="text-red-500 dark:text-red-400 whitespace-nowrap">{t('billCard.remainingLabel', 'المتبقي')}: {money(remAmount)}</span>
+                </div>
               </div>
             );
           })()}
@@ -227,6 +234,11 @@ const BillTableCard = React.memo<BillTableCardProps>(({
                 {onPayItems && canPayPartial && (
                   <button onClick={() => { setShowMobileActions(false); onPayItems(bill); }} className="min-h-8 bg-white hover:bg-gray-50 dark:bg-gray-900 text-indigo-600 dark:text-indigo-400 text-[11px] font-bold rounded-md flex items-center justify-center gap-1 shadow border border-indigo-200 dark:border-indigo-800">
                     <span className="text-sm leading-none">🧾</span><span>{t('billCard.items')}</span>
+                  </button>
+                )}
+                {onManage && (
+                  <button onClick={() => { setShowMobileActions(false); onManage(bill); }} className="min-h-8 bg-white hover:bg-gray-50 dark:bg-gray-900 text-slate-600 dark:text-slate-300 text-[11px] font-bold rounded-md flex items-center justify-center gap-1 shadow border border-slate-200 dark:border-slate-700">
+                    <Settings className="h-3.5 w-3.5" /><span>{t('billCard.manage', 'إدارة الدفع')}</span>
                   </button>
                 )}
                 {onWhatsApp && kind !== 'takeaway' && (
@@ -364,24 +376,26 @@ const BillTableCard = React.memo<BillTableCardProps>(({
                   <span className="text-sm sm:text-base font-extrabold text-blue-600 dark:text-blue-400 mt-0.5" dir="ltr">{phone}</span>
                 ) : null}
                 {(() => {
-                  const hoverFD = (bill.orders || []).reduce((s: number, o: any) => s + (o?.fixedDiscount?.amount || 0), 0);
+                  const hoverFD = (bill.orders || []).reduce((s: number, o: any) => s + (Number(o?.fixedDiscount?.amount) || 0) + (Number(o?.discount) || 0), 0);
                   const hoverBD = Number(bill.discount) || 0;
                   const hoverTotal = hoverFD + hoverBD;
-                  const hoverSub = (bill.total || 0) + hoverTotal;
-                  const hoverNet = isOccupied ? totalRemaining : (Number(bill.total) || 0);
-                  if (hoverTotal <= 0) {
-                    if (hoverNet <= 0) return null;
-                    return (
-                      <span className={`text-base sm:text-lg font-bold mt-0.5 ${styles.sub}`}>
-                        {formatCurrencyUtil(hoverNet, i18n.language, localStorage.getItem('organizationCurrency') || 'EGP')}
-                      </span>
-                    );
-                  }
+                  const hoverSub = (Number(bill.total) || 0) + hoverTotal;
+                  const hoverNet = Number(bill.total) || 0;
+                  const hoverPaid = Number(bill.paid) || 0;
+                  const hoverRem = Number(bill.remaining) || 0;
+                  const hcur = localStorage.getItem('organizationCurrency') || 'EGP';
+                  const hmoney = (v: number) => formatCurrencyUtil(v, i18n.language, hcur);
+                  if (hoverNet <= 0 && hoverPaid <= 0 && hoverRem <= 0) return null;
                   return (
-                    <div className="flex items-center justify-center gap-2 mt-0.5 flex-wrap">
-                      <span className="text-base sm:text-lg font-bold text-gray-400 dark:text-gray-500 line-through whitespace-nowrap">{formatCurrencyUtil(hoverSub, i18n.language, localStorage.getItem('organizationCurrency') || 'EGP')}</span>
-                      <span className="text-base sm:text-lg font-bold text-purple-600 dark:text-purple-400 whitespace-nowrap">{t('billCard.discountLabel', { amount: formatCurrencyUtil(hoverTotal, i18n.language, localStorage.getItem('organizationCurrency') || 'EGP') })}</span>
-                      <span className="text-base sm:text-lg font-bold text-gray-700 dark:text-gray-200 whitespace-nowrap">{formatCurrencyUtil(hoverNet, i18n.language, localStorage.getItem('organizationCurrency') || 'EGP')}</span>
+                    <div className="flex flex-col items-center mt-0.5 gap-0.5">
+                      {hoverTotal > 0 && (
+                        <div className="flex items-center justify-center gap-2 flex-wrap">
+                          <span className="text-sm font-bold text-gray-400 dark:text-gray-500 line-through whitespace-nowrap">{t('billCard.beforeLabel', 'قبل الخصم')}: {hmoney(hoverSub)}</span>
+                          <span className="text-sm font-bold text-purple-600 dark:text-purple-400 whitespace-nowrap">{t('billCard.discountLabel', { amount: hmoney(hoverTotal) })}</span>
+                        </div>
+                      )}
+                      <span className="text-base font-bold text-gray-700 dark:text-gray-200 whitespace-nowrap">{t('billCard.netLabel', 'الصافي')}: {hmoney(hoverNet)}</span>
+                      <span className="text-xs font-bold text-green-600 dark:text-green-400 whitespace-nowrap">{t('billCard.paidLabel', 'المدفوع')}: {hmoney(hoverPaid)}</span>
                     </div>
                   );
                 })()}
@@ -430,6 +444,15 @@ const BillTableCard = React.memo<BillTableCardProps>(({
                   <span>{t('billCard.items')}</span>
                 </button>
               )}
+              {onManage && (
+              <button
+                onClick={(e) => { e.stopPropagation(); onManage(bill); }}
+                className="min-h-8 bg-white hover:bg-gray-50 dark:bg-gray-900 dark:hover:bg-gray-800 text-slate-600 dark:text-slate-300 text-xs font-bold rounded-md flex items-center justify-center gap-1 shadow border border-slate-200 dark:border-slate-700 transition-all"
+                title={t('billCard.manage', 'إدارة الدفع')}>
+                <Settings className="h-3.5 w-3.5" />
+                <span>{t('billCard.manage', 'إدارة الدفع')}</span>
+              </button>
+              )}
               {onWhatsApp && kind !== 'takeaway' && (
                 <button
                   onClick={(e) => { e.stopPropagation(); onWhatsApp(bill); }}
@@ -453,12 +476,23 @@ const BillTableCard = React.memo<BillTableCardProps>(({
         )}
         {!isOccupied && (
           <div className="hidden sm:block absolute inset-x-1 bottom-1 z-20 opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-opacity duration-200">
+            <div className="flex gap-1">
+            {onManage && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onManage(bill); }}
+              className="flex-1 py-1 text-xs font-bold rounded-lg flex items-center justify-center gap-1 shadow-md border transition-all bg-white hover:bg-gray-50 dark:bg-gray-900 dark:hover:bg-gray-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700"
+              title={t('billCard.manage', 'إدارة الدفع')}>
+              <Settings className="h-3.5 w-3.5" />
+              <span>{t('billCard.manage', 'إدارة الدفع')}</span>
+            </button>
+            )}
             <button
               onClick={(e) => { e.stopPropagation(); if (confirmDel) { setConfirmDel(false); onDelete(bill); } else { setConfirmDel(true); setTimeout(() => setConfirmDel(false), 3000); } }}
-              className={`w-full py-1 text-xs font-bold rounded-lg flex items-center justify-center gap-1 shadow-md border transition-all ${confirmDel ? 'bg-red-700 text-white border-red-800 animate-pulse' : 'bg-red-500 hover:bg-red-600 text-white border-red-600'}`}
+              className={`flex-1 py-1 text-xs font-bold rounded-lg flex items-center justify-center gap-1 shadow-md border transition-all ${confirmDel ? 'bg-red-700 text-white border-red-800 animate-pulse' : 'bg-red-500 hover:bg-red-600 text-white border-red-600'}`}
               title={t('billCard.deleteBillTitle')}>
               <span>{confirmDel ? t('billCard.confirmShort') : t('billCard.delete')}</span>
             </button>
+            </div>
           </div>
         )}
       </div>

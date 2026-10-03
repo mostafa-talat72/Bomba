@@ -10,7 +10,7 @@ import arEG from 'antd/locale/ar_EG';
 import enUS from 'antd/locale/en_US';
 import frFR from 'antd/locale/fr_FR';
 import { Receipt, Search, RefreshCw, Printer, Edit, Trash2, X, ChevronRight, ChevronLeft, CalendarDays, CheckCircle2, XCircle, DollarSign, ArrowLeftRight, MessageCircle, ChefHat, ListChecks, Download } from 'lucide-react';
-import { canDeleteBill, canEditOrder, canPayFullBill, canPartialPayment, canExportReports, canViewBills, canEditBill, canEditDateFilters, getMaxDateRangeDays, isDateRangeAllowed, canMoveBillTableToTable, canMoveBillTakeawayToTable, canMoveBillDeliveryToTable } from '../utils/permissionHelper';
+import { canDeleteBill, canEditOrder, canPayFullBill, canPartialPayment, canEditPartialPayment, canExportReports, canViewBills, canEditBill, canEditDateFilters, getMaxDateRangeDays, isDateRangeAllowed, canMoveBillTableToTable, canMoveBillTakeawayToTable, canMoveBillDeliveryToTable } from '../utils/permissionHelper';
 import { io, Socket } from 'socket.io-client';
 import { API_BASE_URL } from '../utils/apiBase';
 import ChangeTableModal from '../components/tables/ChangeTableModal';
@@ -60,7 +60,7 @@ const Bills = () => {
     const start = now.hour() < 7
       ? now.subtract(1, 'day').hour(7).minute(0).second(0).millisecond(0)
       : now.hour(7).minute(0).second(0).millisecond(0);
-    const end = start.add(1, 'day').subtract(1, 'second');
+    const end = start.add(1, 'day').subtract(1, 'millisecond');
     return [start, end];
   });
   const [timeRange, setTimeRange] = useState<[Dayjs, Dayjs]>([
@@ -325,7 +325,9 @@ const Bills = () => {
 
   useEffect(() => { void fetchPage(); }, [fetchPage]);
 
-  // Fetch ALL matching bills (background) for global totals / export / print
+  // Fetch ALL matching bills (background) for export / print.
+  // ملاحظة: البطاقات تجلب إجماليها من السيرفر (بلا سقف) — هذه للتصدير والطباعة والاحتياطي.
+  // الملغاة مستبعدة — إلا لو طُلبت صراحة بفلتر الحالة.
   const fetchAllFiltered = useCallback(async (): Promise<any[]> => {
     const all: any[] = [];
     for (let pg = 1; pg <= 20; pg++) {
@@ -334,8 +336,8 @@ const Bills = () => {
       all.push(...res.data);
       if (!res.hasMore || res.data.length < 500) break;
     }
-    return all;
-  }, [buildFilterParams]);
+    return statusFilter === 'all' ? all.filter((b: any) => b?.status !== 'cancelled') : all;
+  }, [buildFilterParams, statusFilter]);
 
   const [totals, setTotals] = useState({ before: 0, disc: 0, tot: 0, paid: 0, rem: 0 });
   const [totalsLoading, setTotalsLoading] = useState(false);
@@ -355,8 +357,26 @@ const Bills = () => {
 
   const refreshTotals = useCallback(() => {
     setTotalsLoading(true);
-    fetchAllFiltered().then((rows) => { setTotals(sumBills(rows)); setTotalsLoading(false); }).catch(() => setTotalsLoading(false));
-  }, [fetchAllFiltered]);
+    // الإجمالي من السيرفر (كامل الفترة بلا سقف) — والجمع المحلي احتياطي فقط
+    const params: any = buildFilterParams(1, 1);
+    delete params.page; delete params.limit; delete params.sort; delete params.mode;
+    const fallback = () => {
+      fetchAllFiltered().then((rows) => { setTotals(sumBills(rows)); setTotalsLoading(false); }).catch(() => setTotalsLoading(false));
+    };
+    try {
+      (api as any).getBillsTotals(params).then((res: any) => {
+        if (res?.success && res?.totals) {
+          const t = res.totals;
+          setTotals({ before: Number(t.before) || 0, disc: Number(t.disc) || 0, tot: Number(t.tot) || 0, paid: Number(t.paid) || 0, rem: Number(t.rem) || 0 });
+          setTotalsLoading(false);
+        } else {
+          fallback();
+        }
+      }).catch(() => fallback());
+    } catch {
+      fallback();
+    }
+  }, [fetchAllFiltered, buildFilterParams]);
 
   useEffect(() => { refreshTotals(); }, [refreshTotals]);
 
@@ -1105,6 +1125,15 @@ const Bills = () => {
             if (selected && String((selected as any)._id || (selected as any).id) === nid) setSelected(updated);
             refreshTotals();
             setPayItemsBill(null);
+          }}
+          canEditPaid={canEditPartialPayment(user)}
+          onRefreshBill={(updated: any) => {
+            const nid = String(updated?._id || updated?.id || payItemsBill?._id);
+            if (!nid) return;
+            setBills((prev: any[]) => prev.map((b: any) => String(b._id || b.id) === nid ? updated : b));
+            if (selected && String((selected as any)._id || (selected as any).id) === nid) setSelected(updated);
+            refreshTotals();
+            setPayItemsBill(updated);
           }}
         />
       )}

@@ -1,9 +1,11 @@
 import dgram from "dgram";
 import os from "os";
+import crypto from "crypto";
 import { EventEmitter } from "events";
 import { getDeviceId, getDeviceInfo } from "../../utils/deviceIdentity.js";
 import syncConfig from "../../config/syncConfig.js";
 import Logger from "../../middleware/logger.js";
+import { getRoleConfig, classRank, compareClaim } from "../../utils/lanRole.js";
 
 const DEFAULT_PORT = 41234;
 
@@ -62,9 +64,12 @@ class LanDiscovery extends EventEmitter {
         this.electionTimeoutMs = syncConfig.lanSync?.electionTimeout || 10000;
 
         this.socket = null;
-        this.role = "searching"; // searching | primary | secondary
+        this.role = "searching"; // searching | primary | secondary | standalone
         this.primaryInfo = null; // { deviceId, address, port, hostname, lastSeen }
         this.peers = new Map(); // deviceId -> { deviceId, address, port, hostname, lastSeen, role }
+        // هوية الإقلاع والدور: الأسبق المؤهل يفوز + الرتبة تكسر التعادل اللحظي + بلا انتزاع
+        this.bootId = crypto.randomBytes(4).toString("hex");
+        this.roleConfig = getRoleConfig();
         this.heartbeatTimer = null;
         this.electionTimer = null;
         this.announceTimer = null;
@@ -116,6 +121,36 @@ class LanDiscovery extends EventEmitter {
         await this.discoverPrimary();
     }
 
+    // الحضور الموحد في كل رسائل الاكتشاف (رتبة + أهلية + هوية إقلاع)
+    presence(extra = {}) {
+        return {
+            deviceId: this.deviceId,
+            hostname: this.hostname,
+            address: this.localIP,
+            port: this.port,
+            roleClass: this.roleConfig.deviceClass,
+            eligible: this.roleConfig.eligible,
+            bootId: this.bootId,
+            timestamp: Date.now(),
+            ...extra,
+        };
+    }
+
+    reloadRoleConfig() {
+        this.roleConfig = getRoleConfig();
+        Logger.info(`[LanDiscovery] Role config reloaded: eligible=${this.roleConfig.eligible} class=${this.roleConfig.deviceClass}`);
+        // تخفيض الرئيس الحي -> يتنازل فورًا (توقف إعلاناته فينتخب الباقون رئيسًا جديدًا)
+        if (!this.roleConfig.eligible && this.role === "primary") {
+            Logger.warn(`[LanDiscovery] Demoted while primary -> stepping down to STANDALONE`);
+            this.becomeStandalone();
+        }
+        // إعادة التفعيل وهو مستقل -> أعد الاكتشاف فورًا (لا انتظار لإعادة التشغيل)
+        if (this.roleConfig.eligible && this.role === "standalone") {
+            Logger.info(`[LanDiscovery] Re-enabled while standalone -> re-discovering`);
+            void this.discoverPrimary();
+        }
+    }
+
     async discoverPrimary() {
         this.role = "searching";
         this.primaryInfo = null;
@@ -123,7 +158,7 @@ class LanDiscovery extends EventEmitter {
 
         // Send DISCOVER 3 times
         for (let i = 0; i < 3; i++) {
-            this.broadcast({ type: "DISCOVER", deviceId: this.deviceId, hostname: this.hostname, address: this.localIP, port: this.port, timestamp: Date.now() });
+            this.broadcast({ type: "DISCOVER", ...this.presence() });
             await new Promise(r => setTimeout(r, 500));
             if (this.primaryInfo) break;
         }
@@ -132,12 +167,30 @@ class LanDiscovery extends EventEmitter {
         await new Promise(r => setTimeout(r, 1000));
 
         if (this.primaryInfo && this.primaryInfo.deviceId !== this.deviceId) {
-            // Found primary -> become secondary
+            // Found primary -> become secondary (no challenge, no preemption)
             this.becomeSecondary(this.primaryInfo);
-        } else {
-            // No primary -> become primary
+        } else if (this.roleConfig.eligible) {
+            // No primary -> claim (first eligible boot wins)
             this.becomePrimary();
+        } else {
+            // غير مؤهل ولا رئيس معلن -> مستقل: يخدم محليًا بلا ادعاء
+            this.becomeStandalone();
         }
+    }
+
+    becomeStandalone() {
+        if (this.role === "standalone") return;
+        const wasPrimary = this.role === "primary";
+        this.role = "standalone";
+        this.primaryInfo = null;
+        if (wasPrimary) {
+            if (this.announceTimer) { clearInterval(this.announceTimer); this.announceTimer = null; }
+            if (this.heartbeatTimer) { clearInterval(this.heartbeatTimer); this.heartbeatTimer = null; }
+        }
+        Logger.info(`[LanDiscovery] Became STANDALONE (eligible=${this.roleConfig.eligible}) deviceId=${this.deviceId}`);
+        this.emit("became-standalone", { deviceId: this.deviceId, address: this.localIP, port: this.port });
+        this.startHeartbeatCheck();
+        this.startElectionTimeout();
     }
 
     becomePrimary() {
@@ -148,12 +201,12 @@ class LanDiscovery extends EventEmitter {
         this.emit("became-primary", { deviceId: this.deviceId, address: this.localIP, port: this.port });
 
         // Announce immediately and periodically
-        this.broadcast({ type: "ANNOUNCE_PRIMARY", deviceId: this.deviceId, hostname: this.hostname, address: this.localIP, port: this.port, timestamp: Date.now() });
-        this.broadcast({ type: "COORDINATOR", deviceId: this.deviceId, hostname: this.hostname, address: this.localIP, port: this.port, timestamp: Date.now() });
+        this.broadcast({ type: "ANNOUNCE_PRIMARY", ...this.presence() });
+        this.broadcast({ type: "COORDINATOR", ...this.presence() });
 
         if (this.announceTimer) clearInterval(this.announceTimer);
         this.announceTimer = setInterval(() => {
-            this.broadcast({ type: "ANNOUNCE_PRIMARY", deviceId: this.deviceId, hostname: this.hostname, address: this.localIP, port: this.port, timestamp: Date.now() });
+            this.broadcast({ type: "ANNOUNCE_PRIMARY", ...this.presence() });
         }, 5000);
         if (this.announceTimer.unref) this.announceTimer.unref();
 
@@ -180,7 +233,7 @@ class LanDiscovery extends EventEmitter {
         if (this.heartbeatTimer) clearInterval(this.heartbeatTimer);
         this.heartbeatTimer = setInterval(() => {
             if (this.role === "primary") {
-                this.broadcast({ type: "HEARTBEAT", deviceId: this.deviceId, hostname: this.hostname, address: this.localIP, port: this.port, timestamp: Date.now() });
+                this.broadcast({ type: "HEARTBEAT", ...this.presence() });
             }
         }, this.heartbeatIntervalMs);
         if (this.heartbeatTimer.unref) this.heartbeatTimer.unref();
@@ -218,14 +271,20 @@ class LanDiscovery extends EventEmitter {
 
     startElection() {
         if (this.electionInProgress) return;
+        // غير المؤهل لا يشارك — يبقى مستقلًا صامتًا
+        if (!this.roleConfig.eligible) {
+            Logger.info(`[LanDiscovery] Skipping election (ineligible) -> staying STANDALONE`);
+            if (this.role !== "standalone") this.becomeStandalone();
+            return;
+        }
         this.electionInProgress = true;
         this.electionCandidates.clear();
-        this.electionCandidates.set(this.deviceId, { deviceId: this.deviceId, address: this.localIP, port: this.port, hostname: this.hostname });
+        this.electionCandidates.set(this.deviceId, { deviceId: this.deviceId, address: this.localIP, port: this.port, hostname: this.hostname, roleClass: this.roleConfig.deviceClass });
 
         Logger.info(`[LanDiscovery] 🗳️ Starting election deviceId=${this.deviceId}`);
 
         // Broadcast ELECTION
-        this.broadcast({ type: "ELECTION", deviceId: this.deviceId, hostname: this.hostname, address: this.localIP, port: this.port, timestamp: Date.now() });
+        this.broadcast({ type: "ELECTION", ...this.presence() });
 
         // Collect candidates for 2s then decide winner (smallest deviceId)
         if (this.electionCollectTimer) clearTimeout(this.electionCollectTimer);
@@ -236,18 +295,29 @@ class LanDiscovery extends EventEmitter {
     }
 
     finishElection() {
-        const candidates = [...this.electionCandidates.values()];
-        candidates.sort((a, b) => a.deviceId.localeCompare(b.deviceId));
+        // الفائز: أعلى رتبة أولًا ثم أصغر deviceId (حتمي بلا ساعات؛ القديم بلا رتبة = fixed)
+        const candidates = [...this.electionCandidates.values()]
+            .filter(c => c.eligible !== false);
+        candidates.sort((a, b) => {
+            const r = classRank(b.roleClass || "fixed") - classRank(a.roleClass || "fixed");
+            if (r !== 0) return r;
+            return String(a.deviceId).localeCompare(String(b.deviceId));
+        });
         const winner = candidates[0];
-        Logger.info(`[LanDiscovery] Election candidates: ${candidates.map(c => c.deviceId).join(", ")} -> winner ${winner.deviceId}`);
+        Logger.info(`[LanDiscovery] Election candidates: ${candidates.map(c => `${c.deviceId}(${c.roleClass || "?"})`).join(", ")} -> winner ${winner?.deviceId}`);
 
         this.electionInProgress = false;
         this.electionCandidates.clear();
 
+        if (!winner) {
+            if (this.roleConfig.eligible) this.becomePrimary();
+            else this.becomeStandalone();
+            return;
+        }
         if (winner.deviceId === this.deviceId) {
             Logger.info(`[LanDiscovery] 🏆 Won election -> becoming PRIMARY`);
             this.becomePrimary();
-            this.broadcast({ type: "COORDINATOR", deviceId: this.deviceId, hostname: this.hostname, address: this.localIP, port: this.port, timestamp: Date.now() });
+            this.broadcast({ type: "COORDINATOR", ...this.presence() });
             this.emit("election-won", winner);
         } else {
             Logger.info(`[LanDiscovery] Lost election -> primary is ${winner.deviceId}`);
@@ -270,35 +340,45 @@ class LanDiscovery extends EventEmitter {
             case "DISCOVER": {
                 // If we are primary, respond
                 if (this.role === "primary") {
-                    this.sendTo({ type: "ANNOUNCE_PRIMARY", deviceId: this.deviceId, hostname: this.hostname, address: this.localIP, port: this.port, timestamp: Date.now() }, rinfo.address, rinfo.port);
+                    this.sendTo({ type: "ANNOUNCE_PRIMARY", ...this.presence() }, rinfo.address, rinfo.port);
                 }
                 break;
             }
             case "ANNOUNCE_PRIMARY":
             case "COORDINATOR": {
                 // Someone claims to be primary
-                if (this.role === "searching") {
-                    // During discovery, remember primary
+                if (this.role === "searching" || this.role === "standalone") {
+                    // During discovery (or standalone) -> adopt without challenge
                     this.primaryInfo = { deviceId, address: addr, port, hostname: data.hostname, lastSeen: Date.now() };
+                    if (this.role === "standalone") {
+                        Logger.info(`[LanDiscovery] Standalone adopting primary ${deviceId}`);
+                        this.becomeSecondary(this.primaryInfo);
+                    }
                 } else if (this.role === "secondary") {
                     // Update primary info and refresh heartbeat timer
                     if (!this.primaryInfo || this.primaryInfo.deviceId === deviceId) {
-                        this.primaryInfo = { deviceId, address: addr, port, hostname: data.hostname, lastSeen: Date.now() };
+                        this.primaryInfo = { deviceId, address: addr, port, hostname: data.hostname, roleClass: data.roleClass, lastSeen: Date.now() };
                     } else {
-                        // Another primary appeared -> split-brain resolution
-                        const winner = [this.primaryInfo.deviceId, deviceId].sort()[0];
-                        if (winner !== this.primaryInfo.deviceId) {
+                        // Another primary appeared -> split-brain: class first, then deviceId
+                        const winner = compareClaim(
+                            { deviceId: this.primaryInfo.deviceId, roleClass: this.primaryInfo.roleClass || "fixed" },
+                            { deviceId, roleClass: data.roleClass || "fixed" }
+                        );
+                        if (winner.deviceId !== this.primaryInfo.deviceId) {
                             Logger.warn(`[LanDiscovery] Split-brain detected, switching primary to ${deviceId}`);
-                            this.primaryInfo = { deviceId, address: addr, port, hostname: data.hostname, lastSeen: Date.now() };
+                            this.primaryInfo = { deviceId, address: addr, port, hostname: data.hostname, roleClass: data.roleClass, lastSeen: Date.now() };
                             this.emit("primary-changed", this.primaryInfo);
                         }
                     }
                 } else if (this.role === "primary" && deviceId !== this.deviceId) {
-                    // Two primaries -> smaller deviceId wins
-                    const winner = [this.deviceId, deviceId].sort()[0];
-                    if (winner !== this.deviceId) {
+                    // Two primaries -> higher class wins, tie -> smaller deviceId (deterministic)
+                    const winner = compareClaim(
+                        { deviceId: this.deviceId, roleClass: this.roleConfig.deviceClass },
+                        { deviceId, roleClass: data.roleClass || "fixed" }
+                    );
+                    if (winner.deviceId !== this.deviceId) {
                         Logger.warn(`[LanDiscovery] Split-brain primary conflict: ${deviceId} wins, stepping down`);
-                        this.becomeSecondary({ deviceId, address: addr, port, hostname: data.hostname, lastSeen: Date.now() });
+                        this.becomeSecondary({ deviceId, address: addr, port, hostname: data.hostname, roleClass: data.roleClass, lastSeen: Date.now() });
                     } else {
                         Logger.warn(`[LanDiscovery] Split-brain: we win over ${deviceId}, staying primary`);
                     }
@@ -313,32 +393,35 @@ class LanDiscovery extends EventEmitter {
                 } else if (this.role === "searching") {
                     this.primaryInfo = { deviceId, address: addr, port, hostname: data.hostname, lastSeen: Date.now() };
                 } else if (this.role === "primary" && deviceId !== this.deviceId) {
-                    // Another primary heartbeat -> split-brain
-                    const winner = [this.deviceId, deviceId].sort()[0];
-                    if (winner !== this.deviceId) {
+                    // Another primary heartbeat -> split-brain (class first, then deviceId)
+                    const winner = compareClaim(
+                        { deviceId: this.deviceId, roleClass: this.roleConfig.deviceClass },
+                        { deviceId, roleClass: data.roleClass || "fixed" }
+                    );
+                    if (winner.deviceId !== this.deviceId) {
                         Logger.warn(`[LanDiscovery] Heartbeat split-brain, stepping down`);
-                        this.becomeSecondary({ deviceId, address: addr, port, hostname: data.hostname, lastSeen: Date.now() });
+                        this.becomeSecondary({ deviceId, address: addr, port, hostname: data.hostname, roleClass: data.roleClass, lastSeen: Date.now() });
                     }
                 }
                 // For secondary discovery during election, record heartbeat as candidate
                 if (this.electionInProgress) {
-                    this.electionCandidates.set(deviceId, { deviceId, address: addr, port, hostname: data.hostname });
+                    this.electionCandidates.set(deviceId, { deviceId, address: addr, port, hostname: data.hostname, roleClass: data.roleClass, eligible: data.eligible });
                 }
                 break;
             }
             case "ELECTION": {
-                // Another device started election -> participate
-                this.electionCandidates.set(deviceId, { deviceId, address: addr, port, hostname: data.hostname });
-                if (!this.electionInProgress) {
+                // Another device started election -> participate (eligible only)
+                this.electionCandidates.set(deviceId, { deviceId, address: addr, port, hostname: data.hostname, roleClass: data.roleClass, eligible: data.eligible });
+                if (!this.electionInProgress && this.roleConfig.eligible) {
                     // Join election
                     this.electionInProgress = true;
-                    this.electionCandidates.set(this.deviceId, { deviceId: this.deviceId, address: this.localIP, port: this.port, hostname: this.hostname });
-                    this.broadcast({ type: "ELECTION", deviceId: this.deviceId, hostname: this.hostname, address: this.localIP, port: this.port, timestamp: Date.now() });
+                    this.electionCandidates.set(this.deviceId, { deviceId: this.deviceId, address: this.localIP, port: this.port, hostname: this.hostname, roleClass: this.roleConfig.deviceClass, eligible: true });
+                    this.broadcast({ type: "ELECTION", ...this.presence() });
                     if (this.electionCollectTimer) clearTimeout(this.electionCollectTimer);
                     this.electionCollectTimer = setTimeout(() => this.finishElection(), 2500);
                     if (this.electionCollectTimer.unref) this.electionCollectTimer.unref();
                 } else {
-                    // Already in election, just add candidate
+                    // Already in election (just add candidate) or ineligible (stay out)
                 }
                 break;
             }
@@ -399,6 +482,9 @@ class LanDiscovery extends EventEmitter {
             enabled: !!syncConfig.lanSync?.enabled,
             deviceId: this.deviceId,
             role: this.role,
+            eligible: this.roleConfig.eligible,
+            deviceClass: this.roleConfig.deviceClass,
+            bootId: this.bootId,
             localIP: this.localIP,
             port: this.port,
             primary: this.primaryInfo,

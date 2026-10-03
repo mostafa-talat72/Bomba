@@ -28,6 +28,33 @@ async function getBills(params?: { status?: string; table?: string; page?: numbe
   return response;
 }
 
+export interface BillsTotals {
+  before: number;
+  disc: number;
+  tot: number;
+  paid: number;
+  rem: number;
+}
+
+// إجماليات الفترة كاملة من السيرفر (بلا سقف ترقيم) — نفس فلاتر القائمة
+async function getBillsTotals(params?: { status?: string; q?: string; all?: boolean; fulfillmentType?: 'dine_in' | 'takeaway' | 'delivery'; startDate?: string; endDate?: string }): Promise<ApiResponse & { totals?: BillsTotals }> {
+  const searchParams = new URLSearchParams();
+  if (params) {
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined) {
+        searchParams.append(key, value.toString());
+      }
+    });
+  }
+  const response = await apiClient.request<ApiResponse & { totals?: BillsTotals }>(`/billing/totals?${searchParams.toString()}`, {
+    cache: 'no-store',
+    headers: {
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
+      Pragma: 'no-cache',
+    },
+  });
+  return response;
+}
 
 async function getBill(id: string): Promise<ApiResponse<Bill>> {
   const cached = getCachedBill(id);
@@ -403,6 +430,7 @@ async function updateItemPayment(
 
 export const billingApi = {
   getBills,
+  getBillsTotals,
   getBill,
   createBill,
   updateBill,

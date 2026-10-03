@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { X, Search, Save, ShoppingCart, Table as TableIcon, AlertTriangle, CheckCircle, Printer, Plus, Trash2, Edit, ChefHat } from 'lucide-react';
+import { X, Search, Save, ShoppingCart, Table as TableIcon, AlertTriangle, CheckCircle, Printer, Plus, Trash2, Edit, ChefHat, Settings } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Bill, MenuItem, MenuSection, MenuCategory } from '../../services/api';
 import { api } from '../../services/api';
@@ -38,6 +38,8 @@ interface Props {
   getItemsForCategory?: (categoryId: string) => MenuItem[];
   // طباعة التحضير بعد الحفظ (تيك أوي/دليفري) — الزر يظهر فقط عند تمريرها.
   onPrepPrint?: (bill: Bill) => void | Promise<void>;
+  // حفظ ثم إدارة الدفع (نافذة الإدارة فيها الدفع المقسوم) — الزر يظهر فقط عند تمريرها.
+  onSaveAndManage?: (bill: Bill) => void;
   // طباعة مزدوجة: أي زر طباعة/دفع يطبع التحضير والفاتورة معاً (حسب إعداد الدليفري/التيك أوي)
   printBothTogether?: boolean;
 }
@@ -47,12 +49,13 @@ function createItemKey(name: string, price: number, menuItem?: string, variant?:
   return `name:${name}|${price}|${variant || ''}`;
 }
 
-const BillItemsEditModal: React.FC<Props> = ({ isOpen, onClose, bill, menuItems, menuSections, menuCategories, onSuccess, getCategoriesForSection: propGetCats, getItemsForCategory: propGetItems, onPrepPrint, printBothTogether = false }) => {
+const BillItemsEditModal: React.FC<Props> = ({ isOpen, onClose, bill, menuItems, menuSections, menuCategories, onSuccess, getCategoriesForSection: propGetCats, getItemsForCategory: propGetItems, onPrepPrint, printBothTogether = false, onSaveAndManage }) => {
   const { t, i18n } = useTranslation();
   const { isRTL } = useLanguage();
   const [items, setItems] = useState<AggregatedEditItem[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [overpayment, setOverpayment] = useState(0);
   const [inventoryErrors, setInventoryErrors] = useState<string[]>([]);
   const [fullBill, setFullBill] = useState<Bill | null>(null);
   const [loadingBill, setLoadingBill] = useState(false);
@@ -72,6 +75,7 @@ const BillItemsEditModal: React.FC<Props> = ({ isOpen, onClose, bill, menuItems,
     const bid = String((bill as any)._id || (bill as any).id || '');
     if (bid && bid === custInitRef.current) return;
     custInitRef.current = bid || null;
+    setOverpayment(0);
     const b: any = bill;
     setCustName(b.deliveryInfo?.customerName || b.customerName || '');
     setCustPhone(b.deliveryInfo?.phone || b.customerPhone || '');
@@ -468,7 +472,7 @@ const BillItemsEditModal: React.FC<Props> = ({ isOpen, onClose, bill, menuItems,
     });
   };
 
-  const doSave = async ({ shouldPrint = false, shouldPayFull = false, shouldPrepPrint = false }: { shouldPrint?: boolean; shouldPayFull?: boolean; shouldPrepPrint?: boolean } = {}) => {
+  const doSave = async ({ shouldPrint = false, shouldPayFull = false, shouldPrepPrint = false, shouldManage = false }: { shouldPrint?: boolean; shouldPayFull?: boolean; shouldPrepPrint?: boolean; shouldManage?: boolean } = {}) => {
     if (saveInFlightRef.current) return;
     const targetBill = fullBill || bill;
     if (!targetBill) return;
@@ -569,6 +573,10 @@ const BillItemsEditModal: React.FC<Props> = ({ isOpen, onClose, bill, menuItems,
       }
 
       onSuccess(finalBill);
+      // حفظ ثم إدارة الدفع (فيها الدفع المقسوم) — تُفتح من الصفحة الأب
+      if (shouldManage) {
+        onSaveAndManage?.(finalBill);
+      }
       // الطباعة المزدوجة: أي زر طباعة/تحضير/دفع يطبع المستندين معاً عند تفعيل الخيار
       const printBillNow = shouldPrint || (printBothTogether && (shouldPrepPrint || shouldPayFull));
       const prepNow = shouldPrepPrint || (printBothTogether && (shouldPrint || shouldPayFull));
@@ -577,6 +585,12 @@ const BillItemsEditModal: React.FC<Props> = ({ isOpen, onClose, bill, menuItems,
       }
       if (prepNow) {
         try { await onPrepPrint?.(finalBill); } catch {}
+      }
+      // زيادة مدفوعة بعد التعديل: إبقاء النافذة مع تنبيه مستحق الرد (بلا حركة مالية تلقائية)
+      const over = Number((finalBill as any)?.overpayment) || 0;
+      if (over > 0.01) {
+        setOverpayment(over);
+        return;
       }
       onClose();
     } catch (e: any) {
@@ -593,6 +607,7 @@ const BillItemsEditModal: React.FC<Props> = ({ isOpen, onClose, bill, menuItems,
   const handleSave = () => doSave({ shouldPrint: false, shouldPayFull: false });
   const handleSaveAndPrint = () => doSave({ shouldPrint: true, shouldPayFull: false });
   const handleSaveAndPayFull = () => doSave({ shouldPrint: false, shouldPayFull: true });
+  const handleSaveAndManage = () => doSave({ shouldPrint: false, shouldPayFull: false, shouldManage: true });
   const handleSaveAndPrepPrint = () => doSave({ shouldPrint: false, shouldPayFull: false, shouldPrepPrint: true });
   const saveService = () => {
     const amount = Number(serviceAmount);
@@ -819,6 +834,14 @@ const BillItemsEditModal: React.FC<Props> = ({ isOpen, onClose, bill, menuItems,
           )}
           {loadingBill && (
             <div className="mx-2 mt-2 p-2 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 rounded-lg text-center text-sm text-blue-600">{t('billEdit.loadingItems')}</div>
+          )}
+          {/* زيادة مدفوعة بعد التعديل — مستحق رد (بلا حركة مالية تلقائية) */}
+          {overpayment > 0.01 && (
+            <div className="mx-2 mt-2 p-2 bg-amber-50 dark:bg-amber-900/30 border border-amber-300 dark:border-amber-700 rounded-lg flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 text-amber-600 flex-shrink-0" />
+              <p className="flex-1 text-sm text-amber-700 dark:text-amber-300 font-bold">{t('billEdit.overpaymentDue', { amount: fmt(overpayment) })}</p>
+              <button onClick={onClose} className="px-3 py-1 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-lg flex-shrink-0">{t('common.close')}</button>
+            </div>
           )}
 
           {/* BODY - 4 أعمدة نفس OrderModal */}
@@ -1096,6 +1119,12 @@ const BillItemsEditModal: React.FC<Props> = ({ isOpen, onClose, bill, menuItems,
                           className="w-full min-h-[50px] py-3 bg-gradient-to-r from-orange-500 via-amber-500 to-orange-600 hover:from-orange-600 hover:via-amber-600 hover:to-orange-700 active:from-orange-700 active:via-amber-700 active:to-orange-800 text-white font-black text-sm rounded-xl flex items-center justify-center gap-1.5 shadow-lg border-2 border-orange-300 transition-all active:scale-[0.98] disabled:opacity-50">
                             <CheckCircle className="h-4 w-4" />{t('billEdit.saveAndPayFull')}
                           </button>
+                        {onSaveAndManage && (
+                          <button onClick={handleSaveAndManage} disabled={saving || loadingBill}
+                            className="w-full min-h-[50px] py-3 bg-gradient-to-r from-slate-600 via-slate-700 to-slate-800 hover:from-slate-700 hover:via-slate-800 hover:to-slate-900 text-white font-black text-sm rounded-xl flex items-center justify-center gap-1.5 shadow-lg border-2 border-slate-400 transition-all active:scale-[0.98] disabled:opacity-50">
+                              <Settings className="h-4 w-4" />{t('billEdit.saveAndManage', 'حفظ وإدارة الدفع')}
+                            </button>
+                        )}
                         </div>
                 </div>
               </div>

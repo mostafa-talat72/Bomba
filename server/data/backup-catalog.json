@@ -1,6 +1,160 @@
 {
   "backups": [
     {
+      "fileName": "bomba-backup-2026-10-03T17-00-00-248Z.json.gz",
+      "path": "احتياطيه\\bomba-backup-2026-10-03T17-00-00-248Z.json.gz",
+      "secondaryPath": null,
+      "size": 26558281,
+      "documents": 84146,
+      "collections": 37,
+      "encrypted": false,
+      "verified": true,
+      "createdAt": "2026-10-03T17:00:00.248Z"
+    },
+    {
+      "fileName": "bomba-backup-2026-10-03T16-00-00-416Z.json.gz",
+      "path": "احتياطيه\\bomba-backup-2026-10-03T16-00-00-416Z.json.gz",
+      "secondaryPath": null,
+      "size": 26568914,
+      "documents": 84973,
+      "collections": 37,
+      "encrypted": false,
+      "verified": true,
+      "createdAt": "2026-10-03T16:00:00.416Z"
+    },
+    {
+      "fileName": "bomba-backup-2026-10-03T14-52-24-431Z.json.gz",
+      "path": "احتياطيه\\bomba-backup-2026-10-03T14-52-24-431Z.json.gz",
+      "secondaryPath": null,
+      "size": 26573674,
+      "documents": 85358,
+      "collections": 37,
+      "encrypted": false,
+      "verified": true,
+      "createdAt": "2026-10-03T14:52:24.431Z"
+    },
+    {
+      "fileName": "bomba-backup-2026-10-03T14-00-00-703Z.json.gz",
+      "path": "احتياطيه\\bomba-backup-2026-10-03T14-00-00-703Z.json.gz",
+      "secondaryPath": null,
+      "size": 26579231,
+      "documents": 85625,
+      "collections": 37,
+      "encrypted": false,
+      "verified": true,
+      "createdAt": "2026-10-03T14:00:00.703Z"
+    },
+    {
+      "fileName": "bomba-backup-2026-10-03T13-45-49-663Z.json.gz",
+      "path": "احتياطيه\\bomba-backup-2026-10-03T13-45-49-663Z.json.gz",
+      "secondaryPath": null,
+      "size": 26579067,
+      "documents": 85713,
+      "collections": 37,
+      "encrypted": false,
+      "verified": true,
+      "createdAt": "2026-10-03T13:45:49.663Z"
+    },
+    {
+      "fileName": "bomba-backup-2026-10-03T13-00-00-511Z.json.gz",
+      "path": "احتياطيه\\bomba-backup-2026-10-03T13-00-00-511Z.json.gz",
+      "secondaryPath": null,
+      "size": 26586266,
+      "documents": 86068,
+      "collections": 37,
+      "encrypted": false,
+      "verified": true,
+      "createdAt": "2026-10-03T13:00:00.511Z"
+    },
+    {
+      "fileName": "bomba-backup-2026-10-03T11-21-23-656Z.json.gz",
+      "path": "احتياطيه\\bomba-backup-2026-10-03T11-21-23-656Z.json.gz",
+      "secondaryPath": null,
+      "size": 26588762,
+      "documents": 86247,
+      "collections": 37,
+      "encrypted": false,
+      "verified": true,
+      "createdAt": "2026-10-03T11:21:23.656Z"
+    },
+    {
+      "fileName": "bomba-backup-2026-10-03T07-00-00-128Z.json.gz",
+      "path": "احتياطيه\\bomba-backup-2026-10-03T07-00-00-128Z.json.gz",
+      "secondaryPath": null,
+      "size": 25734220,
+      "documents": 84309,
+      "collections": 37,
+      "encrypted": false,
+      "verified": true,
+      "createdAt": "2026-10-03T07:00:00.128Z"
+    },
+    {
+      "fileName": "bomba-backup-2026-10-03T06-00-00-691Z.json.gz",
+      "path": "احتياطيه\\bomba-backup-2026-10-03T06-00-00-691Z.json.gz",
+      "secondaryPath": null,
+      "size": 25739526,
+      "documents": 84529,
+      "collections": 37,
+      "encrypted": false,
+      "verified": true,
+      "createdAt": "2026-10-03T06:00:00.691Z"
+    },
+    {
+      "fileName": "bomba-backup-2026-10-03T05-00-00-875Z.json.gz",
+      "path": "احتياطيه\\bomba-backup-2026-10-03T05-00-00-875Z.json.gz",
+      "secondaryPath": null,
+      "size": 25738098,
+      "documents": 84514,
+      "collections": 37,
+      "encrypted": false,
+      "verified": true,
+      "createdAt": "2026-10-03T05:00:00.875Z"
+    },
+    {
+      "fileName": "bomba-backup-2026-10-03T03-00-00-379Z.json.gz",
+      "path": "احتياطيه\\bomba-backup-2026-10-03T03-00-00-379Z.json.gz",
+      "secondaryPath": null,
+      "size": 25738637,
+      "documents": 84541,
+      "collections": 37,
+      "encrypted": false,
+      "verified": true,
+      "createdAt": "2026-10-03T03:00:00.379Z"
+    },
+    {
+      "fileName": "bomba-backup-2026-10-03T02-00-00-471Z.json.gz",
+      "path": "احتياطيه\\bomba-backup-2026-10-03T02-00-00-471Z.json.gz",
+      "secondaryPath": null,
+      "size": 25748805,
+      "documents": 84995,
+      "collections": 37,
+      "encrypted": false,
+      "verified": true,
+      "createdAt": "2026-10-03T02:00:00.471Z"
+    },
+    {
+      "fileName": "bomba-backup-2026-10-03T01-00-00-157Z.json.gz",
+      "path": "احتياطيه\\bomba-backup-2026-10-03T01-00-00-157Z.json.gz",
+      "secondaryPath": null,
+      "size": 25751191,
+      "documents": 85159,
+      "collections": 37,
+      "encrypted": false,
+      "verified": true,
+      "createdAt": "2026-10-03T01:00:00.157Z"
+    },
+    {
+      "fileName": "bomba-backup-2026-10-03T00-00-00-032Z.json.gz",
+      "path": "احتياطيه\\bomba-backup-2026-10-03T00-00-00-032Z.json.gz",
+      "secondaryPath": null,
+      "size": 25755801,
+      "documents": 85427,
+      "collections": 37,
+      "encrypted": false,
+      "verified": true,
+      "createdAt": "2026-10-03T00:00:00.032Z"
+    },
+    {
       "fileName": "bomba-backup-2026-10-01T16-00-00-362Z.json.gz",
       "path": "احتياطيه\\bomba-backup-2026-10-01T16-00-00-362Z.json.gz",
       "secondaryPath": null,

@@ -1,4 +1,7 @@
 {
+  "tabs": {
+    "maxReached": "Maximum 10 open tabs"
+  },
   "common": {
     "save": "save",
     "cancel": "cancellation",
@@ -1686,7 +1689,10 @@
       "other": "Other",
       "colMethod": "Method",
       "colAmount": "Total",
-      "colCount": "Count"
+      "colCount": "Count",
+      "discount": "Discount",
+      "net": "Net",
+      "outstanding": "Outstanding"
     },
     "paymentsByDrawer": {
       "title": "Payments by drawer"
@@ -2791,6 +2797,8 @@
       "to": "to",
       "date": "date",
       "categoryTotal": "Total {{category}}",
+      "categoryDiscount": "Discount {{category}}",
+      "categoryNet": "Net {{category}}",
       "thankYou": "Thank you all",
       "footer": "This system was designed and developed by Mustafa Talaat Software Solutions | ",
       "printButton": "Print the report"
@@ -4682,6 +4690,24 @@
       "update": "to update"
     }
   },
+  "lanRole": {
+    "title": "Device role (LAN)",
+    "hint": "This device's role in the primary/secondary protocol",
+    "role": "Role",
+    "primary": "Primary",
+    "secondary": "Secondary",
+    "standalone": "Standalone",
+    "searching": "Searching",
+    "unknown": "Unknown",
+    "class": "Class",
+    "class_fixed": "Fixed (cashier)",
+    "class_mobile": "Mobile",
+    "eligible": "Eligible for primary",
+    "eligibleOn": "Eligible",
+    "eligibleOff": "Standby only",
+    "rule": "First eligible boot wins • class breaks ties • no preemption of a live primary",
+    "standaloneBanner": "Working standalone — no primary reachable, data is safe on this device"
+  },
   "toast": {
     "organization": {
       "fetchError": "Failed to load organization data",
@@ -5447,7 +5473,12 @@
     "delete": "Delete",
     "confirmShort": "Confirm?",
     "customerHistoryTitle": "Customer history",
-    "discountLabel": "Discount: -{{amount}}"
+    "discountLabel": "Discount: -{{amount}}",
+    "manage": "Manage payment",
+    "beforeLabel": "Before discount",
+    "netLabel": "Net",
+    "paidLabel": "Paid",
+    "remainingLabel": "Remaining"
   },
   "billEdit": {
     "customerTitle": "Customer details",
@@ -5473,6 +5504,7 @@
     "menuTab": "Menu",
     "orderTab": "Order",
     "paidNotice": "Note: editing a paid bill — remaining and status will be recalculated automatically",
+    "overpaymentDue": "Warning: paid exceeds total by {{amount}} — amount due back to customer",
     "loadingItems": "Loading items...",
     "sections": "Sections",
     "categories": "Categories",
@@ -5490,6 +5522,7 @@
     "savePrintAll": "Save & print all",
     "savePrintBill": "Save & print bill",
     "saveAndPayFull": "Save & pay in full",
+    "saveAndManage": "Save & manage payment",
     "addServiceToBill": "Add service to bill",
     "editService": "Edit service",
     "serviceSubtitle": "Extra service details",
@@ -5526,7 +5559,18 @@
     "total": "Total {{amount}}",
     "cancel": "Cancel",
     "paying": "Paying...",
-    "payAmount": "Pay {{amount}}"
+    "payAmount": "Pay {{amount}}",
+    "selected": "Selected",
+    "selectedEmpty": "Press + on any item to add it here",
+    "removeItem": "Remove",
+    "paidTitle": "Paid",
+    "paidEmpty": "No payments yet",
+    "tabItems": "Items",
+    "tabSelected": "Selected",
+    "tabPaid": "Paid",
+    "editEntry": "Edit payment",
+    "zeroDeletes": "Zero deletes the payment and recalculates the bill",
+    "includesDiscount": "Including {{amount}} discount"
   },
   "customerOrders": {
     "accepted": "Order accepted",
@@ -5540,6 +5584,13 @@
     "reject": "Reject"
   },
   "payment": {
+    "amountsSection": "Amounts",
+    "methodSection": "Payment method",
+    "beforeDiscount": "Before discount",
+    "discountAmount": "Discount",
+    "billKindDineIn": "Dine-in",
+    "billKindTakeaway": "Takeaway",
+    "billKindDelivery": "Delivery",
     "invoice": "Bill #{{number}}",
     "tableLine": "• Table {{number}}",
     "tableButton": "Table",

@@ -17,7 +17,50 @@ import performanceMetrics from "../utils/performanceMetrics.js";
 import dualDatabaseManager from "../config/dualDatabaseManager.js";
 import syncConfig from "../config/syncConfig.js";
 import { createTombstone, createTombstones } from "../utils/tombstoneHelper.js";
-import { aggregateItemsWithPayments, expandAggregatedItemsForPayment } from "../utils/billAggregation.js";
+import { aggregateItemsWithPayments, expandAggregatedItemsForPayment,
+createItemKey, orderRateBucket } from "../utils/billAggregation.js";
+
+// ── توزيع خصم الطلب تناسبيًا على الوحدات (للتحصيل الصافي) ──
+const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
+const orderDiscountRate = (order) => {
+    const sub = (order?.items || []).reduce((s, it) => s + (Number(it.price) || 0) * (Number(it.quantity) || 0), 0);
+    if (!(sub > 0)) return 0;
+    const d = (Number(order?.fixedDiscount?.amount) || 0) + (Number(order?.discount) || 0);
+    return Math.min(1, Math.max(0, d / sub));
+};
+// خريطة معدل خصم الطلبات لفاتورة (للترحيل الصافي — مستقلة عن populate)
+const orderRatesForBill = async (bill) => {
+    const map = new Map();
+    try {
+        const ids = (bill.orders || [])
+            .map((o) => String((o && o._id) || o || ''))
+            .filter((s) => /^[a-f\d]{24}$/i.test(s));
+        if (ids.length === 0) return map;
+        const docs = await Order.find({ _id: { $in: ids } })
+            .select('items fixedDiscount discount')
+            .lean();
+        for (const d of docs) map.set(String(d._id), orderDiscountRate(d));
+    } catch {}
+    return map;
+};
+// حصة الخصم لسطر مجمع — فقط من طلبات مجموعته (نفس معدل الخصم).
+// خصم طلب لا يتسرب أبدًا لأصناف مشابهة في طلب آخر.
+const rowDiscountShare = (row, orders) => {
+    let share = 0;
+    const key = createItemKey(row.name, row.price, row.addons, row.variant);
+    const rowOrder = (orders || []).find((o) => String(o._id || o.id) === String(row.orderId));
+    const bucket = orderRateBucket(rowOrder);
+    for (const o of orders || []) {
+        if (orderRateBucket(o) !== bucket) continue;
+        const rate = orderDiscountRate(o);
+        if (!(rate > 0)) continue;
+        for (const it of o?.items || []) {
+            if (createItemKey(it.name, it.price, it.addons, it.variant) !== key) continue;
+            share += r2((Number(it.price) || 0) * (Number(it.quantity) || 0) * rate);
+        }
+    }
+    return r2(share);
+};
 import { getUserLanguage } from "../utils/localeHelper.js";
 import { getTableName } from "../utils/translations.js";
 import { getInstanceId } from "../utils/instanceId.js";
@@ -218,6 +261,279 @@ async function updateTableStatusIfNeeded(tableId, organizationId, io = null) {
     }
 }
 
+// ── مشترك: بناء استعلام قائمة الفواتير من باراميترات الطلب ─────────────────
+// يُستخدم في getBills وgetBillsTotals لضمان تطابق الفلاتر حرفيًا.
+// أي تعديل على الفلاتر هنا ينعكس على القائمة والإجماليات معًا.
+const buildBillsListQuery = async (req) => {
+    const {
+        status,
+        table,
+        tableNumber,
+        customerName,
+        q,
+        all,
+        fulfillmentType,
+        startDate,
+        endDate,
+        deliveryStatus,
+    } = req.query;
+
+    const unpaidStatuses = ['draft', 'partial', 'overdue'];
+    const query = {};
+
+    // Support both table ObjectId and legacy tableNumber filtering
+    // Priority: table parameter > tableNumber parameter
+    if (table) {
+        // New table parameter (ObjectId)
+        if (mongoose.Types.ObjectId.isValid(table)) {
+            query.table = new mongoose.Types.ObjectId(table);
+        } else {
+            return { invalidTable: true };
+        }
+    } else if (tableNumber) {
+        // Check if tableNumber is a valid ObjectId (for table field filtering)
+        if (mongoose.Types.ObjectId.isValid(tableNumber)) {
+            query.table = new mongoose.Types.ObjectId(tableNumber);
+        } else {
+            // Legacy support for tableNumber field
+            query.tableNumber = tableNumber;
+        }
+    }
+
+    if (customerName) {
+        query.customerName = { $regex: customerName, $options: "i" };
+    }
+
+    // Date range filter on creation time (Bills archive page)
+    if (startDate || endDate) {
+        query.createdAt = {};
+        if (startDate) {
+            const sd = new Date(startDate);
+            if (!Number.isNaN(sd.getTime())) query.createdAt.$gte = sd;
+        }
+        if (endDate) {
+            const ed = new Date(endDate);
+            if (!Number.isNaN(ed.getTime())) query.createdAt.$lte = ed;
+        }
+        if (Object.keys(query.createdAt).length === 0) delete query.createdAt;
+    }
+
+    if (['dine_in', 'takeaway', 'delivery'].includes(fulfillmentType)) {
+        query.fulfillmentType = fulfillmentType;
+    }
+
+    // Delivery pipeline status (also matches legacy docs without the field as preparing)
+    if (['preparing', 'out_for_delivery', 'delivered'].includes(deliveryStatus)) {
+        query['deliveryInfo.status'] = deliveryStatus === 'preparing'
+            ? { $in: ['preparing', null] }
+            : deliveryStatus;
+    }
+
+    // Default: fetch ONLY unpaid bills for Tables page logic
+    // status: { $in: ['draft','partial','overdue'] }
+    // Keep ability to fetch all if query ?all=true or ?status=paid is passed
+    const isAll = all === 'true' || all === true;
+    // status accepts a single value or a comma-separated list (e.g. draft,partial,overdue)
+    const statusList = typeof status === 'string'
+        ? status.split(',').map((s) => s.trim()).filter(Boolean)
+        : [];
+    if (q && q.trim()) {
+        const qt = q.trim();
+        // توحيد الأرقام العربية/الفارسية (٠١٢٣) إلى ASCII — للبحث المرن بالهاتف
+        const normDigits = (s) => String(s || '')
+            .replace(/[٠-٩]/g, (d) => '٠١٢٣٤٥٦٧٨٩'.indexOf(d))
+            .replace(/[۰-۹]/g, (d) => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d));
+        // هروب رموز الـ regex (مثل + ( ) [ ]) حتى لا يكسر البحث بأرقام الهواتف — يكراش 500 بدونها
+        const escQt = qt.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const qOr = [
+            { billNumber: { $regex: escQt, $options: "i" } },
+            { customerName: { $regex: escQt, $options: "i" } },
+            { customerPhone: { $regex: escQt, $options: "i" } },
+            { notes: { $regex: escQt, $options: "i" } },
+            { 'deliveryInfo.customerName': { $regex: escQt, $options: "i" } },
+            { 'deliveryInfo.phone': { $regex: escQt, $options: "i" } },
+            { 'deliveryInfo.address': { $regex: escQt, $options: "i" } },
+        ];
+        if (mongoose.Types.ObjectId.isValid(qt)) {
+            qOr.push({ _id: qt });
+        }
+        // لو النص فيه أرقام عربية، ابحث أيضاً بالنسخة المحولة لـ ASCII في حقول الهاتف
+        const normQt = normDigits(qt);
+        if (normQt !== qt) {
+            const escNorm = normQt.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            qOr.push({ customerPhone: { $regex: escNorm, $options: "i" } });
+            qOr.push({ 'deliveryInfo.phone': { $regex: escNorm, $options: "i" } });
+        }
+        // بحث مرن برقم الهاتف: تجاهل الفواصل (مسافة/شرطة/أقواس) وتوحيد كود الدولة
+        // مثال: "0111 234 5678" تطابق "+2011112345678" والعكس — لأن التخزين والكتابة بصيغ مختلفة
+        // جزء من الرقم يكفي (2+ أرقام) — مش شرط الرقم كامل
+        const qDigits = normDigits(qt).replace(/\D/g, '');
+        if (qDigits.length >= 2) {
+            const variants = new Set([qDigits]);
+            if (/^01\d{9}$/.test(qDigits)) variants.add('20' + qDigits.slice(1));   // 01xxxxxxxxx → 201xxxxxxxxx
+            if (/^20\d{10}$/.test(qDigits)) variants.add('0' + qDigits.slice(2));   // 201xxxxxxxxx → 01xxxxxxxxx
+            if (/^0020\d{10}$/.test(qDigits)) variants.add('0' + qDigits.slice(4)); // 00201xxxxxxxxx → 01xxxxxxxxx
+            for (const v of variants) {
+                // [^0-9]* بين الأرقام = أي فواصل في الرقم المخزن (الأرقام نفسها آمنة للـ regex)
+                const flexRx = v.split('').join('[^0-9]*');
+                qOr.push({ customerPhone: { $regex: flexRx } });
+                qOr.push({ 'deliveryInfo.phone': { $regex: flexRx } });
+            }
+        }
+        // بحث برقم الطلب أو اسم الصنف داخل الطلبات — رقم الطلب يظهر الكارت الخاص به
+        // مهم للتيك أوي والدليفري (جزء من الرقم يكفي)
+        if (escQt.length >= 2) {
+            try {
+                const matchingOrders = await Order.find({
+                    organization: getOrganizationId(req.user),
+                    isDeleted: { $in: [false, null] },
+                    $or: [
+                        { orderNumber: { $regex: escQt, $options: "i" } },
+                        { 'items.name': { $regex: escQt, $options: "i" } },
+                    ],
+                }).select('_id').limit(200).lean();
+                if (matchingOrders.length > 0) {
+                    qOr.push({ orders: { $in: matchingOrders.map((o) => o._id) } });
+                }
+            } catch { /* البحث بالطلبات اختياري — تجاهل عند الفشل */ }
+        }
+        query.$or = qOr;
+        if (statusList.length === 1) query.status = statusList[0];
+        else if (statusList.length > 1) query.status = { $in: statusList };
+    } else if (statusList.length === 1) {
+        query.status = statusList[0];
+    } else if (statusList.length > 1) {
+        query.status = { $in: statusList };
+    } else if (isAll) {
+        // no status filter - fetch all
+    } else {
+        query.status = { $in: unpaidStatuses };
+    }
+
+    query.organization = getOrganizationId(req.user);
+    return { query, isAll, statusList, unpaidStatuses };
+};
+
+// ── مشترك: الحساب الحي للفواتير غير المدفوعة ذات الجلسات النشطة ───────────
+// نفس منطق getBills حرفيًا — أي تعديل هنا ينعكس على القائمة والإجماليات معًا.
+const applyBillsLiveTotals = async (bills, unpaidStatuses) => {
+    const now = new Date();
+    // Batch fetch Device rates only for bills needing liveCost to avoid heavy populate
+    const billsNeedingLive = bills.filter(
+        (b) => unpaidStatuses.includes(b.status) && Array.isArray(b.sessions) && b.sessions.some((s) => s.status === 'active')
+    );
+    let deviceMap = new Map();
+    if (billsNeedingLive.length > 0) {
+        const deviceIds = [
+            ...new Set(
+                billsNeedingLive
+                    .flatMap((b) => b.sessions.filter((s) => s.status === 'active' && s.deviceId).map((s) => String(s.deviceId)))
+                    .filter(Boolean)
+            ),
+        ];
+        if (deviceIds.length > 0) {
+            try {
+                const devices = await Device.find({ _id: { $in: deviceIds } })
+                    .select('type hourlyRate playstationRates')
+                    .lean();
+                devices.forEach((d) => deviceMap.set(String(d._id), d));
+            } catch (e) {
+                // fallback: no device rates available, live calc will use 0 rates
+            }
+        }
+    }
+
+    for (const bill of bills) {
+        if (!unpaidStatuses.includes(bill.status)) continue;
+        if (!bill.sessions || !bill.sessions.some((s) => s.status === 'active')) continue;
+        let liveSessionsTotal = 0;
+        for (const s of bill.sessions) {
+            if (s.status !== 'active') {
+                liveSessionsTotal += Number(s.finalCost) || Number(s.totalCost) || 0;
+            } else {
+                // device may be ObjectId (not populated) - lookup from deviceMap
+                const device = s.deviceId && typeof s.deviceId === 'object' && s.deviceId.type ? s.deviceId : deviceMap.get(String(s.deviceId)) || null;
+                const getRate = (controllers) => {
+                    if (device && device.type === 'playstation' && device.playstationRates) {
+                        return device.playstationRates[String(controllers)] || 0;
+                    } else if (device && device.type === 'computer') {
+                        return device.hourlyRate || 0;
+                    }
+                    return 0;
+                };
+                let total = 0;
+                if (!s.controllersHistory || s.controllersHistory.length === 0) {
+                    const startMs = s.startTime ? new Date(s.startTime).getTime() : 0;
+                    if (startMs) {
+                        const durMin = Math.max(0, (now.getTime() - startMs) / 60000);
+                        const rate = getRate(s.controllers || 1);
+                        total = (durMin * rate) / 60;
+                    }
+                } else {
+                    for (const period of s.controllersHistory) {
+                        const pEnd = period.to ? new Date(period.to).getTime() : now.getTime();
+                        const pStart = period.from ? new Date(period.from).getTime() : 0;
+                        if (pStart && pEnd > pStart) {
+                            const durMin = (pEnd - pStart) / 60000;
+                            const rate = getRate(period.controllers || 1);
+                            total += (durMin * rate) / 60;
+                        }
+                    }
+                }
+                liveSessionsTotal += Math.round(total);
+            }
+        }
+        const ordersTotal = Array.isArray(bill.orders)
+            ? bill.orders.reduce((sum, o) => sum + (Number(o.finalAmount) || Number(o.totalAmount) || 0), 0)
+            : 0;
+        let liveSubtotal;
+        // رسوم التوصيل متى وُجدت (دليفري أو وثائق قديمة بلا نوع) — التيك أوي مستثنى.
+        // مسارها يبني من الأجزاء + الرسوم متجاوزاً المشتق المخزن الذي قد يفتقدها.
+        const liveDeliveryFee = (bill.fulfillmentType !== 'takeaway' ? Number(bill.deliveryInfo?.deliveryFee) || 0 : 0);
+        if (liveDeliveryFee > 0) {
+            liveSubtotal = ordersTotal + liveSessionsTotal + liveDeliveryFee;
+        } else if (ordersTotal > 0 || (Array.isArray(bill.orders) && bill.orders.length > 0 && typeof bill.orders[0] === 'object' && 'totalAmount' in bill.orders[0])) {
+            liveSubtotal = ordersTotal + liveSessionsTotal;
+        } else {
+            const staleSessions = bill.sessions.reduce((sum, s) => sum + (Number(s.totalCost) || Number(s.finalCost) || 0), 0);
+            const staleSubtotal = Number(bill.subtotal) || 0;
+            const ordersPart = Math.max(0, staleSubtotal - staleSessions);
+            liveSubtotal = ordersPart + liveSessionsTotal;
+        }
+        let discountAmt = 0;
+        if (bill.discountPercentage && bill.discountPercentage > 0) {
+            discountAmt = Math.round((liveSubtotal * bill.discountPercentage) / 100);
+        } else {
+            discountAmt = Number(bill.discount) || 0;
+        }
+        const liveTotal = Math.max(0, liveSubtotal + (Number(bill.tax) || 0) - discountAmt);
+        const liveRemaining = Math.max(0, liveTotal - (Number(bill.paid) || 0));
+        bill.subtotal = liveSubtotal;
+        bill.total = liveTotal;
+        bill.remaining = liveRemaining;
+        if (bill.discountPercentage) bill.discount = discountAmt;
+        // شفاء قرائي: فواتير الرسوم بلا جلسات نشطة — المشتق المخزن قد يفتقدها
+        if ((!bill.sessions || !bill.sessions.some((s) => s.status === 'active')) && bill.fulfillmentType !== 'takeaway' && (Number(bill.deliveryInfo?.deliveryFee) || 0) > 0) {
+            const feeOnly = Number(bill.deliveryInfo.deliveryFee) || 0;
+            const oOnly = Array.isArray(bill.orders)
+                ? bill.orders.reduce((sum, o) => sum + (Number(o.finalAmount) || Number(o.totalAmount) || 0), 0)
+                : 0;
+            const sOnly = Array.isArray(bill.sessions)
+                ? bill.sessions.reduce((sum, s) => sum + (Number(s.finalCost) || Number(s.totalCost) || 0), 0)
+                : 0;
+            const sub2 = oOnly + sOnly + feeOnly;
+            let disc2 = 0;
+            if (bill.discountPercentage && bill.discountPercentage > 0) disc2 = Math.round((sub2 * bill.discountPercentage) / 100);
+            else disc2 = Number(bill.discount) || 0;
+            const tot2 = Math.max(0, sub2 + (Number(bill.tax) || 0) - disc2);
+            bill.subtotal = sub2;
+            bill.total = tot2;
+            bill.remaining = Math.max(0, tot2 - (Number(bill.paid) || 0));
+            if (bill.discountPercentage) bill.discount = disc2;
+        }
+    }
+};
+
 // @desc    Get all bills
 // @route   GET /api/bills
 // @access  Private
@@ -242,142 +558,15 @@ export const getBills = async (req, res) => {
             mode, // mode=list → صفوف خفيفة للقوائم (بلا أصناف/مدفوعات مفصلة) — التفاصيل عبر getBill
         } = req.query;
 
-        const query = {};
-        
-        // Support both table ObjectId and legacy tableNumber filtering
-        // Priority: table parameter > tableNumber parameter
-        if (table) {
-            // New table parameter (ObjectId)
-            if (mongoose.Types.ObjectId.isValid(table)) {
-                query.table = new mongoose.Types.ObjectId(table);
-            } else {
-                return res.status(400).json({
-                    success: false,
-                    message: "معرف الطاولة غير صحيح",
-                });
-            }
-        } else if (tableNumber) {
-            // Check if tableNumber is a valid ObjectId (for table field filtering)
-            if (mongoose.Types.ObjectId.isValid(tableNumber)) {
-                query.table = new mongoose.Types.ObjectId(tableNumber);
-            } else {
-                // Legacy support for tableNumber field
-                query.tableNumber = tableNumber;
-            }
+        const __bq = await buildBillsListQuery(req);
+        if (__bq.invalidTable) {
+            return res.status(400).json({
+                success: false,
+                message: "معرف الطاولة غير صحيح",
+            });
         }
-        
-        if (customerName) {
-            query.customerName = { $regex: customerName, $options: "i" };
-        }
-
-        // Date range filter on creation time (Bills archive page)
-        if (startDate || endDate) {
-            query.createdAt = {};
-            if (startDate) {
-                const sd = new Date(startDate);
-                if (!Number.isNaN(sd.getTime())) query.createdAt.$gte = sd;
-            }
-            if (endDate) {
-                const ed = new Date(endDate);
-                if (!Number.isNaN(ed.getTime())) query.createdAt.$lte = ed;
-            }
-            if (Object.keys(query.createdAt).length === 0) delete query.createdAt;
-        }
-
-        if (['dine_in', 'takeaway', 'delivery'].includes(fulfillmentType)) {
-            query.fulfillmentType = fulfillmentType;
-        }
-
-        // Delivery pipeline status (also matches legacy docs without the field as preparing)
-        if (['preparing', 'out_for_delivery', 'delivered'].includes(deliveryStatus)) {
-            query['deliveryInfo.status'] = deliveryStatus === 'preparing'
-                ? { $in: ['preparing', null] }
-                : deliveryStatus;
-        }
-        
-        // Default: fetch ONLY unpaid bills for Tables page logic
-        // status: { $in: ['draft','partial','overdue'] }
-        // Keep ability to fetch all if query ?all=true or ?status=paid is passed
-        const isAll = all === 'true' || all === true;
-        const unpaidStatuses = ['draft', 'partial', 'overdue'];
-        // status accepts a single value or a comma-separated list (e.g. draft,partial,overdue)
-        const statusList = typeof status === 'string'
-            ? status.split(',').map((s) => s.trim()).filter(Boolean)
-            : [];
-        if (q && q.trim()) {
-            const qt = q.trim();
-            // توحيد الأرقام العربية/الفارسية (٠١٢٣) إلى ASCII — للبحث المرن بالهاتف
-            const normDigits = (s) => String(s || '')
-                .replace(/[٠-٩]/g, (d) => '٠١٢٣٤٥٦٧٨٩'.indexOf(d))
-                .replace(/[۰-۹]/g, (d) => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d));
-            // هروب رموز الـ regex (مثل + ( ) [ ]) حتى لا يكسر البحث بأرقام الهواتف — يكراش 500 بدونها
-            const escQt = qt.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-            const qOr = [
-                { billNumber: { $regex: escQt, $options: "i" } },
-                { customerName: { $regex: escQt, $options: "i" } },
-                { customerPhone: { $regex: escQt, $options: "i" } },
-                { notes: { $regex: escQt, $options: "i" } },
-                { 'deliveryInfo.customerName': { $regex: escQt, $options: "i" } },
-                { 'deliveryInfo.phone': { $regex: escQt, $options: "i" } },
-                { 'deliveryInfo.address': { $regex: escQt, $options: "i" } },
-            ];
-            if (mongoose.Types.ObjectId.isValid(qt)) {
-                qOr.push({ _id: qt });
-            }
-            // لو النص فيه أرقام عربية، ابحث أيضاً بالنسخة المحولة لـ ASCII في حقول الهاتف
-            const normQt = normDigits(qt);
-            if (normQt !== qt) {
-                const escNorm = normQt.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                qOr.push({ customerPhone: { $regex: escNorm, $options: "i" } });
-                qOr.push({ 'deliveryInfo.phone': { $regex: escNorm, $options: "i" } });
-            }
-            // بحث مرن برقم الهاتف: تجاهل الفواصل (مسافة/شرطة/أقواس) وتوحيد كود الدولة
-            // مثال: "0111 234 5678" تطابق "+2011112345678" والعكس — لأن التخزين والكتابة بصيغ مختلفة
-            // جزء من الرقم يكفي (2+ أرقام) — مش شرط الرقم كامل
-            const qDigits = normDigits(qt).replace(/\D/g, '');
-            if (qDigits.length >= 2) {
-                const variants = new Set([qDigits]);
-                if (/^01\d{9}$/.test(qDigits)) variants.add('20' + qDigits.slice(1));   // 01xxxxxxxxx → 201xxxxxxxxx
-                if (/^20\d{10}$/.test(qDigits)) variants.add('0' + qDigits.slice(2));   // 201xxxxxxxxx → 01xxxxxxxxx
-                if (/^0020\d{10}$/.test(qDigits)) variants.add('0' + qDigits.slice(4)); // 00201xxxxxxxxx → 01xxxxxxxxx
-                for (const v of variants) {
-                    // [^0-9]* بين الأرقام = أي فواصل في الرقم المخزن (الأرقام نفسها آمنة للـ regex)
-                    const flexRx = v.split('').join('[^0-9]*');
-                    qOr.push({ customerPhone: { $regex: flexRx } });
-                    qOr.push({ 'deliveryInfo.phone': { $regex: flexRx } });
-                }
-            }
-            // بحث برقم الطلب أو اسم الصنف داخل الطلبات — رقم الطلب يظهر الكارت الخاص به
-            // مهم للتيك أوي والدليفري (جزء من الرقم يكفي)
-            if (escQt.length >= 2) {
-                try {
-                    const matchingOrders = await Order.find({
-                        organization: getOrganizationId(req.user),
-                        isDeleted: { $in: [false, null] },
-                        $or: [
-                            { orderNumber: { $regex: escQt, $options: "i" } },
-                            { 'items.name': { $regex: escQt, $options: "i" } },
-                        ],
-                    }).select('_id').limit(200).lean();
-                    if (matchingOrders.length > 0) {
-                        qOr.push({ orders: { $in: matchingOrders.map((o) => o._id) } });
-                    }
-                } catch { /* البحث بالطلبات اختياري — تجاهل عند الفشل */ }
-            }
-            query.$or = qOr;
-            if (statusList.length === 1) query.status = statusList[0];
-            else if (statusList.length > 1) query.status = { $in: statusList };
-        } else if (statusList.length === 1) {
-            query.status = statusList[0];
-        } else if (statusList.length > 1) {
-            query.status = { $in: statusList };
-        } else if (isAll) {
-            // no status filter - fetch all
-        } else {
-            query.status = { $in: unpaidStatuses };
-        }
-
-        query.organization = getOrganizationId(req.user);
+        const { query, isAll, statusList, unpaidStatuses } = __bq;
+        // (بناء الاستعلام الكامل في buildBillsListQuery أعلاه)
 
         // ── SimpleCache 10s TTL for getBills — fast fetch (<50ms) ──
         // Version key: any Bill write bumps getVersion("bills"), so the cache
@@ -442,123 +631,11 @@ export const getBills = async (req, res) => {
 
         const bills = await billQuery;
 
-        // ── حساب حي فقط للفواتير غير المدفوعة التي بها جلسة نشطة ──
-        // ONLY calculate for bills where status is unpaid AND sessions contains active
-        const now = new Date();
-        // Batch fetch Device rates only for bills needing liveCost to avoid heavy populate
-        const billsNeedingLive = bills.filter(
-            (b) => unpaidStatuses.includes(b.status) && Array.isArray(b.sessions) && b.sessions.some((s) => s.status === 'active')
-        );
-        let deviceMap = new Map();
-        if (billsNeedingLive.length > 0) {
-            const deviceIds = [
-                ...new Set(
-                    billsNeedingLive
-                        .flatMap((b) => b.sessions.filter((s) => s.status === 'active' && s.deviceId).map((s) => String(s.deviceId)))
-                        .filter(Boolean)
-                ),
-            ];
-            if (deviceIds.length > 0) {
-                try {
-                    const devices = await Device.find({ _id: { $in: deviceIds } })
-                        .select('type hourlyRate playstationRates')
-                        .lean();
-                    devices.forEach((d) => deviceMap.set(String(d._id), d));
-                } catch (e) {
-                    // fallback: no device rates available, live calc will use 0 rates
-                }
-            }
-        }
+        // ── حساب حي للجلسات النشطة (نفس منطق applyBillsLiveTotals) ──
+        await applyBillsLiveTotals(bills, unpaidStatuses);
 
-        for (const bill of bills) {
-            if (!unpaidStatuses.includes(bill.status)) continue;
-            if (!bill.sessions || !bill.sessions.some((s) => s.status === 'active')) continue;
-            let liveSessionsTotal = 0;
-            for (const s of bill.sessions) {
-                if (s.status !== 'active') {
-                    liveSessionsTotal += Number(s.finalCost) || Number(s.totalCost) || 0;
-                } else {
-                    // device may be ObjectId (not populated) - lookup from deviceMap
-                    const device = s.deviceId && typeof s.deviceId === 'object' && s.deviceId.type ? s.deviceId : deviceMap.get(String(s.deviceId)) || null;
-                    const getRate = (controllers) => {
-                        if (device && device.type === 'playstation' && device.playstationRates) {
-                            return device.playstationRates[String(controllers)] || 0;
-                        } else if (device && device.type === 'computer') {
-                            return device.hourlyRate || 0;
-                        }
-                        return 0;
-                    };
-                    let total = 0;
-                    if (!s.controllersHistory || s.controllersHistory.length === 0) {
-                        const startMs = s.startTime ? new Date(s.startTime).getTime() : 0;
-                        if (startMs) {
-                            const durMin = Math.max(0, (now.getTime() - startMs) / 60000);
-                            const rate = getRate(s.controllers || 1);
-                            total = (durMin * rate) / 60;
-                        }
-                    } else {
-                        for (const period of s.controllersHistory) {
-                            const pEnd = period.to ? new Date(period.to).getTime() : now.getTime();
-                            const pStart = period.from ? new Date(period.from).getTime() : 0;
-                            if (pStart && pEnd > pStart) {
-                                const durMin = (pEnd - pStart) / 60000;
-                                const rate = getRate(period.controllers || 1);
-                                total += (durMin * rate) / 60;
-                            }
-                        }
-                    }
-                    liveSessionsTotal += Math.round(total);
-                }
-            }
-            const ordersTotal = Array.isArray(bill.orders)
-                ? bill.orders.reduce((sum, o) => sum + (Number(o.finalAmount) || Number(o.totalAmount) || 0), 0)
-                : 0;
-            let liveSubtotal;
-            // رسوم التوصيل متى وُجدت (دليفري أو وثائق قديمة بلا نوع) — التيك أوي مستثنى.
-            // مسارها يبني من الأجزاء + الرسوم متجاوزاً المشتق المخزن الذي قد يفتقدها.
-            const liveDeliveryFee = (bill.fulfillmentType !== 'takeaway' ? Number(bill.deliveryInfo?.deliveryFee) || 0 : 0);
-            if (liveDeliveryFee > 0) {
-                liveSubtotal = ordersTotal + liveSessionsTotal + liveDeliveryFee;
-            } else if (ordersTotal > 0 || (Array.isArray(bill.orders) && bill.orders.length > 0 && typeof bill.orders[0] === 'object' && 'totalAmount' in bill.orders[0])) {
-                liveSubtotal = ordersTotal + liveSessionsTotal;
-            } else {
-                const staleSessions = bill.sessions.reduce((sum, s) => sum + (Number(s.totalCost) || Number(s.finalCost) || 0), 0);
-                const staleSubtotal = Number(bill.subtotal) || 0;
-                const ordersPart = Math.max(0, staleSubtotal - staleSessions);
-                liveSubtotal = ordersPart + liveSessionsTotal;
-            }
-            let discountAmt = 0;
-            if (bill.discountPercentage && bill.discountPercentage > 0) {
-                discountAmt = Math.round((liveSubtotal * bill.discountPercentage) / 100);
-            } else {
-                discountAmt = Number(bill.discount) || 0;
-            }
-            const liveTotal = Math.max(0, liveSubtotal + (Number(bill.tax) || 0) - discountAmt);
-            const liveRemaining = Math.max(0, liveTotal - (Number(bill.paid) || 0));
-            bill.subtotal = liveSubtotal;
-            bill.total = liveTotal;
-            bill.remaining = liveRemaining;
-            if (bill.discountPercentage) bill.discount = discountAmt;
-            // شفاء قرائي: فواتير الرسوم بلا جلسات نشطة — المشتق المخزن قد يفتقدها
-            if ((!bill.sessions || !bill.sessions.some((s) => s.status === 'active')) && bill.fulfillmentType !== 'takeaway' && (Number(bill.deliveryInfo?.deliveryFee) || 0) > 0) {
-                const feeOnly = Number(bill.deliveryInfo.deliveryFee) || 0;
-                const oOnly = Array.isArray(bill.orders)
-                    ? bill.orders.reduce((sum, o) => sum + (Number(o.finalAmount) || Number(o.totalAmount) || 0), 0)
-                    : 0;
-                const sOnly = Array.isArray(bill.sessions)
-                    ? bill.sessions.reduce((sum, s) => sum + (Number(s.finalCost) || Number(s.totalCost) || 0), 0)
-                    : 0;
-                const sub2 = oOnly + sOnly + feeOnly;
-                let disc2 = 0;
-                if (bill.discountPercentage && bill.discountPercentage > 0) disc2 = Math.round((sub2 * bill.discountPercentage) / 100);
-                else disc2 = Number(bill.discount) || 0;
-                const tot2 = Math.max(0, sub2 + (Number(bill.tax) || 0) - disc2);
-                bill.subtotal = sub2;
-                bill.total = tot2;
-                bill.remaining = Math.max(0, tot2 - (Number(bill.paid) || 0));
-                if (bill.discountPercentage) bill.discount = disc2;
-            }
-        }
+        // (نُقلت الحلقة إلى applyBillsLiveTotals أعلاه)
+        // (نُقل الشفاء إلى applyBillsLiveTotals أعلاه)
 
         const total = await Bill.countDocuments(query);
 
@@ -606,6 +683,86 @@ export const getBills = async (req, res) => {
         res.status(500).json({
             success: false,
             message: "خطأ في جلب الفواتير",
+            error: error.message,
+        });
+    }
+};
+
+// @desc    Bills totals over the FULL filtered set (no pagination cap)
+// @route   GET /api/billing/totals
+// @access  Private
+// نفس فلاتر getBills حرفيًا عبر buildBillsListQuery + نفس الحساب الحي.
+// الملغاة مستبعدة من الإجمالي إلا لو طُلبت صراحة (status=cancelled).
+export const getBillsTotals = async (req, res) => {
+    try {
+        const __bq = await buildBillsListQuery(req);
+        if (__bq.invalidTable) {
+            return res.status(400).json({
+                success: false,
+                message: "معرف الطاولة غير صحيح",
+            });
+        }
+        const { query, statusList, unpaidStatuses } = __bq;
+        const { q } = req.query;
+
+        // استبعاد الملغاة من الإجمالي — إلا لو طُلبت صراحة
+        if (!statusList.includes('cancelled')) {
+            if (query.status === undefined) {
+                query.status = { $ne: 'cancelled' };
+            } else if (query.status && typeof query.status === 'object' && Array.isArray(query.status.$in)) {
+                const rest = query.status.$in.filter((s) => s !== 'cancelled');
+                query.status = rest.length > 0 ? { $in: rest } : { $in: ['__none__'] };
+            }
+        }
+
+        // كاش 10 ثوانٍ بنفس نسخة الفواتير — لا بيانات قديمة بعد أي كتابة
+        const totalsOrgId = String(getOrganizationId(req.user));
+        const { status, fulfillmentType, startDate, endDate } = req.query;
+        const totalsCacheKey = `billstotals:${totalsOrgId}:${getVersion("bills")}:${JSON.stringify({ status, q, fulfillmentType, startDate, endDate })}`;
+        try {
+            const cachedTotals = cache.get(totalsCacheKey);
+            if (cachedTotals && !q) return res.json(cachedTotals);
+        } catch {}
+
+        // نفس حقول وضع القائمة (الأصناف للخصومات + الجلسات للحساب الحي)
+        const bills = await Bill.find(query)
+            .select('billNumber table status total remaining paid subtotal discount discountPercentage tax billType fulfillmentType deliveryInfo customerName customerPhone sessions orders createdAt updatedAt')
+            .populate({
+                path: "sessions",
+                select: "_id deviceName deviceNumber deviceType status startTime endTime controllers controllersHistory totalCost finalCost deviceId",
+                populate: {
+                    path: "deviceId",
+                    select: "type hourlyRate playstationRates",
+                },
+            })
+            .populate({
+                path: "orders",
+                select: "_id orderNumber status totalAmount finalAmount fixedDiscount discount fulfillmentType createdAt items",
+            })
+            .lean();
+
+        await applyBillsLiveTotals(bills, unpaidStatuses);
+
+        // نفس صيغة sumBills في الواجهة حرفيًا
+        let before = 0, disc = 0, tot = 0, paid = 0, rem = 0;
+        for (const b of bills) {
+            const fd = (b.orders || []).reduce(
+                (s, o) => s + (Number(o?.fixedDiscount?.amount) || 0) + (Number(o?.discount) || 0), 0);
+            const all = fd + (Number(b.discount) || 0);
+            before += (Number(b.total) || 0) + all;
+            disc += all;
+            tot += Number(b.total) || 0;
+            paid += Number(b.paid) || 0;
+            rem += Number(b.remaining) || 0;
+        }
+        const payload = { success: true, totals: { before, disc, tot, paid, rem }, count: bills.length };
+        try { cache.set(totalsCacheKey, payload, 10); } catch {}
+        return res.json(payload);
+    } catch (error) {
+        Logger.error("خطأ في إجماليات الفواتير", { error: error.message });
+        res.status(500).json({
+            success: false,
+            message: "خطأ في إجماليات الفواتير",
             error: error.message,
         });
     }
@@ -1684,6 +1841,12 @@ export const updateBill = async (req, res) => {
             updatedAt: updatedBill.updatedAt,
         };
 
+        // زيادة مدفوعة بعد التعديل (خصم فوق مدفوع سابق): تُعرض كمستحق رد — بلا حركة مالية تلقائية
+        const overpaidHeader = r2((Number(updatedBill.paid) || 0) - (Number(updatedBill.total) || 0));
+        if (overpaidHeader > 0.01) {
+            responseData.overpayment = overpaidHeader;
+        }
+
         // Return response IMMEDIATELY (table status already updated)
         res.json({
             success: true,
@@ -1787,6 +1950,26 @@ export const addPayment = async (req, res) => {
             });
         }
 
+        // حارس الدفعة المكررة: نفس المبلغ+الطريقة خلال 30 ثانية = ضغطة مزدوجة مرفوضة
+        // (الدفعات الجزئية المشروعة متباعدة زمنيًا — لا يؤثر عليها)
+        {
+            const newPayAmount = Number(paymentAmount) > 0 ? Number(paymentAmount) : Number(amount) || 0;
+            if (newPayAmount > 0) {
+                const nowTs = Date.now();
+                const dup = (bill.payments || []).some((p) =>
+                    Number(p.amount) === newPayAmount &&
+                    String(p.method || '') === String(method || 'cash') &&
+                    (nowTs - new Date(p.timestamp).getTime()) < 30000
+                );
+                if (dup) {
+                    return res.status(400).json({
+                        success: false,
+                        message: "دفعة مكررة — تم تسجيل نفس المبلغ منذ ثوانٍ",
+                    });
+                }
+            }
+        }
+
         // تغيير نسبة الخصم عند الدفع يتطلب صلاحية الخصم اليدوي
         if (discountTouched(discountPercentage, bill.discountPercentage) && !canApplyManualDiscount(req.user)) {
             return discountForbidden(res);
@@ -1841,27 +2024,31 @@ export const addPayment = async (req, res) => {
         emitBillUpdated(req, bill);
             }
 
-            // Mark all items as paid if bill is fully paid
+            // Mark all items as paid if bill is fully paid —net amounts (order discount aware)
             if (status === 'paid' && bill.orders && bill.orders.length > 0) {
-                
+                const rateMapF1 = await orderRatesForBill(bill);
+
                 // Initialize itemPayments if not exists
                 if (!bill.itemPayments) {
                     bill.itemPayments = [];
                 }
-                
+
                 // Create or update itemPayments for all order items
                 bill.orders.forEach(order => {
+                    const oidF1 = String((order && order._id) || order || '');
+                    const ordRate = rateMapF1.has(oidF1) ? rateMapF1.get(oidF1) : orderDiscountRate(order);
                     if (order.items && Array.isArray(order.items)) {
                         order.items.forEach((orderItem, itemIndex) => {
                             const itemId = `${order._id}-${itemIndex}`;
-                            
+                            const netAmount = r2((Number(orderItem.price) || 0) * (Number(orderItem.quantity) || 0) * (1 - ordRate));
+
                             // Find existing itemPayment or create new one
                             let itemPayment = bill.itemPayments.find(ip => ip.itemId === itemId);
-                            
+
                             if (itemPayment) {
                                 // Update existing
                                 itemPayment.paidQuantity = itemPayment.quantity;
-                                itemPayment.paidAmount = itemPayment.totalPrice;
+                                itemPayment.paidAmount = netAmount;
                                 itemPayment.isPaid = true;
                                 itemPayment.paidAt = new Date();
                                 itemPayment.paidBy = req.user._id;
@@ -1875,7 +2062,7 @@ export const addPayment = async (req, res) => {
                                     paidQuantity: orderItem.quantity,
                                     pricePerUnit: orderItem.price,
                                     totalPrice: orderItem.price * orderItem.quantity,
-                                    paidAmount: orderItem.price * orderItem.quantity,
+                                    paidAmount: netAmount,
                                     isPaid: true,
                                     paidAt: new Date(),
                                     paidBy: req.user._id,
@@ -1886,7 +2073,7 @@ export const addPayment = async (req, res) => {
                         });
                     }
                 });
-                
+
             }
 
             // Mark all sessions as paid if bill is fully paid
@@ -1934,25 +2121,28 @@ export const addPayment = async (req, res) => {
                 });
             }
 
-            bill.addPayment(amount, method, req.user._id, reference);
+            bill.addPayment(amount, method, req.user._id, reference, false, undefined, drawer);
             
-            // If this payment makes the bill fully paid, create itemPayments
+            // If this payment makes the bill fully paid, create itemPayments — net amounts
             if (bill.status === 'paid' && bill.orders && bill.orders.length > 0) {
-                
+                const rateMapF2 = await orderRatesForBill(bill);
+
                 // Initialize itemPayments if not exists
                 if (!bill.itemPayments) {
                     bill.itemPayments = [];
                 }
-                
+
                 // Create itemPayments for all order items
                 bill.orders.forEach(order => {
+                    const oidF2 = String((order && order._id) || order || '');
+                    const ordRateLegacy = rateMapF2.has(oidF2) ? rateMapF2.get(oidF2) : orderDiscountRate(order);
                     if (order.items && Array.isArray(order.items)) {
                         order.items.forEach((orderItem, itemIndex) => {
                             const itemId = `${order._id}-${itemIndex}`;
-                            
+
                             // Check if itemPayment already exists
                             const existingPayment = bill.itemPayments.find(ip => ip.itemId === itemId);
-                            
+
                             if (!existingPayment) {
                                 // Create new itemPayment
                                 bill.itemPayments.push({
@@ -1963,7 +2153,7 @@ export const addPayment = async (req, res) => {
                                     paidQuantity: orderItem.quantity,
                                     pricePerUnit: orderItem.price,
                                     totalPrice: orderItem.price * orderItem.quantity,
-                                    paidAmount: orderItem.price * orderItem.quantity,
+                                    paidAmount: r2((Number(orderItem.price) || 0) * (Number(orderItem.quantity) || 0) * (1 - ordRateLegacy)),
                                     isPaid: true,
                                     paidAt: new Date(),
                                     paidBy: req.user._id,
@@ -1988,15 +2178,22 @@ export const addPayment = async (req, res) => {
         emitBillUpdated(req, bill, "updated", { silent: true });
         }
 
-        // Mark all items as paid if bill is fully paid
+        // Mark all items as paid if bill is fully paid — net amounts (discount aware)
         if (bill.status === 'paid' && bill.itemPayments && bill.itemPayments.length > 0) {
             let itemsUpdated = false;
+            const rateMapF3 = await orderRatesForBill(bill);
             bill.itemPayments.forEach(item => {
                 if (!item.isPaid || item.paidQuantity < item.quantity) {
                     item.paidQuantity = item.quantity;
                     item.isPaid = true;
                     item.paidAt = new Date();
                     item.paidBy = req.user._id;
+                    const oidF3 = String(item.orderId || '');
+                    const unitBase = Number(item.pricePerUnit) || 0;
+                    const q = Number(item.quantity) || 0;
+                    if (rateMapF3.has(oidF3)) {
+                        item.paidAmount = r2(q * unitBase * (1 - rateMapF3.get(oidF3)));
+                    }
                     itemsUpdated = true;
                 }
             });
@@ -2827,11 +3024,11 @@ export const addPartialPayment = async (req, res) => {
                                 existingPayment.quantity = item.quantity;
                                 existingPayment.totalPrice = item.price * item.quantity;
                                 
-                                // إذا كانت الكمية الجديدة أقل من المدفوعة، اضبط المدفوعة
+                                // إذا كانت الكمية الجديدة أقل من المدفوعة، اضبط المدفوعة (صافي بعد الخصم)
                                 if (existingPayment.paidQuantity > item.quantity) {
                                     Logger.warn(`⚠️ [addPartialPayment] Adjusting paidQuantity for: ${itemId} from ${existingPayment.paidQuantity} to ${item.quantity}`);
                                     existingPayment.paidQuantity = item.quantity;
-                                    existingPayment.paidAmount = item.price * item.quantity;
+                                    existingPayment.paidAmount = r2(item.price * item.quantity * (1 - orderDiscountRate(order)));
                                     existingPayment.isPaid = true;
                                 }
                             }
@@ -2892,11 +3089,16 @@ export const addPartialPayment = async (req, res) => {
                 });
             }
 
-            // تحديث الدفع للصنف المحدد
-            const paymentAmount = targetItem.pricePerUnit * paymentItem.quantity;
+            // تحديث الدفع للصنف المحدد — بالسعر الفعال بعد خصم الطلب (تناسبي)
+            let effRateLegacy = 0;
+            try {
+                const ordLegacy = (bill.orders || []).find((o) => String(o._id || o.id) === String(targetItem.orderId));
+                effRateLegacy = orderDiscountRate(ordLegacy);
+            } catch {}
+            const paymentAmount = r2(targetItem.pricePerUnit * paymentItem.quantity * (1 - effRateLegacy));
 
             targetItem.paidQuantity = (targetItem.paidQuantity || 0) + paymentItem.quantity;
-            targetItem.paidAmount = (targetItem.paidAmount || 0) + paymentAmount;
+            targetItem.paidAmount = r2((targetItem.paidAmount || 0) + paymentAmount);
             targetItem.isPaid = targetItem.paidQuantity >= targetItem.quantity;
             targetItem.paidAt = new Date();
             targetItem.paidBy = req.user._id;
@@ -4021,6 +4223,15 @@ export const getBillAggregatedItems = async (req, res) => {
             bill.total
         );
 
+        // حصة الخصم لكل سطر (توزيع تناسبي من خصومات طلباته) — للعرض والتحصيل الصافي
+        for (const row of aggregatedItems) {
+            const share = rowDiscountShare(row, bill.orders || []);
+            const gross = r2((Number(row.price) || 0) * (Number(row.totalQuantity) || 0));
+            row.discountAmount = Math.min(share, gross);
+            row.netTotal = r2(gross - row.discountAmount);
+            row.netPrice = (Number(row.totalQuantity) || 0) > 0 ? r2(row.netTotal / row.totalQuantity) : r2(row.price);
+        }
+
         Logger.info(`📊 [getBillAggregatedItems] Aggregated ${aggregatedItems.length} items for bill: ${bill.billNumber}`);
 
         res.json({
@@ -4035,7 +4246,9 @@ export const getBillAggregatedItems = async (req, res) => {
                     paid: bill.paid,
                     remaining: bill.remaining,
                 },
-                aggregatedItems
+                aggregatedItems,
+                // دفعات الأصناف التفصيلية — لتعديل المدفوعات من نافذة الدفع
+                itemPayments: bill.itemPayments || [],
             }
         });
 
@@ -4134,11 +4347,11 @@ export const addPartialPaymentAggregated = async (req, res) => {
                                 existingPayment.quantity = item.quantity;
                                 existingPayment.totalPrice = item.price * item.quantity;
                                 
-                                // إذا كانت الكمية الجديدة أقل من المدفوعة، اضبط المدفوعة
+                                // إذا كانت الكمية الجديدة أقل من المدفوعة، اضبط المدفوعة (صافي بعد الخصم)
                                 if (existingPayment.paidQuantity > item.quantity) {
                                     Logger.warn(`⚠️ [addPartialPaymentAggregated] Adjusting paidQuantity for: ${itemId} from ${existingPayment.paidQuantity} to ${item.quantity}`);
                                     existingPayment.paidQuantity = item.quantity;
-                                    existingPayment.paidAmount = item.price * item.quantity;
+                                    existingPayment.paidAmount = r2(item.price * item.quantity * (1 - orderDiscountRate(order)));
                                     existingPayment.isPaid = true;
                                 }
                             }
@@ -4190,11 +4403,16 @@ export const addPartialPaymentAggregated = async (req, res) => {
                 continue; // Skip this item
             }
 
-            // تحديث الدفع للصنف المحدد
-            const paymentAmount = targetItem.pricePerUnit * paymentItem.quantity;
+            // تحديث الدفع للصنف المحدد — بالسعر الفعال بعد خصم الطلب (تناسبي)
+            let effRateAgg = 0;
+            try {
+                const ordOfAgg = (bill.orders || []).find((o) => String(o._id || o.id) === String(targetItem.orderId));
+                effRateAgg = orderDiscountRate(ordOfAgg);
+            } catch {}
+            const paymentAmount = r2(targetItem.pricePerUnit * paymentItem.quantity * (1 - effRateAgg));
 
             targetItem.paidQuantity = (targetItem.paidQuantity || 0) + paymentItem.quantity;
-            targetItem.paidAmount = (targetItem.paidAmount || 0) + paymentAmount;
+            targetItem.paidAmount = r2((targetItem.paidAmount || 0) + paymentAmount);
             targetItem.isPaid = targetItem.paidQuantity >= targetItem.quantity;
             targetItem.paidAt = new Date();
             targetItem.paidBy = req.user._id;
@@ -4234,6 +4452,15 @@ export const addPartialPaymentAggregated = async (req, res) => {
             return res.status(400).json({
                 success: false,
                 message: "لم يتم معالجة أي عناصر للدفع",
+            });
+        }
+
+        // سقف صارم: إجمالي الدفعة (الصافي) لا يتجاوز المتبقي — يمنع التحصيل الزائد
+        totalPaymentAmount = r2(totalPaymentAmount);
+        if (totalPaymentAmount - (Number(bill.remaining) || 0) > 0.05) {
+            return res.status(400).json({
+                success: false,
+                message: `إجمالي الدفعة (${totalPaymentAmount}) يتجاوز المتبقي (${Number(bill.remaining) || 0}) — راجع الكميات`,
             });
         }
 
@@ -4707,6 +4934,7 @@ export const updateBillAggregatedItems = async (req, res) => {
 
             const rebuiltItemPayments = [];
             (bill.orders || []).forEach((ord) => {
+                const ordRate = orderDiscountRate(ord);
                 (ord.items || []).forEach((it, idx) => {
                     const itemId = `${ord._id}-${idx}`;
                     const key = itemKey(it);
@@ -4715,7 +4943,7 @@ export const updateBillAggregatedItems = async (req, res) => {
                     const paidQuantity = aggregate
                         ? Math.min(remainingQuantity, aggregate.paidQuantity)
                         : 0;
-                    const paidAmount = paidQuantity * (Number(it.price) || 0);
+                    const paidAmount = r2(paidQuantity * (Number(it.price) || 0) * (1 - ordRate));
                     let historyQuantity = paidQuantity;
                     const paymentHistory = aggregate
                         ? aggregate.paymentHistory.reduce((history, entry) => {
@@ -4726,7 +4954,7 @@ export const updateBillAggregatedItems = async (req, res) => {
                             history.push({
                                 ...entry,
                                 quantity,
-                                amount: quantity * (Number(it.price) || 0),
+                                amount: r2(quantity * (Number(it.price) || 0) * (1 - ordRate)),
                             });
                             return history;
                         }, [])
@@ -4799,6 +5027,12 @@ export const updateBillAggregatedItems = async (req, res) => {
         
         // Ensure variant field is included in response (convert to plain object)
         const billResponse = bill.toObject();
+
+        // زيادة مدفوعة بعد التعديل (خصم جديد فوق مدفوع سابق): تُعرض كمستحق رد — بلا حركة مالية تلقائية
+        const overpaidAmount = r2((Number(billResponse.paid) || 0) - (Number(billResponse.total) || 0));
+        if (overpaidAmount > 0.01) {
+            billResponse.overpayment = overpaidAmount;
+        }
 
         emitBillUpdated(req, bill);
         // Socket notify — bills

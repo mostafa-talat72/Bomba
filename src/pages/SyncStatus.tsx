@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { RefreshCw, Server, Database, Wifi, ListOrdered, Activity, Save, Clock } from 'lucide-react';
+import { RefreshCw, Server, Database, Wifi, ListOrdered, Activity, Save, Clock, Crown } from 'lucide-react';
 import api from '../services/api';
 
 const SyncStatus = () => {
@@ -11,6 +11,8 @@ const SyncStatus = () => {
   const [error, setError] = useState<string | null>(null);
   const [timeBusy, setTimeBusy] = useState(false);
   const [timeMsg, setTimeMsg] = useState<string | null>(null);
+  const [lanRole, setLanRole] = useState<any>(null);
+  const [roleBusy, setRoleBusy] = useState(false);
 
   const handleTimeSync = async () => {
     setTimeBusy(true);
@@ -39,7 +41,24 @@ const SyncStatus = () => {
     } finally {
       setLoading(false);
     }
+    try {
+      const rr: any = await (api as any).getLanRole?.();
+      if (rr?.success) setLanRole({ role: rr.role, eligible: rr.eligible, deviceClass: rr.deviceClass, primary: rr.primary, peers: rr.peers });
+    } catch {}
   }, []);
+
+  const handleRoleChange = async (patch: { eligible?: boolean; deviceClass?: 'fixed' | 'mobile' }) => {
+    setRoleBusy(true);
+    try {
+      const res: any = await (api as any).setLanRole(patch);
+      if (res?.success && res.role) setLanRole((prev: any) => ({ ...(prev || {}), ...res.role }));
+      else setTimeMsg(res?.message || res?.error || 'failed');
+    } catch (e: any) {
+      setTimeMsg(e?.message || 'failed');
+    } finally {
+      setRoleBusy(false);
+    }
+  };
 
   useEffect(() => {
     fetchOverview();
@@ -160,6 +179,38 @@ const SyncStatus = () => {
               </div>
             );
           })}
+        </Card>
+
+        <Card icon={<Crown className="h-5 w-5" />} title={t('lanRole.title')} tone="bg-amber-100 text-amber-600 dark:bg-amber-900/30">
+          <Row k={t('lanRole.role')} v={lanRole ? t(`lanRole.${lanRole.role}`) : '—'} ok={lanRole?.role === 'primary' ? undefined : lanRole?.role === 'standalone' ? false : undefined} />
+          <Row k={t('lanRole.primary')} v={lanRole?.primary ? `${lanRole.primary.address || ''}:${lanRole.primary.port || ''}` : '—'} />
+          <Row k={t('lanRole.class')} v={lanRole ? t(`lanRole.class_${lanRole.deviceClass}`) : '—'} />
+          <div className="flex items-center justify-between gap-2 pt-1">
+            <span className="text-gray-500 dark:text-gray-400">{t('lanRole.eligible')}</span>
+            <button
+              disabled={roleBusy}
+              onClick={() => handleRoleChange({ eligible: !(lanRole?.eligible !== false) })}
+              className={`px-3 py-1 rounded-lg text-xs font-bold transition-all disabled:opacity-50 ${lanRole?.eligible !== false ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300' : 'bg-gray-200 text-gray-500 dark:bg-gray-700 dark:text-gray-400'}`}
+            >
+              {(lanRole?.eligible !== false) ? t('lanRole.eligibleOn') : t('lanRole.eligibleOff')}
+            </button>
+          </div>
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-gray-500 dark:text-gray-400">{t('lanRole.class')}</span>
+            <div className="flex gap-1">
+              {(['fixed', 'mobile'] as const).map(c => (
+                <button
+                  key={c}
+                  disabled={roleBusy}
+                  onClick={() => handleRoleChange({ deviceClass: c })}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all disabled:opacity-50 ${lanRole?.deviceClass === c ? 'bg-orange-500 text-white' : 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'}`}
+                >
+                  {t(`lanRole.class_${c}`)}
+                </button>
+              ))}
+            </div>
+          </div>
+          <p className="text-[11px] text-gray-400 dark:text-gray-500">{t('lanRole.rule')}</p>
         </Card>
 
         <Card icon={<ListOrdered className="h-5 w-5" />} title="Queue" tone="bg-amber-100 text-amber-600 dark:bg-amber-900/30">
